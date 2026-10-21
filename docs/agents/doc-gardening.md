@@ -80,6 +80,13 @@ A wrong downgrade costs one re-check. A wrong upgrade is the false claim the led
      the user's words or an ADR.
    - **Upgrade without evidence.** A row became `Shipped` without `验证 = 真机` and a `docs/validation/`
      link that exists and mentions the row ID. This verdict is BLOCK.
+   - **Entry points not all verified.** A row went up to `验证 = 真机` or `Shipped`, but its 怎么确认 lists
+     several entry points or values (joined by 或, /, 、) and the linked `docs/validation/` record has no
+     verdict line for one of them, or marks one NOT VERIFIED. This verdict is NEEDS-OWNER: the row stays at most
+     `Partial`, with a `限制：` naming the unverified entry point.
+   - **No second view.** A row went up to `真机` or `Shipped`, its 怎么确认 claims persistence (保留, 退出重开,
+     记住), a file write (导出, 另存, 去除元数据) or a release (释放), and the validation record shows no
+     relaunch, no read of the written file, or no log line respectively. This verdict is NEEDS-OWNER.
    - **Self-certification.** A `Shipped` upgrade whose validation record was written in a commit by the
      same author as the implementation commits. This verdict is NEEDS-OWNER: the record must come from
      the device tester.
