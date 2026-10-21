@@ -87,9 +87,16 @@ A wrong downgrade costs one re-check. A wrong upgrade is the false claim the led
    - **No second view.** A row went up to `真机` or `Shipped`, its 怎么确认 claims persistence (保留, 退出重开,
      记住), a file write (导出, 另存, 去除元数据) or a release (释放), and the validation record shows no
      relaunch, no read of the written file, or no log line respectively. This verdict is NEEDS-OWNER.
-   - **Self-certification.** A `Shipped` upgrade whose validation record was written in a commit by the
-     same author as the implementation commits. This verdict is NEEDS-OWNER: the record must come from
-     the device tester.
+   - **Self-certification.** Every commit here can share one git author, so authorship proves nothing; the
+     check reads commit trailers instead. For each row that went up to `真机` or `Shipped`, find the commit
+     that added or changed its `docs/validation/` section. It is self-certification, and the verdict is
+     NEEDS-OWNER, when any of these holds:
+     - that commit has no `Validated-by: <role> run=<run-id>` trailer;
+     - the role in it also appears in an `Implemented-by: <role>` trailer on a commit in the range that
+       touches the row's paths;
+     - the same commit also changes source code (anything outside `docs/`).
+
+     The record must come from the device tester, in its own commit.
    - **Format.** Every touched row must also pass the ledger's format rules:
      - state and 验证 are in their enums;
      - a `Partial` row carries `限制：`;

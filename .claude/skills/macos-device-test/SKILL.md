@@ -287,6 +287,15 @@ commands in §4–§11 are the reference.
   and scale, bundle path, git SHA (and how it was verified, §6), fixtures, the verdict table, deviations and
   NOT VERIFIED reasons. Mention each ledger row ID it covers; the gardener matches on them. Evidence stays in
   `$RUN_DIR`; the record names the run ID.
+- Commit the record on its own, touching nothing outside `docs/`, with a trailer naming the role and run:
+
+  ```text
+  docs(validation): P0-03 device run VIEW-02, VIEW-03 on MacBook
+
+  Validated-by: claude-imple-1 run=<run-id>
+  ```
+
+  The gardener reads this trailer to rule out self-certification; a record without it can't lift a row.
 - A row can move to `验证 = 真机` only from a record like this, written by the device tester. Raising a row to
   `Shipped` is still the owner's edit, never the gardener's, and it doesn't change that row's 怎么确认 in the
   same commit (see `docs/feature-ledger.md`).

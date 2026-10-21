@@ -128,7 +128,13 @@ gardener 靠这些 ID 把记录对应到行。单独提交：
 
 ```text
 docs(validation): P0-03 device run VIEW-02, VIEW-03 on MacBook
+
+Validated-by: claude-imple-1 run=20261105-143012-VIEW-02-03
 ```
+
+这次提交只改 `docs/` 下的文件，不能夹带代码。最后的 `Validated-by:` trailer 必须有：gardener 靠它确认记录来自设备测试角色、
+而不是实现者，缺了它，这条记录不能让任何账簿行升级。对应地，实现代码的提交带 `Implemented-by: <角色>`
+（例如 `Implemented-by: gpt-imple-1`；在主对话里直接实现时写 `Implemented-by: claude-main`）。
 
 ### ⑤ 你更新账簿行（单独提交）
 
@@ -185,8 +191,13 @@ PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 里说�
 
 **验证记录能不能由写代码的会话写？**
 不能。账簿要求真机记录来自设备测试角色，gardener 会把“实现者给自己出记录”报成 `NEEDS-OWNER`。
-**目前的已知缺口**：gardener 按提交作者判断，而本机所有提交的 git 作者都是同一个人，它分不出是哪个会话写的。
-在这个判断改进之前，靠流程保证：验收一定在新会话里跑，验证记录的提交信息写明运行 ID。
+本机所有提交的 git 作者都是同一个人，所以 gardener 不看作者，而看 trailer。出现下面任何一种，它报自我认证：
+
+- 验证记录的提交没有 `Validated-by: <角色> run=<运行 ID>`；
+- `Validated-by` 的角色，同时出现在这次改动里实现提交的 `Implemented-by` 上；
+- 验证记录和代码改动在同一次提交里。
+
+trailer 只是声明，真正的保证仍是流程：验收一定在新会话里跑，运行 ID 对应 `~/.picsee/dtrack/reports/` 里真实存在的报告。
 
 **截图能不能放进 PR 或 issue？**
 不建议。截图会暴露桌面内容，而仓库与 issue 都是公开的。PR 里放验证记录的链接和结论表即可；确实需要图时，
