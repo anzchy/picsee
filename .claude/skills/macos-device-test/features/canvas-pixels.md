@@ -1,0 +1,44 @@
+# Actual pixels and anchored zoom
+
+At actual pixels, one image pixel maps to one physical (backing) pixel on whatever display the window is on,
+and zooming in or out keeps the image pixel under the cursor under the cursor.
+
+## Sub-features
+
+- `VIEW-02` actual pixels 1:1 on a @2x display, and still 1:1 after moving to a @1x display.
+- `VIEW-03` cursor-anchored zoom.
+
+## How to get to it (user POV)
+
+- Press `1` for actual pixels.
+- Press `+` / `−` to zoom around the cursor.
+- Pinch on the trackpad to zoom around the cursor.
+- Drag the window between the built-in Retina display and a @1x external display.
+
+## Driving it with computer use
+
+Preconditions:
+
+- MacBook Pro, built-in display at @2x. For the second half of VIEW-02, a @1x external display attached.
+- Fixtures: the 1-px checkerboard and the labelled coordinate grid from S1.
+
+- **Open the checkerboard.** Launch with the checkerboard fixture (SKILL.md §5). The image appears fitted to
+  the window.
+- **Actual pixels.** Press `1`. A zoomed screenshot of the image centre shows crisp alternating black and
+  white pixels, with no grey or moiré.
+- **Move to @1x.** Drag the window onto the external display. The checkerboard is still crisp there.
+- **Open the grid.** Open the coordinate-grid fixture and press `1`. Put the cursor on a labelled cell away
+  from the centre and note its label.
+- **Zoom with keys.** Press `+` four times, then `−` four times, without moving the cursor. After each press
+  the cell under the cursor carries the same label.
+- **Zoom with pinch.** Repeat the previous step with a trackpad pinch. This is a user step (computer use can't
+  pinch); if the user isn't available, record VIEW-03 pinch as NOT VERIFIED.
+- **Proof.** Zoomed screenshots `VIEW-02-1key-2x.png`, `VIEW-02-1key-1x.png`, and
+  `VIEW-03-keys-step<n>.png` for each step.
+
+## Gotchas
+
+- The Mac mini is @1x only: it can do the @1x half of VIEW-02 but not the @2x half.
+- A screenshot can itself be scaled. Use computer use's `zoom` on a small region and compare pixels, not a
+  full-screen capture.
+- Moving the cursor between key presses invalidates the anchor check; keep it still.
