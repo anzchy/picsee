@@ -52,7 +52,7 @@ picsee 是面向 macOS 的本地图片浏览工具，优先解决 Finder 打开�
 
 ```mermaid
 flowchart TD
-    App[PicseeApp：组装与应用入口] --> UI[SwiftUI：设置、侧栏、信息面板]
+    App[PicseeApp：组装与应用入口] --> UI[SwiftUI 面板（嵌入 AppKit 窗口）：设置、侧栏、信息面板]
     App --> Mac[PicseeMacUI：窗口、画布、网格、输入]
     UI --> Session[窗口级 ViewerSession / BrowserSession]
     Mac --> Session
@@ -73,7 +73,7 @@ flowchart TD
 
 | Target | 职责与可依赖范围 | 不负责的事情 |
 |---|---|---|
-| `PicseeApp` | App 生命周期、服务组装、打开事件、SwiftUI 外壳；依赖其他模块 | 不内嵌缓存/解码算法 |
+| `PicseeApp` | App 生命周期（`NSApplicationDelegate`）、服务组装、打开事件、SwiftUI 面板；窗口由 AppKit 拥有（[ADR-001](./adr/0001-appkit-owns-windows.md)）；依赖其他模块 | 不内嵌缓存/解码算法 |
 | `PicseeMacUI` | AppKit 画布、网格、窗口、输入；依赖 Core 与 Application | 不直接读磁盘、枚举目录或拼缓存路径 |
 | `PicseeCore` | 值类型、命令、错误、标识、服务协议；Foundation/CoreGraphics 范围内 | 不引用 SwiftUI、AppKit 控件、数据库或具体解码器 |
 | `PicseeApplication` | 窗口 Session、应用用例、状态协调；依赖 Core | 不创建 NSWindow，不执行阻塞文件 I/O |
@@ -352,7 +352,7 @@ AppKit WindowCoordinator 管理 NSWindow/NSPanel 生命周期、浮层、透明�
 
 | ADR | 决策 | 为什么这样选 | 何时重评 |
 |---|---|---|---|
-| ADR-001 | Swift 原生，SwiftUI + AppKit 分工 | 贴近 macOS 窗口、输入与图像 API | 确定其他平台并有可共享核心时 |
+| [ADR-001](./adr/0001-appkit-owns-windows.md) | Swift 原生；AppKit 拥有窗口、画布与网格，SwiftUI 只做面板 | 贴近 macOS 窗口、输入与图像 API | 确定其他平台并有可共享核心时 |
 | ADR-002 | Session 隔离、服务共享 | 多窗口状态独立，避免重复解码 | 真实多窗口内存数据表明需细分服务时 |
 | ADR-003 | Task/actor 协调 + 有界 OperationQueue | 隔离同步解码并显式控制取消与并发 | 新 executor 或解码 API 带来明确收益时 |
 | ADR-004 | 文件系统真相源，版本化快照 | 开箱即用、减少导入与同步成本 | 产品转为大型资产管理库时 |

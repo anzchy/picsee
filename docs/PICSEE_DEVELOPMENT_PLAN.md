@@ -108,14 +108,14 @@ P0 技术验证、设计映射与命令底座
 
 ### 1.4 最小状态模型与实施前冻结点
 
-以下是本轮计划采用的**建议默认行为**，不是已实现或用户逐项指定的事实。P0-09/P3-09开始时记录为命令/状态表；如变更须同步 DESIGN.md、用例及验收，不由每张 mockup 自行决定。
+以下默认行为已在 2026-10-21 grilling 中由用户确认冻结（仍不是已实现的事实）。P0-09/P3-09开始时记录为命令/状态表；如变更须同步 DESIGN.md、用例及验收，不由每张 mockup 自行决定。
 
 - `BrowserSelection` 持有 `selectedItemIDs`、`currentItemID`、`anchorItemID`；图片身份不使用索引代替。切换过滤/目录/排序时与对应快照版本协调。
-- **Space 预览范围默认**：只选1项时按当前过滤/排序后的目录序列翻图；多于1项时按同一排序后的选中集合翻图。Viewer保存来源快照版本和有序ID集合；Esc恢复原选择集合、当前项和滚动锚点。遇删除/权限变化按已冻结序列核对移除，不悄悄扩大到全部目录。
+- **Space 预览范围（用户已确认，2026-10-21 grilling）**：只选1项时按当前过滤/排序后的目录序列翻图；多于1项时按同一排序后的选中集合翻图。Viewer保存来源快照版本和有序ID集合；Esc恢复原选择集合、当前项和滚动锚点。遇删除/权限变化按已冻结序列核对移除，不悄悄扩大到全部目录。
 - ⌘切换单项、Shift以锚点做范围选择；方向键/修饰键和焦点联动在原生 NSCollectionView 中验证并固化，不能仅凭静态蓝框判定完成。
 - `ViewerChromeState` 显式描述隐藏、可见、用户常驻及交互锁定；菜单/Inspector/Filmstrip/键盘焦点形成保持可见条件。用可控时钟验证约2.5秒，不靠散落定时器或字符串替换。
-- `DisplayPreferences` 保存外观、侧栏/宽度、Filmstrip、文件名、缩略图适应方式/尺寸、工具常驻。瞬时搜索词是否跨启动恢复单独决定，不与布局偏好混存。
-- 原生基础命令从P0建立：Space、箭头、Esc、Enter、0/1、+/−、⌘F；建议 ⌘O 对应可选文件/目录的“打开…”，⌘I 对应基础 Inspector。阶段尚未实现时不展示已可用的快捷键提示。
+- `DisplayPreferences` 保存外观、侧栏/宽度、Filmstrip、文件名、缩略图适应方式/尺寸、工具常驻。搜索词是瞬时过滤，不跨启动恢复，不与布局偏好混存。
+- 原生基础命令从P0建立：Space、箭头、Esc、Enter、0/1、+/−、⌘F；⌘O 对应可选文件/目录的“打开…”，⌘I 显示/隐藏基础 Inspector。阶段尚未实现时不展示已可用的快捷键提示。
 - 图片右键动作采用不可变目标身份/快照，避免菜单打开后当前项改变导致作用到别图。多选菜单仅开放已实现且语义明确的集合操作；基础多选不自动授权批量导出/删除。
 
 ### 1.5 本轮阶段调整
@@ -134,13 +134,13 @@ P0 技术验证、设计映射与命令底座
 
 工作包：
 
-- [ ] `P0-01` 创建原生 App 工程与本地 Swift Package；确立五个 production targets，CI 编译和基础行为测试。
+- [ ] `P0-01` 创建原生 App 工程与本地 Swift Package；确立五个 production targets，CI 编译和基础行为测试。P0-01 是 TDD 流程的 bootstrap 例外：tdd-guardian 需要能运行的测试命令，而它由 P0-01 建立；因此 P0-01 仍先写一个失败的 Swift Testing 测试（如 `ItemID` 可编码往返）再实现，红/绿输出放进 PR，但没有 receipt。P0-01 只含五个 target 的骨架、`project.yml`、CI 与这条测试，不含其他行为代码。合入后用户运行 `/tdd-guardian:init`，P0-02 起全部走 tdd-guardian。工程由 XcodeGen 生成：`project.yml` 入库，`*.xcodeproj` 不入库（并行 worktree 不再冲突于 `project.pbxproj`）；Swift 6 语言模式、macOS 14 部署下限与 entitlements 写在 `project.yml` 里。App 显示名 `Picsee`，bundle identifier `io.github.anzchy.picsee`（沙盒容器、偏好与授权都按它归属，发布后不改）。本地与真机构建用 Apple Development 证书、团队 `GRT84NAK4T` 自动签名（`DEVELOPMENT_TEAM` 写在 `project.yml`），让 P0-04 的 bookmark 结论接近发布签名；CI 只做 ad-hoc 或不签名的编译与测试，证书不进 CI。Developer ID Application 证书到 P6 再申请。测试框架：包内单元测试用 Swift Testing（`@Test`、`#expect`）；`UITests/` 与性能采样用 XCTest（XCUITest、`measure` + os_signpost）。CI（GitHub Actions，PR 与 push 到 `main` 触发）：显式选用 P0-02 锁定的 Xcode（runner 镜像没有该版本时不悄悄换版本）；lane 为 `xcodegen generate`、`swift test`、`xcodebuild build`（ad-hoc 或不签名），`ledger:check` 写成后加入；XCUITest、性能采样、sandbox/bookmark 检查不进 CI。`main` 分支保护：上述 lane 为必需检查、禁止 force push；不开“必须经 PR 合入”，按 rule 70 由 delegator 在 verifier PASS 且 CI 绿后 `--ff-only` 推送。
 - [ ] `P0-02` 在可运行的本机稳定工具链锁定 Swift 6 模式、SDK 和 macOS 14 部署下限；建立 Apple Silicon 构建记录。
-- [ ] `P0-03` 验证 SwiftUI 外壳内嵌 AppKit 画布，完成 Retina 尺寸、鼠标锚点缩放与焦点转移实验。
+- [ ] `P0-03` 验证 AppKit 窗口内嵌 SwiftUI 面板与 AppKit 画布（[ADR-001](./adr/0001-appkit-owns-windows.md)），完成 Retina 尺寸、鼠标锚点缩放与焦点转移实验。
 - [ ] `P0-04` 在启用 sandbox 的应用里验证打开单文件、授权父目录、bookmark 跨重启恢复、关闭后释放范围。
 - [ ] `P0-05` ImageIO 对代表性小图、48MP 大图、带方向照片、透明图、坏文件做尺寸受限解码；记录实际字节与耗时。
 - [ ] `P0-06` 受控 OperationQueue 包装异步接口：覆盖排队/执行时取消、只完成一次、内存预约释放。
-- [ ] `P0-07` 建立素材 manifest、指标脚本/日志约定和 ADR-001～007 初稿；记录需要更改的默认值。
+- [ ] `P0-07` 建立素材 manifest、指标脚本/日志约定和 ADR-002～007 初稿（ADR-001 已在 grilling 中定稿）；记录需要更改的默认值。素材分三层：① 小型自校验素材（1px 棋盘格、坐标网格、EXIF 方向 1–8、alpha 渐变、截断/损坏/超限头）由确定性脚本 `scripts/testassets/` 生成，脚本、文件与 `TestAssets/manifest.json` 入库；② S2 批量与 S3 48MP/100MP 由同一脚本按需生成到 `~/.picsee/testassets/`，只入库参数与预期哈希；③ 真实照片内容（带 EXIF 的 JPEG/HEIC、S4 的 RAW/GIF/PDF）按 URL 下载并校验 sha256，来源限 CC0/宽松许可，manifest 记录 URL、许可与哈希，文件不入库。不用 Git LFS。合成平涂图不得用于性能数字：性能采样用第③层真实照片或带照片噪声的合成图，并在记录里写明。
 - [ ] `P0-08` 建立 PicseeDesignKit 的原生颜色/排版/间距/图标映射（位于现有 UI target 内，不额外拆 target）；以[组件与原生映射规范](../design/picsee-ui-system/native/README.md)为输入，实现30页组件状态预览，核对TOKEN_REGISTRY的源哈希并记录原生控件与CSS token的合理差异。文档准备完成不等于本工作包已实现。
 - [ ] `P0-09` 最小 CommandRouter、焦点上下文和选择/预览状态表；冻结1.4节默认值，原生菜单、SwiftUI按钮与AppKit输入共用入口。
 

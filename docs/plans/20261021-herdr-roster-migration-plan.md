@@ -73,7 +73,7 @@ receipt 是 RED-before-GREEN 的证据：实现者在改生产代码**之前**�
 所以只写一个薄包装 `swift-lane.sh`，作为 tdd-guardian 的 lane 命令：
 - 只跑指定测试（`swift test --filter` 或 `xcodebuild test -only-testing`），不跑整套；
 - 编译失败时以“环境失败”退出，不输出计数，让插件判为 `environment` 拒收，迫使实现者先写能编译的桩（返回错误值），再让断言失败；
-- 测试真正运行后，把 XCTest/Swift Testing 结果折算成插件认得的一行 `Tests run: N, Failures: F, Errors: 0, Skipped: S`；
+- 测试真正运行后，把 XCTest/Swift Testing 结果折算成插件认得的一行 `Tests run: N, Failures: F, Errors: 0, Skipped: S`。分工已定（2026-10-21 grilling）：包内单元测试是 Swift Testing，`UITests/` 与性能采样是 XCTest，所以两种输出都要解析，解析规则在 P0-01 后对照真实输出写；
 - 走 `heavy-lock.sh`，避免两个实现者同时用 DerivedData。
 
 record/verify、指纹、防削弱检查仍由插件完成，不像 mdpro 那样另写一套 300 行的 CLI。
@@ -95,9 +95,10 @@ record/verify、指纹、防削弱检查仍由插件完成，不像 mdpro 那样
 
 ## 5. 执行顺序（确认后）
 
-1. 审 `.gitignore` → `git init` → 首次提交（只含文档、设计、脚本） → 用户确认后 `gh repo create --private` 并 push。
+1. ~~审 `.gitignore` → `git init` → 首次提交 → push~~ 已完成（2026-10-21）：用户改为**公开**库 `anzchy/picsee`，Picview 逆向资料与 `evidence/` 不入库。
 2. 写 B2、B3、B1 和规则 70，再写 A2、A1、A3。
 3. 写 A6、A7、A8，确认 hooks 在 settings.json 中生效。
 4. 写 A4、A5，Swift 命令先按架构文档里的 target 名填写，标注“P0-01 后校准”。
 5. 规则和 ADR 草稿交给 gpt-auditor 加 Opus plan reviewer 盲审（照搬规则本身的 plan 审计流程）。
-6. P0-01 建好工程后：A9、A10（`/tdd-guardian:init`），然后用一个真实 P0 工作项完整跑一遍 brief → matrix → attack → RED → handoff → 审计 → 合入。
+6. P0-01 是唯一记录在案的 bootstrap 例外（2026-10-21 grilling 决定）：在主对话里做，仍先写一个会失败的 Swift Testing 测试、看它变红再实现，红/绿输出贴进 PR，PR 描述写明“bootstrap：tdd-guardian 尚不可用”；没有 receipt，但照常走审计与合入。
+7. P0-01 合入后：用户运行 `/tdd-guardian:init`，再写 A9、A10，然后用一个真实 P0 工作项完整跑一遍 brief → matrix → attack → RED → handoff → 审计 → 合入。P0-02 起不再有例外。
