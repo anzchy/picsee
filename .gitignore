@@ -44,6 +44,7 @@ design/competence-report/*.zip
 /.codex/config.toml
 /.codex/migrate-to-codex-report.txt
 /.agents/skills/remote-ssh/
+/.claude/skills/remote-ssh/
 /.agents/skills/remote-windows-device-test/
 /.agents/skills/reverse-engineer-anything/
 
