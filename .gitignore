@@ -1,0 +1,41 @@
+# Dependencies and local caches
+node_modules/
+.cache/
+.npm/
+.rea-cache/
+.DS_Store
+
+# Stitch login credentials (never commit)
+.stitch-cli/
+.gstack/
+
+# Local tool state and browser sessions/authentication
+.playwright-cli/
+playwright/.auth/
+.claude/settings.local.json
+.claude/worktrees/
+
+# Raw reverse-engineering output (large; strings.txt embeds a third-party API key).
+# Reports and small excerpts stay tracked.
+evidence/deep-arm64-disassembly.txt
+evidence/deep-dispatch.json
+evidence/deep-objc-metadata.txt
+evidence/strings.txt
+
+# Stitch tool workspace only; committed mockups live in design/prototypes/picsee-browser/states/
+# Includes .stitch/captures/, .stitch/generated/, and .stitch/revisions/.
+.stitch/
+.stitch.json
+
+# Derived archive of design/competence-report
+design/competence-report/*.zip
+/.agents/skills/stitch
+/evidence
+/design/prototypes/picsee-browser/revisions
+/design/competence-report
+
+# Picview reverse-engineering reports and scripts: local research only, never in the public repo
+/docs/PICVIEW_ANALYSIS.md
+/docs/PICVIEW_FEATURES.md
+/scripts/analyze_picview.py
+/scripts/deepen_picview.py

@@ -1,0 +1,4 @@
+async page=>{
+ const context=await page.context().browser().newContext({viewport:{width:1019,height:853},deviceScaleFactor:2});const retina=await context.newPage();
+ try{await retina.goto('http://127.0.0.1:4311/prototypes/picsee-browser/viewer-v2.html');await retina.getByTestId('large-viewer').waitFor();await retina.waitForFunction(()=>{const e=document.querySelector('.large-image');return e?.naturalWidth>0&&e.style.width});await retina.keyboard.press('1');const metrics=await retina.locator('.large-image').evaluate(e=>({source:e.naturalWidth,css:e.getBoundingClientRect().width,dpr:devicePixelRatio}));if(Math.abs(metrics.css*metrics.dpr-metrics.source)>1)throw Error('Retina 1:1 mismatch');return{passed:true,check:'Retina 1:1 maps source pixels to backing pixels',metrics};}finally{await context.close()}
+}

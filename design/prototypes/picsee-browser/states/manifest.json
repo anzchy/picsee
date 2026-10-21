@@ -1,0 +1,225 @@
+{
+  "schema": "picsee.design-catalog/v1",
+  "states": [
+    {
+      "name": "grid-light",
+      "title": "11 网格 · 浅色",
+      "file": "grid-light.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "grid-dark",
+      "title": "12 网格 · 深色",
+      "file": "grid-dark.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "viewer-quiet",
+      "title": "13 大图 · 沉浸隐藏",
+      "file": "viewer-quiet.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "viewer-controls",
+      "title": "14 大图 · 工具显示",
+      "file": "viewer-controls.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "grid-display",
+      "title": "15 网格 · 显示与外观",
+      "file": "grid-display.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "viewer-inspector",
+      "title": "16 大图 · 图片信息",
+      "file": "viewer-inspector.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "first-launch",
+      "title": "21 首次打开",
+      "file": "first-launch.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "empty-folder",
+      "title": "22 空文件夹",
+      "file": "empty-folder.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "search-empty",
+      "title": "23 搜索无结果",
+      "file": "search-empty.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "folder-loading",
+      "title": "24 读取文件夹",
+      "file": "folder-loading.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "image-error",
+      "title": "25 图片无法读取",
+      "file": "image-error.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "permission-denied",
+      "title": "26 目录权限失效",
+      "file": "permission-denied.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "original-size",
+      "title": "27 原始尺寸与平移",
+      "file": "original-size.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "keyboard-focus",
+      "title": "28 键盘焦点",
+      "file": "keyboard-focus.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "compact-grid",
+      "title": "29 紧凑窗口",
+      "file": "compact-grid.html",
+      "viewport": {
+        "width": 800,
+        "height": 680
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "components",
+      "title": "30 组件与状态",
+      "file": "components.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "accepted-C-snapshot"
+    },
+    {
+      "name": "grid-context-menu",
+      "title": "31 图片右键菜单 · C",
+      "file": "grid-context-menu.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "local-C-adaptation"
+    },
+    {
+      "name": "grid-multiselect",
+      "title": "32 基础多选 · C",
+      "file": "grid-multiselect.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "local-C-adaptation"
+    },
+    {
+      "name": "viewer-filmstrip",
+      "title": "33 胶片条展开 · C",
+      "file": "viewer-filmstrip.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "local-C-adaptation"
+    },
+    {
+      "name": "viewer-inspector-light",
+      "title": "34 图片信息 · 浅色 · C",
+      "file": "viewer-inspector-light.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "local-C-adaptation"
+    }
+  ]
+}

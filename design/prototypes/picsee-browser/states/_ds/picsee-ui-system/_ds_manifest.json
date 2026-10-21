@@ -1,0 +1,982 @@
+{
+  "namespace": "PicseeUiSystem_bb8eab",
+  "components": [
+    {
+      "name": "IconButton",
+      "sourcePath": "components/IconButton.jsx",
+      "props": [
+        {
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "name": "children",
+          "type": "React.ReactNode"
+        },
+        {
+          "name": "onClick",
+          "type": "() => void"
+        },
+        {
+          "name": "pressed",
+          "type": "boolean"
+        },
+        {
+          "name": "disabled",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "Keycap",
+      "sourcePath": "components/Keycap.jsx",
+      "props": [
+        {
+          "name": "children",
+          "type": "React.ReactNode"
+        }
+      ]
+    },
+    {
+      "name": "NavRow",
+      "sourcePath": "components/NavRow.jsx",
+      "props": [
+        {
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "name": "icon",
+          "type": "React.ReactNode"
+        },
+        {
+          "name": "count",
+          "type": "number"
+        },
+        {
+          "name": "selected",
+          "type": "boolean"
+        },
+        {
+          "name": "onClick",
+          "type": "() => void"
+        }
+      ]
+    }
+  ],
+  "startingPoints": [],
+  "cards": [],
+  "globalCssPaths": [
+    "tokens/globals.css",
+    "tokens/light.css",
+    "tokens/dark.css",
+    "components/primitives.css",
+    "styles.css"
+  ],
+  "tokens": [
+    {
+      "name": "--color-bg",
+      "value": "#ffffff",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-surface",
+      "value": "#f6f7fb",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-panel",
+      "value": "#ffffff",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-text",
+      "value": "#1a1a1a",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-muted",
+      "value": "#6b7280",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-border",
+      "value": "color-mix(in srgb, var(--color-text) 10%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-border-subtle",
+      "value": "color-mix(in srgb, var(--color-text) 6%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-hover",
+      "value": "color-mix(in srgb, var(--color-text) 5%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--shadow-soft",
+      "value": "0 0 0 0.5px color-mix(in srgb, var(--color-text) 12%, transparent),\n                 0 8px 24px color-mix(in srgb, var(--color-text) 8%, transparent)",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css"
+    },
+    {
+      "name": "--color-accent",
+      "value": "#2563eb",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-soft",
+      "value": "color-mix(in srgb, var(--color-accent) 14%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-text",
+      "value": "color-mix(in srgb, var(--color-accent) 80%, var(--color-text))",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-fill",
+      "value": "var(--color-accent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-fill-hover",
+      "value": "color-mix(in srgb, var(--color-accent) 88%, var(--color-text))",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-tab-active-fill",
+      "value": "color-mix(in srgb, var(--color-text) 16%, var(--color-surface))",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-tab-active-accent",
+      "value": "var(--color-accent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--tab-active-close-opacity",
+      "value": "0.5",
+      "kind": "other",
+      "definedIn": "tokens/globals.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--color-focus-ring",
+      "value": "var(--color-accent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-danger",
+      "value": "#dc2626",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-danger-soft",
+      "value": "color-mix(in srgb, var(--color-danger) 12%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-error-text",
+      "value": "#b91c1c",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-highlight",
+      "value": "rgba(255, 85, 130, 0.65)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-control-border",
+      "value": "color-mix(in srgb, var(--color-text) 50%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-editor-bg",
+      "value": "#ffffff",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-code-bg",
+      "value": "color-mix(in srgb, var(--color-editor-bg) 94%, var(--color-text))",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--font-sans",
+      "value": "\"SF Pro Text\", \"Avenir Next\", \"Helvetica Neue\", sans-serif",
+      "kind": "font",
+      "definedIn": "tokens/globals.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--font-mono",
+      "value": "\"SF Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace",
+      "kind": "font",
+      "definedIn": "tokens/globals.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--title-bar-height",
+      "value": "38px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--traffic-lights-end",
+      "value": "0px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--traffic-lights-clearance",
+      "value": "0px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--traffic-lights-clearance-main",
+      "value": "0px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--sidebar-width",
+      "value": "220px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--sidebar-width-min",
+      "value": "180px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--main-min-width",
+      "value": "320px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--bottom-tabs-height",
+      "value": "36px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--editor-content-width",
+      "value": "780px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--content-padding",
+      "value": "40px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--editor-font-family",
+      "value": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "kind": "font",
+      "definedIn": "tokens/globals.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--editor-font-size",
+      "value": "16px",
+      "kind": "font",
+      "definedIn": "tokens/globals.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--editor-line-height",
+      "value": "1.6",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--color-toggle-track-off",
+      "value": "#cccccc",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-running-fill",
+      "value": "#dcfce7",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-running-text",
+      "value": "#16a34a",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-banner-unsaved",
+      "value": "#f59e0b",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-group-bg",
+      "value": "color-mix(in srgb, var(--color-surface) 80%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-input-bg",
+      "value": "color-mix(in srgb, var(--color-panel) 90%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-text-secondary",
+      "value": "#6b7280",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-bg-secondary",
+      "value": "#f6f7fb",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-bg-tertiary",
+      "value": "#eeeff3",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-on-accent",
+      "value": "#fff",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-scrim",
+      "value": "rgba(15, 23, 42, 0.35)",
+      "kind": "color",
+      "definedIn": "tokens/globals.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--font-size-ui-sm",
+      "value": "12px",
+      "kind": "font",
+      "definedIn": "tokens/globals.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--font-size-ui",
+      "value": "13px",
+      "kind": "font",
+      "definedIn": "tokens/globals.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--font-size-ui-lg",
+      "value": "14px",
+      "kind": "font",
+      "definedIn": "tokens/globals.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--font-size-title",
+      "value": "16px",
+      "kind": "font",
+      "definedIn": "tokens/globals.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--radius-inner",
+      "value": "4px",
+      "kind": "radius",
+      "definedIn": "tokens/globals.css",
+      "annotation": "radius"
+    },
+    {
+      "name": "--radius-control",
+      "value": "6px",
+      "kind": "radius",
+      "definedIn": "tokens/globals.css",
+      "annotation": "radius"
+    },
+    {
+      "name": "--radius-popover",
+      "value": "10px",
+      "kind": "radius",
+      "definedIn": "tokens/globals.css",
+      "annotation": "radius"
+    },
+    {
+      "name": "--motion-duration-fast",
+      "value": "150ms",
+      "kind": "other",
+      "definedIn": "tokens/globals.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--motion-duration-fast",
+      "value": "0ms",
+      "kind": "other",
+      "definedIn": "tokens/globals.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--traffic-lights-end",
+      "value": "78px",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--traffic-lights-clearance",
+      "value": "calc(var(--traffic-lights-end) - 16px)",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--traffic-lights-clearance-main",
+      "value": "calc(var(--traffic-lights-end) + 2px)",
+      "kind": "spacing",
+      "definedIn": "tokens/globals.css",
+      "annotation": "spacing"
+    },
+    {
+      "name": "--color-bg",
+      "value": "#ffffff",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-surface",
+      "value": "#f6f7fb",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-panel",
+      "value": "#ffffff",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-text",
+      "value": "#1a1a1a",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-muted",
+      "value": "#6b7280",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-border",
+      "value": "color-mix(in srgb, var(--color-text) 10%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-border-subtle",
+      "value": "color-mix(in srgb, var(--color-text) 6%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-hover",
+      "value": "color-mix(in srgb, var(--color-text) 5%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--shadow-soft",
+      "value": "0 0 0 0.5px color-mix(in srgb, var(--color-text) 12%, transparent),\n                 0 8px 24px color-mix(in srgb, var(--color-text) 8%, transparent)",
+      "kind": "spacing",
+      "definedIn": "tokens/light.css"
+    },
+    {
+      "name": "--color-accent",
+      "value": "#2563eb",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-soft",
+      "value": "color-mix(in srgb, var(--color-accent) 14%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-text",
+      "value": "color-mix(in srgb, var(--color-accent) 80%, var(--color-text))",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-fill",
+      "value": "var(--color-accent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-fill-hover",
+      "value": "color-mix(in srgb, var(--color-accent) 88%, var(--color-text))",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-tab-active-fill",
+      "value": "color-mix(in srgb, var(--color-text) 16%, var(--color-surface))",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-tab-active-accent",
+      "value": "var(--color-accent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--tab-active-close-opacity",
+      "value": "0.5",
+      "kind": "other",
+      "definedIn": "tokens/light.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--color-danger",
+      "value": "#dc2626",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-danger-soft",
+      "value": "color-mix(in srgb, var(--color-danger) 12%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-error-text",
+      "value": "#b91c1c",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-highlight",
+      "value": "rgba(255, 85, 130, 0.65)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-control-border",
+      "value": "color-mix(in srgb, var(--color-text) 50%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-editor-bg",
+      "value": "#ffffff",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-code-bg",
+      "value": "color-mix(in srgb, var(--color-editor-bg) 94%, var(--color-text))",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-toggle-track-off",
+      "value": "#cccccc",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-running-fill",
+      "value": "#dcfce7",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-running-text",
+      "value": "#16a34a",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-banner-unsaved",
+      "value": "#f59e0b",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-group-bg",
+      "value": "color-mix(in srgb, var(--color-surface) 80%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-input-bg",
+      "value": "color-mix(in srgb, var(--color-panel) 90%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-text-secondary",
+      "value": "var(--color-muted)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-bg-secondary",
+      "value": "var(--color-surface)",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-bg-tertiary",
+      "value": "#eeeff3",
+      "kind": "color",
+      "definedIn": "tokens/light.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-bg",
+      "value": "#0f1115",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-surface",
+      "value": "#161a22",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-panel",
+      "value": "#141821",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-text",
+      "value": "#e5e7eb",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-muted",
+      "value": "#9aa4b2",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-border",
+      "value": "color-mix(in srgb, var(--color-text) 12%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-border-subtle",
+      "value": "color-mix(in srgb, var(--color-text) 7%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-hover",
+      "value": "color-mix(in srgb, var(--color-text) 8%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--shadow-soft",
+      "value": "0 0 0 0.5px color-mix(in srgb, var(--color-text) 16%, transparent),\n                 0 8px 24px color-mix(in srgb, black 45%, transparent)",
+      "kind": "spacing",
+      "definedIn": "tokens/dark.css"
+    },
+    {
+      "name": "--color-accent",
+      "value": "#60a5fa",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-soft",
+      "value": "color-mix(in srgb, var(--color-accent) 22%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-text",
+      "value": "var(--color-accent)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-fill",
+      "value": "#1d4ed8",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-accent-fill-hover",
+      "value": "color-mix(in srgb, var(--color-accent-fill) 88%, #000)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-tab-active-fill",
+      "value": "color-mix(in srgb, var(--color-text) 30%, var(--color-surface))",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-tab-active-accent",
+      "value": "#93c5fd",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--tab-active-close-opacity",
+      "value": "0.6",
+      "kind": "other",
+      "definedIn": "tokens/dark.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--color-danger",
+      "value": "#f87171",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-danger-soft",
+      "value": "color-mix(in srgb, var(--color-danger) 18%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-error-text",
+      "value": "#f87171",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-highlight",
+      "value": "rgba(255, 85, 130, 0.40)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-control-border",
+      "value": "color-mix(in srgb, var(--color-text) 50%, transparent)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-editor-bg",
+      "value": "#0f1115",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-code-bg",
+      "value": "color-mix(in srgb, var(--color-editor-bg) 94%, var(--color-text))",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-toggle-track-off",
+      "value": "#cccccc",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-running-fill",
+      "value": "#dcfce7",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-running-text",
+      "value": "#16a34a",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-banner-unsaved",
+      "value": "#f59e0b",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-group-bg",
+      "value": "rgba(15, 18, 28, 0.6)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-input-bg",
+      "value": "rgba(15, 18, 28, 0.9)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-text-secondary",
+      "value": "var(--color-muted)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-bg-secondary",
+      "value": "var(--color-surface)",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    },
+    {
+      "name": "--color-bg-tertiary",
+      "value": "#1e2330",
+      "kind": "color",
+      "definedIn": "tokens/dark.css",
+      "annotation": "color"
+    }
+  ],
+  "themes": [],
+  "fonts": [],
+  "brandFonts": [],
+  "source": "spa"
+}

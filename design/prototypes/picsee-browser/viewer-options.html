@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN" class="theme-light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>picsee · 第二稿 · 沉浸浏览</title>
+  <link rel="icon" href="assets/picsee.svg" type="image/svg+xml">
+  <!-- Interaction prototype; mdpro visual tokens, locally bundled React. Not the native Swift app. -->
+  <script>try{document.documentElement.className='theme-'+((JSON.parse(localStorage.getItem('picsee-v2-appearance')||'"system"')==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):JSON.parse(localStorage.getItem('picsee-v2-appearance'))));}catch(e){}</script>
+  <link rel="stylesheet" href="_ds/picsee-ui-system/tokens/globals.css">
+  <link rel="stylesheet" href="_ds/picsee-ui-system/tokens/light.css">
+  <link rel="stylesheet" href="_ds/picsee-ui-system/tokens/dark.css">
+  <link rel="stylesheet" href="_ds/picsee-ui-system/components/primitives.css">
+  <link rel="stylesheet" href="_ds/picsee-ui-system/styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="viewer-options.css">
+</head>
+<body>
+  <div id="root"></div>
+  <noscript>请启用 JavaScript 以体验 picsee 交互原型。</noscript>
+  <script src="vendor/react.min.js"></script>
+  <script src="vendor/react-dom.min.js"></script>
+  <script src="_ds/picsee-ui-system/_ds_bundle.js"></script>
+  <script src="data.js"></script>
+  <script src="ui.js"></script>
+  <script src="viewer-layout.js"></script>
+  <script src="viewer-options.js"></script>
+</body>
+</html>

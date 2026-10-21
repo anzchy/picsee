@@ -1,0 +1,117 @@
+:root {
+  --color-bg: #ffffff; /* @kind color */
+  --color-surface: #f6f7fb; /* @kind color */
+  --color-panel: #ffffff; /* @kind color */
+  --color-text: #1a1a1a; /* @kind color */
+  --color-muted: #6b7280; /* @kind color */
+  --color-border: color-mix(in srgb, var(--color-text) 10%, transparent); /* @kind color */
+  --color-border-subtle: color-mix(in srgb, var(--color-text) 6%, transparent); /* @kind color */
+  --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent); /* @kind color */
+  --shadow-soft: 0 0 0 0.5px color-mix(in srgb, var(--color-text) 12%, transparent),
+                 0 8px 24px color-mix(in srgb, var(--color-text) 8%, transparent);
+  --color-accent: #2563eb; /* @kind color */
+  --color-accent-soft: color-mix(in srgb, var(--color-accent) 14%, transparent); /* @kind color */
+  
+  --color-accent-text: color-mix(in srgb, var(--color-accent) 80%, var(--color-text)); /* @kind color */
+  --color-accent-fill: var(--color-accent); /* @kind color */
+  --color-accent-fill-hover: color-mix(in srgb, var(--color-accent) 88%, var(--color-text)); /* @kind color */
+  
+  --color-tab-active-fill: color-mix(in srgb, var(--color-text) 16%, var(--color-surface)); /* @kind color */
+  --color-tab-active-accent: var(--color-accent); /* @kind color */
+  --tab-active-close-opacity: 0.5; /* @kind other */
+  
+  --color-focus-ring: var(--color-accent); /* @kind color */
+  --color-danger: #dc2626; /* @kind color */
+  --color-danger-soft: color-mix(in srgb, var(--color-danger) 12%, transparent); /* @kind color */
+  
+  --color-error-text: #b91c1c; /* @kind color */
+  
+  --color-highlight: rgba(255, 85, 130, 0.65); /* @kind color */
+  
+  --color-control-border: color-mix(in srgb, var(--color-text) 50%, transparent); /* @kind color */
+  --color-editor-bg: #ffffff; /* @kind color */
+  
+  --color-code-bg: color-mix(in srgb, var(--color-editor-bg) 94%, var(--color-text)); /* @kind color */
+  --font-sans: "SF Pro Text", "Avenir Next", "Helvetica Neue", sans-serif; /* @kind font */
+  --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; /* @kind font */
+  --title-bar-height: 38px; /* @kind spacing */
+  
+  --traffic-lights-end: 0px; /* @kind spacing */
+  --traffic-lights-clearance: 0px; /* @kind spacing */
+  --traffic-lights-clearance-main: 0px; /* @kind spacing */
+  
+  --sidebar-width: 220px; /* @kind spacing */
+  --sidebar-width-min: 180px; /* @kind spacing */
+  --main-min-width: 320px; /* @kind spacing */ 
+  --bottom-tabs-height: 36px; /* @kind spacing */
+  
+  --editor-content-width: 780px; /* @kind spacing */
+  --content-padding: 40px; /* @kind spacing */
+
+  
+  --editor-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; /* @kind font */
+  --editor-font-size: 16px; /* @kind font */
+  --editor-line-height: 1.6; /* @kind spacing */
+
+  
+  --color-toggle-track-off: #cccccc; /* @kind color */
+  --color-running-fill: #dcfce7; /* @kind color */
+  --color-running-text: #16a34a; /* @kind color */
+  --color-banner-unsaved: #f59e0b; /* @kind color */
+  
+  --color-group-bg: color-mix(in srgb, var(--color-surface) 80%, transparent); /* @kind color */
+  --color-input-bg: color-mix(in srgb, var(--color-panel) 90%, transparent); /* @kind color */
+
+  
+  --color-text-secondary: #6b7280; /* @kind color */
+  --color-bg-secondary: #f6f7fb; /* @kind color */
+  --color-bg-tertiary: #eeeff3; /* @kind color */
+
+  
+  --color-on-accent: #fff; /* @kind color */
+  --color-scrim: rgba(15, 23, 42, 0.35); /* @kind color */
+  --font-size-ui-sm: 12px; /* @kind font */
+  --font-size-ui: 13px; /* @kind font */
+  --font-size-ui-lg: 14px; /* @kind font */
+  --font-size-title: 16px; /* @kind font */ 
+  --radius-inner: 4px; /* @kind radius */
+  --radius-control: 6px; /* @kind radius */
+  --radius-popover: 10px; /* @kind radius */
+  --motion-duration-fast: 150ms; /* @kind other */
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 0ms; /* @kind other */
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+
+body.tauri-macos {
+  --traffic-lights-end: 78px; /* @kind spacing */
+  --traffic-lights-clearance: calc(var(--traffic-lights-end) - 16px); /* @kind spacing */ 
+  --traffic-lights-clearance-main: calc(var(--traffic-lights-end) + 2px); /* @kind spacing */ 
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

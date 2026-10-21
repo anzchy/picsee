@@ -1,0 +1,202 @@
+{
+  "schema": "picsee.mockup-assets/v1",
+  "images": [
+    {
+      "file": "assets/images/8897d43d5dc551830572.jpg",
+      "sha256": "8897d43d5dc551830572460a852f3329aad39fd64030728cdd9ec1ac3a6c476a",
+      "mimeType": "image/jpeg",
+      "bytes": 49848,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "components",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/0a76039c539ba52fbd71.jpg",
+      "sha256": "0a76039c539ba52fbd715d9aa4cd41157168fc8a72f3636a1f7e1680f73672b4",
+      "mimeType": "image/jpeg",
+      "bytes": 51576,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/bfacd632b6f4783f5181.jpg",
+      "sha256": "bfacd632b6f4783f5181a2df6a851fb6dfb3916a323ce152843d5d1722d9c827",
+      "mimeType": "image/jpeg",
+      "bytes": 47923,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/b2b2e3fddb8288fe4613.jpg",
+      "sha256": "b2b2e3fddb8288fe4613a459be76609b41983901a4778ee6a6a7859b1961d7ff",
+      "mimeType": "image/jpeg",
+      "bytes": 61940,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/675a412cb8c3b1ac4404.jpg",
+      "sha256": "675a412cb8c3b1ac4404a1d8736ca310a52a5590aa88f78ed53c74b90a445082",
+      "mimeType": "image/jpeg",
+      "bytes": 27572,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/0cf207b2a79464a24b34.jpg",
+      "sha256": "0cf207b2a79464a24b3463025d82b21e7719a00b521b81aeb01e3f0390ed7fad",
+      "mimeType": "image/jpeg",
+      "bytes": 17513,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/027bdb1e0a18ecc32ce5.jpg",
+      "sha256": "027bdb1e0a18ecc32ce50e8b450f3d00b470b61017282d5b7a971712314eb375",
+      "mimeType": "image/jpeg",
+      "bytes": 56737,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/43d4b1abd0797dad6e85.jpg",
+      "sha256": "43d4b1abd0797dad6e85f30366840251f5a0ac914d3cd2a204bbec7efff1daca",
+      "mimeType": "image/jpeg",
+      "bytes": 28017,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/d83eaf54fbbb9e975300.jpg",
+      "sha256": "d83eaf54fbbb9e975300a5b33d7ab15bc9b97c63ae98eca896baa977b5b3c2a1",
+      "mimeType": "image/jpeg",
+      "bytes": 35574,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/7522c3c4cb0bd95c0d7a.jpg",
+      "sha256": "7522c3c4cb0bd95c0d7af4cc890bc0b1ebe1b9dd29743cb85609efd7e3d8cf4b",
+      "mimeType": "image/jpeg",
+      "bytes": 25232,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/0507fad8b25695d8a7d9.jpg",
+      "sha256": "0507fad8b25695d8a7d9bf0cde04bafe216c5d2b9d9926ca4ad0bfacc5a4bc87",
+      "mimeType": "image/jpeg",
+      "bytes": 21053,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/eb9ffeb5f86f9639c45f.jpg",
+      "sha256": "eb9ffeb5f86f9639c45f96a2d7aaee9fddc9669fa6e6f6e9e3535faadef149fe",
+      "mimeType": "image/jpeg",
+      "bytes": 42854,
+      "usedBy": [
+        "grid-light",
+        "grid-dark",
+        "grid-display",
+        "compact-grid",
+        "grid-context-menu",
+        "grid-multiselect",
+        "viewer-filmstrip"
+      ]
+    },
+    {
+      "file": "assets/images/b3525a0437e56edf3a3f.jpg",
+      "sha256": "b3525a0437e56edf3a3f6821bffdbe311c4fd71da321125f04deef27510898d5",
+      "mimeType": "image/jpeg",
+      "bytes": 1161114,
+      "usedBy": [
+        "viewer-quiet",
+        "viewer-controls",
+        "viewer-inspector",
+        "original-size",
+        "keyboard-focus",
+        "viewer-filmstrip",
+        "viewer-inspector-light"
+      ]
+    }
+  ],
+  "attributionFile": "../../ASSETS.md"
+}

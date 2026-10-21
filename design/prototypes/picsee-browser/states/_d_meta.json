@@ -1,0 +1,47 @@
+{
+  "type": "design",
+  "designSystems": [
+    {
+      "name": "picsee — Quiet Image Canvas primitives",
+      "slug": "picsee-ui-system",
+      "namespace": "PicseeUiSystem_bb8eab",
+      "dsFolder": "_ds/picsee-ui-system",
+      "sourcePath": "design/picsee-ui-system"
+    }
+  ],
+  "primaryDesignSystem": "picsee-ui-system",
+  "createdAt": "2026-10-21T02:59:40.494Z",
+  "updatedAt": "2026-10-21T06:02:55.520Z",
+  "designDecision": {
+    "approvedSource": "C second draft",
+    "cloudProjectId": "2194104928396163363",
+    "finalHtmlScreens": 16,
+    "review": "needs-user-review",
+    "nativeBehaviorValidated": false,
+    "localHtmlScreens": 20,
+    "cloudHtmlScreens": 16,
+    "localAdditions": 4,
+    "localAdditionNames": [
+      "grid-context-menu",
+      "grid-multiselect",
+      "viewer-filmstrip",
+      "viewer-inspector-light"
+    ]
+  },
+  "assets": {
+    "picsee · C 设计状态稿": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-10-21T06:02:55.519Z",
+          "status": "needs-review",
+          "subtitle": "20 份 · 仓库内正式素材 · 本地可预览",
+          "viewport": {
+            "width": 1280,
+            "height": 800
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,266 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='IconButton'] > JSXAttribute > JSXIdentifier[name!=/^(?:label|children|onClick|pressed|disabled|key|ref|className|style)$/]",
+        "message": "<IconButton> doesn't accept that prop. Declared props: label, children, onClick, pressed, disabled."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Keycap'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|key|ref|className|style)$/]",
+        "message": "<Keycap> doesn't accept that prop. Declared props: children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='NavRow'] > JSXAttribute > JSXIdentifier[name!=/^(?:label|icon|count|selected|onClick|key|ref|className|style|children)$/]",
+        "message": "<NavRow> doesn't accept that prop. Declared props: label, icon, count, selected, onClick."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "IconButton": {
+        "replaces": []
+      },
+      "Keycap": {
+        "replaces": []
+      },
+      "NavRow": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--bottom-tabs-height",
+      "--color-accent",
+      "--color-accent",
+      "--color-accent",
+      "--color-accent-fill",
+      "--color-accent-fill",
+      "--color-accent-fill",
+      "--color-accent-fill-hover",
+      "--color-accent-fill-hover",
+      "--color-accent-fill-hover",
+      "--color-accent-soft",
+      "--color-accent-soft",
+      "--color-accent-soft",
+      "--color-accent-text",
+      "--color-accent-text",
+      "--color-accent-text",
+      "--color-banner-unsaved",
+      "--color-banner-unsaved",
+      "--color-banner-unsaved",
+      "--color-bg",
+      "--color-bg",
+      "--color-bg",
+      "--color-bg-secondary",
+      "--color-bg-secondary",
+      "--color-bg-secondary",
+      "--color-bg-tertiary",
+      "--color-bg-tertiary",
+      "--color-bg-tertiary",
+      "--color-border",
+      "--color-border",
+      "--color-border",
+      "--color-border-subtle",
+      "--color-border-subtle",
+      "--color-border-subtle",
+      "--color-code-bg",
+      "--color-code-bg",
+      "--color-code-bg",
+      "--color-control-border",
+      "--color-control-border",
+      "--color-control-border",
+      "--color-danger",
+      "--color-danger",
+      "--color-danger",
+      "--color-danger-soft",
+      "--color-danger-soft",
+      "--color-danger-soft",
+      "--color-editor-bg",
+      "--color-editor-bg",
+      "--color-editor-bg",
+      "--color-error-text",
+      "--color-error-text",
+      "--color-error-text",
+      "--color-focus-ring",
+      "--color-group-bg",
+      "--color-group-bg",
+      "--color-group-bg",
+      "--color-highlight",
+      "--color-highlight",
+      "--color-highlight",
+      "--color-hover",
+      "--color-hover",
+      "--color-hover",
+      "--color-input-bg",
+      "--color-input-bg",
+      "--color-input-bg",
+      "--color-muted",
+      "--color-muted",
+      "--color-muted",
+      "--color-on-accent",
+      "--color-panel",
+      "--color-panel",
+      "--color-panel",
+      "--color-running-fill",
+      "--color-running-fill",
+      "--color-running-fill",
+      "--color-running-text",
+      "--color-running-text",
+      "--color-running-text",
+      "--color-scrim",
+      "--color-surface",
+      "--color-surface",
+      "--color-surface",
+      "--color-tab-active-accent",
+      "--color-tab-active-accent",
+      "--color-tab-active-accent",
+      "--color-tab-active-fill",
+      "--color-tab-active-fill",
+      "--color-tab-active-fill",
+      "--color-text",
+      "--color-text",
+      "--color-text",
+      "--color-text-secondary",
+      "--color-text-secondary",
+      "--color-text-secondary",
+      "--color-toggle-track-off",
+      "--color-toggle-track-off",
+      "--color-toggle-track-off",
+      "--content-padding",
+      "--editor-content-width",
+      "--editor-font-family",
+      "--editor-font-size",
+      "--editor-line-height",
+      "--font-mono",
+      "--font-sans",
+      "--font-size-title",
+      "--font-size-ui",
+      "--font-size-ui-lg",
+      "--font-size-ui-sm",
+      "--main-min-width",
+      "--motion-duration-fast",
+      "--motion-duration-fast",
+      "--radius-control",
+      "--radius-inner",
+      "--radius-popover",
+      "--shadow-soft",
+      "--shadow-soft",
+      "--shadow-soft",
+      "--sidebar-width",
+      "--sidebar-width-min",
+      "--tab-active-close-opacity",
+      "--tab-active-close-opacity",
+      "--tab-active-close-opacity",
+      "--title-bar-height",
+      "--traffic-lights-clearance",
+      "--traffic-lights-clearance",
+      "--traffic-lights-clearance-main",
+      "--traffic-lights-clearance-main",
+      "--traffic-lights-end",
+      "--traffic-lights-end"
+    ],
+    "tokenKinds": {
+      "--color-bg": "color",
+      "--color-surface": "color",
+      "--color-panel": "color",
+      "--color-text": "color",
+      "--color-muted": "color",
+      "--color-border": "color",
+      "--color-border-subtle": "color",
+      "--color-hover": "color",
+      "--shadow-soft": "spacing",
+      "--color-accent": "color",
+      "--color-accent-soft": "color",
+      "--color-accent-text": "color",
+      "--color-accent-fill": "color",
+      "--color-accent-fill-hover": "color",
+      "--color-tab-active-fill": "color",
+      "--color-tab-active-accent": "color",
+      "--tab-active-close-opacity": "other",
+      "--color-focus-ring": "color",
+      "--color-danger": "color",
+      "--color-danger-soft": "color",
+      "--color-error-text": "color",
+      "--color-highlight": "color",
+      "--color-control-border": "color",
+      "--color-editor-bg": "color",
+      "--color-code-bg": "color",
+      "--font-sans": "font",
+      "--font-mono": "font",
+      "--title-bar-height": "spacing",
+      "--traffic-lights-end": "spacing",
+      "--traffic-lights-clearance": "spacing",
+      "--traffic-lights-clearance-main": "spacing",
+      "--sidebar-width": "spacing",
+      "--sidebar-width-min": "spacing",
+      "--main-min-width": "spacing",
+      "--bottom-tabs-height": "spacing",
+      "--editor-content-width": "spacing",
+      "--content-padding": "spacing",
+      "--editor-font-family": "font",
+      "--editor-font-size": "font",
+      "--editor-line-height": "spacing",
+      "--color-toggle-track-off": "color",
+      "--color-running-fill": "color",
+      "--color-running-text": "color",
+      "--color-banner-unsaved": "color",
+      "--color-group-bg": "color",
+      "--color-input-bg": "color",
+      "--color-text-secondary": "color",
+      "--color-bg-secondary": "color",
+      "--color-bg-tertiary": "color",
+      "--color-on-accent": "color",
+      "--color-scrim": "color",
+      "--font-size-ui-sm": "font",
+      "--font-size-ui": "font",
+      "--font-size-ui-lg": "font",
+      "--font-size-title": "font",
+      "--radius-inner": "radius",
+      "--radius-control": "radius",
+      "--radius-popover": "radius",
+      "--motion-duration-fast": "other"
+    },
+    "fontFamilies": []
+  }
+}

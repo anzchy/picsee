@@ -1,0 +1,179 @@
+{
+  "projectId": "2194104928396163363",
+  "projectUrl": "https://stitch.google.com/projects/2194104928396163363",
+  "localPackagingUploaded": false,
+  "states": [
+    {
+      "name": "grid-light",
+      "screenIds": [
+        "14601836994229817048"
+      ],
+      "sourceHtmlSha256": "99b0e3562ed39cd11ffbfe857af2098195c2b3a90e8227cf1968505ffb88fdd8",
+      "packagedHtmlSha256": "9c10c44b405078ef81b3dae00ce96952d4204517fa3df9d67c6bdfee4921b31d",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "grid-dark",
+      "screenIds": [
+        "3064312406943265187"
+      ],
+      "sourceHtmlSha256": "509c4d204ad2c9a232027159de3892b15a4940a4ffa00141d083a23cb6d5a186",
+      "packagedHtmlSha256": "ccd738c4841aa4679b769dce7ceed86ab95137b38c4157df013c17b0ff33baab",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "viewer-quiet",
+      "screenIds": [
+        "12350118541987102203"
+      ],
+      "sourceHtmlSha256": "82f60a6d15b945c969c32868561244c1be52ea4af2c9cff231110cbe4a7aed0c",
+      "packagedHtmlSha256": "1cb5ee6198cd4333f156095c35fa7e1ea03eccb03e3b0144bfe799794f2cd101",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "viewer-controls",
+      "screenIds": [
+        "13589006507119364287"
+      ],
+      "sourceHtmlSha256": "35c76eef91824dc07fe1a2f0bf28b7dc40f0560454ef4b6ec5e067190b0fd4f3",
+      "packagedHtmlSha256": "a42fee6602541b08b4fa601c493afcb26a187a95068d7ac4e8ccf983b5c981af",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "grid-display",
+      "screenIds": [
+        "11064550040603606807"
+      ],
+      "sourceHtmlSha256": "dd7a63e40a26c700152e07379360e7401d8e2d60d9f1dbffb31b4faa1e404e97",
+      "packagedHtmlSha256": "e94d5046f5327da902c78c547453e3ef0cd0b5294327aaa5363975333cc078a6",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "viewer-inspector",
+      "screenIds": [
+        "12755442922507933941"
+      ],
+      "sourceHtmlSha256": "0e006be992129510ca259eab1a0298a5cda45bca4cb8133f9e574dcf18261964",
+      "packagedHtmlSha256": "7611b8dd969eabbb9380d584ca1d12239319e8bcc920cd6bb8e2eed9031c76b0",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "first-launch",
+      "screenIds": [
+        "164908240892538176"
+      ],
+      "sourceHtmlSha256": "11f734c3c5d1f2a2055a1dc92b49610477b7183d7d63c33ca7dbd8853f596a3e",
+      "packagedHtmlSha256": "891606a1d3b3e022cfe6489c19ad81151358c2aae64f3c2d09f1e72e95dccb8e",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "empty-folder",
+      "screenIds": [
+        "164908240892536508"
+      ],
+      "sourceHtmlSha256": "6d443c69fbf48c2b7f7f1abf4a8ed08f40c872afc7ad2863ff239ce7fa93b829",
+      "packagedHtmlSha256": "178ae2a2c01bf6c7f719d5351d05bd06dbf8dd20a7855aa9001dbe9256f216f3",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "search-empty",
+      "screenIds": [
+        "12486128623328386720"
+      ],
+      "sourceHtmlSha256": "4b844c78a85915ba1db1679a7389e55972b1cdf520d74056dd672693a1d7d29e",
+      "packagedHtmlSha256": "2809bc1aa8936fa5f97908b436624c975127faa7b7366982b13892403d848ddd",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "folder-loading",
+      "screenIds": [
+        "56944056459542733"
+      ],
+      "sourceHtmlSha256": "afb062ee42ae07dee57720cba4e745406923bba992e9d59bb94f5643cc1ef93d",
+      "packagedHtmlSha256": "80d4e86a7f83fb8724a5856b5c0df7b227730f82fedc34756dc75b8b8081dbb0",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "image-error",
+      "screenIds": [
+        "11744224511424315712"
+      ],
+      "sourceHtmlSha256": "ad27d14381cba0cbe8c7a3da32996f6cfd55d26e879703c0f79e4154b824474a",
+      "packagedHtmlSha256": "98573fc7914a86e4c55c55b233aa4901a26ba080763ddda92f4474405b7119cb",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "permission-denied",
+      "screenIds": [
+        "5467803942563442168"
+      ],
+      "sourceHtmlSha256": "8abe8212187f198cdda5af265a56ff33173e838858d5040377a73a991ef67443",
+      "packagedHtmlSha256": "0bfb6a85412a97229ed4840f275466064d5afd0554d3980ede9c3ddd7c1b344b",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "original-size",
+      "screenIds": [
+        "61167294243124794"
+      ],
+      "sourceHtmlSha256": "b6b18dd919b0801ba0713c6324e66e70c21625fa2df2366805f8268cac17910a",
+      "packagedHtmlSha256": "8b4395816c23ae87fae0aa99efda248db30d09949a76273e2d9c38db6e17aab9",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "keyboard-focus",
+      "screenIds": [
+        "6740836353484827439"
+      ],
+      "sourceHtmlSha256": "b784858098e8c4308d4e900774203fc642069a594a79622942b6abb355c5e8cc",
+      "packagedHtmlSha256": "4651f48a5895f120efb3ff79abe72941ca7019aecb0f2d31e761e5ce0c48909f",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "compact-grid",
+      "screenIds": [
+        "14975705375083274647"
+      ],
+      "sourceHtmlSha256": "27c0bf88492093a725a145a43c266a7b548a15f74c8fc641e68759fe2cda2fc6",
+      "packagedHtmlSha256": "474bab65053d7f3108da82025d73058661b7576161ec222b2b13b115134e3c37",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "components",
+      "screenIds": [
+        "9478740685932826683"
+      ],
+      "sourceHtmlSha256": "939b41058d8006331894ce6a50e723fff2ba84e6634a47af72988910ee2ee762",
+      "packagedHtmlSha256": "b7b412926371c9eba6e53243dc2e6f4fd655cfd55d67a1d5873343c6189391f6",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "grid-context-menu",
+      "screenIds": [],
+      "sourceHtmlSha256": "ce8b29713b20e667535dc0244effdd86666ac769ef612a22132f6d59df569a72",
+      "packagedHtmlSha256": "82eccb2e4f6284f3d18287d46aa135acee4b9c4abb72525ef9d17dce83cbf9bf",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "grid-multiselect",
+      "screenIds": [],
+      "sourceHtmlSha256": "793132743934a2602b2609cd8b093b225798585ff8b9a2d750c594dcf0e1069f",
+      "packagedHtmlSha256": "b6d1bc9988ceed05ece98b4d590200ac85e5a2a4c571df887001eb56c419c2c1",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "viewer-filmstrip",
+      "screenIds": [],
+      "sourceHtmlSha256": "a42bdfd4f3c1ee86fdb8024b3f3716fdc1dc0229af6c183abe82d42afe0999ad",
+      "packagedHtmlSha256": "a3adff92d1bfd4f479a7136486d6b73bc851a6c90e9289435009fdfb0652c2f5",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    },
+    {
+      "name": "viewer-inspector-light",
+      "screenIds": [],
+      "sourceHtmlSha256": "1c414e700449594bc95163c165c4d59cb9bf36bcd9197102cbf980efe0220375",
+      "packagedHtmlSha256": "a2e2331cef71140452d0d8070a814f0a875f1d5bcf0f697d87758f75a0c9d01e",
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+    }
+  ]
+}

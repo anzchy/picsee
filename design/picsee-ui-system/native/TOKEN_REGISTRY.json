@@ -1,0 +1,274 @@
+{
+  "schema": "picsee.native-design-spec/v1",
+  "status": "specification-only",
+  "canonicalGuide": "design/DESIGN.md",
+  "nativeImplementationGenerated": false,
+  "sourcesSha256": {
+    "design/picsee-ui-system/tokens/globals.css": "be0d05ca62224767f66b051561af0b0ca9759431e9fe9965d159e90284e972a3",
+    "design/picsee-ui-system/tokens/light.css": "83088bc697be62301129a44b2ac1357db5231969f1cba75d32da181e7d8d23b7",
+    "design/picsee-ui-system/tokens/dark.css": "c5f51232f582665033bb3f037253d2f4665a3412894d8e0b30569c078dc47d88",
+    "design/picsee-ui-system/components/primitives.css": "6e034191ac3027330152b00f0b786eb3c5a8cdeedc3dc935e90044039d26a89d",
+    "design/DESIGN.md": "1c7e55e45db79bcce2cac97d30f43aa7a9b26006795cca5e7a5c041a9796e967"
+  },
+  "colors": {
+    "canvasBackground": {
+      "cssToken": "--color-bg",
+      "sourceExpressions": {
+        "light": "#ffffff",
+        "dark": "#0f1115"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "sidebarBackground": {
+      "cssToken": "--color-surface",
+      "sourceExpressions": {
+        "light": "#f6f7fb",
+        "dark": "#161a22"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "popoverBackground": {
+      "cssToken": "--color-panel",
+      "sourceExpressions": {
+        "light": "#ffffff",
+        "dark": "#141821"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "textPrimary": {
+      "cssToken": "--color-text",
+      "sourceExpressions": {
+        "light": "#1a1a1a",
+        "dark": "#e5e7eb"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "textSecondary": {
+      "cssToken": "--color-muted",
+      "sourceExpressions": {
+        "light": "#6b7280",
+        "dark": "#9aa4b2"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "divider": {
+      "cssToken": "--color-border",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-text) 10%, transparent)",
+        "dark": "color-mix(in srgb, var(--color-text) 12%, transparent)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "dividerSubtle": {
+      "cssToken": "--color-border-subtle",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-text) 6%, transparent)",
+        "dark": "color-mix(in srgb, var(--color-text) 7%, transparent)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "hoverBackground": {
+      "cssToken": "--color-hover",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-text) 5%, transparent)",
+        "dark": "color-mix(in srgb, var(--color-text) 8%, transparent)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "accent": {
+      "cssToken": "--color-accent",
+      "sourceExpressions": {
+        "light": "#2563eb",
+        "dark": "#60a5fa"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "focusRing": {
+      "cssToken": "--color-focus-ring",
+      "sourceExpressions": {
+        "light": "var(--color-accent)",
+        "dark": "var(--color-accent)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "selectionFill": {
+      "cssToken": "--color-accent-soft",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-accent) 14%, transparent)",
+        "dark": "color-mix(in srgb, var(--color-accent) 22%, transparent)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "selectionText": {
+      "cssToken": "--color-accent-text",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-accent) 80%, var(--color-text))",
+        "dark": "var(--color-accent)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "primaryFill": {
+      "cssToken": "--color-accent-fill",
+      "sourceExpressions": {
+        "light": "var(--color-accent)",
+        "dark": "#1d4ed8"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "primaryFillHover": {
+      "cssToken": "--color-accent-fill-hover",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-accent) 88%, var(--color-text))",
+        "dark": "color-mix(in srgb, var(--color-accent-fill) 88%, #000)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "onPrimary": {
+      "cssToken": "--color-on-accent",
+      "sourceExpressions": {
+        "light": "#fff",
+        "dark": "#fff"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "controlBorder": {
+      "cssToken": "--color-control-border",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-text) 50%, transparent)",
+        "dark": "color-mix(in srgb, var(--color-text) 50%, transparent)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "inputBackground": {
+      "cssToken": "--color-input-bg",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-panel) 90%, transparent)",
+        "dark": "rgba(15, 18, 28, 0.9)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "error": {
+      "cssToken": "--color-danger",
+      "sourceExpressions": {
+        "light": "#dc2626",
+        "dark": "#f87171"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "errorFill": {
+      "cssToken": "--color-danger-soft",
+      "sourceExpressions": {
+        "light": "color-mix(in srgb, var(--color-danger) 12%, transparent)",
+        "dark": "color-mix(in srgb, var(--color-danger) 18%, transparent)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "errorText": {
+      "cssToken": "--color-error-text",
+      "sourceExpressions": {
+        "light": "#b91c1c",
+        "dark": "#f87171"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
+    "scrim": {
+      "cssToken": "--color-scrim",
+      "sourceExpressions": {
+        "light": "rgba(15, 23, 42, 0.35)",
+        "dark": "rgba(15, 23, 42, 0.35)"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    }
+  },
+  "typography": {
+    "uiSmall": {
+      "cssToken": "--font-size-ui-sm",
+      "referenceSize": 12.0,
+      "nativeUnit": "pt",
+      "nativeFont": "system, validate font metrics"
+    },
+    "ui": {
+      "cssToken": "--font-size-ui",
+      "referenceSize": 13.0,
+      "nativeUnit": "pt",
+      "nativeFont": "system, validate font metrics"
+    },
+    "uiLarge": {
+      "cssToken": "--font-size-ui-lg",
+      "referenceSize": 14.0,
+      "nativeUnit": "pt",
+      "nativeFont": "system, validate font metrics"
+    },
+    "title": {
+      "cssToken": "--font-size-title",
+      "referenceSize": 16.0,
+      "nativeUnit": "pt",
+      "nativeFont": "system, validate font metrics"
+    }
+  },
+  "customRadii": {
+    "inner": {
+      "cssToken": "--radius-inner",
+      "referenceSize": 4.0,
+      "nativeUnit": "pt"
+    },
+    "control": {
+      "cssToken": "--radius-control",
+      "referenceSize": 6.0,
+      "nativeUnit": "pt"
+    },
+    "popover": {
+      "cssToken": "--radius-popover",
+      "referenceSize": 10.0,
+      "nativeUnit": "pt"
+    }
+  },
+  "layoutReferences": {
+    "source": "Accepted C mockups and design/DESIGN.md; native system metrics may differ",
+    "spacingPt": [
+      4,
+      8,
+      12,
+      16,
+      24
+    ],
+    "iconPt": [
+      16,
+      18
+    ],
+    "iconButtonHitAreaPt": [
+      30,
+      28
+    ],
+    "gridBottomBarPt": 40,
+    "sidebarInitialPt": [
+      196,
+      220
+    ],
+    "sidebarRangePt": [
+      160,
+      320
+    ],
+    "inspectorInitialPt": 220,
+    "viewerFitMarginPt": 16,
+    "webTitleStripReferencePx": 38,
+    "nativeTitlebarHeight": "system-defined"
+  },
+  "behaviorReferences": {
+    "viewerIdleDelaySeconds": 2.5,
+    "shortTransitionSeconds": 0.15,
+    "reducedMotionTransitionSeconds": 0,
+    "timerOwner": "PicseeApplication"
+  },
+  "legacyExclusion": [
+    "editor-*",
+    "color-editor-bg",
+    "color-code-bg",
+    "color-highlight",
+    "bottom-tabs-height",
+    "traffic-lights-*",
+    "color-running-*",
+    "color-banner-unsaved",
+    "unused aliases"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "devDependencies": {
+    "@google/stitch": "0.11.1",
+    "rea-agents": "6.7.0"
+  },
+  "name": "picview-rea-analysis",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Project-scoped REA installation and static Picview analysis",
+  "scripts": {
+    "rea": "rea",
+    "analyze": "python3 scripts/analyze_picview.py",
+    "stitch": "node scripts/stitch.mjs",
+    "preview:prototype": "python3 -m http.server 4311 --bind 127.0.0.1 --directory design",
+    "preview:states": "python3 -m http.server 4313 --bind 127.0.0.1 --directory design/prototypes/picsee-browser/states"
+  }
+}

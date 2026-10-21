@@ -1,0 +1,67 @@
+{
+  "type": "design",
+  "designSystems": [
+    {
+      "name": "picsee — Quiet Image Canvas primitives",
+      "slug": "picsee-ui-system",
+      "namespace": "PicseeUiSystem_bb8eab",
+      "dsFolder": "_ds/picsee-ui-system",
+      "sourcePath": "design/picsee-ui-system"
+    }
+  ],
+  "primaryDesignSystem": "picsee-ui-system",
+  "createdAt": "2026-10-20T10:37:16.688Z",
+  "updatedAt": "2026-10-21T05:12:31.075Z",
+  "assets": {
+    "picsee · 文件夹与大图浏览": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-10-20T10:42:28.889Z",
+          "status": "needs-review",
+          "subtitle": "mdpro design system · Space / ← → / Esc · Light & Dark",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          }
+        }
+      ]
+    },
+    "picsee · C 沉浸浏览": {
+      "versions": [
+        {
+          "path": "viewer-options.html",
+          "createdAt": "2026-10-20T15:00:03.875Z",
+          "status": "needs-review",
+          "subtitle": "唯一方案 · 精简网格 · 底部工具",
+          "viewport": {
+            "width": 1019,
+            "height": 853
+          }
+        },
+        {
+          "path": "viewer-v2.html",
+          "createdAt": "2026-10-21T01:31:12.964Z",
+          "status": "needs-review",
+          "subtitle": "第二稿 · 极简网格 · 按需工具 · 1:1 缩放",
+          "viewport": {
+            "width": 1019,
+            "height": 853
+          }
+        }
+      ]
+    }
+  },
+  "title": "picsee 图片浏览交互原型",
+  "prompt": "结合刚复制的 mdpro design system，包含文件夹侧栏、缩略图网格、Space 打开大图、左右箭头翻图、Esc 返回，支持浅色与深色主题。",
+  "viewerDecision": {
+    "date": "2026-10-21",
+    "primaryVariant": "immersive",
+    "userStatement": "C 方案为主；A 和 B 去掉",
+    "availableVariants": [
+      "immersive"
+    ],
+    "gridRevision": "Draft 2: single filename, subtle selection, bottom display preferences, resizable sidebar",
+    "detailReview": "User adopted all priority suggestions; draft 2 awaiting visual review"
+  }
+}
