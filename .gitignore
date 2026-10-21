@@ -39,3 +39,13 @@ design/competence-report/*.zip
 /docs/PICVIEW_FEATURES.md
 /scripts/analyze_picview.py
 /scripts/deepen_picview.py
+
+# Machine-local agent config: absolute paths, tailnet hosts, one-off migration logs
+/.codex/config.toml
+/.codex/migrate-to-codex-report.txt
+/.agents/skills/remote-ssh/
+/.agents/skills/remote-windows-device-test/
+/.agents/skills/reverse-engineer-anything/
+
+# Superseded A/B/C viewer-option screenshots (A/B were dropped; see prototype README)
+/design/prototypes/picsee-browser/qa/viewer-options/
