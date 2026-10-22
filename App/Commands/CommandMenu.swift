@@ -19,8 +19,10 @@ extension CommandID {
 /// Bare equivalents must defer to the native field editor before menu dispatch.
 final class CommandMainMenu: NSMenu {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if NSApp.keyWindow?.firstResponder is NSTextInputClient,
-           event.modifierFlags.intersection([.command, .control, .option]).isEmpty { return false }
+        if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+            guard NSApp.keyWindow?.windowController is CanvasWindowController,
+                  !(NSApp.keyWindow?.firstResponder is NSTextInputClient) else { return false }
+        }
         return super.performKeyEquivalent(with: event)
     }
 }

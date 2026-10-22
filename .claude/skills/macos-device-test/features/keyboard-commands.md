@@ -24,11 +24,11 @@ covers P0-09's Inspector placeholder, not the real information Inspector or fold
 
 ## Driving it with computer use
 
-Preconditions: ABC input; open `TestAssets/synthetic/coordinate-grid.png` from Finder or File → Open….
+Preconditions: ABC input; System Settings › Keyboard › Keyboard navigation on to Tab between controls; open `TestAssets/synthetic/coordinate-grid.png` from Finder or File → Open….
 
 - **Three entries.** From equal starting transforms, test Fit/0, Actual Pixels/1, Zoom In/+, Zoom Out/−
   using the View menu, placeholder button and canvas key separately. Record a verdict per command × entry.
-  Reset the transform between entries; keep the pointer at the same canvas position for zoom checks.
+  Reset the transform between entries; buttons anchor at the view centre, as do menu/key zooms when the pointer is over the panel or outside the canvas. Use the centre for equivalent-entry comparisons.
 - **Open.** Test File → Open… and ⌘O separately. Choose an image, then repeat and cancel: image/transform/focus
   stay unchanged on cancellation. Directories cannot be selected; folder acceptance needs #8.
 - **Inspector.** Test View → Show/Hide Inspector and ⌘I. Showing preserves canvas focus; hiding while a panel
@@ -41,7 +41,7 @@ Preconditions: ABC input; open `TestAssets/synthetic/coordinate-grid.png` from F
   A second Esc returns focus to canvas. No Space/arrows/Enter/⌘F menu items or shortcut hints should exist.
 - **Disabled.** With no image loaded, menu zoom items and panel zoom buttons are disabled; image keys do nothing.
 - **Focus.** Without the mouse, ⌘O chooses an image, ⌘I shows the panel, Tab enters it, Tab traverses controls,
-  Shift-Tab leaves it, Esc returns to canvas. Confirm visible rings. Open another image with field focus and
+  Shift-Tab from any panel control returns straight to the canvas, Esc returns to canvas. Confirm visible rings. Open another image with field focus and
   confirm focus is preserved. Folder/grid portions of A11Y-02 remain NOT VERIFIED pending #8/P3.
 - **Proof.** `CMD-01-<ID>-<entry>.png`, `CMD-02-field.png`, `CMD-02-menu-escape.png` and an A11Y-02 focus sequence.
 

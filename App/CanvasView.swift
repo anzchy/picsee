@@ -64,6 +64,7 @@ final class CanvasView: NSView {
     }
 
     var onCommand: ((CommandID) -> Bool)?
+    var pointerIsOverPanel: (() -> Bool)?
     var onCanvasFocus: (() -> Void)?
     var onTab: ((Bool) -> Void)?
     var hasImage: Bool { image != nil }
@@ -93,13 +94,13 @@ final class CanvasView: NSView {
         super.keyDown(with: event)
     }
 
-    func apply(_ command: CommandID) {
+    func apply(_ command: CommandID, from entry: CommandEntry) {
         guard image != nil else { return }
         switch command {
         case .fit: fit()
         case .actualPixels: transform.actualPixels(about: centre)
-        case .zoomIn: transform.zoom(to: transform.zoom * 1.25, about: cursorAnchor)
-        case .zoomOut: transform.zoom(to: transform.zoom / 1.25, about: cursorAnchor)
+        case .zoomIn: transform.zoom(to: transform.zoom * 1.25, about: commandAnchor(from: entry))
+        case .zoomOut: transform.zoom(to: transform.zoom / 1.25, about: commandAnchor(from: entry))
         default: return
         }
         needsDisplay = true
@@ -126,10 +127,14 @@ final class CanvasView: NSView {
 
     private var centre: CGPoint { CGPoint(x: bounds.midX, y: bounds.midY) }
 
-    private var cursorAnchor: CGPoint {
-        guard let window, window.isVisible else { return centre }
-        let anchor = convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        return bounds.contains(anchor) ? anchor : centre
+    private func commandAnchor(from entry: CommandEntry) -> CGPoint {
+        let pointer = window.flatMap { window -> CGPoint? in
+            guard window.isVisible else { return nil }
+            let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            return bounds.contains(point) ? point : nil
+        }
+        return CommandZoomAnchor.resolve(entry: entry, pointer: pointer,
+            pointerOverPanel: pointerIsOverPanel?() ?? false, centre: centre)
     }
 
     private func requestDetail() {
