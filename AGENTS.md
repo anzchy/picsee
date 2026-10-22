@@ -62,7 +62,7 @@ scripts/               研究与设计工具脚本（Python / Node）
 
 ## 命令
 
-现在能用的命令都是研究和设计工具：
+研究和设计预览命令：
 
 ```sh
 npm ci --ignore-scripts          # 安装 REA、Stitch CLI（不运行生命周期脚本）
@@ -86,7 +86,7 @@ open -n .build/dd-signed/Build/Products/Debug/Picsee.app
 Swift RED 使用手动 lane `swift-red`，只跑指定测试。先写能编译的失败断言，再记录；`--files` 只选指纹文件，不选择测试。record 和 verify 必须传相同的过滤器（环境变量不会写入 receipt）：
 
 ```sh
-# 路径选本机最新安装的 tdd-guardian；本次验收版本为 0.10.2
+# 固定使用已验收的 tdd-guardian 0.10.2；测试可用 PICSEE_TDD_PLUGIN_ROOT 覆盖
 plugin_root="$HOME/.claude/plugins/cache/xiaolai/tdd-guardian/0.10.2"
 export PICSEE_SWIFT_FILTER='测试函数名'
 node "$plugin_root/scripts/tdd-guardian/receipt.js" record --id P0-XX-WI-1 --lane swift-red --files Packages/PicseeKit/Tests/PicseeCoreTests/ItemIDTests.swift
@@ -96,9 +96,11 @@ node "$plugin_root/scripts/tdd-guardian/receipt.js" show
 node --test scripts/tdd/*.test.mjs
 ```
 
-也可直接用 `node scripts/tdd/swift-lane.mjs itemIDSurvivesJSONRoundTrip` 跑单测。编译失败/零测试/不完整输出退出 70（`runner-error` → `environment`），不会产生有效 RED；断言失败退出 1 并输出计数。
+也可直接用 `node scripts/tdd/swift-lane.mjs itemIDSurvivesJSONRoundTrip` 跑单测。所有已启动框架均须完成根运行；编译失败、零测试、崩溃或不完整输出退出 70，不输出计数。正常断言失败退出 1；计数前打印 `swift-lane filter=<f>` 供输出 tail 审计，verify 仍须传相同过滤器。
 
-receipt lane 自动走 `scripts/heavy-lock.sh`。其他重任务用 `scripts/heavy-lock.sh <命令…>`；整机各 worktree 共用 `~/.picsee/locks/heavy.lock/`，与 mdpro 隔离。`PICSEE_HEAVY_LOCK` 可覆盖路径，`PICSEE_HEAVY_LOCK_WAIT_SECS` 默认 1800 秒；子进程带 `PICSEE_HEAVY_LOCK_HELD=1`，嵌套不再抢锁。`unit` lane 保留原有全量测试和覆盖率配置。
+新 API 按此流程先写可编译桩，桩在 record 时是未提交的实现改动，Swift receipt 总会带 `implementation-already-present` MEDIUM；审计仍须核对桩与 RED。断言消息含 “No such file or directory” 时，插件会把失败升级为环境失败并拒收有效 RED。
+
+receipt lane 和两个 discovery probe 均走 `scripts/heavy-lock.sh`。其他重任务用 `scripts/heavy-lock.sh <命令…>`；整机各 worktree 共用持久锁文件 `~/.picsee/locks/heavy.lock`。Python 3 的 `fcntl.flock` 由子进程继承描述符，最后一次关闭才解锁；不要删除锁文件。`PICSEE_HEAVY_LOCK` 可覆盖路径，`PICSEE_HEAVY_LOCK_WAIT_SECS` 默认 1800 秒、超时退出 75；`PICSEE_HEAVY_LOCK_HELD=1` 支持嵌套。`unit` 测试和覆盖率配置不变。
 
 ## 必须遵守的规则
 
