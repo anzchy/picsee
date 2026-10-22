@@ -26,6 +26,11 @@ public struct IconCommandButton: View {
         self.symbol = symbol; self.state = state; self.theme = theme; self.input = input; self.action = action
     }
     func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: current, action: action) }
+    func activateFromKeyboard() -> KeyPress.Result {
+        guard input == .live else { return .ignored }
+        ComponentResolver.activate(.keyboard, state: current, action: action)
+        return .handled
+    }
     let symbol: DesignSymbol; let state: ComponentState; let theme: DesignTheme; let input: ComponentInput; let action: () -> Void
     @State private var hover = false
     @FocusState private var focused: Bool
@@ -38,6 +43,7 @@ public struct IconCommandButton: View {
         }
         .buttonStyle(DesignCommandStyle(kind: .icon, state: current, theme: theme, input: input))
         .disabled(state.contains(.disabled)).allowsHitTesting(input == .live).focusable(input == .live).focused($focused).focusEffectDisabled(input == .forced).onHover(perform: updateHover)
+        .onKeyPress(.space, action: activateFromKeyboard)
         .accessibilityLabel(Text(String(localized: String.LocalizationValue(symbol.label)))).help(Text(String(localized: String.LocalizationValue(symbol.label))))
     }
 }
@@ -56,6 +62,16 @@ public struct FolderNavigationRow: View {
     }
     func select() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: onSelect) }
     func expand() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: onExpand) }
+    func selectFromKeyboard() -> KeyPress.Result {
+        guard input == .live else { return .ignored }
+        ComponentResolver.activate(.keyboard, state: state, action: onSelect)
+        return .handled
+    }
+    func expandFromKeyboard() -> KeyPress.Result {
+        guard input == .live else { return .ignored }
+        ComponentResolver.activate(.keyboard, state: state, action: onExpand)
+        return .handled
+    }
     let nodeID: String; let name: String; let count: Int?; let expanded: Bool
     let state: ComponentState; let theme: DesignTheme; let input: ComponentInput; let onSelect: () -> Void; let onExpand: () -> Void
     @State private var hover = false
@@ -65,6 +81,7 @@ public struct FolderNavigationRow: View {
     public var body: some View {
         HStack(spacing: 4) {
             Button(expanded ? "▾" : "▸", action: expand).focusable(input == .live).focusEffectDisabled(input == .forced)
+                .onKeyPress(.space, action: expandFromKeyboard)
                 .accessibilityLabel(Text(expanded ? "Collapse folder" : "Expand folder"))
             Button(action: select) {
                 HStack {
@@ -72,7 +89,7 @@ public struct FolderNavigationRow: View {
                     Spacer(minLength: 4)
                     if let count { Text(count.formatted()).font(Font(DesignMetrics.font("uiSmall", monospaced: true))).foregroundStyle(DesignColor.textSecondary.color) }
                 }.frame(maxWidth: .infinity, minHeight: 20)
-            }.focusable(input == .live).focused($focused).focusEffectDisabled(input == .forced).accessibilityLabel(name).help(name)
+            }.focusable(input == .live).focused($focused).focusEffectDisabled(input == .forced).onKeyPress(.space, action: selectFromKeyboard).accessibilityLabel(name).help(name)
         }
         .buttonStyle(DesignCommandStyle(kind: .folder, state: current, theme: theme, input: input))
         .disabled(state.contains(.disabled)).allowsHitTesting(input == .live).onHover(perform: updateHover).id(nodeID)
