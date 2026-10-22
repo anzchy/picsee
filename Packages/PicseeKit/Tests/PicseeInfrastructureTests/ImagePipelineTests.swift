@@ -7,9 +7,12 @@ import PicseeCore
 import PicseeInfrastructure
 
 private struct ThreadProbeDecoder: ImageDecoding {
-    enum Failure: Error { case ranOnMainThread }
+    enum Failure: Error { case ranOnMainThread, wrongExecutor }
     func decode(_ request: ImageDecodeRequest) throws -> DecodedImage {
         if Thread.isMainThread { throw Failure.ranOnMainThread }
+        guard let queue = OperationQueue.current,
+              queue.name == "io.github.anzchy.picsee.first-image-decode",
+              queue.maxConcurrentOperationCount == 1 else { throw Failure.wrongExecutor }
         return try ImageIODecoder().decode(request)
     }
 }
@@ -62,4 +65,23 @@ private struct ThreadProbeDecoder: ImageDecoding {
             }
         }
     }
+    @Test func zoomSequenceDecodesOnlyPreviewAndOneDetailOnPipelineQueue() async throws {
+        try await withImage { file in
+            let pipeline = ImageIOPipeline(decoder: ThreadProbeDecoder())
+            let source = CGSize(width: 64, height: 32)
+            let viewport = CGSize(width: 8, height: 8)
+            var completed = 0
+            var decodedEdges: [Int] = []
+            for zoom in [0.125] + (1...100).map({ 0.125 * pow(1.025, Double($0)) }) + [1, 64, 0.125, 2] {
+                let maximum = CanvasDecodePolicy.maximumPixelSize(source: source, viewport: viewport, zoom: zoom)
+                if maximum > completed {
+                    let result = try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: maximum))
+                    decodedEdges.append(result.image.width)
+                    completed = maximum
+                }
+            }
+            #expect(decodedEdges == [8, 64])
+        }
+    }
+
 }
