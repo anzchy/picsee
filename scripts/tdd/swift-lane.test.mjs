@@ -6,7 +6,8 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const root = process.cwd();
-const handoff = path.join(process.env.HOME, '.picsee/herdr/gpt-imple-1');
+const handoff = path.join(root, '.build/tdd-tests');
+mkdirSync(handoff, { recursive: true });
 const temp = mkdtempSync(path.join(handoff, 'swift-cli-'));
 // Only Swift itself is replaced: the real wrapper and heavy lock execute.
 writeFileSync(path.join(temp, 'swift'), `#!${process.execPath}

@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const scratch = path.join(process.env.HOME, '.picsee/herdr/gpt-imple-1/test-runs');
+const scratch = path.join(root, '.build/tdd-tests');
 mkdirSync(scratch, { recursive: true });
 const lock = path.join(root, 'scripts/heavy-lock.sh');
 function environment() {
