@@ -58,6 +58,11 @@ checked:
 | Medium | A real defect or risk off the ordinary path, or debt with a concrete cost | No; counted, listed briefly |
 | Low | A nit: style, naming, a small clean-up | No; counted only |
 
+Before landing, Medium findings that affect user-visible behavior or violate an acceptance criterion get one
+fix round. Do not open another confirm round merely to reach zero Mediums. Put every other Medium (test gaps,
+evidence wording and technical debt) under the PR's `Still open` section and schedule it for a later Low
+follow-up batch; those findings do not block landing.
+
 - Every Critical or High needs three things: the file and line, an ordered trace of how an ordinary path
   reaches it, and the reason existing tests or checks miss it. A suspicion without a trace is at most
   Medium.
