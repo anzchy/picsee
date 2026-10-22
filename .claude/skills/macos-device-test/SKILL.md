@@ -145,7 +145,10 @@ scripts/device/doctor.sh "$RUN_DIR" --expected-sha "$(git rev-parse --short HEAD
 The helper prints exactly one `PASS <check>` or `FAIL <check> — <why>` line for each check below, saves the
 output atomically as `doctor.txt`, and exits non-zero if any fail. Collection errors become FAIL on the
 affected checks; all twelve lines replace the previous report even when a bundle, plist or record is
-missing or malformed. `doctor-input.json` keeps the observations.
+missing or malformed. The twelve verdicts reach stdout before the report write. If storage fails, an
+additional `FAIL report-write` line names the failure, the exit is non-zero, and an old report is moved to
+`doctor.stale.txt` (or removed). If storage prevents both, the diagnostic explicitly marks the old
+`doctor.txt` STALE/UNUSABLE. `doctor-input.json` keeps the observations.
 
 | Check | Pass when |
 |---|---|
@@ -314,15 +317,15 @@ failing regression test, clean up each failed attempt, then rerun the whole sequ
 NOT VERIFIED entries for features the skeleton cannot exercise.
 
 **Proof run: 2026-10-22**, MacBook Pro M4, 24 GiB, macOS 27.0.1, internal Retina @2x, Xcode 26.6 (17F113),
-signed Debug. Runtime implementation SHA `04edb7c`; run `20261022-issue4-fix1-proof2` under
-`~/.picsee/device-runs/`. Build → launch → doctor → cleanup passed. All twelve doctor checks passed,
-including public live-log SHA, active PID/path/birth ownership, committed input hashes and XML sandbox
-entitlement. Cleanup terminated only PID 79040, retired the ownership record and preserved evidence.
-The subsequent documentation commit changes no runtime helper. The earlier complete smoke/capture proof
-at `a2be193` (`20261022-issue4-final`) remains in the handoff: 960×672 → 800×600 → 960×672 points, with a
-1920×1344 window-only PNG. This fix-round proof did not repeat the capture or resize action; the capture
-entrypoint additionally has offline denied-permission/black/empty publication tests. This is helper
-workflow proof, not independent feature-ledger acceptance. The delegator reruns it before validation.
+signed Debug. Runtime implementation SHA `4037cb6`; run `20261022-issue4-fix2-proof` under
+`~/.picsee/device-runs/`. Build → launch → doctor → window capture → resize/readback/restore → doctor →
+cleanup passed. Both doctors printed twelve PASS lines. The window-only PNG is 1920×1344 for a 960×672 pt
+window. `size.sh` set 800×600, a separate System Events call read 800×600, then size was restored to
+960×672. Cleanup terminated PID 38809, retired ownership and preserved the PNG, logs and report. This
+re-proves capture/input identity checks as well as launch and doctor. The following documentation commit
+changes no runtime helpers. The post-build metadata-only re-sign branch is covered offline for success,
+failure and clean-stamp bypass; that branch is still not live-proven. Earlier runs and RED/GREEN outputs
+remain in the issue #4 handoff. This is helper proof, not independent feature-ledger acceptance.
 
 Still **NOT VERIFIED**: Mac mini `picsee-dtrack`, XCUITest, and all `features/` recipes (the skeleton has no
 image commands). On the mini, signed builds must run inside the user-owned `picsee-dtrack` tmux session;
