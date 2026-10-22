@@ -47,6 +47,36 @@ def group_survivors(pid):
         return f'pgid={pid} (process listing unavailable)'
 
 
+def stop_group(child, grace):
+    """Terminate and drain while the launcher remains the live shared owner.
+
+    Return True only when survivors require retaining the shared directory.
+    Poll the child too, so its unreaped exit cannot keep the group alive.
+    """
+    started = time.monotonic()
+    killed_at = None
+    try:
+        os.killpg(child.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    while True:
+        child.poll()
+        if not group_alive(child.pid):
+            return False
+        now = time.monotonic()
+        if now - started >= grace and killed_at is None:
+            killed_at = now
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if killed_at is not None and now - killed_at >= 5:
+            print(f'[heavy-lock] WARNING: survivors {group_survivors(child.pid)}; '
+                  'leaving shared directory in place', file=sys.stderr, flush=True)
+            return True
+        time.sleep(0.02)
+
+
 def owner_pid(lock):
     try:
         return next((line[4:] for line in (lock / 'owner').read_text().splitlines()
@@ -194,33 +224,13 @@ def main():
             except OSError as error:
                 print(f'[heavy-lock] {error}', file=sys.stderr)
                 return 127
-            stopping = None
-            killed_at = None
             draining = None
             drain_heartbeat = None
             while True:
                 result = child.poll()
                 if received:
-                    now = time.monotonic()
-                    if stopping is None:
-                        stopping = now
-                        try:
-                            os.killpg(child.pid, signal.SIGTERM)
-                        except ProcessLookupError:
-                            pass
-                    if not group_alive(child.pid):
-                        break
-                    if now - stopping >= grace and killed_at is None:
-                        killed_at = now
-                        try:
-                            os.killpg(child.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
-                    if killed_at is not None and now - killed_at >= 5:
-                        retain_shared = True
-                        print(f'[heavy-lock] WARNING: survivors {group_survivors(child.pid)}; '
-                              'leaving shared directory in place', file=sys.stderr, flush=True)
-                        break
+                    retain_shared = stop_group(child, grace)
+                    break
                 elif result is not None:
                     if not group_alive(child.pid):
                         break
@@ -233,10 +243,9 @@ def main():
                               f'{group_survivors(child.pid)}', file=sys.stderr, flush=True)
                         drain_heartbeat = now + 60
                     if now - draining >= drain_seconds:
-                        retain_shared = True
-                        print(f'[heavy-lock] WARNING: survivors {group_survivors(child.pid)}; '
-                              'drain timed out; leaving shared directory in place',
+                        print('[heavy-lock] drain timed out; terminating group survivors',
                               file=sys.stderr, flush=True)
+                        retain_shared = stop_group(child, grace)
                         break
                 time.sleep(0.02)
             if not retain_shared:
