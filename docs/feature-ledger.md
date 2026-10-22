@@ -106,7 +106,7 @@
 |---|---|---|---|---|---|---|
 | OPEN-01 | 首次打开空态 | Absent | 无 | P1-02、P1-07 | — | 冷启动、没有打开过文件夹：显示 21 页空态，有“选择文件夹”按钮和拖入提示；底部搜索、排序、信息、显示按钮为禁用。⌘O 可选单张图片或文件夹 |
 | OPEN-02 | 打开面板 | Absent | 无 | P1-02 | — | ⌘O 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变 |
-| OPEN-03 | 从 Finder 打开 | Absent | 无 | P1-02 | — | 在 Finder 对一张 JPEG 用“打开方式 → picsee”，App 启动并显示该图 |
+| OPEN-03 | 从 Finder 打开 | Stub | 无 | P1-02 | `App/Info.plist`、`App/PicseeApp.swift` | 在 Finder 对一张 JPEG 用“打开方式 → picsee”，App 启动并显示该图。限制：已声明 `public.image` 文档类型，真机运行中的 `open -a` 可用（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；Finder“打开方式”与双击未验；多文件仅显示首个文件。 |
 | OPEN-04 | 拖入打开 | Absent | 无 | P1-02 | — | 从 Finder 拖一张图进窗口，显示该图；拖入不支持的文件给出明确提示，当前图不变 |
 | OPEN-05 | 无法读取的图片 | Absent | 无 | P1-07、P2-03 | — | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图 |
 | OPEN-06 | 最近打开 | Absent | 无 | P2-09、P3-14 | — | 打开一个目录后退出重开，最近列表里有它；授权失效时显示重新授权入口；不保存图片副本 |
@@ -116,9 +116,9 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| VIEW-01 | 适应窗口 | Absent | 无 | P1-03 | — | 分别打开横图和竖图，都完整居中显示；拖动改窗口大小，图随之适应 |
-| VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：仅单图实验，多文件打开仅显示首个文件；按 1 时原点吸附像素网格，锚点每轴最多偏移半个物理像素；真机棋盘格精确像素验收、1× 外接屏、触控板捏合均未验，冒烟不替代独立设备验收。 |
-| VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：仅单图实验；画布文案支持中英文，有图片可访问名称，VoiceOver 全流程未验；真机棋盘格/标签锚点精确验收、1× 外接屏、触控板捏合均未验；键盘只接画布，尚无 P0-09 命令路由。 |
+| VIEW-01 | 适应窗口 | Stub | 无 | P1-03 | `App/CanvasView.swift` | 分别打开横图和竖图，都完整居中显示；拖动改窗口大小，图随之适应。限制：打开时会以不超过 1 的倍率适应窗口；窗口缩放时重新适应和适应窗口切换命令属于 P1-03；本行未单独真机验证。 |
+| VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：@2x 真机按 `1` 已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；@1x 外接屏未验；多文件打开仅显示首个文件；中文界面和 VoiceOver 未验。 |
+| VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：@2x 真机 +/− 锚点缩放已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；触控板捏合、@1x 和完整 VoiceOver 未验。 |
 | VIEW-04 | 平移与边界 | Absent | 无 | P1-03 | — | 放大后拖动，图像不会被拖出可见范围；回到适应窗口后位置复原（27 页） |
 | VIEW-05 | 全屏 | Absent | 无 | P1-03 | — | ⌃⌘F 进入和退出全屏，当前图和缩放状态保持 |
 | VIEW-06 | 按 EXIF 方向显示 | Absent | 无 | P0-05、P1-03 | — | 打开 S1 素材里八种 Orientation 的样本，全部正向显示 |
@@ -327,8 +327,8 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-22 | doc-gardener | P0-03（#7）在 `App/Info.plist` 声明 `public.image` 文档类型（Viewer）并接 `application(_:open:)`；OPEN-03 仍 `Absent`、无对应路径，待负责人定行；Finder 打开未真机验 |
-| 查看与画布 | 2026-10-22 | doc-gardener | P0-03（#7）：VIEW-02/03 升为 `Partial`/`单元`，验收原句未改、只追加限制；`docs/validation/P0.md` 已有 @2x 按 `1` 与 +/− 真机记录，但两行限制仍写“真机精确验收未验”，待负责人改；VIEW-01 适应窗口已有代码，行仍 `Absent` |
+| 打开与输入 | 2026-10-22 | doc-gardener | P0-03（#7）在 `App/Info.plist` 声明 `public.image` 文档类型（Viewer）并接 `application(_:open:)`；OPEN-03 已按未覆盖 Finder 入口记为 `Stub`/`无`；Finder“打开方式”与双击仍未真机验 |
+| 查看与画布 | 2026-10-22 | doc-gardener | P0-03（#7）：VIEW-02/03 保持 `Partial`/`单元`，限制已对齐 `docs/validation/P0.md` 的 @2x 按 `1` 与 +/− 真机记录；VIEW-01 打开时适应窗口已有代码，按未独立测试记为 `Stub`/`无` |
 | C 沉浸界面 | 2026-10-21 | 建账 | 同上 |
 | 外观与显示偏好 | 2026-10-22 | doc-gardener | PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
