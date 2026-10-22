@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import PicseeCore
-import PicseeInfrastructure
+@testable import PicseeInfrastructure
 
 func expectCancelled(_ subscription: DecodeSubscription) async {
     do { _ = try await subscription.value(); Issue.record("cancelled subscription succeeded") }
@@ -38,7 +38,7 @@ final class BlockingDecoder: ImageDecoding, @unchecked Sendable {
     }
 }
 
-@Test func realQueueCancellationBalancesThreePointsWithoutSleep() async throws {
+@Test(.timeLimit(.minutes(1))) func realQueueCancellationBalancesThreePointsWithoutSleep() async throws {
     let decoder = BlockingDecoder()
     let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),
         executor: OperationDecodeExecutor(workers: 1), decoder: decoder)
@@ -54,4 +54,38 @@ final class BlockingDecoder: ImageDecoding, @unchecked Sendable {
     if await admission.activity().waiting == 0 { await expectCancelled(queued) }
     await expectCancelled(running)
     #expect(await admission.activity().running == 0)
+}
+
+@Test(.timeLimit(.minutes(1))) func submittedPixelCancellationSkipsDecoderAndBalancesResources() async throws {
+    let executor = OperationDecodeExecutor(workers: 1)
+    let (blocked, signalBlocked) = AsyncStream<Void>.makeStream()
+    let release = DispatchSemaphore(value: 0)
+    executor.submit { signalBlocked.yield(()); release.wait() }
+    var blocker = blocked.makeAsyncIterator()
+    _ = await blocker.next()
+    let decoder = DecodeCounter()
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),
+                                    executor: executor, decoder: decoder)
+    // subscribe returns only after submission. The sole real worker is still blocked.
+    let queued = await admission.subscribe(tinyRequest, key: decodeKey(80), cost: 4, heavy: true, priority: .current)
+    #expect(await admission.activity().running == 1)
+    #expect(await admission.activity().waiting == 0)
+    let (registered, signalRegistered) = AsyncStream<Void>.makeStream()
+    let waiter = Task {
+        try await queued.delivery.value(onRegistration: { signalRegistered.yield(()) })
+    }
+    var registration = registered.makeAsyncIterator()
+    _ = await registration.next()
+    await queued.cancel(); await queued.cancel()
+    #expect(decoder.count == 0)
+    #expect(await admission.activity().reservedBytes == 4)
+    release.signal()
+    var completions = 0
+    do { _ = try await waiter.value; Issue.record("queued cancellation delivered success") }
+    catch { completions += 1; #expect(error is CancellationError) }
+    #expect(completions == 1)
+    #expect(decoder.count == 0)
+    #expect(await admission.activity().reservedBytes == 0)
+    #expect(await admission.activity().running == 0)
+    #expect(await admission.activity().heavy == 0)
 }
