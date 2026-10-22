@@ -27,6 +27,8 @@ truly can't work.**
 - **Record every deviation** where automation took a different path from a real user (e.g. activating the
   app instead of clicking its window).
 
+Store run briefs under `~/.picsee/device-briefs/`; this keeps them separate from mdpro's `dtrack` session.
+
 ## 1. When this lane is the right one
 
 | The automated lanes can't see… | so this lane checks… |
