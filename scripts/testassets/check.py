@@ -89,9 +89,7 @@ def dimensions(data):
     return None
 
 
-def verify(args):
-    manifest = json.loads(args.manifest.read_text())
-    check_environment(manifest)
+def check_manifest_schema(manifest):
     if manifest["schema"] != "picsee-testassets/v1":
         raise ValueError("unknown schema")
     if manifest["generator_version"] != generate.VERSION:
@@ -105,130 +103,137 @@ def verify(args):
         raise ValueError("generator source hash mismatch")
     specs = {(1, s["path"]): s for s in generate.small_specs()}
     specs.update({(2, s["path"]): s for s in generate.large_specs()})
-    bulk_checked = check_bulk(manifest, args)
-    oriented_hashes = []
-    seen = set()
-    counts = {1: 0, 2: 0, 3: 0}
-    checked = {1: 0, 2: 0, 3: 0}
-    total_small = 0
-    for a in manifest["assets"]:
-        tier, path = a["tier"], a["path"]
-        relative = Path(path)
-        if relative.is_absolute() or ".." in relative.parts or not relative.parts:
-            raise ValueError("unsafe asset path " + path)
-        key = (tier, path)
-        if key in seen:
-            raise ValueError("duplicate manifest path " + path)
-        seen.add(key)
-        counts[tier] += 1
-        if not re.fullmatch("[0-9a-f]{64}", a["sha256"]) or a["byte_size"] <= 0:
-            raise ValueError("invalid hash/size " + path)
-        if a["license"] != "CC0-1.0":
-            raise ValueError("unreviewed licence " + path)
-        if tier in (1, 2):
-            spec = specs[key]
-            if a["generator"] != "scripts/testassets/generate.py" or a[
-                "parameters"
-            ] != {k: v for k, v in spec.items() if k != "path"}:
-                raise ValueError("recipe differs " + path)
-            if a["pixel_size"] != [spec["width"], spec["height"]]:
-                raise ValueError("recipe dimensions differ " + path)
-        else:
-            for field in ("url", "license_url", "source_url", "provenance_url"):
-                if not a[field].startswith("https://"):
-                    raise ValueError("missing HTTPS source " + path)
-            if not a["has_exif"]:
-                raise ValueError("photo requires EXIF " + path)
-        if tier != 1 and not args.external:
-            continue
-        target = (
-            args.small_root
-            if tier == 1
-            else args.generated_root if tier == 2 else args.external_root
-        ) / relative
-        data = target.read_bytes()
-        if len(data) != a["byte_size"]:
-            raise ValueError("byte size mismatch " + path)
-        if hashlib.sha256(data).hexdigest() != a["sha256"]:
-            raise ValueError("sha256 mismatch " + path)
-        if (
-            tier in (1, 2)
-            and dimensions(data) != a["pixel_size"]
-            and a["parameters"]["kind"] != "corrupt"
-        ):
-            raise ValueError("header dimensions mismatch " + path)
-        if tier == 3 and data.startswith(b"version https://git-lfs"):
-            raise ValueError("download is a pointer, not image bytes")
-        if args.native and tier == 1 and a["parameters"]["kind"] == "truncated":
-            subprocess.run(
-                [
-                    "/usr/bin/osascript",
-                    "-l",
-                    "JavaScript",
-                    str(ROOT / "scripts/testassets/inspect.js"),
-                    str(target),
-                    "truncated",
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        if args.native and (
-            tier == 3
-            or (
-                tier == 1
-                and a["parameters"]["kind"] not in ("corrupt", "truncated", "oversize")
-            )
-        ):
-            mode = (
-                ["oriented-pixels"]
-                if tier == 1 and a["parameters"]["kind"] == "orientation"
-                else []
-            )
-            observed = json.loads(
-                subprocess.check_output(
-                    [
-                        "/usr/bin/osascript",
-                        "-l",
-                        "JavaScript",
-                        str(ROOT / "scripts/testassets/inspect.js"),
-                        str(target),
-                        *mode,
-                    ],
-                    text=True,
-                )
-            )
-            if [observed["width"], observed["height"]] != a["pixel_size"]:
-                raise ValueError("ImageIO dimensions mismatch " + path)
-            if tier == 3 and not observed["hasExif"]:
-                raise ValueError("ImageIO found no EXIF " + path)
-            if (
-                tier == 1
-                and a["parameters"]["kind"] == "orientation"
-                and (
-                    observed["orientation"] != a["parameters"]["orientation"]
-                    or not observed["hasExif"]
-                )
-            ):
-                raise ValueError("ImageIO EXIF orientation mismatch " + path)
-            if mode:
-                if [observed["displayWidth"], observed["displayHeight"]] != a[
-                    "display_size"
-                ]:
-                    raise ValueError("oriented display size mismatch " + path)
-                oriented_hashes.append(
-                    hashlib.sha256(base64.b64decode(observed["pixels"])).hexdigest()
-                )
-            if (
-                tier == 1
-                and a["parameters"]["kind"] == "alpha"
-                and not observed["hasAlpha"]
-            ):
-                raise ValueError("ImageIO found no alpha " + path)
-        checked[tier] += 1
-        if tier == 1:
-            total_small += len(data)
+    return specs
+
+
+def check_asset_schema(asset, specs, seen, counts):
+    tier, path = asset["tier"], asset["path"]
+    relative = Path(path)
+    if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+        raise ValueError("unsafe asset path " + path)
+    key = (tier, path)
+    if key in seen:
+        raise ValueError("duplicate manifest path " + path)
+    seen.add(key)
+    counts[tier] += 1
+    if (
+        not re.fullmatch("[0-9a-f]{64}", asset["sha256"])
+        or asset["byte_size"] <= 0
+    ):
+        raise ValueError("invalid hash/size " + path)
+    if asset["license"] != "CC0-1.0":
+        raise ValueError("unreviewed licence " + path)
+    if tier in (1, 2):
+        spec = specs[key]
+        if asset["generator"] != "scripts/testassets/generate.py" or asset[
+            "parameters"
+        ] != {k: v for k, v in spec.items() if k != "path"}:
+            raise ValueError("recipe differs " + path)
+        if asset["pixel_size"] != [spec["width"], spec["height"]]:
+            raise ValueError("recipe dimensions differ " + path)
+    else:
+        for field in ("url", "license_url", "source_url", "provenance_url"):
+            if not asset[field].startswith("https://"):
+                raise ValueError("missing HTTPS source " + path)
+        if not asset["has_exif"]:
+            raise ValueError("photo requires EXIF " + path)
+    return tier, path, relative
+
+
+def check_asset_bytes(asset, args, tier, path, relative):
+    target = (
+        args.small_root
+        if tier == 1
+        else args.generated_root if tier == 2 else args.external_root
+    ) / relative
+    data = target.read_bytes()
+    if len(data) != asset["byte_size"]:
+        raise ValueError("byte size mismatch " + path)
+    if hashlib.sha256(data).hexdigest() != asset["sha256"]:
+        raise ValueError("sha256 mismatch " + path)
+    if (
+        tier in (1, 2)
+        and dimensions(data) != asset["pixel_size"]
+        and asset["parameters"]["kind"] != "corrupt"
+    ):
+        raise ValueError("header dimensions mismatch " + path)
+    if tier == 3 and data.startswith(b"version https://git-lfs"):
+        raise ValueError("download is a pointer, not image bytes")
+    return target, data
+
+
+def check_native(asset, target, tier, path, oriented_hashes):
+    if tier == 1 and asset["parameters"]["kind"] == "truncated":
+        subprocess.run(
+            [
+                "/usr/bin/osascript",
+                "-l",
+                "JavaScript",
+                str(ROOT / "scripts/testassets/inspect.js"),
+                str(target),
+                "truncated",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    if not (
+        tier == 3
+        or (
+            tier == 1
+            and asset["parameters"]["kind"] not in ("corrupt", "truncated", "oversize")
+        )
+    ):
+        return
+    mode = (
+        ["oriented-pixels"]
+        if tier == 1 and asset["parameters"]["kind"] == "orientation"
+        else []
+    )
+    observed = json.loads(
+        subprocess.check_output(
+            [
+                "/usr/bin/osascript",
+                "-l",
+                "JavaScript",
+                str(ROOT / "scripts/testassets/inspect.js"),
+                str(target),
+                *mode,
+            ],
+            text=True,
+        )
+    )
+    if [observed["width"], observed["height"]] != asset["pixel_size"]:
+        raise ValueError("ImageIO dimensions mismatch " + path)
+    if tier == 3 and not observed["hasExif"]:
+        raise ValueError("ImageIO found no EXIF " + path)
+    if (
+        tier == 1
+        and asset["parameters"]["kind"] == "orientation"
+        and (
+            observed["orientation"] != asset["parameters"]["orientation"]
+            or not observed["hasExif"]
+        )
+    ):
+        raise ValueError("ImageIO EXIF orientation mismatch " + path)
+    if mode:
+        if [observed["displayWidth"], observed["displayHeight"]] != asset[
+            "display_size"
+        ]:
+            raise ValueError("oriented display size mismatch " + path)
+        oriented_hashes.append(
+            hashlib.sha256(base64.b64decode(observed["pixels"])).hexdigest()
+        )
+    if (
+        tier == 1
+        and asset["parameters"]["kind"] == "alpha"
+        and not observed["hasAlpha"]
+    ):
+        raise ValueError("ImageIO found no alpha " + path)
+
+
+def check_manifest_coverage(manifest, args, specs, seen, counts):
     if not set(specs).issubset(seen):
         raise ValueError("missing generated manifest entries")
     if counts != {
@@ -249,20 +254,43 @@ def verify(args):
             "unlisted or missing tier-1 files: "
             + ", ".join(sorted(disk ^ {p for tier, p in seen if tier == 1}))
         )
+
+
+def check_native_summary(oriented_hashes, checked):
+    if len(oriented_hashes) != 8 or len(set(oriented_hashes)) != 1:
+        raise ValueError("orientations do not render identical upright pixels")
+    print(
+        "PASS independent ImageIO: dimensions, EXIF orientations 1–8 render identical upright 128x96 pixels, alpha; truncated: partial or failed, never a crash; "
+        + ("photo EXIF verified" if checked[3] else "photo EXIF skipped (use --external)")
+    )
+
+
+def verify(args):
+    manifest = json.loads(args.manifest.read_text())
+    check_environment(manifest)
+    specs = check_manifest_schema(manifest)
+    bulk_checked = check_bulk(manifest, args)
+    oriented_hashes = []
+    seen = set()
+    counts = {1: 0, 2: 0, 3: 0}
+    checked = {1: 0, 2: 0, 3: 0}
+    total_small = 0
+    for asset in manifest["assets"]:
+        tier, path, relative = check_asset_schema(asset, specs, seen, counts)
+        if tier != 1 and not args.external:
+            continue
+        target, data = check_asset_bytes(asset, args, tier, path, relative)
+        if args.native:
+            check_native(asset, target, tier, path, oriented_hashes)
+        checked[tier] += 1
+        if tier == 1:
+            total_small += len(data)
+    check_manifest_coverage(manifest, args, specs, seen, counts)
     print(
         f"PASS manifest schema/recipes/licences: {sum(counts.values())} entries + {manifest['bulk']['count']} bulk files; verified tier1={checked[1]} tier2={checked[2]+bulk_checked} tier3={checked[3]}; tier1 bytes={total_small}"
     )
     if args.native:
-        if len(oriented_hashes) != 8 or len(set(oriented_hashes)) != 1:
-            raise ValueError("orientations do not render identical upright pixels")
-        print(
-            "PASS independent ImageIO: dimensions, EXIF orientations 1–8 render identical upright 128x96 pixels, alpha; truncated: partial or failed, never a crash; "
-            + (
-                "photo EXIF verified"
-                if checked[3]
-                else "photo EXIF skipped (use --external)"
-            )
-        )
+        check_native_summary(oriented_hashes, checked)
 
 
 def main():
