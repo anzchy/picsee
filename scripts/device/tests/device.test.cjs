@@ -62,3 +62,7 @@ test('fix-round-1 offline behavioral regressions',()=>{
  const r=spawnSync('python3',[path.join(__dirname,'fix1_test.py')],{encoding:'utf8'});
  assert.equal(r.status,0,r.stdout+r.stderr);
 });
+test('fix-round-2 report storage and re-sign regressions',()=>{
+ const r=spawnSync('python3',[path.join(__dirname,'fix2_test.py')],{encoding:'utf8'});
+ assert.equal(r.status,0,r.stdout+r.stderr);
+});
