@@ -80,11 +80,19 @@ public actor DecodeAdmission {
     }
     private var jobs: [UUID: Job] = [:]
     private var pending: [UUID] = []
+    private var keyed: [RenderKey: UUID] = [:]
 
     public func subscribe(_ request: ImageDecodeRequest, key: RenderKey, cost: Int, heavy: Bool,
                           priority: DecodePriority) -> DecodeSubscription {
         precondition(cost > 0 && cost <= configuration.budget)
         let id = UUID(), subscriber = UUID(), delivery = DecodeDelivery()
+        if let existing = keyed[key] {
+            jobs[existing]!.subscribers[subscriber] = delivery
+            jobs[existing]!.priority = DecodePriority(rawValue: max(jobs[existing]!.priority.rawValue, priority.rawValue))!
+            drain()
+            return DecodeSubscription(id: subscriber, delivery: delivery, admission: self)
+        }
+        keyed[key] = id
         jobs[id] = Job(id: id, request: request, key: key, cost: cost, heavy: heavy,
                        priority: priority, subscribers: [subscriber: delivery])
         pending.append(id)
@@ -123,6 +131,7 @@ public actor DecodeAdmission {
     }
     private func finished(_ id: UUID, result: Result<DecodedImage, Error>) async {
         let job = jobs.removeValue(forKey: id)!
+        if keyed[job.key] == id { keyed.removeValue(forKey: job.key) }
         drain()
         for (subscriber, delivery) in job.subscribers {
             await delivery.finish(job.cancelled.contains(subscriber) ? .failure(CancellationError()) : result)
@@ -132,8 +141,13 @@ public actor DecodeAdmission {
         guard let jobID = jobs.first(where: { $0.value.subscribers[id] != nil })?.key else { return }
         guard !jobs[jobID]!.cancelled.contains(id) else { return }
         jobs[jobID]!.cancelled.insert(id)
+        let job = jobs[jobID]!
+        if job.cancelled.count == job.subscribers.count && keyed[job.key] == jobID {
+            keyed.removeValue(forKey: job.key)
+        }
         if jobs[jobID]!.admitted == nil {
             let delivery = jobs[jobID]!.subscribers.removeValue(forKey: id)!
+            jobs[jobID]!.cancelled.remove(id)
             if jobs[jobID]!.subscribers.isEmpty {
                 jobs.removeValue(forKey: jobID)
                 pending.removeAll { $0 == jobID }
