@@ -83,6 +83,7 @@ public actor FileAccess: AccessLeasing {
         let key: AccessRequest
         let url: URL
         let rootID: AccessRootID?
+        var staleRecord: AccessRootRecord?
         switch request {
         case .root(let id, let file):
             guard let record = saved.first(where: { $0.id == id }), let root = roots[id] else {
@@ -91,7 +92,11 @@ public actor FileAccess: AccessLeasing {
             key = .root(id, file: root); rootID = id
             if active[key] != nil { url = root }
             else {
-                do { url = try bookmarks.resolve(record.bookmark).url }
+                do {
+                    let resolution = try bookmarks.resolve(record.bookmark)
+                    url = resolution.url
+                    if resolution.stale { staleRecord = record }
+                }
                 catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
             }
             guard AccessBoundary.contains(file, in: url) else { throw FileAccessError.outsideRoot }
@@ -103,6 +108,18 @@ public actor FileAccess: AccessLeasing {
             entry.tokens.insert(lease.token); active[key] = entry
         } else {
             let session = try ScopeSession(scope: scope, url: url, rootID: rootID)
+            if var record = staleRecord {
+                do {
+                    record.bookmark = try bookmarks.create(for: url)
+                    let refreshed = saved.map { $0.id == record.id ? record : $0 }
+                    try store.save(refreshed)
+                    saved = refreshed
+                } catch {
+                    session.stop()
+                    roots.removeValue(forKey: record.id)
+                    throw FileAccessError.needsReconnection(record.id)
+                }
+            }
             active[key] = Active(session: session, tokens: [lease.token])
         }
         requests[lease.token] = key

@@ -84,3 +84,30 @@ final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     }
     #expect(try Data(contentsOf: store.url) == Data("broken JSON".utf8))
 }
+
+@Test func accessAcquireRefreshesNewlyStaleBookmarkAndRejectsLostRoot() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    let store = BookmarkStore(url: base.appendingPathComponent("roots.json"))
+    let scope = CountingScope(); let codec = FakeBookmarks()
+    let access = try FileAccess(scope: scope, bookmarks: codec, store: store, buildSHA: "A")
+    let id = try await access.grant(folder: base)
+    codec.stale = true
+    let lease = try await access.acquire(.root(id, file: base.appendingPathComponent("a.jpg")))
+    #expect(codec.count == 2)
+    let second = try await access.acquire(.root(id, file: base.appendingPathComponent("b.jpg")))
+    #expect(codec.count == 2)
+    await access.release(lease); await access.release(second)
+    codec.creationFails = true
+    await #expect(throws: FileAccessError.needsReconnection(id)) {
+        try await access.acquire(.root(id, file: base))
+    }
+    #expect(await access.rootCovering(base) == nil)
+    #expect(scope.counts[0] == scope.counts[1])
+    let restored = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: store, buildSHA: "B")
+    codec.fails = true
+    let otherID = try await restored.grant(folder: base)
+    #expect(otherID != id)
+}
