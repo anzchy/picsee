@@ -105,7 +105,7 @@
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | OPEN-01 | 首次打开空态 | Absent | 无 | P1-02、P1-07 | — | 冷启动、没有打开过文件夹：显示 21 页空态，有“选择文件夹”按钮和拖入提示；底部搜索、排序、信息、显示按钮为禁用。⌘O 可选单张图片或文件夹 |
-| OPEN-02 | 打开面板 | Partial | 无 | P0-09、P1-02 | `App/PicseeApp.swift`、`App/Commands/CommandMenu.swift` | ⌘O 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变。限制：open（File → Open… / ⌘O）仅选择图片，目录不可选（#8）；无打开按钮；菜单、按键、取消路径真机未验。 |
+| OPEN-02 | 打开面板 | Partial | 无 | P0-09、P1-02 | `App/PicseeApp.swift`、`App/Commands/CommandMenu.swift` | ⌘O 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变。限制：仅选图片，目录不可选（#8）；无打开按钮；File › Open…、⌘O 与取消已在 @1x 真机通过（P0-09 记录）。 |
 | OPEN-03 | 从 Finder 打开 | Stub | 无 | P1-02 | `App/Info.plist`、`App/PicseeApp.swift` | 在 Finder 对一张 JPEG 用“打开方式 → picsee”，App 启动并显示该图。限制：已声明 `public.image` 文档类型，真机运行中的 `open -a` 可用（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；Finder“打开方式”与双击未验；多文件仅显示首个文件。 |
 | OPEN-04 | 拖入打开 | Absent | 无 | P1-02 | — | 从 Finder 拖一张图进窗口，显示该图；拖入不支持的文件给出明确提示，当前图不变 |
 | OPEN-05 | 无法读取的图片 | Absent | 无 | P1-07、P2-03 | — | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图 |
@@ -222,8 +222,8 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/previous/next/enter/search未实现；escape/inspector已接路由；非搜索占位；入口/合成真机未验。 |
-| CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；输入框裸键和菜单 Esc 优先级有单元测试；非画布窗口不处理裸键菜单等价键，原生接线未自动测试；AppKit 菜单、SwiftUI 按钮及原生按键接线真机未验。 |
+| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/previous/next/enter/search 未实现；已实现命令与 inspector 三入口 @1x 真机一致；escape 按键通过，菜单 Focus Canvas 失败（#29）。 |
+| CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；字段裸键、Edit 菜单与菜单打开时的 Esc 已在 @1x 真机通过。 |
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |
 | CMD-05 | 全局快捷键 | Absent | 无 | P7-09 | — | App 在后台时按全局快捷键，picsee 被唤到前台 |
@@ -273,7 +273,7 @@ MVP 起就是门槛（见计划 P3「MVP 还需检查」），P6-04 补全全部
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | A11Y-01 | VoiceOver | Absent | 无 | P3-10、P6-04 | — | 开 VoiceOver 走一遍打开→网格→大图→Inspector，每个控件都有正确的名称，隐藏的工具不被读出 |
-| A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/InspectorFocus.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：仅画布与 Inspector 占位控件焦点状态已单测，非搜索；目录/选图/网格待 #8/P3；⌘O/⌘I/Tab/Shift-Tab/Esc、焦点环及原生桥接真机未验。 |
+| A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/InspectorFocus.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：目录/选图/网格待 #8/P3；占位面板的 ⌘O/⌘I/Tab/Shift-Tab/Esc 与焦点环 @1x 真机通过；菜单 Focus Canvas 失败（#29）。 |
 | A11Y-03 | 对比度与焦点不被遮挡 | Absent | 无 | P6-04 | — | 浅色和深色下文字与控件对比度符合 `design/DESIGN.md` 的目标；获得焦点的控件不被其他元素挡住 |
 | A11Y-04 | 中英文界面 | Absent | 无 | P1-07、P6-04 | — | 系统语言切到中文或英文，界面文字跟随变化，没有截断和未翻译的键名 |
 
