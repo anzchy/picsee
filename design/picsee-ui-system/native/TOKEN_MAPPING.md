@@ -60,3 +60,43 @@
 编辑器字体/宽度/行高、code/highlight、bottom-tabs、Tauri traffic-light clearance、运行状态徽标、未保存编辑器横条，以及未在 C 中实际使用的旧别名保留于现有 Web CSS 以兼容历史输出；**不进入原生导出白名单**。后续删 Web token 时另做消费者检查，不在本次破坏旧原型。
 
 当前 JSON 不生成 Swift 枚举/ColorSet，不固化原生布局。P0-08 应检查导出源哈希、角色唯一性、两主题完整性、混色用例和布局/像素单位后再实现。
+
+## 6. 原生实现差异
+
+P0-08（#12）：手写 sRGB 与 alpha 由动态 NSColor 提供，SwiftUI 从同一 NSColor 创建颜色；没有运行时 CSS 解析或资源 bundle。五个源文件 SHA256 固定于 `DesignRegistry`，测试从仓库读取并重算。没有修改设计源、registry 或 §6 原生门槛勾选。
+
+| 原生结果 / 与 Web 的差异 | 理由 |
+| --- | --- |
+| 原生 live Button / TextField 保留系统键盘焦点与输入行为；强制状态的共享 ComponentSurface 用 focusRing 角色画内侧 2pt 描边，CSS 是外侧 outline | 系统焦点行为由平台管理；内侧预览描边避免在滚动/相邻组件处裁切，选中与焦点仍独立，需真机检查系统环与预览环 |
+| 字体取 NSFont 系统字体与系统等宽字体，12/13/14/16 pt | 与 Web fallback 字体的基线、字宽和行高可能不同；不锁网页字体度量 |
+| `--shadow-soft` 不导出 | Web 阴影配方不是 NSShadow；系统浮层由系统管理 |
+| 不使用 38px 标题条 | AppKit 管理原生标题栏、窗口按钮与安全区域 |
+| 菜单使用 NSMenu；搜索使用 roundedBorder TextField，系统输入 chrome | 保留系统输入与菜单语义，不手绘网页菜单或输入边界 |
+| 交互视图组合暂在 Debug-only `App/UI/DesignPreview/`；包内保留状态/激活规则和可渲染状态表面 | 原生 Button/field/disclosure 的事件闭包不由 ImageRenderer 执行；不排除包内覆盖率文件。后续功能采用时需补真实事件测试，再迁入包 |
+| 缩略图是代码绘制的占位图，名称示例与计数明确标记 Preview data | 不引入照片资源、解码或文件访问；本项只覆盖选择视觉 |
+| 部分语义颜色只出现在色板：popoverBackground、dividerSubtle、primaryFill、primaryFillHover、onPrimary、controlBorder、error、errorFill、scrim | P0 不实现自定义浮层、主操作按钮或模态遮罩；原生 Retry 使用系统按钮，输入边界由系统绘制 |
+| ShortcutHint 的 divider 边界 / hoverBackground：light 1.22:1、dark 1.39:1，低于控件图形目标 3:1 | 保留设计源 token；此处为非交互提示边界，仍如实记录差距，不能据此宣称全部控件对比度合格 |
+
+对比度由 `DesignContrastTests.designContrastReport` 测量：先将背景角色叠在 canvasBackground，再把前景按 alpha 叠在该背景；sRGB 线性化后计算 WCAG 比值。相同像素组合覆盖 default/hover/pressed/selected/focus；focus 行包含内侧填充相邻色。禁用透明度为0.4，禁用态不作为可用操作的目标通过证据。系统按钮、系统 TextField 和系统 ProgressView 的 chrome 仍需设备测量。以下均为 12–16pt 文字（4.5:1）或控制图形（3:1），没有以“大文字”放宽。
+
+| 组合（前景 / 已合成背景） | light | dark | 目标 | 结果 |
+| --- | ---: | ---: | ---: | --- |
+| Default text / canvas | 17.40 | 15.26 | 4.5 | PASS |
+| Secondary/status text / canvas | 4.83 | 7.49 | 4.5 | PASS |
+| Icon / canvas | 17.40 | 15.26 | 3.0 | PASS |
+| Folder/icon text / hover | 15.76 | 12.85 | 4.5 | PASS |
+| Icon graphic / hover | 15.76 | 12.85 | 3.0 | PASS |
+| Icon text / pressed,selected | 14.31 | 10.57 | 4.5 | PASS |
+| Icon graphic / pressed,selected | 14.31 | 10.57 | 3.0 | PASS |
+| Folder/filter text / selected | 5.53 | 5.15 | 4.5 | PASS |
+| Filename text / selected | 14.31 | 10.57 | 4.5 | PASS |
+| Thumbnail graphic / sidebar | 16.26 | 14.08 | 3.0 | PASS |
+| Selection frame / sidebar | 4.83 | 6.85 | 3.0 | PASS |
+| Selection frame / canvas | 5.17 | 7.43 | 3.0 | PASS |
+| Shortcut text / hover | 15.76 | 12.85 | 4.5 | PASS |
+| Shortcut boundary / hover | 1.22 | 1.39 | 3.0 | MISS |
+| Focus / canvas | 5.17 | 7.43 | 3.0 | PASS |
+| Focus / hover | 4.68 | 6.26 | 3.0 | PASS |
+| Focus / selected | 4.25 | 5.15 | 3.0 | PASS |
+| Focus / input | 5.17 | 7.36 | 3.0 | PASS |
+| Error text / canvas | 6.47 | 6.83 | 4.5 | PASS |

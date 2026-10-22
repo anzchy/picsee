@@ -66,6 +66,10 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         }
         let windows = submenu("Window")
         windows.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        #if DEBUG
+        let preview = windows.addItem(withTitle: String(localized: "Component Preview"), action: #selector(DesignPreviewWindow.openPreview(_:)), keyEquivalent: "")
+        preview.target = DesignPreviewWindow.shared
+        #endif
         NSApp.windowsMenu = windows
         NSApp.mainMenu = main
     }
