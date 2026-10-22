@@ -17,6 +17,7 @@ import urllib.request
 import check
 import determinism
 import download
+import generate
 
 
 class Checks(unittest.TestCase):
@@ -41,6 +42,32 @@ class Checks(unittest.TestCase):
 
     def photo(self):
         return next(a for a in self.manifest["assets"] if a["tier"] == 3)
+
+    def bulk_case(self):
+        specs = generate.bulk_specs()[:4]
+        generated = self.root / "generated"
+        with contextlib.redirect_stdout(io.StringIO()):
+            generate.generate(generated, specs)
+        records = {
+            spec["path"]: hashlib.sha256(
+                (generated / spec["path"]).read_bytes()
+            ).hexdigest()
+            for spec in specs
+        }
+        canonical = "".join(
+            f"{digest}  {path}\n" for path, digest in sorted(records.items())
+        )
+        manifest = {"bulk": copy.deepcopy(self.manifest["bulk"])}
+        manifest["bulk"]["count"] = len(specs)
+        manifest["bulk"]["inventory_sha256"] = hashlib.sha256(
+            canonical.encode("utf-8")
+        ).hexdigest()
+        args = mock.Mock(external=True, generated_root=generated)
+        return manifest, args, specs
+
+    def check_bulk(self, manifest, args, specs):
+        with mock.patch.object(generate, "bulk_specs", return_value=specs):
+            return check.check_bulk(manifest, args)
 
     def download_case(
         self, data, expected_size=8, message="download exceeds expected size"
@@ -121,6 +148,38 @@ class Checks(unittest.TestCase):
             any(a["path"].startswith("S2/") for a in self.manifest["assets"])
         )
         self.assertEqual(len(self.manifest["bulk"]["inventory_sha256"]), 64)
+
+    def test_bulk_inventory_baseline(self):
+        manifest, args, specs = self.bulk_case()
+        self.assertEqual(self.check_bulk(manifest, args, specs), len(specs))
+
+    def test_bulk_inventory_changed_bytes(self):
+        manifest, args, specs = self.bulk_case()
+        target = args.generated_root / specs[0]["path"]
+        data = bytearray(target.read_bytes())
+        data[-1] ^= 1
+        target.write_bytes(data)
+        with self.assertRaisesRegex(ValueError, "bulk inventory sha256 mismatch"):
+            self.check_bulk(manifest, args, specs)
+
+    def test_bulk_inventory_missing_path(self):
+        manifest, args, specs = self.bulk_case()
+        missing = specs[0]["path"]
+        (args.generated_root / missing).unlink()
+        with self.assertRaisesRegex(ValueError, "paths differ.*" + missing):
+            self.check_bulk(manifest, args, specs)
+
+    def test_bulk_inventory_extra_path(self):
+        manifest, args, specs = self.bulk_case()
+        extra = "S2/extra.png"
+        (args.generated_root / extra).write_bytes(b"extra")
+        with self.assertRaisesRegex(ValueError, "paths differ.*" + extra):
+            self.check_bulk(manifest, args, specs)
+
+    def test_bulk_inventory_ignores_finder_file(self):
+        manifest, args, specs = self.bulk_case()
+        (args.generated_root / "S2/.DS_Store").write_bytes(b"finder")
+        self.assertEqual(self.check_bulk(manifest, args, specs), len(specs))
 
     def test_versions_report_both(self):
         self.manifest["generator_environment"] = {"python": "0.0", "zlib": "0.0"}
