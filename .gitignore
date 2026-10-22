@@ -60,3 +60,6 @@ DerivedData/
 .claude/tdd-guardian/state.json
 .claude/tdd-guardian/receipts.json
 /coverage/
+
+# Device helper Python runtime cache (run evidence lives outside the repository)
+/scripts/device/__pycache__/

@@ -25,9 +25,18 @@ try:
     folder = run / 'shots'
     folder.mkdir(exist_ok=True)
     out = folder / (name + '.png')
-    checked(['/usr/sbin/screencapture', '-x', '-o', '-l' + wid, out])
-    if not out.exists() or out.stat().st_size < 100:
-        raise RuntimeError('Screen Recording capture failed: empty image')
+    temporary = folder / (name + '.capture.png')
+    if out.exists() or temporary.exists():
+        raise RuntimeError('artifact already exists; choose a new name')
+    try:
+        checked(['/usr/sbin/screencapture', '-x', '-o', '-l' + wid, temporary])
+        if not temporary.exists() or temporary.stat().st_size < 100:
+            raise RuntimeError('Screen Recording capture failed: empty image')
+        checked(['/usr/bin/osascript', '-l', 'JavaScript', HERE / 'check-image.js', temporary])
+        temporary.rename(out)
+    finally:
+        if temporary.exists():
+            temporary.unlink()  # Only this invocation's failed capture, never prior evidence.
     dimensions = checked(['/usr/bin/sips', '-g', 'pixelWidth', '-g', 'pixelHeight', out])
     print(f'PASS screenshot window={wid} points={width}x{height} file={out}\n{dimensions}')
 except Exception as e:
