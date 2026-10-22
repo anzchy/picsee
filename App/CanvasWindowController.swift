@@ -4,8 +4,7 @@ import PicseeCore
 import PicseeApplication
 import SwiftUI
 
-/// One P0 window and one in-flight request. New intent coalesces behind it.
-/// The admission actor, shared budgets and full cancellation belong to P0-05/06.
+/// Window intent is isolated; decode admission and buffers are shared by the pipeline.
 @MainActor
 final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let canvas = CanvasView(frame: .zero)
@@ -16,6 +15,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var desiredMaximum = 0
     private var completedMaximum = 0
     private var decoding = false
+    private var decodeTask: Task<Void, Never>?
+    private let binding = UUID()
+    private var currentKey: RenderKey?
 
     private let inspector = InspectorModel()
     private let router = CommandRouter()
@@ -82,8 +84,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func open(_ url: URL) {
         filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
+        decodeTask?.cancel()
+        decodeTask = nil
+        decoding = false
         generation = UUID()
         fileURL = url
+        currentKey = nil
         completedMaximum = 0
         let scale = window?.backingScaleFactor ?? 1
         desiredMaximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
@@ -95,7 +101,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        decodeTask?.cancel()
+        decodeTask = nil
+        decoding = false
         generation = UUID()
+        currentKey = nil
         fileURL = nil
         // The running synchronous decode retains its File Grant until actual completion.
     }
@@ -103,26 +113,43 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private func decodeIfNeeded() {
         guard !decoding, let url = fileURL, desiredMaximum > completedMaximum else { return }
         decoding = true
-        let token = generation
+        let token = PresentationToken(binding: binding, generation: generation)
         let maximum = desiredMaximum
-        Task { [self] in
+        decodeTask = Task { [self] in
             let scoped = url.startAccessingSecurityScopedResource()
-            let result: Result<DecodedImage, Error>
+            // A running cancellation returns only after the synchronous decoder returns.
+            // This keeps this consumer's File Grant alive without inventing #8's leases.
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
-                result = .success(try await pipeline.image(for: ImageDecodeRequest(fileURL: url, maximumPixelSize: maximum)))
+                let request = try await pipeline.request(for: url, maximumPixelSize: maximum)
+                try Task.checkCancellation()
+                guard token.generation == generation else { return }
+                currentKey = request.renderKey
+                let image = try await pipeline.image(for: request)
+                try Task.checkCancellation()
+                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                let revision = FileRevision(byteCount: (attributes[.size] as? NSNumber)?.intValue ?? 0,
+                                            modificationDate: attributes[.modificationDate] as? Date)
+                if let key = request.renderKey, let expectedKey = currentKey {
+                    let expected = RenderKey(itemID: expectedKey.itemID, revision: revision, maximumPixelSize: maximum)
+                    let current = PresentationToken(binding: binding, generation: generation)
+                    if current.accepts(key: key, expected: expected, token: token) {
+                        completedMaximum = maximum
+                        canvas.install(image)
+                    } else if token == current {
+                        canvas.showFailure(); desiredMaximum = 0
+                    }
+                }
             } catch {
-                result = .failure(error)
-            }
-            if scoped { url.stopAccessingSecurityScopedResource() }
-            if token == generation {
-                completedMaximum = maximum
-                switch result {
-                case .success(let image): canvas.install(image)
-                case .failure: canvas.showFailure(); desiredMaximum = 0
+                if token.generation == generation && !Task.isCancelled {
+                    canvas.showFailure(); desiredMaximum = 0
                 }
             }
-            decoding = false
-            decodeIfNeeded()
+            if token.generation == generation {
+                decoding = false
+                decodeTask = nil
+                decodeIfNeeded()
+            }
         }
     }
 }
