@@ -58,3 +58,52 @@ elif mode == 'heartbeat':
     with patch.object(launcher.time, 'monotonic', side_effect=clock), \
          patch.object(launcher.time, 'sleep'):
         assert launcher.main() == 75
+elif mode == 'vanished':
+    lock = Path(os.environ['PICSEE_MDPRO_LOCK'])
+    original_mkdir = launcher.os.mkdir
+    raced = [False]
+    def mkdir(path, *args, **kwargs):
+        if Path(path) == lock and not raced[0]:
+            raced[0] = True
+            assert not lock.exists(), 'path absent when FileExistsError is handled'
+            raise FileExistsError('peer moved lock away after mkdir collision')
+        return original_mkdir(path, *args, **kwargs)
+    ticks = [0]
+    def clock():
+        ticks[0] += 0.1
+        return ticks[0]
+    sys.argv = ['heavy-lock.py', 'true']
+    with patch.object(launcher.os, 'mkdir', side_effect=mkdir), \
+         patch.object(launcher.time, 'monotonic', side_effect=clock), \
+         patch.object(launcher.time, 'sleep'):
+        assert launcher.main() == 0, 'vanished path must retry and launch'
+    assert raced[0]
+elif mode in ('drain-message', 'drain-bound'):
+    class Child:
+        pid = 123456789
+        def poll(self):
+            return 3
+        def wait(self):
+            return 3
+    ticks = [0]
+    checks = [0]
+    def clock():
+        ticks[0] += 1
+        return ticks[0]
+    def alive(pid):
+        checks[0] += 1
+        return checks[0] < (80 if mode == 'drain-message' else 100)
+    original_popen = launcher.subprocess.Popen
+    def popen(command, *args, **kwargs):
+        return Child() if command == ['fake-job'] else original_popen(command, *args, **kwargs)
+    with patch.object(launcher.subprocess, 'Popen', side_effect=popen), \
+         patch.object(launcher.time, 'monotonic', side_effect=clock), \
+         patch.object(launcher.time, 'sleep'), \
+         patch.object(launcher, 'group_alive', side_effect=alive), \
+         patch.object(launcher, 'group_survivors', return_value='123456789 fake-worker'):
+        assert launcher.main() == 3, 'preserve direct child status'
+    if mode == 'drain-bound':
+        assert checks[0] < 10, 'drain bound must stop polling'
+        assert Path(os.environ['PICSEE_MDPRO_LOCK']).is_dir(), 'retain shared lock at bound'
+    else:
+        assert not Path(os.environ['PICSEE_MDPRO_LOCK']).exists(), 'release when group empties'
