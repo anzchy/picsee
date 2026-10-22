@@ -35,6 +35,9 @@ def group_alive(pid):
         return True
     except ProcessLookupError:
         return False
+    except PermissionError:
+        # macOS reports EPERM while a zombie-only group awaits reaping.
+        return True
 
 
 def group_survivors(pid):
@@ -57,7 +60,7 @@ def stop_group(child, grace):
     killed_at = None
     try:
         os.killpg(child.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         pass
     while True:
         child.poll()
@@ -68,7 +71,7 @@ def stop_group(child, grace):
             killed_at = now
             try:
                 os.killpg(child.pid, signal.SIGKILL)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
         if killed_at is not None and now - killed_at >= 5:
             print(f'[heavy-lock] WARNING: survivors {group_survivors(child.pid)}; '
