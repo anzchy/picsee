@@ -13,8 +13,6 @@ settings:
     CODE_SIGN_IDENTITY: "Apple Development"
     DEVELOPMENT_TEAM: GRT84NAK4T
     ENABLE_HARDENED_RUNTIME: YES
-    # Git metadata lives outside a linked worktree; only build scripts are unsandboxed.
-    ENABLE_USER_SCRIPT_SANDBOXING: NO
 targets:
   PicseeApp:
     type: application
@@ -39,8 +37,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Picsee
         CODE_SIGN_ENTITLEMENTS: App/Resources/Picsee.entitlements
-        ENABLE_APP_SANDBOX: YES
-        ENABLE_USER_SELECTED_FILES: readonly
+        # Git metadata lives outside a linked worktree; only this target's build script is unsandboxed.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
     postBuildScripts:
       - name: Stamp build Git SHA
         basedOnDependencyAnalysis: false
