@@ -114,7 +114,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         guard !decoding, let url = fileURL, desiredMaximum > completedMaximum else { return }
         decoding = true
         let token = PresentationToken(binding: binding, generation: generation)
-        let maximum = desiredMaximum
+        let maximum = completedMaximum == 0 ? min(CanvasDecodePolicy.previewMaximumPixelSize, desiredMaximum) : desiredMaximum
         decodeTask = Task { [self] in
             let scoped = url.startAccessingSecurityScopedResource()
             // A running cancellation returns only after the synchronous decoder returns.
