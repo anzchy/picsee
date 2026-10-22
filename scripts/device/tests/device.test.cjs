@@ -33,3 +33,13 @@ test('window lookup uses PID even with identical or misleading owner names',()=>
  assert.deepEqual(helper.selectWindows(windows,22).map(w=>w.kCGWindowNumber),[2]);
  assert.deepEqual(helper.selectWindows(windows,33),[]);
 });
+test('sandbox parser reads the current codesign text dump and XML without false positives',()=>{
+ const script=`import sys
+sys.path.insert(0, sys.argv[1])
+from device import sandbox_enabled
+assert sandbox_enabled('[Dict]\\n\\t[Key] com.apple.security.app-sandbox\\n\\t[Value]\\n\\t\\t[Bool] true\\n')
+assert not sandbox_enabled('[Dict]\\n\\t[Key] com.apple.security.app-sandbox\\n\\t[Value]\\n\\t\\t[Bool] false\\n\\t[Key] other\\n\\t[Value]\\n\\t\\t[Bool] true\\n')
+assert sandbox_enabled(b'<?xml version="1.0"?><plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>')
+assert not sandbox_enabled('nonsense')`;
+ const r=spawnSync('python3',['-c',script,base],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);
+});
