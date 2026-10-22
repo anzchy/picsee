@@ -204,7 +204,7 @@ def verdicts(data):
         ('launch-log', bool(re.search(r'Picsee launch git=' + re.escape(str(data.get('expectedSHA'))) + r'(?![\w-])', data.get('log', ''))), 'public SHA launch log missing'),
         ('machine', data.get('machineMatches') is True, 'machine/display differs from build record'),
         ('fixtures', data.get('fixturesIntact') is True, 'fixture hashes missing or changed')]
-    lines = [('PASS ' + name if ok else 'FAIL ' + name + ' — ' + data.get('errors', {}).get(name, why))
+    lines = [('PASS ' + name if ok else 'FAIL ' + name + ' — ' + ' '.join(str(data.get('errors', {}).get(name, why)).split()))
              for name, ok, why in checks]
     return lines, all(ok for _, ok, _ in checks)
 

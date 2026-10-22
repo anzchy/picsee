@@ -43,3 +43,17 @@ assert sandbox_enabled(b'<?xml version="1.0"?><plist version="1.0"><dict><key>co
 assert not sandbox_enabled('nonsense')`;
  const r=spawnSync('python3',['-c',script,base],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);
 });
+test('screenshot validation rejects a black image and accepts visible window pixels',()=>{
+ for(const [name,pixel,expected] of [['black',[0,0,0],1],['visible',[255,255,255],0]]){
+  const ppm=path.join(scratch,name+'.ppm'),png=path.join(scratch,name+'.png');
+  fs.writeFileSync(ppm,Buffer.concat([Buffer.from('P6\n2 2\n255\n'),Buffer.from([...pixel,...pixel,...pixel,...pixel])]));
+  assert.equal(spawnSync('/usr/bin/sips',['-s','format','png',ppm,'--out',png]).status,0);
+  const r=spawnSync('/usr/bin/osascript',['-l','JavaScript',path.join(base,'check-image.js'),png],{encoding:'utf8'});
+  assert.equal(r.status,expected,r.stderr);
+  if(expected)assert.match(r.stderr,/black or empty image/);
+ }
+});
+test('doctor keeps permission errors on one verdict line',()=>{
+ const f=fixture();f.windows=[];f.errors={window:'permission denied\nsecond diagnostic line'};
+ const r=doctor(f,'multiline');assert.equal(r.status,1);assert.equal(r.stdout.trim().split('\n').length,checks.length);
+});
