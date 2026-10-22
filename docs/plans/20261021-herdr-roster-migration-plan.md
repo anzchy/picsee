@@ -54,8 +54,8 @@
 | A6 | `.claude/agents/picsee-fable-auditor.md`、`picsee-landing-verifier.md`、`picsee-number-registrar.md` | 同名 mdpro 文件 | 仓库路径、lanes、verify worktree 目录 `picsee-wt/verify-<sha7>`；registrar 扫描 `docs/adr/` 和 F 编号表 | A1 |
 | A7 | `.claude/hooks/role-guard.sh` 及 python 模块 | 约 1.5k 行 | 先只移植实现者的 git 限制和禁止 `AskUserQuestion`，读 `PICSEE_ROLE`；真机测试者的写入限制同步移植 | git init |
 | A8 | `.claude/hooks/session-size-guard.sh` | 原样 | 只改 handoff 路径 | — |
-| A9 | `scripts/tdd/swift-lane.mjs`、`scripts/heavy-lock.sh` | mdpro `scripts/cargo-test-lane.mjs`、`scripts/heavy-lock.sh` @ `9f133f1d` | **已完成**（2026-10-22，#3）：原样复制 `4a8df7f`；锁 `64f93cf`；真实输出测试 `7d47ae9`；适配 `d207e5b`；HUP 信号补齐 `e027d2f`。用途及偏差见 3.1；真实插件 drill 已验证 | P0-01 + tdd-guardian init |
-| A10 | `.claude/tdd-guardian/config.json` | — | **已完成**（2026-10-22）：用户已运行 `/tdd-guardian:init`；#3 在 `d207e5b` 增加手动 `swift-red`，保留 `unit`；插件 loader 无错误，probe 可发现测试。尚无 UITests/xcodebuild lane | P0-01 |
+| A9 | `scripts/tdd/swift-lane.mjs`、`scripts/heavy-lock.sh` | mdpro `scripts/cargo-test-lane.mjs`、`scripts/heavy-lock.sh` @ `9f133f1d` | **已完成**（2026-10-22，#3）：原样复制 `4a8df7f`；锁 `64f93cf`；真实输出测试 `7d47ae9`；适配 `d207e5b`；HUP 信号补齐 `e027d2f`；审计修复：完成性/同名测试 `6b4f20c`，内核锁 `08989fe`。用途及偏差见 3.1；真实插件 drill 已验证 | P0-01 + tdd-guardian init |
+| A10 | `.claude/tdd-guardian/config.json` | — | **已完成**（2026-10-22）：用户已运行 `/tdd-guardian:init`；#3 在 `d207e5b` 增加手动 `swift-red`，保留 `unit`；两个 probe 在 `cba8fa5` 统一加锁；插件 loader/probe 验证见 handoff。尚无 UITests/xcodebuild lane | P0-01 |
 
 | A11 | `docs/feature-ledger.md` | mdpro 同名文件 | **已建账**（2026-10-21），102 行全部 `Absent`；规则 70 的 brief 模板在 Background 里引用账簿 ID，B3 加一条“用户可见行为变化须同次提交改账簿行” | — |
 | A12 | `scripts/ledger/check.mjs` | mdpro `scripts/ledger/` | 按账簿「门禁」五条实现；`npm run ledger:check` 进 CI 和 landing verifier 的 lanes | P0-01 + tdd-guardian init |
@@ -78,9 +78,11 @@ receipt 是 RED-before-GREEN 的证据：实现者在改生产代码**之前**�
 
 record/verify、指纹、防削弱检查仍由插件完成，不像 mdpro 那样另写一套 300 行的 CLI。
 
-2026-10-22 #3 实现记录（A9/A10）：最终用 `swift-lane.mjs`，不是原拟的 `.sh`；先将 mdpro @ `9f133f1d` 的 cargo wrapper 和 heavy lock 原样提交（`4a8df7f`），再适配（`64f93cf`、`d207e5b`），并在 `e027d2f` 补齐 HUP 的进程组收尾。保留 Node 的逐流 UTF-8 解码、原始字节透传、背压和信号转发，故不追求原拟约 60 行。`PICSEE_SWIFT_FILTER` 由 record/verify 的环境继承，CLI 也可直接传一个过滤器参数；`--files` 只管指纹。编译失败或没有可靠完成结果退出 70，插件分类为 `runner-error` / `environment`，拒绝作为有效 RED（插件仍存无效记录以便诊断）。真正断言失败退出 1，分类为 `assertion-failure`；通过退出 0，分类为 `pass` / `green`。重复 XCTest 汇总只计一次，再加 Swift Testing 的独立运行结果；Swift Testing 的 issue 数不等于失败测试数。零测试拒收，XCTest/Swift Testing 真输出 fixtures 与自动化测试已入库。过滤器需要在 verify 时再次提供，插件不持久化环境变量。`DRILL-1` 已验证 assertion RED → specification held；`DRILL-2` 编译错误为 environment；临时 Swift 改动已恢复。
+2026-10-22 #3 实现记录（A9/A10）：最终用 `swift-lane.mjs`；先将源脚本原样提交（`4a8df7f`），再适配（`64f93cf`、`d207e5b`、`e027d2f`）。`.mjs` 保留逐流 UTF-8 解码、原始字节透传、背压与信号转发。第一轮审计指出旧实现会把 XCTest 类小计当成整轮完成，并合并同名 Swift 测试；该旧完成性声明已撤回，`6b4f20c` 改为：每个已启动框架均须到达根完成（XCTest 的 All tests/Selected tests/选中 bundle，Swift Testing 的最终 run summary），任一流出现崩溃标记、未完成框架或不一致计数均退出 70、不输出计数。XCTest 用稳定 case identity 核对根汇总；Swift 普通输出缺少稳定 identity 时，按每条 terminal event 计数，绝不按 display name 去重，并与框架总数交叉检查，不一致即拒收。真实 crash-after-subtotal 与两个同名失败/两个同名跳过的 fixtures 已加入测试。
 
-receipt lane 自动获得 picsee 整机锁（`~/.picsee/locks/heavy.lock/`，`PICSEE_HEAVY_LOCK_HELD=1` 支持嵌套），不调用 mdpro 路径。`unit` 原有命令与 coverage 报告保持不变，避免改变现有全量门禁；需要串行执行其测试及覆盖率导出时，在调用整个 lane 外包 heavy lock。暂不实现 UITests/xcodebuild 运行入口，XCTest parser 用真实 scratch SwiftPM XCTest 输出验证。
+`PICSEE_SWIFT_FILTER` 由 record/verify 的环境继承，也可直接传一个参数给 wrapper；`--files` 只选指纹文件。计数前输出 `swift-lane filter=<f>`，使运行输出 tail 可见过滤器；插件仍不会约束两个调用的过滤器相等，verify 必须传相同值。正常断言失败是 exit 1 / `fail` / `assertion-failure`；编译、崩溃或不可靠运行是 exit 70 / `runner-error` / `environment`（插件保留无效诊断，不接受为有效 RED）；通过是 exit 0 / `pass` / `green`。新 API 按此流程在 record 时已有未提交的可编译桩，因此总带 `implementation-already-present` MEDIUM，须由审计核对。断言消息含 “No such file or directory” 会被插件升级为环境失败。初次真实插件 drill：DRILL-1 为 assertion RED → specification held，DRILL-2 编译错误为 environment；临时 Swift 改动已恢复，诊断 receipt 在 fix round 1 清理，原始证据留在 handoff。
+
+`08989fe` 以 Python 3 标准库 `fcntl.flock` 取代目录锁/PID 回收：持久文件 `~/.picsee/locks/heavy.lock`（不删除/移动），job 经 `pass_fds` 继承描述符，只有最后一次 close 才解锁。选择 Python 是因为 macOS 支持该标准库，并能明确控制继承和进程组；没有额外包依赖。保留嵌套、超时 75、退出码与信号转发。SIGKILL holder 后其存活子进程仍持锁，两个 waiter 与三方竞争均有自动化测试。`unit` 原测试/coverage 命令不变，整个 lane 可由外层 heavy lock 串行；两个 discovery probe 都加锁。测试临时目录在 `os.tmpdir()`，由 `after()` 清理，测试插件固定为 0.10.2（保留 env override），fixtures 仅把 scratch/home 前缀改为中性路径。暂不实现 UITests/xcodebuild lane，XCTest 使用真实 scratch SwiftPM 输出验证。
 
 ### B. 规则 70 引用到、picsee 也需要的基础规则
 
