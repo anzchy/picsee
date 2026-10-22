@@ -137,6 +137,14 @@ prefix_rule(
     not_match = ["codesign -d --entitlements :- Picsee.app", "codesign --verify --deep --strict Picsee.app", "codesign --force --sign 'Apple Development' --entitlements Picsee.entitlements Picsee.app"],
 )
 
+prefix_rule(
+    pattern = [["xcrun", "/usr/bin/xcrun"], "codesign", "--remove-signature"],
+    decision = "forbidden",
+    justification = "AGENTS.md and migration plan A3: preserve the signature and sandbox entitlements. Ask the delegator, naming the app and signing problem; inspect with xcrun codesign -d or --verify instead.",
+    match = ["xcrun codesign --remove-signature Picsee.app", "/usr/bin/xcrun codesign --remove-signature Picsee.app"],
+    not_match = ["xcrun codesign -d --entitlements :- Picsee.app", "/usr/bin/xcrun codesign --force --sign 'Apple Development' --entitlements Picsee.entitlements Picsee.app"],
+)
+
 # PlistBuddy's -c operation is a single literal argv token, not a parsed command.
 # Cover Delete and Set/Add bool with false/true/0/1/NO/YES, with/without a root
 # colon. Other whitespace, quoting, values, option orders and chained -c commands
@@ -184,4 +192,12 @@ prefix_rule(
     justification = "AGENTS.md sandbox stays on; migration plan A3: do not replace, remove or insert the App Sandbox key. Ask the delegator, naming the entitlement file, exact operation and sandbox conflict; use plutil -p and record an ADR instead.",
     match = ["plutil -replace com.apple.security.app-sandbox -bool NO Picsee.entitlements", "/usr/bin/plutil -remove com.apple.security.app-sandbox Picsee.entitlements", "plutil -insert com.apple.security.app-sandbox -bool YES Picsee.entitlements", "plutil -replace 'com\\.apple\\.security\\.app-sandbox' -bool NO Picsee.entitlements", "plutil -remove 'com\\.apple\\.security\\.app-sandbox' Picsee.entitlements", "plutil -insert 'com\\.apple\\.security\\.app-sandbox' -bool NO Picsee.entitlements"],
     not_match = ["plutil -p Picsee.entitlements", "/usr/bin/plutil -p Picsee.entitlements", "plutil -replace unrelated.key -bool NO Picsee.entitlements"],
+)
+
+prefix_rule(
+    pattern = [["xcrun", "/usr/bin/xcrun"], "plutil", ["-replace", "-remove", "-insert"], ["com.apple.security.app-sandbox", "com\\.apple\\.security\\.app-sandbox"]],
+    decision = "forbidden",
+    justification = "AGENTS.md sandbox stays on; migration plan A3: do not replace, remove or insert the App Sandbox key. Ask the delegator, naming the entitlement file, exact operation and sandbox conflict; use xcrun plutil -p and record an ADR instead.",
+    match = ["xcrun plutil -replace com.apple.security.app-sandbox -bool NO Picsee.entitlements", "/usr/bin/xcrun plutil -remove 'com\\.apple\\.security\\.app-sandbox' Picsee.entitlements"],
+    not_match = ["xcrun plutil -p Picsee.entitlements", "/usr/bin/xcrun plutil -replace unrelated.key -bool NO Picsee.entitlements"],
 )
