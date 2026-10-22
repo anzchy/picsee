@@ -222,8 +222,8 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/previous/next/enter/search 未实现；已实现命令与 inspector 三入口 @1x 真机一致；escape 按键通过，菜单 Focus Canvas 失败（#29）。 |
-| CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；字段裸键、Edit 菜单与菜单打开时的 Esc 已在 @1x 真机通过。 |
+| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/previous/next/enter/search 未实现；inspector 等三入口 @1x 真机一致；escape 菜单项失败 #29。 |
+| CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；字段裸键、Edit 菜单与菜单 Esc 已 @1x 真机通过；非画布窗口不处理裸键菜单等价键，未验。 |
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |
 | CMD-05 | 全局快捷键 | Absent | 无 | P7-09 | — | App 在后台时按全局快捷键，picsee 被唤到前台 |
@@ -327,7 +327,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）：OPEN-02 `Partial`/`无`，计划已补 P0-09；⌘O 与 File → Open… 只选图片（`canChooseDirectories = false`），与限制一致；OPEN-01、OPEN-03 不受影响 |
+| 打开与输入 | 2026-10-22 | doc-gardener | P0-09 真机运行（88a76ef..0426db5）：OPEN-02 仍 `Partial`/`无`，只改限制，验收未改；File › Open…、⌘O、取消与 P0.md 第 12–14 项一致；目录（#8）未验；OPEN-01、OPEN-03 不受影响 |
 | 查看与画布 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）：`0`/`1`/+/− 改经 CommandRouter，新增 View 菜单与 Inspector 按钮；VIEW-01/02/03 限制已按此更新并点名 `fit`/`actualPixels`/`zoomIn`/`zoomOut`，「怎么确认」均在 150 字内，验收未改；P0-03 真机记录仍在且含 VIEW-02/03 |
 | C 沉浸界面 | 2026-10-21 | 建账 | 同上 |
 | 外观与显示偏好 | 2026-10-22 | doc-gardener | PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
@@ -337,11 +337,11 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
 | 授权与文件访问 | 2026-10-21 | 建账 | 同上 |
 | 缓存与资源 | 2026-10-21 | 建账 | 同上 |
-| 命令与键盘 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）：CMD-01/02 `Partial`/`单元`，验收未改，与 `CommandID.isImplemented` 及 CommandRouter 测试一致；12 个 `CommandID` 均已在 CMD-01、OPEN-02、VIEW-01/02/03 点名；CMD-01「怎么确认」150 字，已到上限 |
+| 命令与键盘 | 2026-10-22 | doc-gardener | P0-09 真机运行（88a76ef..0426db5）：CMD-01/02 仍 `Partial`/`单元`，只改限制，验收未改；CMD-01「怎么确认」约 180 字，超出 150 字上限，待缩短；CMD-02 删去了仍成立的「非画布窗口不处理裸键菜单等价键」限制，待恢复；Focus Canvas 菜单缺陷见 #29 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-22 | doc-gardener | P0-05 计划加测解码 lane 上限，FMT-01 验收不变 |
-| 可访问性与本地化 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）：A11Y-02 `Partial`/`单元`，验收未改；限制已精简，「怎么确认」约 135 字 |
+| 可访问性与本地化 | 2026-10-22 | doc-gardener | P0-09 真机运行（88a76ef..0426db5）：A11Y-02 仍 `Partial`/`单元`，只改限制，验收未改；与 P0.md 第 5、6、10、11、15 项一致，「怎么确认」约 134 字 |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
