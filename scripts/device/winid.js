@@ -1,11 +1,18 @@
-ObjC.import('CoreGraphics');
-ObjC.import('Foundation');
-function run(){
-  var list=ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly,0));
-  var out=[];
-  for(var i=0;i<list.count;i++){var w=list.objectAtIndex(i);
-    var owner=ObjC.unwrap(w.objectForKey('kCGWindowOwnerName'));
-    if(owner==='mdpro'||owner==='tauri-app'){var b=w.objectForKey('kCGWindowBounds');
-      out.push([ObjC.unwrap(w.objectForKey('kCGWindowNumber')),owner,ObjC.unwrap(w.objectForKey('kCGWindowLayer')),ObjC.unwrap(b.objectForKey('Width')),ObjC.unwrap(b.objectForKey('Height')),ObjC.unwrap(w.objectForKey('kCGWindowName'))].join(' '));}}
-  return out.join('\n');
+// Shared PID selection is exercised with node --test; runtime uses CGWindowList.
+function selectWindows(windows, pid) {
+  return windows.filter(function(w) {
+    return Number(w.kCGWindowOwnerPID) === Number(pid) && Number(w.kCGWindowLayer) === 0;
+  });
+}
+if (typeof module !== 'undefined') module.exports = {selectWindows: selectWindows};
+function run(argv) {
+  if (argv.length !== 1 || !/^\d+$/.test(argv[0]) || Number(argv[0]) <= 1) throw Error('usage: winid.js <pid>');
+  ObjC.import('CoreGraphics');
+  ObjC.import('Foundation');
+  var list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0));
+  var windows = ObjC.deepUnwrap(list);
+  return selectWindows(windows, argv[0]).map(function(w) {
+    return [w.kCGWindowNumber, w.kCGWindowOwnerPID, w.kCGWindowLayer,
+      w.kCGWindowBounds.Width, w.kCGWindowBounds.Height, w.kCGWindowName || ''].join('\t');
+  }).join('\n');
 }
