@@ -116,9 +116,9 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| VIEW-01 | 适应窗口 | Stub | 无 | P1-03 | `App/CanvasView.swift` | 分别打开横图和竖图，都完整居中显示；拖动改窗口大小，图随之适应。限制：打开时以不超过 1 的倍率适应；0、View › Fit、Inspector Fit 已经路由实现；窗口缩放时重新适应待 P1-03；本行真机未验。 |
-| VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：P0-03 的 `1` 键在 [@2x](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[@1x](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini) 已验；现路由 `1`、菜单 Actual Pixels、按钮真机未验；跨屏拖窗、中文和 VoiceOver 未验；多文件仅显示首个。 |
-| VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：P0-03 的 +/− 在 [@2x](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[@1x](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini) 已验；捏合、完整 VoiceOver 未验；现按键路由/菜单/按钮真机未验；按钮或指针在面板/画布外时以中心缩放，锚点选择已单测。 |
+| VIEW-01 | 适应窗口 | Stub | 无 | P1-03 | `App/CanvasView.swift` | 分别打开横图和竖图，都完整居中显示；拖动改窗口大小，图随之适应。限制：打开时以不超过 1 的倍率适应；fit（0、View › Fit、Inspector Fit）已经路由实现；窗口缩放时重新适应待 P1-03；本行真机未验。 |
+| VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：P0-03 的 `1` 键在 [@2x](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[@1x](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini) 已验；actualPixels 的路由 1/菜单/按钮真机未验；跨屏拖窗、中文和 VoiceOver 未验；多文件仅显示首个。 |
+| VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：zoomIn/zoomOut：P0-03 的 +/− 在 [@2x](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[@1x](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini) 已验；捏合、完整 VoiceOver 未验；现按键路由/菜单/按钮真机未验；按钮或指针在面板/画布外时以中心缩放，锚点选择已单测。 |
 | VIEW-04 | 平移与边界 | Absent | 无 | P1-03 | — | 放大后拖动，图像不会被拖出可见范围；回到适应窗口后位置复原（27 页） |
 | VIEW-05 | 全屏 | Absent | 无 | P1-03 | — | ⌃⌘F 进入和退出全屏，当前图和缩放状态保持 |
 | VIEW-06 | 按 EXIF 方向显示 | Absent | 无 | P0-05、P1-03 | — | 打开 S1 素材里八种 Orientation 的样本，全部正向显示 |
@@ -222,7 +222,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/previous/next/enter/search 未实现；Inspector 占位非搜索；菜单/按钮/按键与合成真机未验。 |
+| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/previous/next/enter/search未实现；escape/inspector已接路由；非搜索占位；入口/合成真机未验。 |
 | CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；输入框裸键和菜单 Esc 优先级有单元测试；非画布窗口不处理裸键菜单等价键，原生接线未自动测试；AppKit 菜单、SwiftUI 按钮及原生按键接线真机未验。 |
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |
