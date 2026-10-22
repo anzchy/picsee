@@ -30,6 +30,7 @@ struct InspectorPlaceholder: View {
         }
         .padding(16)
         .frame(width: 240)
+        .background(.background)
         .onChange(of: model.state.focus) { _, focus in fieldFocused = focus == .textInput }
         .onChange(of: fieldFocused) { _, focused in
             if focused { model.state.updateFocus(.textInput) }

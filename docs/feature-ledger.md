@@ -273,7 +273,7 @@ MVP 起就是门槛（见计划 P3「MVP 还需检查」），P6-04 补全全部
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | A11Y-01 | VoiceOver | Absent | 无 | P3-10、P6-04 | — | 开 VoiceOver 走一遍打开→网格→大图→Inspector，每个控件都有正确的名称，隐藏的工具不被读出 |
-| A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/InspectorFocus.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：仅画布与 Inspector 占位字段/按钮的 Tab、Shift-Tab、Esc 状态已单元测试；打开目录、选图、返回网格未实现（#8/P3）；⌘O、⌘I、Tab、Esc 和焦点环真机未验，字段不是搜索。 |
+| A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/InspectorFocus.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：仅画布与 Inspector 占位字段/按钮的 Tab、Shift-Tab、Esc 状态已单元测试；打开目录、选图、返回网格未实现（#8/P3）；⌘O、⌘I、Tab、Esc 和焦点环真机未验；App 桥接在 SwiftUI 释放焦点后恢复画布，字段不是搜索。 |
 | A11Y-03 | 对比度与焦点不被遮挡 | Absent | 无 | P6-04 | — | 浅色和深色下文字与控件对比度符合 `design/DESIGN.md` 的目标；获得焦点的控件不被其他元素挡住 |
 | A11Y-04 | 中英文界面 | Absent | 无 | P1-07、P6-04 | — | 系统语言切到中文或英文，界面文字跟随变化，没有截断和未翻译的键名 |
 
