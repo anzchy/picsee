@@ -73,6 +73,9 @@ Round one is blind:
 - both get the same range, tier and AC list at the same time;
 - the delegator merges the two verdicts.
 
+A Low item from `gpt-imple-3` has one blind auditor, `picsee-fable-auditor`, with no merge or
+challenge step; if that auditor raises the tier above Low, the item returns to two auditors.
+
 When the auditors disagree on a finding, the delegator sends it as a `challenge` to the auditor that
 did not raise it. That auditor confirms the finding with its own trace or refutes it with a
 reproduction or a counter-proof. "Unlikely" is not a refutation.
