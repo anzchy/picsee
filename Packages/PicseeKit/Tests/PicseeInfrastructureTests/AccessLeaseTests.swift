@@ -68,3 +68,49 @@ final class CountingScope: SecurityScope, @unchecked Sendable {
     #expect(value == 42)
     #expect(scope.counts == [7, 5])
 }
+
+private final class LinkChangingScope: SecurityScope, @unchecked Sendable {
+    let link: URL
+    let outside: URL
+    private let lock = NSLock()
+    private var armed = false
+    private var starts = 0
+    private var stops = 0
+    init(link: URL, outside: URL) { self.link = link; self.outside = outside }
+    func arm() { lock.withLock { armed = true } }
+    func start(_ url: URL) -> Bool {
+        lock.withLock {
+            starts += 1
+            if armed {
+                try! FileManager.default.removeItem(at: link)
+                try! FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+                armed = false
+            }
+            return true
+        }
+    }
+    func stop(_ url: URL) { lock.withLock { stops += 1 } }
+    var balanced: Bool { lock.withLock { starts == stops } }
+}
+
+@Test func accessBoundaryIsRecheckedAfterScopeActuallyStarts() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    let root = base.appendingPathComponent("root")
+    try fm.createDirectory(at: root, withIntermediateDirectories: true)
+    let inside = root.appendingPathComponent("inside.jpg")
+    let outside = base.appendingPathComponent("outside.jpg")
+    let link = root.appendingPathComponent("link.jpg")
+    try Data().write(to: inside); try Data().write(to: outside)
+    try fm.createSymbolicLink(at: link, withDestinationURL: inside)
+    let scope = LinkChangingScope(link: link, outside: outside)
+    let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "A")
+    let id = try await access.grant(folder: root)
+    scope.arm()
+    await #expect(throws: FileAccessError.outsideRoot) {
+        let lease = try await access.acquire(.root(id, file: link))
+        await access.release(lease)
+    }
+    #expect(scope.balanced)
+}

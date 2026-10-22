@@ -100,7 +100,7 @@ public actor FileAccess: AccessLeasing {
                 }
                 catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
             }
-            guard AccessBoundary.contains(file, in: url) else { throw FileAccessError.outsideRoot }
+            if active[key] != nil, !AccessBoundary.contains(file, in: url) { throw FileAccessError.outsideRoot }
         case .fileGrant(let file):
             key = .fileGrant(file.standardizedFileURL); url = file; rootID = nil
         }
@@ -109,6 +109,10 @@ public actor FileAccess: AccessLeasing {
             entry.tokens.insert(lease.token); active[key] = entry
         } else {
             let session = try ScopeSession(scope: scope, url: url, rootID: rootID)
+            if case .root(_, let file) = request, !AccessBoundary.contains(file, in: url) {
+                session.stop()
+                throw FileAccessError.outsideRoot
+            }
             if var record = staleRecord {
                 do {
                     record.bookmark = try bookmarks.create(for: url)
