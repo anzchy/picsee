@@ -103,7 +103,7 @@ node --test scripts/tdd/*.test.mjs
 
 新 API 按此流程先写可编译桩，桩在 record 时是未提交的实现改动，Swift receipt 总会带 `implementation-already-present` MEDIUM；审计仍须核对桩与 RED。断言消息含 “No such file or directory” 时，插件会把失败升级为环境失败并拒收有效 RED。
 
-receipt lane 和两个 discovery probe 均走 `scripts/heavy-lock.sh`。其他重任务用 `scripts/heavy-lock.sh <命令…>`；整机各 worktree 共用持久锁文件 `~/.picsee/locks/heavy.lock`。Python 3 的 `fcntl.flock` 由子进程继承描述符，最后一次关闭才解锁；不要删除锁文件。`PICSEE_HEAVY_LOCK` 可覆盖路径，`PICSEE_HEAVY_LOCK_WAIT_SECS` 默认 1800 秒、超时退出 75；`PICSEE_HEAVY_LOCK_HELD=1` 支持嵌套。`unit` 测试和覆盖率配置不变。
+receipt lane 和两个 discovery probe 均走 `scripts/heavy-lock.sh`。其他重任务用 `scripts/heavy-lock.sh <命令…>`；整机各 worktree 先取持久锁文件 `~/.picsee/locks/heavy.lock` 的 flock，再取 mdpro 的目录锁 `~/.cache/mdpro-heavy.lock`，使 picsee 与 mdpro 的重任务互斥、不并发。`PICSEE_MDPRO_LOCK` 可覆盖 mdpro 目录锁路径，设为 `off` 可跳过共享锁（测试或无 mdpro 的机器）；子进程同时继承 `MDPRO_HEAVY_LOCK_HELD=1`。Python 3 的 `fcntl.flock` 由子进程继承描述符，最后一次关闭才解锁；不要删除锁文件。`PICSEE_HEAVY_LOCK` 可覆盖路径，`PICSEE_HEAVY_LOCK_WAIT_SECS` 默认 1800 秒、两个锁共用这一等待预算，超时退出 75；`PICSEE_HEAVY_LOCK_HELD=1` 支持嵌套。`unit` 测试和覆盖率配置不变。
 
 ## 必须遵守的规则
 
