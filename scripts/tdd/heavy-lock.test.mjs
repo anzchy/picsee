@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -11,7 +11,7 @@ after(() => rmSync(scratch, { recursive: true, force: true }));
 const lock = path.join(root, 'scripts/heavy-lock.sh');
 function environment() {
   const home = mkdtempSync(path.join(scratch, 'lock-'));
-  return { ...process.env, HOME: home, PICSEE_HEAVY_LOCK_WAIT_SECS: '15', PICSEE_HEAVY_LOCK_HELD: '' };
+  return { ...process.env, HOME: home, PICSEE_HEAVY_LOCK: path.join(home, '.picsee/locks/heavy.lock'), PICSEE_MDPRO_LOCK: path.join(home, 'mdpro.lock'), MDPRO_HEAVY_LOCK_HELD: '', PICSEE_HEAVY_LOCK_WAIT_SECS: '15', PICSEE_HEAVY_LOCK_HELD: '' };
 }
 function run(args, env) {
   return new Promise((resolve, reject) => {
@@ -132,5 +132,112 @@ test('lock wait timeout keeps exit 75 without entering the command', async () =>
   } finally {
     holder.child.kill('SIGTERM');
     await holder.done;
+  }
+});
+
+// Shared-lock contract: every path is private to this test's temporary directory.
+function fakeHolder(env, pid) {
+  mkdirSync(env.PICSEE_MDPRO_LOCK);
+  writeFileSync(path.join(env.PICSEE_MDPRO_LOCK, 'owner'), `pid=${pid}\nstarted=fixture\ncwd=/fixture\ncmd=sleep\n`);
+}
+function releaseFake(env) { rmSync(env.PICSEE_MDPRO_LOCK, { recursive: true, force: true }); }
+const pause = ms => new Promise(r => setTimeout(r, ms));
+test('AC-1 live mdpro holder blocks picsee until release', async () => {
+  const env=environment(), ready=path.join(env.HOME,'ready');
+  const sleeper=spawn('sleep',['20']);
+  fakeHolder(env,sleeper.pid);
+  const job=start(['touch',ready],env);
+  try {
+    await pause(250);
+    assert.equal(existsSync(ready),false);
+    assert.match(job.output(),/held by:.*pid=/);
+  } finally { releaseFake(env); sleeper.kill(); await job.done; }
+  assert.ok(existsSync(ready));
+});
+test('AC-2 shared owner is live and describes the job; exits and signal propagate', async () => {
+  for (const ending of ['exit 0','exit 3','kill -TERM $$']) {
+    const env=environment(), ready=path.join(env.HOME,'ready'), release=path.join(env.HOME,'release');
+    const job=start(['bash','-c',`touch "$1"; while ! test -f "$2"; do sleep 0.02; done; ${ending}`,'_',ready,release],env);
+    try {
+      await until(()=>existsSync(ready),'job started');
+      const owner=readFileSync(path.join(env.PICSEE_MDPRO_LOCK,'owner'),'utf8');
+      const pid=Number(owner.match(/^pid=(\d+)$/m)[1]);
+      process.kill(pid,0);
+      assert.equal(pid,job.child.pid);
+      assert.ok(owner.includes(`cwd=${root}\n`));
+      assert.match(owner,/^cmd=bash /m);
+      assert.match(owner,/^started=.+/m);
+    } finally { writeFileSync(release,''); await job.done; }
+    const result=await job.done;
+    assert.equal(result.code,ending==='exit 0'?0:ending==='exit 3'?3:null);
+    assert.equal(result.signal,ending.startsWith('kill')?'SIGTERM':null);
+    assert.equal(existsSync(env.PICSEE_MDPRO_LOCK),false);
+  }
+});
+test('AC-3 stale and ownerless mdpro locks are reclaimed', async () => {
+  for (const ownerless of [false,true]) {
+    const env=environment();
+    const dead=spawn('true'); await new Promise(r=>dead.on('close',r));
+    fakeHolder(env,dead.pid);
+    if(ownerless) rmSync(path.join(env.PICSEE_MDPRO_LOCK,'owner'));
+    const result=await run(['true'],env);
+    assert.equal(result.code,0,result.output);
+    assert.match(result.output,/reclaiming/);
+    assert.equal(existsSync(env.PICSEE_MDPRO_LOCK),false);
+  }
+});
+test('AC-4 INT and TERM keep shared lock through group kill grace', async () => {
+  for(const sig of ['SIGINT','SIGTERM']) {
+    const env={...environment(),PICSEE_HEAVY_LOCK_KILL_GRACE_SECS:'0.5'};
+    const ready=path.join(env.HOME,'ready');
+    const job=start(['python3','-c','import signal,time,pathlib,sys; signal.signal(signal.SIGTERM,signal.SIG_IGN); pathlib.Path(sys.argv[1]).write_text(str(__import__("os").getpid())); time.sleep(3)',ready],env);
+    await until(()=>existsSync(ready),'ignoring child started');
+    const pid=Number(readFileSync(ready,'utf8'));
+    try {
+      job.child.kill(sig); await pause(150);
+      process.kill(pid,0);
+      assert.ok(existsSync(env.PICSEE_MDPRO_LOCK),'held while child ignores TERM');
+    } finally { await job.done; }
+    assert.equal((await job.done).signal,sig);
+    assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
+    assert.equal(existsSync(env.PICSEE_MDPRO_LOCK),false);
+  }
+});
+test('AC-5 shared timeout exits 75 and releases picsee flock', async () => {
+  const env=environment(); fakeHolder(env,process.pid);
+  try {
+    const result=await run(['echo','must-not-run'],{...env,PICSEE_HEAVY_LOCK_WAIT_SECS:'0.2'});
+    assert.equal(result.code,75,result.output);
+    assert.doesNotMatch(result.output,/must-not-run/);
+    assert.equal((await run(['true'],{...env,PICSEE_MDPRO_LOCK:'off',PICSEE_HEAVY_LOCK_WAIT_SECS:'0.2'})).code,0);
+    assert.ok(existsSync(env.PICSEE_MDPRO_LOCK),'live peer never reclaimed');
+  } finally { releaseFake(env); }
+});
+test('AC-6 opt-out and direct nesting export mdpro held flag', async () => {
+  for(const direct of [false,true]) {
+    const env={...environment(),PICSEE_MDPRO_LOCK:'off',PICSEE_HEAVY_LOCK_HELD:direct?'1':''};
+    const result=await run(['bash','-c','test "$MDPRO_HEAVY_LOCK_HELD" = 1'],env);
+    assert.equal(result.code,0,result.output);
+    assert.equal(existsSync(env.PICSEE_HEAVY_LOCK),!direct);
+  }
+});
+const mdproLock='/Users/jackcheng/Documents/01_Coding/mac-app/mdpro/scripts/heavy-lock.sh';
+test('AC-7 real mdpro script serializes in both directions', {timeout:30000}, async () => {
+  for(const first of ['picsee','mdpro']) {
+    const env=environment(), events=path.join(env.HOME,'events');
+    env.MDPRO_HEAVY_LOCK=env.PICSEE_MDPRO_LOCK;
+    function launch(which,args) {
+      const child=spawn(which==='picsee'?lock:mdproLock,args,{env,cwd:root});
+      let output=''; child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
+      return new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',(code,signal)=>resolve({code,signal,output}));});
+    }
+    const holder=launch(first,['bash','-c','echo "$2-start $(date +%s)" >> "$1"; sleep 5; echo "$2-end $(date +%s)" >> "$1"','_',events,first]);
+    await until(()=>existsSync(events),'first job started');
+    const second=first==='picsee'?'mdpro':'picsee';
+    const waiter=launch(second,['bash','-c','echo "$2-date $(date +%s)" >> "$1"','_',events,second]);
+    const results=await Promise.all([holder,waiter]);
+    console.log(`AC-7 ${first} first:\n${readFileSync(events,'utf8')}${results.map(r=>r.output).join('')}`);
+    assert.deepEqual(results.map(r=>r.code),[0,0]);
+    assert.deepEqual(readFileSync(events,'utf8').trim().split('\n').map(s=>s.split(' ')[0]),[`${first}-start`,`${first}-end`,`${second}-date`]);
   }
 });
