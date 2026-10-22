@@ -71,6 +71,11 @@ public actor DecodeAdmission {
     public init(configuration: DecodeConfiguration, executor: any DecodeExecuting, decoder: any ImageDecoding) {
         self.configuration = configuration; self.executor = executor; self.decoder = decoder
     }
+    // Internal schedule-control seam: completion has removed the job, delivery has not resumed its waiter.
+    private var completionBarrier: (@Sendable () async -> Void)?
+    func setCompletionBarrier(_ barrier: @escaping @Sendable () async -> Void) {
+        completionBarrier = barrier
+    }
     private var identities: [URL: ItemID] = [:]
     public func key(for url: URL, revision: FileRevision, maximumPixelSize: Int) -> RenderKey {
         let path = url.standardizedFileURL
@@ -161,6 +166,7 @@ public actor DecodeAdmission {
         job.trace.release(result)
         if keyed[job.key] == id { keyed.removeValue(forKey: job.key) }
         drain()
+        await completionBarrier?()
         for (subscriber, delivery) in job.subscribers {
             await delivery.finish(job.cancelled.contains(subscriber) ? .failure(CancellationError()) : result)
         }
