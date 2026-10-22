@@ -35,6 +35,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         let content = NSView(frame: window.contentView!.bounds)
+        content.wantsLayer = true
         canvas.frame = content.bounds
         canvas.autoresizingMask = [.width, .height]
         canvas.focusRingType = .exterior
