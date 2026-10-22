@@ -303,3 +303,37 @@ for (const mode of ['survivors','publication','heartbeat']) {
     if(mode==='heartbeat') assert.match(result.stderr,/still waiting \(\d+s\)/);
   });
 }
+
+test('R1 contended reverse nesting fails promptly without disturbing the flock holder', async () => {
+  const env=environment(), entered=path.join(env.HOME,'entered');
+  fakeHolder(env,process.pid); // M holds S; P will take F and wait on S.
+  const peer=start(['touch',entered],env);
+  try {
+    await until(()=>peer.output().includes('held by:'),'P owns F and waits for S');
+    const began=Date.now();
+    const nested=spawnSync(lock,['echo','must-not-launch'],{env:{...env,MDPRO_HEAVY_LOCK_HELD:'1'},encoding:'utf8',timeout:1500});
+    assert.ifError(nested.error);
+    assert.equal(nested.status,75,nested.stderr);
+    assert.ok(Date.now()-began<1500);
+    assert.match(nested.stderr,/picsee job holds the picsee lock while waiting for mdpro/);
+    assert.doesNotMatch(nested.stdout,/must-not-launch/);
+    process.kill(peer.child.pid,0);
+    assert.equal(existsSync(entered),false);
+  } finally { releaseFake(env); await peer.done; }
+  assert.equal((await peer.done).code,0);
+  assert.ok(existsSync(entered),'P completes after M releases S');
+});
+
+for (const mode of ['vanished','drain-message','drain-bound']) {
+  test(`R2/R3 fault injection: ${mode}`, () => {
+    const env={...environment(),PICSEE_HEAVY_LOCK_DRAIN_SECS:mode==='drain-message'?'100':'0.2'};
+    const result=spawnSync('python3',['scripts/tdd/fixtures/heavy-lock-faults.py','scripts/tdd/heavy-lock.py',mode],{env,encoding:'utf8',timeout:5000});
+    assert.ifError(result.error);
+    assert.equal(result.status,0,result.stderr);
+    if(mode==='vanished') assert.doesNotMatch(result.stderr,/not a directory/);
+    if(mode==='drain-message') {
+      assert.ok((result.stderr.match(/job exited \(3\); waiting for group survivors: 123456789 fake-worker/g)||[]).length>=2,result.stderr);
+    }
+    if(mode==='drain-bound') assert.match(result.stderr,/WARNING.*survivors.*123456789 fake-worker/);
+  });
+}
