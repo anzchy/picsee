@@ -327,7 +327,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-22 | doc-gardener | P0-09 真机运行（88a76ef..24bd082）：OPEN-02 仍 `Partial`/`无`，只改限制，验收未改；File › Open…、⌘O、取消与 P0.md 第 12–14 项一致；目录（#8）未验；OPEN-01、OPEN-03 不受影响 |
+| 打开与输入 | 2026-10-23 | doc-gardener | P0-08（#12，86950cc..f9c2ef6）只在 `App/Commands/CommandMenu.swift` 的 Window 菜单加 `#if DEBUG` 的 Component Preview 项，无快捷键，不改 File › Open…/⌘O；OPEN-02 不受影响。上次：P0-09 真机运行（88a76ef..24bd082），OPEN-02 与 P0.md 第 12–14 项一致 |
 | 查看与画布 | 2026-10-22 | doc-gardener | P0-05/P0-06（#9，54d9510..9b45af9）：VIEW-06/07/08 由 `Absent` 升到 `Partial`/`单元`，只加 `限制：真机未验` 等，验收未改；head 代码有 ImageIO 方向变换、透明背景填充、512 预览后再视口解码；范围内无 `docs/validation/` 记录；VIEW-08「仅 @1x mini；菜单未验」是计划中的运行条件，不是真机结果 |
 | C 沉浸界面 | 2026-10-21 | 建账 | 同上 |
 | 外观与显示偏好 | 2026-10-22 | doc-gardener | PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
@@ -337,7 +337,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
 | 授权与文件访问 | 2026-10-21 | 建账 | 同上 |
 | 缓存与资源 | 2026-10-21 | 建账 | 同上 |
-| 命令与键盘 | 2026-10-22 | doc-gardener | P0-09 真机运行（88a76ef..24bd082）：CMD-01/02 仍 `Partial`/`单元`，只改限制，验收未改；与 P0.md 第 1–9 项一致；CMD-01「怎么确认」约 155 字，在约 150 字范围内；CMD-02 已恢复非画布窗口限制（未验）；Focus Canvas 菜单缺陷见 #29 |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P0-08（#12，86950cc..f9c2ef6）：Window › Component Preview 仅 `#if DEBUG`、无 keyEquivalent、不经 CommandRouter，无新命令 ID 或菜单 identifier；预览组件的 Space 处理只在预览窗口内；CMD-01/02 不受影响。上次：P0-09 真机运行（88a76ef..24bd082），CMD-01/02 与 P0.md 第 1–9 项一致；Focus Canvas 菜单缺陷见 #29 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-22 | doc-gardener | P0-05（#9，54d9510..9b45af9）：FMT-01 由 `Absent` 升到 `Partial`/`单元`，限制写真机未验与 S1 未完整，验收未改；范围内无真机记录 |
