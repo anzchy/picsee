@@ -1,36 +1,39 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { createRequire } from 'node:module';
 
 const root = process.cwd();
-const handoff = path.join(root, '.build/tdd-tests');
-mkdirSync(handoff, { recursive: true });
-const temp = mkdtempSync(path.join(handoff, 'swift-cli-'));
+const temp = mkdtempSync(path.join(os.tmpdir(), 'picsee-swift-tests-'));
+after(() => rmSync(temp, { recursive: true, force: true }));
 // Only Swift itself is replaced: the real wrapper and heavy lock execute.
 writeFileSync(path.join(temp, 'swift'), `#!${process.execPath}
 const fs = require('node:fs');
 fs.writeFileSync(process.env.ARGV_FILE, JSON.stringify({argv:process.argv.slice(2), held:process.env.PICSEE_HEAVY_LOCK_HELD}));
-const text=fs.readFileSync(process.env.FIXTURE);
+let text=fs.readFileSync(process.env.FIXTURE);
+if(process.env.TRUNCATE_ROOT) text=Buffer.from(text.toString().split("Test Suite 'All tests' failed")[0]);
 // Feed uneven byte chunks (including multibyte checkmarks), across both streams.
 const stream = process.env.ON_STDERR ? process.stderr : process.stdout;
 for(let i=0;i<text.length;i+=17) stream.write(text.subarray(i,i+17));
+if(process.env.SPLIT) process.stderr.write(text);
+if(process.env.CRASH_STDERR) process.stderr.write(fs.readFileSync(process.env.CRASH_STDERR_FIXTURE,'utf8').split('\\n').filter(l=>/Fatal error|exited with unexpected signal/.test(l)).join('\\n'));
+if(process.env.INCOMPLETE_SWIFT) process.stderr.write(fs.readFileSync(process.env.SWIFT_START_FIXTURE,'utf8').split('\\n').filter(l=>l.includes('Test run started')).join('\\n')); 
 process.exitCode=Number(process.env.SWIFT_EXIT);
 `, { mode: 0o755 });
 const require = createRequire(import.meta.url);
 const cache = path.join(process.env.HOME, '.claude/plugins/cache/xiaolai/tdd-guardian');
-const version = readdirSync(cache).sort((a,b) => a.localeCompare(b, undefined, {numeric:true})).at(-1);
-const plugin = process.env.PICSEE_TDD_PLUGIN_ROOT || path.join(cache, version);
+const plugin = process.env.PICSEE_TDD_PLUGIN_ROOT || path.join(cache, '0.10.2');
 const exec = require(path.join(plugin, 'scripts/tdd-guardian/lib/exec.js'));
 const { classifyRedRun } = require(path.join(plugin, 'scripts/tdd-guardian/lib/verification.js'));
-function run(fixture, code, { filter = 'FixtureTests/selectedOnly', args = [], stderr = false } = {}) {
+function run(fixture, code, { filter = 'FixtureTests/selectedOnly', args = [], stderr = false, split = false, crashStderr = false, truncateRoot = false, incompleteSwift = false } = {}) {
   const argvFile = path.join(temp, 'argv.json');
   const env = { ...process.env, PATH: `${temp}:${process.env.PATH}`, PICSEE_SWIFT_FILTER: filter,
     PICSEE_HEAVY_LOCK: path.join(temp, 'heavy.lock'), PICSEE_HEAVY_LOCK_HELD: '',
-    ARGV_FILE: argvFile, FIXTURE: path.join(root, 'scripts/tdd/fixtures', fixture + '.txt'),
-    SWIFT_EXIT: String(code), ON_STDERR: stderr ? '1' : '' };
+    SWIFT_START_FIXTURE: path.join(root,'scripts/tdd/fixtures/swift-pass.txt'), TRUNCATE_ROOT: truncateRoot ? '1' : '', INCOMPLETE_SWIFT: incompleteSwift ? '1' : '', CRASH_STDERR_FIXTURE: path.join(root,'scripts/tdd/fixtures/xctest-partial-crash.txt'), ARGV_FILE: argvFile, FIXTURE: path.join(root, 'scripts/tdd/fixtures', fixture + '.txt'),
+    SWIFT_EXIT: String(code), ON_STDERR: stderr ? '1' : '', SPLIT: split ? '1' : '', CRASH_STDERR: crashStderr ? '1' : '' };
   const r = spawnSync(process.execPath, ['scripts/tdd/swift-lane.mjs', ...args], { env, encoding:'utf8', timeout:10000 });
   assert.ifError(r.error);
   return { ...r, argvFile };
@@ -68,6 +71,47 @@ test('missing filter fails closed rather than running the full suite', () => {
 });
 test('a runner failure after a completed pass is not assertion RED', () => {
   const r = run('swift-pass',1);
+  assert.equal(r.status,70);
+  assert.equal(exec.parseCounts(r.stdout,r.stderr),null);
+});
+test('captured fixtures contain no private home prefix', () => {
+  for (const file of readdirSync('scripts/tdd/fixtures').filter(f => f.endsWith('.txt'))) {
+    assert.ok(!readFileSync(path.join('scripts/tdd/fixtures',file),'utf8').includes(process.env.HOME),file);
+  }
+});
+
+test('partial XCTest crash after assertion failure is environment, with no count line', () => {
+  const r=run('xctest-partial-crash',1);
+  assert.equal(r.status,70);
+  assert.equal(exec.parseCounts(r.stdout,r.stderr),null);
+});
+test('duplicate Swift display names preserve two failed and two skipped tests', () => {
+  const r=run('swift-duplicate',1);
+  assert.equal(r.status,1,r.stderr);
+  assert.deepEqual(exec.parseCounts(r.stdout,r.stderr),{total:4,failed:2,passed:0,skipped:2});
+});
+test('records the literal filter beside its count line for the output tail', () => {
+  const r=run('swift-fail',1,{filter:'sameFilter'});
+  assert.match(r.stdout,/swift-lane filter=sameFilter\nTests run: 3, Failures: 1/);
+});
+test('two completed fixture streams fail closed', () => {
+  const r=run('swift-fail',1,{split:true});
+  assert.equal(r.status,70);
+  assert.equal(exec.parseCounts(r.stdout,r.stderr),null);
+});
+test('crash diagnostics in stderr override a completed failing stdout result', () => {
+  const r=run('swift-fail',1,{crashStderr:true});
+  assert.equal(r.status,70);
+  assert.equal(exec.parseCounts(r.stdout,r.stderr),null);
+});
+
+test('XCTest subtotals without root completion are rejected even without a crash marker', () => {
+  const r=run('xctest-fail',1,{truncateRoot:true});
+  assert.equal(r.status,70);
+  assert.equal(exec.parseCounts(r.stdout,r.stderr),null);
+});
+test('a started Swift Testing stream must finish even when XCTest finished elsewhere', () => {
+  const r=run('xctest-fail',1,{incompleteSwift:true});
   assert.equal(r.status,70);
   assert.equal(exec.parseCounts(r.stdout,r.stderr),null);
 });

@@ -1,14 +1,14 @@
 Building for debugging...
 [0/3] Write sources
 [1/3] Write swift-version--112E4EF74740DA65.txt
-[3/5] Compiling LaneTests FixtureTests.swift
-[4/5] Emitting module LaneTests
+[3/5] Emitting module LaneTests
+[4/5] Compiling LaneTests FixtureTests.swift
 [4/6] Write Objects.LinkFileList
 [5/6] Linking LaneFixturesPackageTests
-Build complete! (0.59s)
-Test Suite 'All tests' started at 2026-10-22 11:45:01.524.
-Test Suite 'LaneFixturesPackageTests.xctest' started at 2026-10-22 11:45:01.525.
-Test Suite 'FixtureTests' started at 2026-10-22 11:45:01.525.
+Build complete! (0.53s)
+Test Suite 'All tests' started at 2026-10-22 12:15:14.628.
+Test Suite 'LaneFixturesPackageTests.xctest' started at 2026-10-22 12:15:14.629.
+Test Suite 'FixtureTests' started at 2026-10-22 12:15:14.629.
 Test Case '-[LaneTests.FixtureTests test00]' started.
 Test Case '-[LaneTests.FixtureTests test00]' passed (0.000 seconds).
 Test Case '-[LaneTests.FixtureTests test01]' started.
@@ -32,13 +32,13 @@ Test Case '-[LaneTests.FixtureTests test09]' passed (0.000 seconds).
 Test Case '-[LaneTests.FixtureTests test10]' started.
 Test Case '-[LaneTests.FixtureTests test10]' passed (0.000 seconds).
 Test Case '-[LaneTests.FixtureTests test11]' started.
-/Users/jackcheng/.picsee/herdr/gpt-imple-1/scratch/Tests/LaneTests/FixtureTests.swift:14: -[LaneTests.FixtureTests test11] : Test skipped - fixture skip
-Test Case '-[LaneTests.FixtureTests test11]' skipped (0.000 seconds).
-Test Suite 'FixtureTests' passed at 2026-10-22 11:45:01.528.
+/SCRATCH/LaneFixtures/Tests/LaneTests/FixtureTests.swift:14: -[LaneTests.FixtureTests test11] : Test skipped - fixture skip
+Test Case '-[LaneTests.FixtureTests test11]' skipped (0.001 seconds).
+Test Suite 'FixtureTests' passed at 2026-10-22 12:15:14.632.
 	 Executed 12 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.002 (0.003) seconds
-Test Suite 'LaneFixturesPackageTests.xctest' passed at 2026-10-22 11:45:01.528.
+Test Suite 'LaneFixturesPackageTests.xctest' passed at 2026-10-22 12:15:14.632.
 	 Executed 12 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.002 (0.003) seconds
-Test Suite 'All tests' passed at 2026-10-22 11:45:01.528.
+Test Suite 'All tests' passed at 2026-10-22 12:15:14.632.
 	 Executed 12 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.002 (0.004) seconds
 ◇ Test run started.
 ↳ Testing Library Version: 1902

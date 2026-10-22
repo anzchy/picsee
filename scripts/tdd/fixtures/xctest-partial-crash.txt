@@ -1,0 +1,24 @@
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--112E4EF74740DA65.txt
+[3/5] Emitting module LaneTests
+[4/5] Compiling LaneTests FixtureTests.swift
+[4/6] Write Objects.LinkFileList
+[5/6] Linking LaneFixturesPackageTests
+Build complete! (0.63s)
+error: Process '/Applications/Xcode-26.6.app/Contents/Developer/usr/bin/xctest /SCRATCH/LaneFixtures/.build/arm64-apple-macosx/debug/LaneFixturesPackageTests.xctest' exited with unexpected signal code 5
+Test Suite 'All tests' started at 2026-10-22 12:15:16.815.
+Test Suite 'LaneFixturesPackageTests.xctest' started at 2026-10-22 12:15:16.816.
+Test Suite 'AAssertionTests' started at 2026-10-22 12:15:16.816.
+Test Case '-[LaneTests.AAssertionTests testFirst]' started.
+/SCRATCH/LaneFixtures/Tests/LaneTests/FixtureTests.swift:3: error: -[LaneTests.AAssertionTests testFirst] : XCTAssertEqual failed: ("1") is not equal to ("0")
+Test Case '-[LaneTests.AAssertionTests testFirst]' failed (0.030 seconds).
+Test Suite 'AAssertionTests' failed at 2026-10-22 12:15:16.846.
+	 Executed 1 test, with 1 failure (0 unexpected) in 0.030 (0.031) seconds
+Test Suite 'BCrashTests' started at 2026-10-22 12:15:16.846.
+Test Case '-[LaneTests.BCrashTests testSecond]' started.
+LaneTests/FixtureTests.swift:6: Fatal error: intentional fixture trap
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
