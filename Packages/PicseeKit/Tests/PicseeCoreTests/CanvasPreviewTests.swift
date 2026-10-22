@@ -29,3 +29,32 @@ import PicseeCore
     small.completed(tiny, isPreview: false)
     #expect(small.nextMaximum(desired: 512) == nil)
 }
+
+@Test func revisionMismatchRetriesCurrentGenerationOnceAndResetsDecodeProgress() throws {
+    let token = PresentationToken(binding: UUID(), generation: UUID())
+    let stale = PresentationToken(binding: token.binding, generation: UUID())
+    let rebound = PresentationToken(binding: UUID(), generation: token.generation)
+    var progress = CanvasDecodeProgress()
+    let retry1 = progress.restartForRevision(request: stale, current: token)
+    #expect(!retry1)
+    let retry2 = progress.restartForRevision(request: rebound, current: token)
+    #expect(!retry2)
+    let retry3 = progress.restartForRevision(request: token, current: token)
+    #expect(retry3)
+    let retry4 = progress.restartForRevision(request: token, current: token)
+    #expect(!retry4)
+    let context = try #require(CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    progress.completed(DecodedImage(image: try #require(context.makeImage()), sourcePixelSize: CGSize(width: 1, height: 1)), isPreview: false)
+    #expect(progress.completedMaximum == 1)
+    #expect(progress.nextMaximum(desired: 1000) == nil)
+    // A successful install ends the consecutive-mismatch sequence.
+    let retry5 = progress.restartForRevision(request: token, current: token)
+    #expect(retry5)
+    #expect(progress.completedMaximum == 0)
+    #expect(!progress.previewCompleted)
+    #expect(progress.nextMaximum(desired: 1000) == 512)
+    #expect(progress.nextMaximum(desired: 0) == nil)
+    let retry6 = progress.restartForRevision(request: token, current: token)
+    #expect(!retry6)
+}
