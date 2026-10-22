@@ -63,3 +63,10 @@ DerivedData/
 
 # Device helper Python runtime cache (run evidence lives outside the repository)
 /scripts/device/__pycache__/
+
+# P0-07 external corpora and stdlib generator cache
+/scripts/testassets/__pycache__/
+/TestAssets/S2/
+/TestAssets/S3/
+/TestAssets/photos/
+/TestAssets/generated/

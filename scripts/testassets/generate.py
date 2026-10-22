@@ -60,14 +60,18 @@ def grid(width, height, spacing):
             text(pixels, width, x+6, y+8, f'{x},{y}')
     return png(width, height, (pixels[y*width:(y+1)*width] for y in range(height)))
 
-def tiff(width, height, pixels, orientation=1):
+def tiff(width, height, pixels, orientation=1, exif=False):
     # TIFF/EXIF Orientation (0x0112), uncompressed 8-bit grayscale, one strip.
+    root_end=8+2+(11 if exif else 10)*12+4
+    exif_data=(struct.pack('<H',3)+struct.pack('<HHI4s',36864,7,4,b'0232')+
+               struct.pack('<HHII',40962,4,1,width)+struct.pack('<HHII',40963,4,1,height)+b'\0'*4) if exif else b''
     fields = [(256,4,width),(257,4,height),(258,3,8),(259,3,1),(262,3,1),
-              (273,4,8+2+10*12+4),(274,3,orientation),(277,3,1),(278,4,height),(279,4,len(pixels))]
+              (273,4,root_end+len(exif_data)),(274,3,orientation),(277,3,1),(278,4,height),(279,4,len(pixels))]
+    if exif: fields.append((34665,4,root_end))
     directory = b''.join(struct.pack('<HHI', tag, kind, 1) +
                          (struct.pack('<H', value)+b'\0\0' if kind==3 else struct.pack('<I',value))
                          for tag,kind,value in fields)
-    return b'II*\0'+struct.pack('<I',8)+struct.pack('<H',len(fields))+directory+b'\0'*4+pixels
+    return b'II*\0'+struct.pack('<I',8)+struct.pack('<H',len(fields))+directory+b'\0'*4+exif_data+pixels
 
 def oriented(orientation):
     width, height = 128, 96
@@ -86,7 +90,7 @@ def oriented(orientation):
     for y in range(sh):
         for x in range(sw):
             dx,dy=display(x,y);raw.append(upright[dy*width+dx])
-    return tiff(sw,sh,bytes(raw),orientation)
+    return tiff(sw,sh,bytes(raw),orientation,exif=True)
 
 def small_specs():
     result=[dict(path='synthetic/checkerboard-1px.png',kind='checkerboard',width=1024,height=768),
@@ -99,6 +103,15 @@ def small_specs():
                dict(path='synthetic/oversize-header.png',kind='oversize',width=2147483647,height=2147483647)]
     return result
 
+def bulk_specs():
+    return [dict(path=f'S2/group-{i//100:02d}/nested-{i%5}/image-{i%100:03d}.' + ('png' if i%2==0 else 'tiff'),
+                 kind='bulk-png' if i%2==0 else 'bulk-tiff', width=64+i%3*16, height=48+i%3*12, seed=i)
+            for i in range(5000)]
+
+def large_specs():
+    return [dict(path='S3/noise-48mp.png',kind='noise',width=8000,height=6000,seed=48007),
+            dict(path='S3/noise-100mp.png',kind='noise',width=10000,height=10000,seed=100007)]
+
 def render(spec):
     w,h=spec['width'],spec['height'];kind=spec['kind']
     if kind=='checkerboard':return png(w,h,(bytes(255*((x+y)%2) for x in range(w)) for y in range(h)))
@@ -108,6 +121,9 @@ def render(spec):
     if kind=='corrupt':return b'PICSEE deliberately corrupt image\0not a PNG\n'
     if kind=='truncated':return png(w,h,(bytes([y])*w for y in range(h)))[:48]
     if kind=='oversize':return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,0,0,0,0))+chunk(b'IEND',b'')
+    if kind in ('bulk-png','bulk-tiff','noise'):
+        rows=(hashlib.shake_256(f'picsee-v1:{spec["seed"]}:{y}'.encode('ascii')).digest(w) for y in range(h))
+        return tiff(w,h,b''.join(rows)) if kind=='bulk-tiff' else png(w,h,rows)
     raise ValueError(kind)
 
 def generate(output, specs):
@@ -119,5 +135,12 @@ def generate(output, specs):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--tier',choices=['small','bulk','large','all'],default='small')
     args=parser.parse_args()
-    generate(args.output,small_specs())
+    specs={'small':small_specs,'bulk':bulk_specs,'large':large_specs,
+           'all':lambda:small_specs()+bulk_specs()+large_specs()}[args.tier]()
+    repo=Path(__file__).resolve().parents[2]
+    output=args.output.expanduser().resolve()
+    if args.tier!='small' and (output==repo or repo in output.parents):
+        parser.error('bulk/large output must be outside the repository')
+    generate(output,specs)
