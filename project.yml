@@ -30,6 +30,15 @@ targets:
         product: PicseeInfrastructure
       - package: PicseeKit
         product: PicseeMacUI
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Image
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.image
     settings:
       base:
         PRODUCT_NAME: Picsee
