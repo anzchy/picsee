@@ -38,6 +38,10 @@ public struct CanvasTransform: Sendable {
 
     public mutating func actualPixels(about anchor: CGPoint) {
         zoom(to: 1, about: anchor)
+        // Actual-pixel mode prefers the backing grid over a subpixel anchor:
+        // at most half a backing pixel of movement on each axis.
+        origin = CGPoint(x: (origin.x * backingScale).rounded() / backingScale,
+                         y: (origin.y * backingScale).rounded() / backingScale)
     }
 
     public mutating func setBackingScale(_ scale: Double, about anchor: CGPoint) {

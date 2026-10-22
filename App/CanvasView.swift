@@ -40,6 +40,7 @@ final class CanvasView: NSView {
             let origin = CGPoint(x: bounds.midX - sourceSize.width * zoom / backing / 2,
                                  y: bounds.midY - sourceSize.height * zoom / backing / 2)
             transform = CanvasTransform(backingScale: backing, zoom: zoom, origin: origin)
+            if zoom == 1 { transform.actualPixels(about: centre) }
         }
         needsDisplay = true
     }
@@ -47,6 +48,7 @@ final class CanvasView: NSView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         transform.setBackingScale(Double(window?.backingScaleFactor ?? 1), about: centre)
+        if transform.zoom == 1 { transform.actualPixels(about: centre) }
         needsDisplay = true
         requestDetail()
     }

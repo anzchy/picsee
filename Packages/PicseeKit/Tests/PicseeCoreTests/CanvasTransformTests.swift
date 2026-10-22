@@ -16,7 +16,9 @@ import PicseeCore
             let centredPixel = transform.viewToImage(centre)
             transform.actualPixels(about: centre)
             #expect(transform.zoom == 1)
-            close(transform.imageToView(centredPixel), centre)
+            let snappedCentre = transform.imageToView(centredPixel)
+            #expect(abs(snappedCentre.x - centre.x) <= 0.5 / scale)
+            #expect(abs(snappedCentre.y - centre.y) <= 0.5 / scale)
             for pixel in [CGPoint.zero, CGPoint(x: 3.25, y: 8.75), CGPoint(x: -123.5, y: 900.125)] {
                 close(transform.viewToImage(transform.imageToView(pixel)), pixel)
                 let start = transform.imageToBacking(pixel)
