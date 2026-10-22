@@ -381,8 +381,8 @@ inside `.build/device-<run-id>/`. The heavy-lock integration is a TODO for issue
 
   The gardener reads this trailer to rule out self-certification; a record without it can't lift a row.
 - A row can move to `验证 = 真机` only from a record like this, written by the device tester. Raising a row to
-  `Shipped` is still the owner's edit, never the gardener's, and it doesn't change that row's 怎么确认 in the
-  same commit (see `docs/feature-ledger.md`).
+  `Shipped` is still the owner's edit, never the gardener's. The same commit may append or edit `限制：`, but
+  must not rewrite that row's acceptance in 怎么确认 (see `docs/feature-ledger.md`).
 - A row whose recipe in `features/` is missing can't reach 真机: write the recipe first.
 - A defect found here is a bug: it goes back through `/tdd-guardian:workflow` with a regression test that fails
   without the fix. This lane finds defects; it doesn't license an ad-hoc patch.
