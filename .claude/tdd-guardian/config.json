@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "enabled": true,
+  "enforceOnTaskCompleted": false,
+  "blockCommitWithoutFreshGate": false,
+  "staleGateAction": "deny",
+  "gateFreshnessMinutes": 120,
+  "smartStaleness": true,
+  "bypassEnv": "TDD_GUARD_BYPASS",
+  "preflightCommand": "",
+  "lanes": [
+    {
+      "name": "unit",
+      "description": "PicseeKit package tests (Swift Testing) via SwiftPM; in-process, no external services. Same command as the CI 'Swift Testing' step, plus coverage.",
+      "command": "swift test --package-path Packages/PicseeKit --enable-code-coverage",
+      "coverageReportCommand": "sh scripts/tdd/swift-lcov.sh",
+      "gateOn": ["taskCompleted", "commit"],
+      "coverage": "include",
+      "coverageSummaryPath": "coverage/lcov.info",
+      "probeCommand": "swift test --package-path Packages/PicseeKit --list-tests",
+      "timeoutMs": 600000
+    }
+  ],
+  "coverageThresholds": { "lines": 100, "functions": 100, "branches": 0, "statements": 100 },
+  "coverageMode": "absolute",
+  "requireMutation": false,
+  "mutationCommand": "",
+  "mutationGateOn": ["push"]
+}

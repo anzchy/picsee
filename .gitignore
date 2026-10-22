@@ -55,3 +55,8 @@ design/competence-report/*.zip
 *.xcodeproj/
 .build/
 DerivedData/
+
+# tdd-guardian generated artifacts
+.claude/tdd-guardian/state.json
+.claude/tdd-guardian/receipts.json
+/coverage/
