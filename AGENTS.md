@@ -81,7 +81,7 @@ xcodebuild build -scheme Picsee -destination 'platform=macOS' -derivedDataPath .
 open -n .build/dd-signed/Build/Products/Debug/Picsee.app
 ```
 
-`*.xcodeproj` 由 `project.yml` 生成，不入库。`ledger:check` / `ledger:build` 尚未建立。
+`*.xcodeproj` 由 `project.yml` 生成，不入库。`ledger:check` / `ledger:build` 尚未建立；规划见迁移计划 A12。
 
 Swift RED 使用手动 lane `swift-red`，只跑指定测试。先写能编译的失败断言，再记录；`--files` 只选指纹文件，不选择测试。record 和 verify 必须传相同的过滤器（环境变量不会写入 receipt）：
 
