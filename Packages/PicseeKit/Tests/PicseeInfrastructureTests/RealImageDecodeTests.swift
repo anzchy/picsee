@@ -75,3 +75,24 @@ func rgba(_ image: CGImage) throws -> [UInt8] {
         #expect(decoded.formatIdentifier == type.identifier)
     }
 }
+
+@Test func embeddedJPEGPreviewDoesNotReplaceSmallViewportDetail() async throws {
+    let context = try #require(CGContext(data: nil, width: 2000, height: 1500, bitsPerComponent: 8, bytesPerRow: 8000,
+        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    context.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: 2000, height: 1500))
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("jpg")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let destination = try #require(CGImageDestinationCreateWithURL(file as CFURL, UTType.jpeg.identifier as CFString, 1, nil))
+    CGImageDestinationAddImage(destination, try #require(context.makeImage()),
+        [kCGImageDestinationEmbedThumbnail: true] as CFDictionary)
+    #expect(CGImageDestinationFinalize(destination))
+    let pipeline = ImageIOPipeline()
+    let preview = try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 512, isPreview: true))
+    #expect(preview.image.width < 512)
+    let detail = try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 512))
+    #expect(detail.image.width == 512)
+    #expect(detail.image.height == 384)
+    let smaller = try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 320))
+    #expect(smaller.image.width == 320)
+}

@@ -11,3 +11,24 @@ public enum CanvasDecodePolicy {
         return max(1, Int(ceil(maximum)))
     }
 }
+
+/// Tracks delivered pixels, independently of the requested edge and preview mode.
+public struct CanvasDecodeProgress: Sendable {
+    public private(set) var completedMaximum = 0
+    public private(set) var previewCompleted = false
+    private var sourceMaximum = Int.max
+    private var viewportCompleted = false
+    public init() { }
+    public func nextMaximum(desired: Int) -> Int? {
+        guard desired > 0 else { return nil }
+        if !previewCompleted { return min(CanvasDecodePolicy.previewMaximumPixelSize, desired) }
+        let target = min(desired, sourceMaximum)
+        return !viewportCompleted || target > completedMaximum ? target : nil
+    }
+    public mutating func completed(_ image: DecodedImage, isPreview: Bool) {
+        completedMaximum = max(image.image.width, image.image.height)
+        sourceMaximum = Int(max(image.sourcePixelSize.width, image.sourcePixelSize.height))
+        previewCompleted = true
+        viewportCompleted = viewportCompleted || !isPreview
+    }
+}

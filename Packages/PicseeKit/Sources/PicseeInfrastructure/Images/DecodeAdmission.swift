@@ -77,11 +77,11 @@ public actor DecodeAdmission {
         completionBarrier = barrier
     }
     private var identities: [URL: ItemID] = [:]
-    public func key(for url: URL, revision: FileRevision, maximumPixelSize: Int) -> RenderKey {
+    public func key(for url: URL, revision: FileRevision, maximumPixelSize: Int, isPreview: Bool = false) -> RenderKey {
         let path = url.standardizedFileURL
         let item = identities[path] ?? ItemID(rawValue: UUID())
         identities[path] = item
-        return RenderKey(itemID: item, revision: revision, maximumPixelSize: maximumPixelSize)
+        return RenderKey(itemID: item, revision: revision, maximumPixelSize: maximumPixelSize, isPreview: isPreview)
     }
     public func image(_ request: ImageDecodeRequest, key: RenderKey, cost: Int, heavy: Bool,
                       priority: DecodePriority) async throws -> DecodedImage {
