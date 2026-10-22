@@ -72,9 +72,14 @@ P0-08（#12）：手写 sRGB 与 alpha 由动态 NSColor 提供，SwiftUI 从同
 | `--shadow-soft` 不导出 | Web 阴影配方不是 NSShadow；系统浮层由系统管理 |
 | 不使用 38px 标题条 | AppKit 管理原生标题栏、窗口按钮与安全区域 |
 | 菜单使用 NSMenu；搜索使用 roundedBorder TextField，系统输入 chrome | 保留系统输入与菜单语义，不手绘网页菜单或输入边界 |
-| 交互视图组合暂在 Debug-only `App/UI/DesignPreview/`；包内保留状态/激活规则和可渲染状态表面 | 原生 Button/field/disclosure 的事件闭包不由 ImageRenderer 执行；不排除包内覆盖率文件。后续功能采用时需补真实事件测试，再迁入包 |
+| 九个可复用组件均在 PicseeMacUI/DesignSystem/Components；App 只组合预览页面 | ImageRenderer 覆盖两主题视觉；事件处理方法直接测试激活/禁用。原生事件派发仍需设备检查，不能由包覆盖率推断 |
+| 强制状态样例只取显式 state，禁用命中、原生焦点及实时 hover/press 合并；独立 live 行才接收输入 | 保证 Default 等样例不会因 Tab、悬停或点击改变展示；live 控件保留系统行为 |
+| IconCommandButton 默认图标保留 textPrimary，Web primitive 默认为 textSecondary；hover/pressed 的文字也为 textPrimary | 原生紧凑 16pt 符号保持主要命令的清晰度；这是组件角色替代，未修改源 token。对比度表按实际 textPrimary 测量 |
+| IconCommandButton pressed/selected 底色保留 selectionFill，Web primitive 的 aria-pressed 为 hoverBackground | 与显式 selected 状态共用较清晰的按下反馈；未修改源 token，对比度表按实际 selectionFill 测量 |
+| ShortcutHint 明确使用 textPrimary / hoverBackground，Web keycap 为 textSecondary / popoverBackground；ScaleIndicator 复用同一提示视觉 | 原生快捷键与缩放提示统一成较轻的行内背景及清晰文字；这是组件角色替代，未修改源 token。边界和文字测量使用实际 hoverBackground |
 | 缩略图是代码绘制的占位图，名称示例与计数明确标记 Preview data | 不引入照片资源、解码或文件访问；本项只覆盖选择视觉 |
 | 部分语义颜色只出现在色板：popoverBackground、dividerSubtle、primaryFill、primaryFillHover、onPrimary、controlBorder、error、errorFill、scrim | P0 不实现自定义浮层、主操作按钮或模态遮罩；原生 Retry 使用系统按钮，输入边界由系统绘制 |
+| FolderNavigationRow 计数恢复 Web 的 textSecondary；hover 背景 light 4.38:1，selected 背景 light 3.98:1，低于文字目标 4.5:1（dark 6.31/5.19:1） | 保留源角色与 token，如实记录两处浅色差距，后续改设计源后再更新原生 |
 | ShortcutHint 的 divider 边界 / hoverBackground：light 1.22:1、dark 1.39:1，低于控件图形目标 3:1 | 保留设计源 token；此处为非交互提示边界，仍如实记录差距，不能据此宣称全部控件对比度合格 |
 
 对比度由 `DesignContrastTests.designContrastReport` 测量：先将背景角色叠在 canvasBackground，再把前景按 alpha 叠在该背景；sRGB 线性化后计算 WCAG 比值。相同像素组合覆盖 default/hover/pressed/selected/focus；focus 行包含内侧填充相邻色。禁用透明度为0.4，禁用态不作为可用操作的目标通过证据。系统按钮、系统 TextField 和系统 ProgressView 的 chrome 仍需设备测量。以下均为 12–16pt 文字（4.5:1）或控制图形（3:1），没有以“大文字”放宽。
@@ -83,6 +88,8 @@ P0-08（#12）：手写 sRGB 与 alpha 由动态 NSColor 提供，SwiftUI 从同
 | --- | ---: | ---: | ---: | --- |
 | Default text / canvas | 17.40 | 15.26 | 4.5 | PASS |
 | Secondary/status text / canvas | 4.83 | 7.49 | 4.5 | PASS |
+| Folder count / hover | 4.38 | 6.31 | 4.5 | MISS light |
+| Folder count / selected | 3.98 | 5.19 | 4.5 | MISS light |
 | Icon / canvas | 17.40 | 15.26 | 3.0 | PASS |
 | Folder/icon text / hover | 15.76 | 12.85 | 4.5 | PASS |
 | Icon graphic / hover | 15.76 | 12.85 | 3.0 | PASS |
