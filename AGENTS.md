@@ -83,6 +83,23 @@ open -n .build/dd-signed/Build/Products/Debug/Picsee.app
 
 `*.xcodeproj` 由 `project.yml` 生成，不入库。`ledger:check` / `ledger:build` 尚未建立。
 
+Swift RED 使用手动 lane `swift-red`，只跑指定测试。先写能编译的失败断言，再记录；`--files` 只选指纹文件，不选择测试。record 和 verify 必须传相同的过滤器（环境变量不会写入 receipt）：
+
+```sh
+# 路径选本机最新安装的 tdd-guardian；本次验收版本为 0.10.2
+plugin_root="$HOME/.claude/plugins/cache/xiaolai/tdd-guardian/0.10.2"
+export PICSEE_SWIFT_FILTER='测试函数名'
+node "$plugin_root/scripts/tdd-guardian/receipt.js" record --id P0-XX-WI-1 --lane swift-red --files Packages/PicseeKit/Tests/PicseeCoreTests/ItemIDTests.swift
+# 实现后，保留相同 PICSEE_SWIFT_FILTER
+node "$plugin_root/scripts/tdd-guardian/receipt.js" verify --id P0-XX-WI-1
+node "$plugin_root/scripts/tdd-guardian/receipt.js" show
+node --test scripts/tdd/*.test.mjs
+```
+
+也可直接用 `node scripts/tdd/swift-lane.mjs itemIDSurvivesJSONRoundTrip` 跑单测。编译失败/零测试/不完整输出退出 70（`runner-error` → `environment`），不会产生有效 RED；断言失败退出 1 并输出计数。
+
+receipt lane 自动走 `scripts/heavy-lock.sh`。其他重任务用 `scripts/heavy-lock.sh <命令…>`；整机各 worktree 共用 `~/.picsee/locks/heavy.lock/`，与 mdpro 隔离。`PICSEE_HEAVY_LOCK` 可覆盖路径，`PICSEE_HEAVY_LOCK_WAIT_SECS` 默认 1800 秒；子进程带 `PICSEE_HEAVY_LOCK_HELD=1`，嵌套不再抢锁。`unit` lane 保留原有全量测试和覆盖率配置。
+
 ## 必须遵守的规则
 
 - **测试先行。** 行为改动先写会失败的测试，再写实现。Claude Code 用 `/tdd-guardian:workflow`；Codex 用 `$picsee-tdd-workflow`（P0-01 后建立）。测试框架还没有时，说明这一点，不要跳过。
