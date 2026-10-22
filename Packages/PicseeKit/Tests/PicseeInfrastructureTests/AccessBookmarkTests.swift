@@ -111,3 +111,21 @@ final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     let otherID = try await restored.grant(folder: base)
     #expect(otherID != id)
 }
+
+@Test func accessRejectsNonFolderAndLaterBookmarkResolutionFailure() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    let file = base.appendingPathComponent("file.jpg")
+    try Data().write(to: file)
+    let scope = CountingScope(); let codec = FakeBookmarks()
+    let store = BookmarkStore(url: base.appendingPathComponent("roots.json"))
+    let access = try FileAccess(scope: scope, bookmarks: codec, store: store, buildSHA: "A")
+    await #expect(throws: FileAccessError.invalidFolder) { try await access.grant(folder: file) }
+    let id = try await access.grant(folder: base)
+    codec.fails = true
+    await #expect(throws: FileAccessError.needsReconnection(id)) { try await access.acquire(.root(id, file: file)) }
+    #expect(await access.rootCovering(file) == nil)
+    #expect(scope.counts[0] == scope.counts[1])
+}
