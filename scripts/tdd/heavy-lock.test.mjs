@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, writeFileSync, rmSync, mkdirSync, statSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -88,7 +88,7 @@ function start(args, env) {
   return {child,done,output:()=>output};
 }
 test('SIGKILLed holder leaves inherited lock held until its child exits, with two waiters', {timeout:25000}, async () => {
-  const env=environment();
+  const env={...environment(),PICSEE_MDPRO_LOCK:'off'};
   const events=path.join(env.HOME,'events');
   const release=path.join(env.HOME,'release');
   const holder=start(['bash','-c','echo holder-start >> "$1"; for ((i=0;i<600;i++)); do test -f "$2" && break; sleep 0.02; done; echo holder-end >> "$1"','_',events,release],env);
@@ -174,16 +174,23 @@ test('AC-2 shared owner is live and describes the job; exits and signal propagat
     assert.equal(existsSync(env.PICSEE_MDPRO_LOCK),false);
   }
 });
-test('AC-3 stale and ownerless mdpro locks are reclaimed', async () => {
+test('AC-3 stale and ownerless mdpro locks time out without mutation or launch', async () => {
   for (const ownerless of [false,true]) {
-    const env=environment();
+    const env={...environment(),PICSEE_HEAVY_LOCK_WAIT_SECS:'0.15'};
     const dead=spawn('true'); await new Promise(r=>dead.on('close',r));
     fakeHolder(env,dead.pid);
     if(ownerless) rmSync(path.join(env.PICSEE_MDPRO_LOCK,'owner'));
-    const result=await run(['true'],env);
-    assert.equal(result.code,0,result.output);
-    assert.match(result.output,/reclaiming/);
-    assert.equal(existsSync(env.PICSEE_MDPRO_LOCK),false);
+    const before=statSync(env.PICSEE_MDPRO_LOCK);
+    const contents=readdirSync(env.PICSEE_MDPRO_LOCK);
+    const result=await run(['echo','must-not-launch'],env);
+    assert.equal(result.code,75,result.output);
+    assert.doesNotMatch(result.output,/must-not-launch|reclaiming stale/);
+    assert.match(result.output,/waiting for an mdpro waiter to reclaim it/);
+    assert.match(result.output,/pgrep -f/);
+    assert.equal(statSync(env.PICSEE_MDPRO_LOCK).ino,before.ino);
+    assert.equal(statSync(env.PICSEE_MDPRO_LOCK).mtimeMs,before.mtimeMs);
+    assert.deepEqual(readdirSync(env.PICSEE_MDPRO_LOCK),contents);
+    assert.ok(!readdirSync(env.HOME).some(n=>n.includes('.stale.')));
   }
 });
 test('AC-4 INT and TERM keep shared lock through group kill grace', async () => {
@@ -213,16 +220,19 @@ test('AC-5 shared timeout exits 75 and releases picsee flock', async () => {
     assert.ok(existsSync(env.PICSEE_MDPRO_LOCK),'live peer never reclaimed');
   } finally { releaseFake(env); }
 });
-test('AC-6 opt-out and direct nesting export mdpro held flag', async () => {
+test('AC-6 opt-out and direct nesting do not invent mdpro ownership', async () => {
   for(const direct of [false,true]) {
     const env={...environment(),PICSEE_MDPRO_LOCK:'off',PICSEE_HEAVY_LOCK_HELD:direct?'1':''};
-    const result=await run(['bash','-c','test "$MDPRO_HEAVY_LOCK_HELD" = 1'],env);
+    const result=await run(['bash','-c','test -z "$MDPRO_HEAVY_LOCK_HELD"'],env);
     assert.equal(result.code,0,result.output);
     assert.equal(existsSync(env.PICSEE_HEAVY_LOCK),!direct);
   }
+  assert.equal((await run(['bash','-c','test "$MDPRO_HEAVY_LOCK_HELD" = 1'],environment())).code,0);
+  assert.equal((await run(['bash','-c','test "$MDPRO_HEAVY_LOCK_HELD" = 1'],{...environment(),PICSEE_HEAVY_LOCK_HELD:'1',MDPRO_HEAVY_LOCK_HELD:'1'})).code,0);
 });
-const mdproLock='/Users/jackcheng/Documents/01_Coding/mac-app/mdpro/scripts/heavy-lock.sh';
-test('AC-7 real mdpro script serializes in both directions', {timeout:30000}, async () => {
+const mdproLock=process.env.PICSEE_MDPRO_SCRIPT;
+test('AC-7 real mdpro script serializes in both directions', {timeout:30000}, async t => {
+  if (!mdproLock) { t.skip('PICSEE_MDPRO_SCRIPT not set'); return; }
   for(const first of ['picsee','mdpro']) {
     const env=environment(), events=path.join(env.HOME,'events');
     env.MDPRO_HEAVY_LOCK=env.PICSEE_MDPRO_LOCK;
@@ -241,3 +251,55 @@ test('AC-7 real mdpro script serializes in both directions', {timeout:30000}, as
     assert.deepEqual(readFileSync(events,'utf8').trim().split('\n').map(s=>s.split(' ')[0]),[`${first}-start`,`${first}-end`,`${second}-date`]);
   }
 });
+
+test('B2 leader exit retains directory until same-group worker finishes', async () => {
+  for (const ending of ['exit 3', 'kill -TERM $$']) {
+    const env=environment(), ready=path.join(env.HOME,'worker'), done=path.join(env.HOME,'done'), entered=path.join(env.HOME,'waiter');
+    const job=start(['bash','-c',`(touch "$1"; sleep 1; touch "$2") & ${ending}`,'_',ready,done],env);
+    await until(()=>existsSync(ready),'background worker started');
+    const waiter=spawn('bash',['-c','while ! mkdir "$1" 2>/dev/null; do sleep 0.02; done; touch "$2"; rmdir "$1"','_',env.PICSEE_MDPRO_LOCK,entered]);
+    const waiterDone=new Promise(r=>waiter.on('close',r));
+    try {
+      await pause(200);
+      assert.ok(existsSync(env.PICSEE_MDPRO_LOCK),'directory held for worker');
+      assert.equal(existsSync(entered),false,'mdpro waiter stays blocked');
+    } finally { await job.done; await waiterDone; }
+    assert.ok(existsSync(done));
+    const result=await job.done;
+    assert.equal(result.code,ending==='exit 3'?3:null);
+    assert.equal(result.signal,ending==='exit 3'?null:'SIGTERM');
+  }
+});
+
+test('N2 reverse nesting keeps picsee flock and skips the already-held shared lock', async () => {
+  const env={...environment(),MDPRO_HEAVY_LOCK_HELD:'1',PICSEE_HEAVY_LOCK_WAIT_SECS:'0.2'};
+  fakeHolder(env,process.pid);
+  const before=statSync(env.PICSEE_MDPRO_LOCK);
+  const result=await run(['bash','-c','test "$PICSEE_HEAVY_LOCK_HELD" = 1 && test "$MDPRO_HEAVY_LOCK_HELD" = 1 && test -f "$PICSEE_HEAVY_LOCK"'],env);
+  assert.equal(result.code,0,result.output);
+  assert.match(result.output,/already holds.*shared lock/);
+  assert.equal(statSync(env.PICSEE_MDPRO_LOCK).ino,before.ino);
+  assert.ok(existsSync(path.join(env.PICSEE_MDPRO_LOCK,'owner')));
+});
+test('N4 file at shared lock path fails clearly without traceback', async () => {
+  const env=environment(); writeFileSync(env.PICSEE_MDPRO_LOCK,'peer');
+  const result=await run(['echo','must-not-launch'],env);
+  assert.equal(result.code,75);
+  assert.match(result.output,/not a directory/);
+  assert.doesNotMatch(result.output,/Traceback|must-not-launch/);
+  assert.equal(readFileSync(env.PICSEE_MDPRO_LOCK,'utf8'),'peer');
+});
+
+for (const mode of ['survivors','publication','heartbeat']) {
+  test(`fault injection: ${mode}`, () => {
+    const env={...environment(),PICSEE_HEAVY_LOCK_WAIT_SECS:mode==='heartbeat'?'200':'0.1',PICSEE_HEAVY_LOCK_KILL_GRACE_SECS:'0'};
+    if(mode==='heartbeat') fakeHolder(env,process.pid);
+    const result=spawnSync('python3',['scripts/tdd/fixtures/heavy-lock-faults.py','scripts/tdd/heavy-lock.py',mode],{env,encoding:'utf8',timeout:5000});
+    assert.ifError(result.error);
+    assert.equal(result.status,0,result.stderr);
+    assert.doesNotMatch(result.stderr,/Traceback/);
+    if(mode==='survivors') assert.match(result.stderr,/WARNING.*survivors.*123456789/);
+    if(mode==='publication') assert.match(result.stderr,/owner publication failed/);
+    if(mode==='heartbeat') assert.match(result.stderr,/still waiting \(\d+s\)/);
+  });
+}
