@@ -328,7 +328,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
 | 打开与输入 | 2026-10-22 | doc-gardener | P0-03（#7）在 `App/Info.plist` 声明 `public.image` 文档类型（Viewer）并接 `application(_:open:)`；OPEN-03 已按未覆盖 Finder 入口记为 `Stub`/`无`；Finder“打开方式”与双击仍未真机验 |
-| 查看与画布 | 2026-10-22 | doc-gardener | P0-03（#7）：VIEW-02/03 保持 `Partial`/`单元`，限制已对齐 `docs/validation/P0.md` 的 @2x 与 Mac mini @1x 按 `1`、+/− 真机记录（`1` 键与 +/− 在 1×、2× 均通过；VIEW-02 跨屏拖动、VIEW-03 捏合未验，故未升 `真机`）；VIEW-02 限制已精简，「怎么确认」约 136 字，符合 150 字上限；VIEW-01 打开时适应窗口已有代码，按未独立测试记为 `Stub`/`无` |
+| 查看与画布 | 2026-10-22 | doc-gardener | P0-03（#7）：VIEW-02/03 保持 `Partial`/`单元`，限制已对齐 `docs/validation/P0.md` 的 @2x 与 Mac mini @1x 按 `1`、+/− 真机记录（`1` 键与 +/− 在 1×、2× 均通过；VIEW-02 跨屏拖动、VIEW-03 捏合未验，故未升 `真机`）；VIEW-02 限制已精简，「怎么确认」约 136 字，符合 150 字上限；VIEW-01 打开时适应窗口已有代码，按未独立测试记为 `Stub`/`无`；`docs/device-mini`（8ac6972..c095b0a）只改真机流程与 Part 2 环境表，VIEW-02/03 行不变；`canvas-pixels.md` 因无同时具备 1×、2× 的测试机把 VIEW-02 拖窗入口固定记 NOT VERIFIED，账簿验收未改 |
 | C 沉浸界面 | 2026-10-21 | 建账 | 同上 |
 | 外观与显示偏好 | 2026-10-22 | doc-gardener | PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
