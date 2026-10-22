@@ -22,7 +22,7 @@ public enum ComponentResolver {
         let background: DesignColor? = selected ? .selectionFill : state.contains(.hover) ? .hoverBackground : nil
         let foreground: DesignColor = kind == .error ? .errorText : selected && kind == .folder ? .selectionText : .textPrimary
         return ComponentStyle(foreground: foreground,
-                              background: kind == .search ? .inputBackground : background,
+                              background: kind == .thumbnail ? nil : kind == .search ? .inputBackground : background,
                               border: kind == .thumbnail && state.contains(.selected) ? .accent : nil,
                               focusRing: state.contains(.keyboardFocused), opacity: state.contains(.disabled) ? 0.4 : 1,
                               theme: theme)
