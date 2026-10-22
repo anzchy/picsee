@@ -20,7 +20,7 @@
       ],
       "coverage": "include",
       "coverageSummaryPath": "coverage/lcov.info",
-      "probeCommand": "swift test --package-path Packages/PicseeKit --list-tests",
+      "probeCommand": "scripts/heavy-lock.sh swift test --package-path Packages/PicseeKit --list-tests",
       "timeoutMs": 600000
     },
     {
