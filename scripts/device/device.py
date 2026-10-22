@@ -13,19 +13,20 @@ import signal
 import subprocess
 import sys
 import time
+import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
 def command(argv, timeout=30):
     return subprocess.run([str(a) for a in argv], text=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, timeout=timeout)
+                          stderr=subprocess.PIPE, timeout=timeout, env={**os.environ, 'LC_ALL': 'C'})
 
-def checked(argv, timeout=30):
+def checked(argv, timeout=30, strip=True):
     r = command(argv, timeout)
     if r.returncode:
         raise RuntimeError(r.stderr.strip() or r.stdout.strip() or str(argv))
-    return r.stdout.strip()
+    return r.stdout.strip() if strip else r.stdout
 
 def executable(pid):
     lib = ctypes.CDLL('/usr/lib/libproc.dylib')
@@ -34,11 +35,38 @@ def executable(pid):
         return None
     return Path(os.fsdecode(buf.value)).resolve()
 
+def process_snapshot(pid):
+    before = executable(pid)
+    if before is None:
+        return None
+    birth = checked(['/bin/ps', '-o', 'lstart=', '-p', str(pid)])
+    datetime.datetime.strptime(birth, '%a %b %d %H:%M:%S %Y')
+    if executable(pid) != before:
+        raise RuntimeError('process identity changed while reading birth time')
+    return dict(pid=pid, executable=str(before), birth=birth)
+
+def recorded_identity(run):
+    if (run / 'retired').exists():
+        raise RuntimeError('process identity record is retired')
+    try:
+        pid = int((run / 'picsee.pid').read_text().strip())
+        app = Path((run / 'bundle.path').read_text().strip()).resolve()
+        record = json.loads((run / 'process.json').read_text())
+        if (pid <= 1 or type(record['pid']) is not int or record['pid'] != pid
+                or not record['birth'] or not isinstance(record['birth'], str)
+                or not Path(record['executable']).is_absolute()):
+            raise ValueError('ambiguous PID, executable or birth')
+        datetime.datetime.strptime(record['birth'], '%a %b %d %H:%M:%S %Y')
+        if not inside(Path(record['executable']).resolve(), app):
+            raise ValueError('executable outside recorded bundle')
+    except Exception as e:
+        raise RuntimeError('invalid process identity record: ' + str(e)) from e
+    return pid, app, record
+
 def identity(run):
-    pid = int((run / 'picsee.pid').read_text().strip())
-    if pid <= 1:
-        raise RuntimeError('invalid recorded PID')
-    app = Path((run / 'bundle.path').read_text().strip()).resolve()
+    pid, app, record = recorded_identity(run)
+    if process_snapshot(pid) != record:
+        raise RuntimeError('process identity differs from recorded birth, PID or executable')
     return pid, app
 
 def inside(exe, app):
@@ -50,16 +78,22 @@ def running():
 
 def windows(pid):
     script = '''on run argv
-    tell application "System Events" to tell (first process whose unix id is (item 1 of argv as integer))
+    set targetPID to item 1 of argv as integer
+    tell application "System Events"
+      tell (first process whose unix id is targetPID)
+        set windowSnapshot to properties of every window
+      end tell
       set resultText to ""
-      repeat with w in windows
-        set s to size of w
-        set resultText to resultText & name of w & tab & (item 1 of s) & tab & (item 2 of s) & linefeed
+      repeat with w in windowSnapshot
+        set titleText to name of w
+        if titleText is missing value then set titleText to ""
+        set dimensions to size of w
+        set resultText to resultText & titleText & tab & (item 1 of dimensions) & tab & (item 2 of dimensions) & linefeed
       end repeat
       return resultText
     end tell
     end run'''
-    output = checked(['/usr/bin/osascript', '-e', script, str(pid)], timeout=5)
+    output = checked(['/usr/bin/osascript', '-e', script, str(pid)], timeout=5, strip=False).rstrip('\r\n')
     return [dict(zip(['title', 'width', 'height'], line.split('\t'))) for line in output.splitlines()]
 
 def machine():
@@ -80,8 +114,46 @@ def logs(run, pid):
     (run / 'app.log').write_text(r.stdout)
     return r.stdout
 
+def atomic_text(path, text):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, prefix='.' + path.name, delete=False) as output:
+            temporary = Path(output.name)
+            output.write(text)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+
 def save(run, name, data):
-    (run / name).write_text(json.dumps(data, indent=2) + '\n')
+    atomic_text(run / name, json.dumps(data, indent=2) + '\n')
+
+INPUT_ROOTS = ('App', 'Packages', 'project.yml', 'UITests', 'TestAssets', 'Info.plist', 'Resources', 'resources')
+
+def is_input(relative):
+    path = Path(relative)
+    return (not any(part in ('.build', '.git', '__pycache__', 'DerivedData') for part in path.parts)
+            and (path.parts[0] in INPUT_ROOTS or path.suffix == '.entitlements'))
+
+def input_inventory(root=ROOT):
+    paths = []
+    for name in INPUT_ROOTS:
+        p = root / name
+        if p.is_file() or p.is_symlink(): paths.append(p)
+        elif p.is_dir(): paths.extend(p.rglob('*'))
+    paths.extend(root.glob('*.entitlements'))
+    return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in paths if p.is_file() and is_input(p.relative_to(root))}
+
+def assert_clean_inputs(root=ROOT):
+    inventory = input_inventory(root)
+    tracked = set(checked(['git', '-C', root, 'ls-files', '-z']).split('\0'))
+    tracked = {name for name in tracked if name and is_input(name)}
+    if set(inventory) != tracked:
+        raise RuntimeError('untracked or missing build inputs: ' + ', '.join(sorted(set(inventory) ^ tracked)))
+    if command(['git', '-C', root, 'diff', '--quiet', 'HEAD', '--', *sorted(tracked)]).returncode:
+        raise RuntimeError('modified build inputs; commit before building')
+    return inventory
 
 def run_dir(value):
     run = Path(value).expanduser().resolve()
@@ -93,8 +165,7 @@ def run_dir(value):
 def build(run):
     if running():
         raise RuntimeError('another Picsee is running; ask its owner to quit it')
-    if checked(['git', '-C', ROOT, 'status', '--porcelain', '--untracked-files=no']):
-        raise RuntimeError('commit tracked changes before building a proof image')
+    inputs = assert_clean_inputs(ROOT)
     developer = os.environ.get('PICSEE_XCODE', '/Applications/Xcode-26.6.app') + '/Contents/Developer'
     os.environ['DEVELOPER_DIR'] = developer
     version = checked(['/usr/bin/xcodebuild', '-version'])
@@ -109,9 +180,20 @@ def build(run):
             r = subprocess.run(argv, cwd=ROOT, stdout=output, stderr=subprocess.STDOUT)
             if r.returncode:
                 raise RuntimeError(f'build failed; see {run / "build.log"}')
+    if inputs != assert_clean_inputs(ROOT) or full != checked(['git', '-C', ROOT, 'rev-parse', 'HEAD']):
+        raise RuntimeError('build inputs or commit changed during build; refusing proof image')
     app = dd / 'Build/Products/Debug/Picsee.app'
+    # The inherited stamp marks all tracked metadata edits dirty. Only normalize after
+    # verifying every binary input against HEAD, then restore the development signature.
+    plist = app / 'Contents/Info.plist'
+    if plistlib.loads(plist.read_bytes()).get('PicseeGitSHA') != sha:
+        checked(['/usr/libexec/PlistBuddy', '-c', 'Set :PicseeGitSHA ' + sha, plist])
+        checked(['/usr/bin/codesign', '--force', '--sign', 'Apple Development',
+                 '--preserve-metadata=entitlements,requirements,flags,runtime', app])
+    if inputs != assert_clean_inputs(ROOT):
+        raise RuntimeError('build inputs changed during signing')
     (run / 'bundle.path').write_text(str(app) + '\n')
-    save(run, 'build.json', dict(sha=sha, fullSHA=full, machine=machine(), configuration='Debug', xcode=version))
+    save(run, 'build.json', dict(sha=sha, fullSHA=full, machine=machine(), configuration='Debug', xcode=version, inputs=inputs))
     print(f'PASS build bundle={app} git={sha}')
 
 def launch(run):
@@ -120,6 +202,8 @@ def launch(run):
     app = Path((run / 'bundle.path').read_text().strip()).resolve()
     sha = json.loads((run / 'build.json').read_text())['sha']
     (run / 'start.txt').write_text(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    if (run / 'process.json').exists() or (run / 'retired').exists():
+        raise RuntimeError('run already has an ownership record; use a new run directory')
     checked(['/usr/bin/open', '-n', app])
     deadline = time.monotonic() + 30
     missing = 'process'
@@ -127,7 +211,13 @@ def launch(run):
         candidates = [p for p in running() if executable(p) == app / 'Contents/MacOS/Picsee']
         if len(candidates) == 1:
             pid = candidates[0]
-            (run / 'picsee.pid').write_text(str(pid) + '\n')
+            if not (run / 'process.json').exists():
+                record = process_snapshot(pid)
+                if record is None:
+                    raise RuntimeError('process disappeared before birth identity was recorded')
+                save(run, 'process.json', record)
+                (run / 'picsee.pid').write_text(str(pid) + '\n')
+            identity(run)
             ws = windows(pid)  # Authorization failures stop immediately; never dismiss prompts.
             visible = checked(['/usr/bin/osascript', '-l', 'JavaScript', HERE / 'winid.js', str(pid)])
             log = logs(run, pid)
@@ -140,53 +230,68 @@ def launch(run):
     raise RuntimeError('ready timeout after 30 s: missing ' + missing)
 
 def sandbox_enabled(output):
-    raw = output.encode() if isinstance(output, str) else output
+    # codesign :- requests XML explicitly; do not parse the default human-readable dump.
     try:
+        raw = output.encode() if isinstance(output, str) else output
         return plistlib.loads(raw).get('com.apple.security.app-sandbox') is True
     except Exception:
-        # macOS 27 codesign emits a typed text dump by default.
-        text = raw.decode(errors='replace')
-        return bool(re.search(r'(?m)^\s*\[Key\] com\.apple\.security\.app-sandbox\s*\n'
-                              r'\s*\[Value\]\s*\n\s*\[Bool\] true\s*$', text))
+        return False
+
+CHECKS = ('build-sha', 'bundle-id', 'signature-team', 'signature-valid', 'sandbox', 'process-bundle',
+          'fresh-sources', 'single-instance', 'window', 'launch-log', 'machine', 'fixtures')
 
 def collect(run, expected):
-    pid, app = identity(run)
-    info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
-    signing = command(['/usr/bin/codesign', '-dv', '--verbose=2', app])
-    ent = command(['/usr/bin/codesign', '-d', '--entitlements', '-', app])
-    sandbox = ent.returncode == 0 and sandbox_enabled(ent.stdout)
-    ws, log = [], ''
-    errors = {}
-    try:
-        ws = windows(pid)
-    except Exception as e:
-        errors['window'] = str(e)
-    try:
-        log = logs(run, pid)
-    except Exception as e:
-        errors['launch-log'] = str(e)
-    fixture_files = [p for p in (run / 'fixtures').rglob('*') if p.is_file()]
-    manifest = run / 'fixtures.sha256.json'
-    fixtures = not fixture_files  # Skeleton proof has no image fixtures.
-    if manifest.exists():
-        hashes = json.loads(manifest.read_text())
-        fixtures = {str(p.relative_to(run / 'fixtures')): hashlib.sha256(p.read_bytes()).hexdigest()
-                    for p in fixture_files} == hashes
-    stamp = (app / 'Contents/Info.plist').stat().st_mtime
-    recorded = json.loads((run / 'build.json').read_text())
-    try:
-        current_machine = machine()
-        machine_matches = current_machine == recorded['machine']
-    except Exception as e:
-        current_machine, machine_matches = str(e), False
-    data = dict(expectedSHA=expected, sha=info.get('PicseeGitSHA'), bundleID=info.get('CFBundleIdentifier'),
-        team=(re.search(r'TeamIdentifier=(\S+)', signing.stderr) or [None, None])[1],
-        signatureValid=command(['/usr/bin/codesign', '--verify', '--deep', '--strict', app]).returncode == 0,
-        sandbox=sandbox, processMatches=executable(pid) == app / 'Contents/MacOS/Picsee',
-        fresh=all(p.stat().st_mtime <= stamp for folder in ['App', 'Packages/PicseeKit/Sources']
-                  for p in (ROOT / folder).rglob('*.swift')),
-        alone=running() == [pid], windows=ws, log=log, machineMatches=machine_matches,
-        fixturesIntact=fixtures, machine=current_machine, errors=errors)
+    data = dict(expectedSHA=expected, errors={})
+    def observe(names, action, default=None):
+        try:
+            return action()
+        except Exception as e:
+            for name in names:
+                data['errors'][name] = str(e)
+            return default
+    app = observe(('build-sha', 'bundle-id', 'signature-team', 'signature-valid', 'sandbox', 'fresh-sources'),
+                  lambda: Path((run / 'bundle.path').read_text().strip()).resolve())
+    info = observe(('build-sha', 'bundle-id'),
+                   lambda: plistlib.loads((app / 'Contents/Info.plist').read_bytes()), {})
+    data.update(sha=info.get('PicseeGitSHA'), bundleID=info.get('CFBundleIdentifier'))
+    def team():
+        r = command(['/usr/bin/codesign', '-dv', '--verbose=2', app])
+        if r.returncode: raise RuntimeError(r.stderr)
+        match = re.search(r'TeamIdentifier=(\S+)', r.stderr)
+        return match.group(1) if match else None
+    data['team'] = observe(('signature-team',), team)
+    def signature():
+        checked(['/usr/bin/codesign', '--verify', '--deep', '--strict', app])
+        return True
+    data['signatureValid'] = observe(('signature-valid',), signature, False)
+    data['sandbox'] = observe(('sandbox',), lambda: sandbox_enabled(checked(
+        ['/usr/bin/codesign', '-d', '--entitlements', ':-', app])), False)
+    owned = observe(('process-bundle', 'single-instance', 'window', 'launch-log'), lambda: identity(run))
+    data['processMatches'] = owned is not None and owned[1] == app
+    data['alone'] = observe(('single-instance',), lambda: owned is not None and running() == [owned[0]], False)
+    data['windows'] = observe(('window',), lambda: windows(owned[0]), []) if owned else []
+    if owned and not data['windows'] and 'window' not in data['errors']:
+        data['errors']['window'] = '0 windows'
+    data['log'] = observe(('launch-log',), lambda: logs(run, owned[0]), '') if owned else ''
+    recorded = observe(('machine', 'fresh-sources'), lambda: json.loads((run / 'build.json').read_text()), {})
+    data['machine'] = observe(('machine',), machine)
+    data['machineMatches'] = data['machine'] is not None and data['machine'] == recorded.get('machine')
+    def fresh():
+        current = assert_clean_inputs(ROOT)
+        stamp = (app / 'Contents/Info.plist').stat().st_mtime_ns
+        return (current == recorded['inputs'] and
+                all((ROOT / name).stat().st_mtime_ns <= stamp for name in current))
+    data['fresh'] = observe(('fresh-sources',), fresh, False)
+    def fixtures():
+        files = [p for p in (run / 'fixtures').rglob('*') if p.is_file()]
+        manifest = run / 'fixtures.sha256.json'
+        if not manifest.exists(): return not files
+        expected_hashes = json.loads(manifest.read_text())
+        return {str(p.relative_to(run / 'fixtures')): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in files} == expected_hashes
+    data['fixturesIntact'] = observe(('fixtures',), fixtures, False)
+    if owned:
+        observe(('process-bundle', 'single-instance', 'window', 'launch-log'), lambda: identity(run))
     save(run, 'doctor-input.json', data)
     return data
 
@@ -198,34 +303,52 @@ def verdicts(data):
         ('signature-valid', data.get('signatureValid') is True, 'codesign verification failed'),
         ('sandbox', data.get('sandbox') is True, 'App Sandbox entitlement missing'),
         ('process-bundle', data.get('processMatches') is True, 'PID executable differs from recorded bundle'),
-        ('fresh-sources', data.get('fresh') is True, 'Swift source newer than bundle'),
+        ('fresh-sources', data.get('fresh') is True, 'build input modified, missing, untracked or newer than bundle'),
         ('single-instance', data.get('alone') is True, 'recorded PID is not the only Picsee instance'),
         ('window', len(data.get('windows', [])) == 1 and data['windows'][0].get('title') == 'Picsee', 'expected one window titled Picsee'),
         ('launch-log', bool(re.search(r'Picsee launch git=' + re.escape(str(data.get('expectedSHA'))) + r'(?![\w-])', data.get('log', ''))), 'public SHA launch log missing'),
         ('machine', data.get('machineMatches') is True, 'machine/display differs from build record'),
         ('fixtures', data.get('fixturesIntact') is True, 'fixture hashes missing or changed')]
+    checks = [(name, ok and name not in data.get('errors', {}), why) for name, ok, why in checks]
     lines = [('PASS ' + name if ok else 'FAIL ' + name + ' — ' + ' '.join(str(data.get('errors', {}).get(name, why)).split()))
              for name, ok, why in checks]
     return lines, all(ok for _, ok, _ in checks)
 
 def cleanup(run):
-    pid, app = identity(run)
-    exe = executable(pid)
-    if exe is None:
-        print(f'PASS cleanup pid={pid} already exited; evidence retained at {run}')
-        return
-    if not inside(exe, app):
-        raise RuntimeError(f'PID {pid} executable outside recorded bundle; refusing signal')
-    # Check immediately before signal; never search or kill by name.
-    if executable(pid) != exe:
-        raise RuntimeError('PID identity changed; refusing signal')
-    os.kill(pid, signal.SIGTERM)
-    for _ in range(50):
-        if executable(pid) != exe:
-            print(f'PASS cleanup terminated pid={pid}; evidence retained at {run}')
+    try:
+        pid, app, record = recorded_identity(run)
+        current = process_snapshot(pid)
+        if current is None:
+            print(f'PASS cleanup pid={pid} already exited; evidence retained at {run}')
             return
-        time.sleep(0.1)
-    raise RuntimeError(f'PID {pid} did not exit after SIGTERM; no escalation sent')
+        if current != record:
+            raise RuntimeError('process identity differs from recorded birth, PID or executable')
+        # Last identity read immediately before the signal; never search/kill by name.
+        if process_snapshot(pid) != record:
+            raise RuntimeError('process identity changed; refusing signal')
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(50):
+            if process_snapshot(pid) != record:
+                print(f'PASS cleanup terminated pid={pid}; evidence retained at {run}')
+                return
+            time.sleep(0.1)
+        raise RuntimeError(f'PID {pid} did not exit after SIGTERM; no escalation sent')
+    finally:
+        atomic_text(run / 'retired', 'Cleanup attempted; ownership record is permanently retired.\n')
+
+def doctor(run, expected=None, fixture=None):
+    try:
+        data = json.loads(Path(fixture).read_text()) if fixture else collect(
+            run, expected or checked(['git', '-C', ROOT, 'rev-parse', '--short', 'HEAD']))
+        lines, passed = verdicts(data)
+    except Exception as e:
+        data = dict(errors={name: str(e) for name in CHECKS})
+        lines, passed = verdicts(data)
+    output = '\n'.join(lines) + '\n'
+    if run:
+        atomic_text(run / 'doctor.txt', output)
+    print(output, end='')
+    return 0 if passed else 1
 
 def main():
     parser = argparse.ArgumentParser()
@@ -237,13 +360,7 @@ def main():
     try:
         if args.action == 'doctor':
             run = None if args.fixture else run_dir(args.run)
-            data = json.loads(Path(args.fixture).read_text()) if args.fixture else collect(run, args.expected_sha or checked(['git', '-C', ROOT, 'rev-parse', '--short', 'HEAD']))
-            lines, passed = verdicts(data)
-            output = '\n'.join(lines) + '\n'
-            print(output, end='')
-            if run:
-                (run / 'doctor.txt').write_text(output)
-            return 0 if passed else 1
+            return doctor(run, args.expected_sha, args.fixture)
         globals()[args.action](run_dir(args.run))
         return 0
     except Exception as e:

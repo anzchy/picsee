@@ -75,6 +75,8 @@ class Regressions(unittest.TestCase):
         for name in ['App/new.swift','App/Info.plist','App/new.entitlements','App/Resources/icon.bin','UITests/test.swift','TestAssets/image.bin','Packages/P/Sources/a.swift']:
             p=repo/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('untracked')
             with self.assertRaises(RuntimeError):d.assert_clean_inputs(repo)
+            with patch.object(d, 'ROOT', repo), patch.object(d, 'running', return_value=[]):
+                with self.assertRaisesRegex(RuntimeError, 'untracked or missing build inputs'): d.build(self.run)
             p.unlink()
         (repo/'project.yml').write_text('modified')
         with self.assertRaises(RuntimeError):d.assert_clean_inputs(repo)
