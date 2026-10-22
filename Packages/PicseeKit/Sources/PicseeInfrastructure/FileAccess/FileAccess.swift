@@ -69,7 +69,8 @@ public actor FileAccess: AccessLeasing {
         let id = AccessRootID()
         let session = try ScopeSession(scope: scope, url: folder, rootID: id)
         defer { session.stop() }
-        guard try folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
             throw FileAccessError.invalidFolder
         }
         let bookmark = try bookmarks.create(for: folder)
