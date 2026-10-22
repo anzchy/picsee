@@ -20,6 +20,12 @@ import Testing
                 #expect(cg.colorSpace?.name == CGColorSpace.sRGB)
                 let pixels = NSBitmapImageRep(cgImage: cg)
                 #expect(cg.width == 100 && cg.height == 40)
+                if kind == .thumbnail && state == .selected {
+                    let pixel = channels(try #require(pixels.colorAt(x: 50, y: 20)))
+                    let base = DesignColor.canvasBackground.components(theme)
+                    for i in 0..<3 { #expect(abs(pixel[i] - base[i]) < 0.03) }
+                    continue
+                }
                 if state.contains(.keyboardFocused) {
                     let pixel = channels(try #require(pixels.colorAt(x: 50, y: 1)))
                     let expected = DesignColor.focusRing.components(theme)

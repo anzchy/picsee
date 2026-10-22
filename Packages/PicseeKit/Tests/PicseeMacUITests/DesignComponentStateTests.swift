@@ -32,3 +32,10 @@ import Testing
     #expect(ComponentResolver.transition(reduceMotion: false) == behavior["shortTransitionSeconds"] as? Double)
     #expect(ComponentResolver.transition(reduceMotion: true) == behavior["reducedMotionTransitionSeconds"] as? Double)
 }
+@Test func designThumbnailSelectionDoesNotTintImage() {
+    for theme in DesignTheme.allCases {
+        for state: ComponentState in [[], .selected, .hover, .pressed, [.selected, .keyboardFocused]] {
+            #expect(ComponentResolver.resolve(.thumbnail, state: state, theme: theme).background == nil)
+        }
+    }
+}
