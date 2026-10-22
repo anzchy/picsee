@@ -49,7 +49,7 @@ function createDetector() {
  * per-stream decoder feeds `detector`. EOF ends the last line.
  * @param {import("node:stream").Readable} src
  * @param {NodeJS.WriteStream} dest
- * @param {ReturnType<typeof createFailedSummaryDetector>} detector
+ * @param {ReturnType<typeof createDetector>} detector
  */
 function pipeThrough(src, dest, detector) {
   const decoder = new StringDecoder("utf8");

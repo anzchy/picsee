@@ -11,13 +11,13 @@
 #                               outside the repo so all worktrees share it.
 #   PICSEE_HEAVY_LOCK_WAIT_SECS  max wait for the lock (default 1800); exit 75.
 #   PICSEE_HEAVY_LOCK_HELD=1     exported to the child; a nested call runs directly.
-#   PICSEE_HEAVY_LOCK_KILL_GRACE_SECS  on INT/TERM, how long the job's process
+#   PICSEE_HEAVY_LOCK_KILL_GRACE_SECS  on INT/TERM/HUP, how long the job's process
 #                               group gets after TERM before KILL (default 10).
 #
 # Key decisions: macOS has no flock(1), so the lock is an atomic `mkdir` dir
 #   holding an `owner` file (pid, start time, cwd, command). An owner pid that
 #   fails `kill -0` is stale and reclaimed. The child's exit code propagates
-#   exactly; the lock is released on EXIT/INT/TERM — on a signal only after the
+#   exactly; the lock is released on EXIT/INT/TERM/HUP — on a signal only after the
 #   child's whole process group has exited (D75), so a queued job never starts
 #   beside orphaned rustc / vitest workers. Cost of the own process group: the
 #   job is not the terminal's foreground group, so a job that reads the tty
@@ -123,7 +123,7 @@ stop_group() {
   fi
 }
 # Bash defers traps while a foreground child runs, so the child runs in the
-# background and we `wait` (interruptible). Both signals are forwarded to the
+# background and we `wait` (interruptible). These signals are forwarded to the
 # child's group as TERM.
 on_signal() {
   [[ -n "$child" ]] && stop_group
@@ -134,6 +134,7 @@ on_signal() {
 trap release EXIT
 trap 'on_signal INT' INT
 trap 'on_signal TERM' TERM
+trap 'on_signal HUP' HUP
 
 export PICSEE_HEAVY_LOCK_HELD=1
 set +e
