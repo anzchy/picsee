@@ -327,21 +327,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..8e32477）：OPEN-02 `Partial`/`无`，计划已补 P0-09；⌘O 与 File → Open… 只选图片（`canChooseDirectories = false`），与限制一致；OPEN-01、OPEN-03 不受影响 |
-| 查看与画布 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..8e32477）：`0`/`1`/+/− 改经 CommandRouter，新增 View 菜单与 Inspector 按钮；VIEW-01/02/03 限制已按此更新，「怎么确认」均在 150 字内，验收未改；P0-03 真机记录仍在且含 VIEW-02/03；命令 ID `fit`/`actualPixels`/`zoomIn`/`zoomOut` 未在任何行点名（已提议） |
+| 打开与输入 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）：OPEN-02 `Partial`/`无`，计划已补 P0-09；⌘O 与 File → Open… 只选图片（`canChooseDirectories = false`），与限制一致；OPEN-01、OPEN-03 不受影响 |
+| 查看与画布 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）：`0`/`1`/+/− 改经 CommandRouter，新增 View 菜单与 Inspector 按钮；VIEW-01/02/03 限制已按此更新并点名 `fit`/`actualPixels`/`zoomIn`/`zoomOut`，「怎么确认」均在 150 字内，验收未改；P0-03 真机记录仍在且含 VIEW-02/03 |
 | C 沉浸界面 | 2026-10-21 | 建账 | 同上 |
 | 外观与显示偏好 | 2026-10-22 | doc-gardener | PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-21 | 建账 | 同上 |
 | 网格、选择与菜单 | 2026-10-21 | 建账 | 同上 |
-| 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..8e32477）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
+| 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
 | 授权与文件访问 | 2026-10-21 | 建账 | 同上 |
 | 缓存与资源 | 2026-10-21 | 建账 | 同上 |
-| 命令与键盘 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..8e32477）：CMD-01/02 `Partial`/`单元`，验收未改，与 `CommandID.isImplemented` 及 CommandRouter 测试一致；CMD-01 已点名未实现 ID、长度在上限内；8e32477 精简限制时删去已实现 ID `escape` 等的点名（已提议补回） |
+| 命令与键盘 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）：CMD-01/02 `Partial`/`单元`，验收未改，与 `CommandID.isImplemented` 及 CommandRouter 测试一致；12 个 `CommandID` 均已在 CMD-01、OPEN-02、VIEW-01/02/03 点名；CMD-01「怎么确认」150 字，已到上限 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-22 | doc-gardener | P0-05 计划加测解码 lane 上限，FMT-01 验收不变 |
-| 可访问性与本地化 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..8e32477）：A11Y-02 `Partial`/`单元`，验收未改；限制已精简，「怎么确认」约 135 字 |
+| 可访问性与本地化 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）：A11Y-02 `Partial`/`单元`，验收未改；限制已精简，「怎么确认」约 135 字 |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
