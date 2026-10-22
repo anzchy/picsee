@@ -85,8 +85,17 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         guard let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return false }
         let target = NSApp.keyWindow?.windowController as? CanvasWindowController
         if id == .inspector { item.title = target?.inspectorVisible == true ? "Hide Inspector" : "Show Inspector" }
-        return target?.isEnabled(id) ?? (id == .open)
+        return target?.session.isEnabled(id) ?? (id == .open)
     }
-    func menuWillOpen(_ menu: NSMenu) { isTracking = true }
-    func menuDidClose(_ menu: NSMenu) { isTracking = false }
+    func menuWillOpen(_ menu: NSMenu) {
+        isTracking = true
+        (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session.setMenuTracking(true)
+    }
+    func menuDidClose(_ menu: NSMenu) {
+        isTracking = false
+        // The key window can change during menu tracking. Release the original window too.
+        for window in NSApp.windows {
+            (window.windowController as? CanvasWindowController)?.session.setMenuTracking(false)
+        }
+    }
 }

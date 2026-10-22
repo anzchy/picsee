@@ -20,15 +20,17 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let binding = UUID()
     private var currentKey: RenderKey?
 
-    private let inspector = InspectorModel()
+    let session: ViewerSession
+    private let inspector: InspectorModel
     private let router = CommandRouter()
-    private var commandEntry: CommandEntry = .key
     private var inspectorHost: NSHostingView<InspectorPlaceholder>!
     var onOpenRequest: (() -> Void)?
     var menuTracking: () -> Bool = { false }
 
-    init(pipeline: any ImagePipeline) {
+    init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore) {
         self.pipeline = pipeline
+        session = ViewerSession(preferencesStore: preferencesStore)
+        inspector = InspectorModel(session: session)
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
@@ -36,6 +38,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.center()
         super.init(window: window)
+        session.host = self
         window.delegate = self
         let content = NSView(frame: window.contentView!.bounds)
         content.wantsLayer = true
@@ -57,11 +60,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         window.makeFirstResponder(canvas)
         window.preserveResponder = { [weak self] responder in
             guard let self else { return false }
-            return responder === self.canvas && self.inspector.state.focus != .canvas
+            return responder === self.canvas && self.session.inspectorFocus.focus != .canvas
         }
         window.didChangeResponder = { [weak self] in
             guard let self else { return }
-            self.inspector.state.updateFocus(self.focusContext)
+            self.session.updateFocus(self.focusContext)
         }
         window.consumeKey = { [weak self] event in self?.consumePanelKey(event) ?? false }
         canvas.pointerIsOverPanel = { [weak self] in
@@ -69,10 +72,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             return self.inspectorHost.bounds.contains(
                 self.inspectorHost.convert(window.mouseLocationOutsideOfEventStream, from: nil))
         }
-        canvas.onCanvasFocus = { [weak self] in self?.inspector.state.updateFocus(.canvas) }
+        canvas.onCanvasFocus = { [weak self] in self?.session.updateFocus(.canvas) }
         canvas.onTab = { [weak self] reverse in
-            self?.inspector.state.tab(reverse: reverse)
-            self?.applyFocus()
+            self?.session.tab(reverse: reverse)
         }
         canvas.onCommand = { [weak self] id in self?.route(id, from: .key) ?? false }
         canvas.onResolutionNeeded = { [weak self] maximum in
@@ -171,53 +173,37 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
-// The UI adapter resolves its own window; no global current-image state.
-extension CanvasWindowController: WindowCommandTarget {
-    var inspectorVisible: Bool { inspector.state.isVisible }
+// Native effects only. The Session decides command availability and transitions.
+extension CanvasWindowController: ViewerSessionHost {
+    var inspectorVisible: Bool { session.inspectorFocus.isVisible }
+    var hasImage: Bool { canvas.hasImage }
     private var focusContext: FocusContext {
         if window?.firstResponder is NSTextInputClient { return .textInput }
         return window?.firstResponder === canvas ? .canvas : .panel
     }
-    func isEnabled(_ command: CommandID) -> Bool {
-        switch command {
-        case .fit, .actualPixels, .zoomIn, .zoomOut: canvas.hasImage
-        case .escape: inspectorVisible && focusContext != .canvas
-        case .open, .inspector: true
-        default: false
-        }
-    }
     @discardableResult
     func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
-        inspector.state.updateFocus(focusContext)
-        let previousEntry = commandEntry
-        commandEntry = entry
-        defer { commandEntry = previousEntry }
-        return router.route(command, from: entry, focus: focusContext, menuTracking: menuTracking(), to: self)
+        session.updateFocus(focusContext)
+        session.setMenuTracking(menuTracking())
+        return router.route(command, from: entry, to: session)
     }
-    func perform(_ command: CommandID) {
-        switch command {
-        case .open: onOpenRequest?()
-        case .inspector:
-            inspector.state.setVisible(!inspectorVisible)
-            inspector.hasImage = canvas.hasImage
-            inspectorHost.isHidden = !inspectorVisible
-            applyFocus()
-        case .escape:
-            inspector.state.escape()
-            applyFocus()
-        default: canvas.apply(command, from: commandEntry)
-        }
+    func performCanvas(_ command: CommandID, from entry: CommandEntry) {
+        canvas.apply(command, from: entry)
     }
-    private func applyFocus() {
-        guard inspector.state.focus == .canvas else { return }
+    func requestOpen() { onOpenRequest?() }
+    func showInspector(_ visible: Bool) {
+        inspector.hasImage = canvas.hasImage
+        inspectorHost.isHidden = !visible
+    }
+    func applyFocus(_ focus: FocusContext) {
+        guard focus == .canvas else { return }
         window?.makeFirstResponder(canvas)
     }
     private func consumePanelKey(_ event: NSEvent) -> Bool {
         guard !menuTracking(), inspectorVisible, focusContext != .canvas else { return false }
         if event.keyCode == 53 { return route(.escape, from: .key) }
         if event.keyCode == 48 && event.modifierFlags.contains(.shift) {
-            inspector.state.tab(reverse: true)
-            applyFocus()
+            session.tab(reverse: true)
             return true
         }
         return false

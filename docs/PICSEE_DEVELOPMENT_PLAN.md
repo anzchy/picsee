@@ -118,6 +118,27 @@ P0 技术验证、设计映射与命令底座
 - 原生基础命令从P0建立：Space、箭头、Esc、Enter、0/1、+/−、⌘F；⌘O 对应可选文件/目录的“打开…”，⌘I 显示/隐藏基础 Inspector。阶段尚未实现时不展示已可用的快捷键提示。
 - 图片右键动作采用不可变目标身份/快照，避免菜单打开后当前项改变导致作用到别图。多选菜单仅开放已实现且语义明确的集合操作；基础多选不自动授权批量导出/删除。
 
+#### ViewerSession 状态表（P0-09，#11）
+
+下表只证明 Application 状态规则；网格、工具与菜单界面仍按各工作包验收。`PreviewSourceVersion` 是 Application 内的来源版本占位，不替代未来目录快照版本。加载代次、旧结果拒收与缩放值暂留 #9 的 App 适配器。
+
+| 状态或事件 | 规则 | 来源 | 证明测试函数 |
+| --- | --- | --- | --- |
+| 普通点击 / 无效 ID | 单选并设置 current、anchor；不在列表的 ID 不改变状态 | §1.4 选择模型 | `browserSelectionModifiersAndReconciliation` |
+| ⌘点击 | 切换一个 ID；current 可不在选择内；anchor 移到点击项 | §1.4 修饰键；anchor 规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `browserSelectionModifiersAndReconciliation` |
+| Shift 点击 | 以 anchor 到点击项的双向闭区间替换选择；anchor 不动；缺失 anchor 回退普通点击 | §1.4 修饰键；替换规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `browserSelectionModifiersAndReconciliation` |
+| 列表更新 | selected、current、anchor 扣除离开列表的 ID | §1.4 选择与快照协调 | `browserSelectionModifiersAndReconciliation` |
+| Space / Enter 进入 | 零/单选冻结整个过滤排序列表；多选冻结列表顺序中的选中项；保存版本、选择、current、滚动锚点 | §1.4 Preview Set | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
+| 多选起点 | current 在集合内从它开始，否则从首个选中项开始 | §1.4 Preview Set；P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
+| ← / → | 只在冻结集合内移动，首尾停止不循环 | §1.4 基础命令；首尾规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
+| 预览期间新增 / 移除 | 新列表不扩大或重排集合；删除/失权项移除；当前项移除后取后继，否则前驱，否则空 | §1.4 Preview Set；回退规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
+| Esc | 菜单先消费；否则面板焦点回画布；否则恢复来源（扣除移除项）；单文件无来源则无动作；一次只做一件事 | §1.4 Preview Set / 基础命令；原生映射 §4 | `sessionRouterPreviewAndEscape`、`commandRouting`、`inspectorFocusTransitions` |
+| 无活动 / 活动 | 约 2.5 秒可调整原型参数；恰到期限隐藏，活动显现并重新计时；仅暴露期限，不启动调度器 | §1.4 ViewerChromeState；DESIGN.md 大图 | `chromeClockBoundariesActivityAndLocks` |
+| 常驻 / 交互锁 | 菜单、Inspector、Filmstrip、工具/面板键盘焦点各自保持可见；最后锁释放重计时 | §1.4 ViewerChromeState；释放规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `chromeClockBoundariesActivityAndLocks`、`sessionChromeLocksAndWindowIsolation` |
+| 偏好 / 搜索 | 工具常驻和 Filmstrip 展开为 App 级共享布局值；每窗口搜索词瞬时，编码偏好不含搜索；P1-09 接真实持久化 | §1.4 DisplayPreferences；ADR-002 | `sessionSearchIsTransientPreferencesSharedAndRestored`、`sessionChromeLocksAndWindowIsolation` |
+| 右键目标 | 多选内右击绑定有序选择，否则绑定点击项；后续仅扣除失效 ID，不跟随 current/selection | §1.4 不可变目标；动作与 UI 待 P3-12 | `contextMenuTargetRemainsBoundToOriginalIdentities`、`sessionContextTargetSurvivesSelectionChange` |
+| 窗口隔离 / 命令入口 | 每窗口 Session 独占选择、Preview Set、chrome、Inspector/焦点；仅偏好共享；菜单/按钮/键盘路由一致；未实现命令保持无菜单及提示 | §1.4 基础命令；ADR-002 | `commandRouting`、`inspectorFocusTransitions`、`sessionChromeLocksAndWindowIsolation` |
+
 ### 1.5 本轮阶段调整
 
 | 旧计划中的位置 | 本轮安排 | 理由 |

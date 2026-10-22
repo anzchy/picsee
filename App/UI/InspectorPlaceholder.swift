@@ -4,7 +4,9 @@ import PicseeApplication
 
 @MainActor @Observable
 final class InspectorModel {
-    var state = InspectorFocus()
+    let session: ViewerSession
+    var state: InspectorFocus { session.inspectorFocus }
+    init(session: ViewerSession) { self.session = session }
     var hasImage = false
 }
 
@@ -34,9 +36,9 @@ struct InspectorPlaceholder: View {
         .background(.background)
         .onChange(of: model.state.focus) { _, focus in fieldFocused = focus == .textInput }
         .onChange(of: fieldFocused) { _, focused in
-            if focused { model.state.updateFocus(.textInput) }
+            if focused { model.session.updateFocus(.textInput) }
             else if model.state.focus == .canvas { restoreCanvasFocus() }
-            else if model.state.focus == .textInput { model.state.updateFocus(.panel) }
+            else if model.state.focus == .textInput { model.session.updateFocus(.panel) }
         }
     }
 }
