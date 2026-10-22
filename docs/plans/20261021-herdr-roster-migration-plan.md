@@ -15,6 +15,10 @@
 - 实现名额“整机两个”只算 picsee：「picsee」；
 - 大体积研究产物不入库：「这些都不入库」。
 
+用户决定（2026-10-22）：
+- 对简单任务的原始要求：「for simpler tasks, delegate it to dsh rather than gpt-imple-*」；
+- 随后改为新增 `gpt-imple-3` 并指定模型：「改为gpt-imple-3, but use gpt-5.6-sol」。
+
 ## 1. 为什么不能直接复制
 
 - M71 只是 M70 的覆盖层，只替换角色表、Codex 派活方式、guard、审计分工这几块。合入流程（三个条件和 `--ff-only`）、两份审计结论怎么合并、三轮上限、风险分级、receipts、编号预留、会话轮换、真机批次，都写在 M70 里。
@@ -27,9 +31,9 @@
 
 | 节 | 来源 | picsee 改法 |
 |---|---|---|
-| 角色表 | M71 Roster + M70 Sessions | delegator 改名 `picsee-delegator`；实现者、审计者、真机沿用 `gpt-imple-1/2`、`gpt-auditor`、`fable-auditor`、`claude-imple-1`，报告目录在 `~/.picsee/herdr/<name>/`；去掉 `/security-review` 行；去掉 mdpro-device-harness 和历史别名表 |
+| 角色表 | M71 Roster + M70 Sessions | delegator 改名 `picsee-delegator`；实现者为 `gpt-imple-1/2`（Codex `gpt-6.1-sol`）和 `gpt-imple-3`（Codex `gpt-5.6-sol`）；审计者为 `gpt-auditor`、`fable-auditor`，真机为 `claude-imple-1`；报告目录在 `~/.picsee/herdr/<name>/`，`gpt-imple-3` 对应 `~/.picsee/herdr/gpt-imple-3/`；去掉 `/security-review` 行；去掉 mdpro-device-harness 和历史别名表 |
 | 模型规则 | M70 “Every session runs on Opus” | 只保留结论：Claude 会话和 subagent 用 Opus，Fable 审计者例外，Codex 用指定模型。不搬演变历史 |
-| 派活与上限 | M70 How work is assigned、idle pull | 工作项编号用开发计划里的 `P0-01…P7-09`；新发现的问题编号改用 `F<n>`，替代 mdpro 的 D 编号；每会话一个、picsee 整机两个未合入实现项，不与 mdpro 合计 |
+| 派活与上限 | M70 How work is assigned、idle pull | 工作项编号用开发计划里的 `P0-01…P7-09`；新发现的问题编号改用 `F<n>`，替代 mdpro 的 D 编号；每会话一个、picsee 整机两个未合入实现项，不与 mdpro 合计。`gpt-imple-3` 只接 Low 风险工作：纯文档、机械重命名与路径修复、Low 审计修复、小脚本与测试 fixture、账簿与时间线措辞；Swift、并发、sandbox、entitlements、签名、真机脚本、receipt lane 及 Medium/High 风险仍由 `gpt-imple-1/2` 负责。`gpt-imple-3` 的 Low 项只需一名盲审，gardener 与 CI 不变；其 Low 项是否占第三个未合入名额**待用户确认** |
 | Codex 智能体 | M71 Codex agents | 照搬 `prompt --wait`、唤醒、超时只重新等待不重发、restart 四步。路径改为 `~/.picsee/herdr/<name>/`，环境变量改为 `PICSEE_ROLE` |
 | Brief 与自验收 | M71 Briefs and self-acceptance | 6 节 brief 结构照搬；Background 引用开发计划工作包、mockup 编号、DESIGN 条款和 ADR；测试矩阵、对抗审查四步照搬，skill 改为 `$picsee-tdd-workflow` |
 | 测试矩阵用例清单 | M71 | 换成 picsee 的高风险用例：A→B→C 乱序返回、generation 过期、continuation 恰好恢复一次、security-scoped 访问范围释放、bookmark stale、cell 复用串图、取消前/排队中/执行中、1×/2× backing scale、浅深主题、Reduce Motion |
