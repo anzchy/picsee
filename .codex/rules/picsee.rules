@@ -10,6 +10,7 @@
 # Limits: a rule matches the argv prefix only. `git -C <dir> push`, or a shell
 # script using $(...), redirection or variables, is not split and slips past.
 # These rules are a backstop, not the boundary; AGENTS.md still binds.
+# apply_patch/editor edits to *.entitlements or project.yml are NOT caught; AGENTS.md and audit D4 check entitlements, and doctor sandbox verifies the signed app.
 
 # --- AGENTS.md: destructive commands ------------------------------------------
 
@@ -107,4 +108,69 @@ prefix_rule(
     justification = "Roster: the delegator opens, merges and closes PRs.",
     match = ["gh pr merge 12", "gh pr create"],
     not_match = ["gh pr view 12", "gh pr diff 12"],
+)
+
+# --- AGENTS.md: sandbox, signing and privacy grants ---
+
+prefix_rule(
+    pattern = ["tccutil", "reset"],
+    decision = "forbidden",
+    justification = "AGENTS.md and migration plan A3: preserve privacy grants used by device acceptance. Ask the delegator, naming the service, bundle ID and acceptance state at risk; use read-only inspection instead.",
+    match = ["tccutil reset All", "tccutil reset All io.github.anzchy.picsee", "tccutil reset SystemPolicyAllFiles"],
+    not_match = ["tccutil --help"],
+)
+
+prefix_rule(
+    pattern = ["codesign", "--remove-signature"],
+    decision = "forbidden",
+    justification = "AGENTS.md and migration plan A3: preserve the signature and sandbox entitlements. Ask the delegator, naming the app and signing problem; inspect with codesign -d or --verify instead.",
+    match = ["codesign --remove-signature Picsee.app"],
+    not_match = ["codesign -d --entitlements :- Picsee.app", "codesign --verify --deep --strict Picsee.app", "codesign --force --sign 'Apple Development' --entitlements Picsee.entitlements Picsee.app"],
+)
+
+# PlistBuddy's -c operation is a single literal argv token, not a parsed command.
+# Cover Delete and Set/Add bool with false/true/0/1/NO/YES, with/without a root
+# colon. Other whitespace, quoting, values, option orders and chained -c commands
+# are NOT generalized by this list; AGENTS.md and the audit remain mandatory.
+prefix_rule(
+    pattern = [["PlistBuddy", "/usr/libexec/PlistBuddy"], "-c", [
+        "Delete com.apple.security.app-sandbox",
+        "Set com.apple.security.app-sandbox false",
+        "Add com.apple.security.app-sandbox bool false",
+        "Set com.apple.security.app-sandbox true",
+        "Add com.apple.security.app-sandbox bool true",
+        "Set com.apple.security.app-sandbox 0",
+        "Add com.apple.security.app-sandbox bool 0",
+        "Set com.apple.security.app-sandbox 1",
+        "Add com.apple.security.app-sandbox bool 1",
+        "Set com.apple.security.app-sandbox NO",
+        "Add com.apple.security.app-sandbox bool NO",
+        "Set com.apple.security.app-sandbox YES",
+        "Add com.apple.security.app-sandbox bool YES",
+        "Delete :com.apple.security.app-sandbox",
+        "Set :com.apple.security.app-sandbox false",
+        "Add :com.apple.security.app-sandbox bool false",
+        "Set :com.apple.security.app-sandbox true",
+        "Add :com.apple.security.app-sandbox bool true",
+        "Set :com.apple.security.app-sandbox 0",
+        "Add :com.apple.security.app-sandbox bool 0",
+        "Set :com.apple.security.app-sandbox 1",
+        "Add :com.apple.security.app-sandbox bool 1",
+        "Set :com.apple.security.app-sandbox NO",
+        "Add :com.apple.security.app-sandbox bool NO",
+        "Set :com.apple.security.app-sandbox YES",
+        "Add :com.apple.security.app-sandbox bool YES",
+    ]],
+    decision = "forbidden",
+    justification = "AGENTS.md sandbox stays on; migration plan A3: do not mutate the App Sandbox key. Ask the delegator, naming the entitlement file, exact operation and sandbox conflict; use Print and record an ADR instead.",
+    match = ["PlistBuddy -c 'Set :com.apple.security.app-sandbox false' Picsee.entitlements", "/usr/libexec/PlistBuddy -c 'Delete :com.apple.security.app-sandbox' Picsee.entitlements", "PlistBuddy -c 'Add com.apple.security.app-sandbox bool NO' Picsee.entitlements"],
+    not_match = ["PlistBuddy -c Print Picsee.entitlements", "/usr/libexec/PlistBuddy -c Print Picsee.entitlements", "/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' Picsee.entitlements", "/usr/libexec/PlistBuddy -c 'Set :unrelated.key false' Picsee.entitlements"],
+)
+
+prefix_rule(
+    pattern = [["plutil", "/usr/bin/plutil"], ["-replace", "-remove", "-insert"], "com.apple.security.app-sandbox"],
+    decision = "forbidden",
+    justification = "AGENTS.md sandbox stays on; migration plan A3: do not replace, remove or insert the App Sandbox key. Ask the delegator, naming the entitlement file, exact operation and sandbox conflict; use plutil -p and record an ADR instead.",
+    match = ["plutil -replace com.apple.security.app-sandbox -bool NO Picsee.entitlements", "/usr/bin/plutil -remove com.apple.security.app-sandbox Picsee.entitlements", "plutil -insert com.apple.security.app-sandbox -bool YES Picsee.entitlements"],
+    not_match = ["plutil -p Picsee.entitlements", "/usr/bin/plutil -p Picsee.entitlements", "plutil -replace unrelated.key -bool NO Picsee.entitlements"],
 )
