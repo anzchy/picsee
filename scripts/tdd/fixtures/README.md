@@ -16,7 +16,7 @@ Create `Tests/LaneTests/`, then run from the worktree root:
 scripts/heavy-lock.sh python3 scripts/tdd/fixtures/capture.py /absolute/path/to/scratch
 ```
 
-The generator writes each exact test source alongside scratch, runs `swift test --package-path <scratch>` for each source, and writes `fixture-capture.txt` with commands, exit codes and full output in scratch's parent. It refreshes the seven tracked output fixtures here.
+The generator writes each exact test source alongside scratch, runs `swift test --package-path <scratch>` for each source, and writes `fixture-capture.txt` with commands, exit codes and full output in scratch's parent. It refreshes the ten tracked output fixtures here. Append fixture names after the scratch path to capture only those variants and keep earlier captures unchanged.
 
 | Fixture | Exit | Expected completed results |
 |---|---|---|
@@ -27,7 +27,10 @@ The generator writes each exact test source alongside scratch, runs `swift test 
 | xctest-fail | 1 | 12 total, 10 passed, 1 failed, 1 skipped |
 | swift-duplicate | 1 | 4 total, 2 failed and 2 skipped, all displayed as “same” |
 | xctest-partial-crash | 1 | first class assertion fails, second class traps; no XCTest root completion |
+| xctest-two-assertions | 1 | 1 executed case, 2 failure events, 1 failed case |
+| swift-crash-name-pass | 0 | 1 passed test named “does not crash” |
+| swift-crash-name-fail | 1 | 1 failed test named “does not crash”; crash-related assertion prose |
 
-Swift Testing fixtures include XCTest's empty companion summary; XCTest fixtures include Swift Testing's empty companion summary and three repeated XCTest suite summaries. The adapter requires every started framework's root completion and cross-checks terminal results against the framework totals. A class subtotal cannot establish completion. XCTest failure output contains both the `error: -[... ] : XCTAssertEqual failed` diagnostic and the failed case result.
+Swift Testing fixtures include XCTest's empty companion summary; XCTest fixtures include Swift Testing's empty companion summary and three repeated XCTest suite summaries. The adapter requires every started framework's root completion and cross-checks terminal results against the framework totals. A class subtotal cannot establish completion. XCTest root failure events must be at least the number of failed terminal case identities; they are not equal when one case has multiple failed assertions. Crash detection uses anchored diagnostic records, excluding words inside test names and assertion messages. XCTest failure output contains both the `error: -[... ] : XCTAssertEqual failed` diagnostic and the failed case result.
 
 Run `node --test scripts/tdd/*.test.mjs`. Tests use tdd-guardian `0.10.2` under `~/.claude/plugins/cache/xiaolai/tdd-guardian/`, or `PICSEE_TDD_PLUGIN_ROOT`, to check actual plugin classification. They replace only the external `swift` executable with a fixture playback process; the real wrapper and lock still execute. Temporary test directories use `os.tmpdir()` and are removed in `after()`. Split-stream tests replay captured bytes on both streams, including a crash diagnostic on the other stream and a started-but-incomplete framework. Derived truncations remove captured lines to test completion checks; they do not fabricate fixture output.
