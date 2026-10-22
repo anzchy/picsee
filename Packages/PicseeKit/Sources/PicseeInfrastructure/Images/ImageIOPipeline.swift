@@ -56,7 +56,7 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         self.configuration = configuration
         let executor = OperationDecodeExecutor(workers: configuration.workers)
         self.executor = executor
-        admission = DecodeAdmission(configuration: configuration, executor: executor, decoder: decoder)
+        admission = DecodeAdmission(configuration: configuration, executor: executor, decoder: RevisionReportingDecoder(decoder: decoder))
     }
     private func header(_ request: ImageDecodeRequest) async throws -> ImageSourceHeader {
         let budget = configuration.budget
@@ -83,5 +83,18 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
             renderKey: key, priority: request.priority, sourceByteBudget: cost)
         return try await admission.image(admittedRequest, key: key, cost: cost,
             heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
+    }
+}
+
+/// Runs inside the bounded executor, including the post-decode filesystem read.
+private struct RevisionReportingDecoder: ImageDecoding {
+    let decoder: any ImageDecoding
+    func decode(_ request: ImageDecodeRequest) throws -> DecodedImage {
+        let decoded = try decoder.decode(request)
+        let attributes = try FileManager.default.attributesOfItem(atPath: request.fileURL.path)
+        guard let size = attributes[.size] as? NSNumber else { throw ImageDecodeError.unreadableImage }
+        return DecodedImage(image: decoded.image, sourcePixelSize: decoded.sourcePixelSize,
+            formatIdentifier: decoded.formatIdentifier,
+            revision: FileRevision(byteCount: size.intValue, modificationDate: attributes[.modificationDate] as? Date))
     }
 }

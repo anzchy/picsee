@@ -127,13 +127,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 currentKey = request.renderKey
                 let image = try await pipeline.image(for: request)
                 try Task.checkCancellation()
-                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-                let revision = FileRevision(byteCount: (attributes[.size] as? NSNumber)?.intValue ?? 0,
-                                            modificationDate: attributes[.modificationDate] as? Date)
-                if let key = request.renderKey, let expectedKey = currentKey {
+                if let key = request.renderKey, let expectedKey = currentKey, let revision = image.revision {
                     let expected = RenderKey(itemID: expectedKey.itemID, revision: revision, maximumPixelSize: maximum)
                     let current = PresentationToken(binding: binding, generation: generation)
                     if current.accepts(key: key, expected: expected, token: token) {
+                        try Task.checkCancellation()
+                        guard token == PresentationToken(binding: binding, generation: generation) else { return }
                         completedMaximum = maximum
                         canvas.install(image)
                     } else if token == current {
