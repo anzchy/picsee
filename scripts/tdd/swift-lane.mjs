@@ -1,98 +1,49 @@
 /**
- * Purpose: Wraps `cargo test` for the tdd-guardian rust lanes so a red test
- * reads as a test failure, not a broken runner. cargo exits 101 both when a
- * test fails and when the crate does not compile; the plugin reads 101 as
- * `runner-error` and only exit 1 as `fail`. This wrapper exits 1 when cargo
- * exits 101 *and* printed a `test result: FAILED.` summary, and passes every
- * other outcome through unchanged (plan WI-2, Q1).
- *
- * Usage: `scripts/heavy-lock.sh node scripts/cargo-test-lane.mjs cargo test …`
- *
- * Pipeline: spawn argv (no shell, stdin inherited, env inherited)
- *   → each of stdout/stderr: raw Buffer written through live, and decoded by
- *     its own StringDecoder into its own detector
- *   → on the child's `close` (pipes drained): classifyCargoExit → exit code,
- *     or re-raise the child's signal on this process.
- *
- * Key decisions:
- * - Output is written through as raw Buffers, never re-encoded, so invalid
- *   UTF-8 stays byte-identical; detection decodes separately (Deviation 9).
- * - One detector per stream: a summary split across stdout and stderr is not
- *   a summary. The decision waits for `close`, not `exit`, so a summary still
- *   in a pipe is not missed; the exit is set through `process.exitCode` so our
- *   own stdout drains before Node exits.
- * - SIGINT/SIGTERM/SIGHUP are forwarded to the child as themselves. A child
- *   that dies by any signal is re-raised here once our streams drain, with
- *   128+n as the fallback exit code if the re-raise does not kill us.
- * - Exit codes: no arguments → 64 (usage); spawn failure → 127 with
- *   `<cmd>: <message>` on stderr.
- * - Plugin caveats (tdd-guardian 0.10.2): it parses counts from the first
- *   `test result:` line only, so a red in a later test target still exits 1
- *   but records as `opaque-failure`; a doctest that fails to compile prints
- *   `test result: FAILED` and so maps to 1.
- *
- * @module scripts/cargo-test-lane
- * @coordinates-with scripts/heavy-lock.sh (runs this under the machine-wide lock)
- * @coordinates-with .claude/tdd-guardian/config.json (`rust`, `rust-verify-run` lanes)
+ * Swift receipt adapter, adapted from mdpro scripts/cargo-test-lane.mjs @9f133f1d.
+ * Usage: node scripts/tdd/swift-lane.mjs [filter]
+ * Or set PICSEE_SWIFT_FILTER for receipt.js record AND verify (env is inherited).
+ * Always runs SwiftPM under the picsee heavy lock. No filter => 64; no completed
+ * tests / compile failure / inconsistent outcome => 70 (runner-error/environment).
+ * Completed assertion failure => 1 plus Maven counts; pass => 0 plus counts.
+ * Keeps raw-byte streaming, backpressure, per-stream decoding and signal relay
+ * from the copied adapter. XCTest suite summaries repeat: take the last one,
+ * then add Swift Testing's distinct run, including its zero-test companion.
+ * Counts failing tests, not Swift Testing issues or repeated XCTest suites.
+ * An xcodebuild/UI lane is intentionally not implemented yet.
  */
 import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import { pathToFileURL } from "node:url";
-
-/** cargo's exit code for "a test failed" and for "did not compile". */
-const CARGO_FAILURE = 101;
-/** The exit code tdd-guardian reads as a test failure. */
-const TEST_FAILURE = 1;
-const EX_USAGE = 64;
-const EX_SPAWN_FAILED = 127;
+import { fileURLToPath, pathToFileURL } from "node:url";
 const SIGNAL_EXIT_BASE = 128;
-const FORWARDED_SIGNALS = /** @type {const} */ (["SIGINT", "SIGTERM", "SIGHUP"]);
-const USAGE = "usage: node scripts/cargo-test-lane.mjs <command> [args...]  (e.g. cargo test --manifest-path …)\n";
+const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
 
-const FAILED_SUMMARY = /^test result: FAILED\./;
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI SGR is the point
-const SGR = /\x1b\[[0-9;]*m/g;
-
-/**
- * Map cargo's outcome to the lane's outcome.
- * @param {{ code: number | null, signal: string | null, sawFailedSummary: boolean }} outcome
- * @returns {{ exit: number } | { signal: string }} `{signal}` whenever the child died by a
- *   signal; otherwise the code, except 101 with a FAILED summary seen → 1.
- */
-export function classifyCargoExit({ code, signal, sawFailedSummary }) {
-  if (signal) return { signal };
-  return { exit: code === CARGO_FAILURE && sawFailedSummary ? TEST_FAILURE : /** @type {number} */ (code) };
+// Only completed summaries prove tests actually ran. Each stream is parsed
+// independently so interleaved partial stdout/stderr cannot forge a summary.
+function parseOutput(text) {
+  const clean = text.replace(/\x1b\[[0-9;]*m/g, "").replace(/\r/g, "");
+  const lines = clean.split("\n");
+  const xct = [...clean.matchAll(/^\s*Executed (\d+) tests?, with (?:(\d+) tests? skipped and )?(\d+) failures? \(\d+ unexpected\)/gm)].at(-1);
+  const swift = [...clean.matchAll(/^[✔✘] Test run with (\d+) tests? in \d+ suites? (passed|failed) after .+ seconds(?:\.| with \d+ issues?\.)$/gm)].at(-1);
+  const failures = new Set(lines.filter(l => /^✘ Test (?!run with ).+ failed after /.test(l)).map(l => l.split(' failed after ')[0]));
+  const skips = new Set(lines.filter(l => /^➜ Test .+ skipped(?::| after |\.)/.test(l)).map(l => l.split(' skipped')[0]));
+  const cases = new Set(lines.filter(l => /^Test Case '.+' failed \(/.test(l)).map(l => l.split("' failed (")[0]));
+  // Some XCTest outputs emit errors before the case summary. Never treat a
+  // compiler's 'error:' as a failed test: a completed Executed summary is required.
+  const errors = new Set([...clean.matchAll(/error: (-\[[^\]]+\]) : /g)].map(m => m[1]));
+  if (!xct && !swift) return null;
+  const total = +(xct?.[1] || 0) + +(swift?.[1] || 0);
+  const failed = (xct ? (cases.size || errors.size || +xct[3]) : 0) + (swift ? failures.size : 0);
+  const skipped = +(xct?.[2] || 0) + (swift ? skips.size : 0);
+  if (swift && ((swift[2] === 'failed') !== (failures.size > 0))) return null;
+  if (!total || failed + skipped > total) return null;
+  return {total, failed, skipped};
 }
-
-/** @param {string} line */
-function isFailedSummary(line) {
-  return FAILED_SUMMARY.test(line.replace(SGR, "").replace(/\r$/, ""));
+function createDetector() {
+  let text = "";
+  return { push: chunk => { text += chunk; }, seen: () => parseOutput(text) };
 }
-
-/**
- * A line-buffered detector for cargo's `test result: FAILED.` summary.
- * Chunks may split lines anywhere; only complete lines are judged, with ANSI
- * SGR sequences and one trailing `\r` removed, anchored at the line start.
- * Once true it stays true; `seen()` has no side effect.
- * @returns {{ push(chunk: string): void, seen(): boolean }}
- */
-export function createFailedSummaryDetector() {
-  let pending = "";
-  let found = false;
-  return {
-    push(chunk) {
-      if (found) return;
-      pending += chunk;
-      const lines = pending.split("\n");
-      pending = /** @type {string} */ (lines.pop());
-      found = lines.some(isFailedSummary);
-    },
-    seen: () => found,
-  };
-}
-
 /**
  * Write `src` through to `dest` as raw bytes, honouring backpressure, while a
  * per-stream decoder feeds `detector`. EOF ends the last line.
@@ -128,47 +79,49 @@ function reraise(signal) {
   process.kill(process.pid, /** @type {NodeJS.Signals} */ (signal));
 }
 
-/** @param {string[]} argv the command to run and its arguments */
+/** argv is only a filter, never shell code or arbitrary runner arguments. */
 function main(argv) {
-  if (argv.length === 0) {
-    process.stderr.write(USAGE);
-    process.exitCode = EX_USAGE;
+  const filter = argv[0] ?? process.env.PICSEE_SWIFT_FILTER;
+  if (argv.length > 1 || !filter?.trim()) {
+    process.stderr.write("usage: node scripts/tdd/swift-lane.mjs [filter]; or set PICSEE_SWIFT_FILTER for record and verify\n");
+    process.exitCode = 64;
     return;
   }
-  const [cmd, ...args] = argv;
-  const child = spawn(cmd, args, { stdio: ["inherit", "pipe", "pipe"] });
-  const stdoutDetector = createFailedSummaryDetector();
-  const stderrDetector = createFailedSummaryDetector();
-  pipeThrough(/** @type {import("node:stream").Readable} */ (child.stdout), process.stdout, stdoutDetector);
-  pipeThrough(/** @type {import("node:stream").Readable} */ (child.stderr), process.stderr, stderrDetector);
-
-  const forwarders = FORWARDED_SIGNALS.map((sig) => /** @type {const} */ ([sig, () => child.kill(sig)]));
+  const lock = fileURLToPath(new URL("../heavy-lock.sh", import.meta.url));
+  const child = spawn(lock, ["swift", "test", "--package-path", "Packages/PicseeKit", "--filter", filter], { stdio: ["inherit", "pipe", "pipe"] });
+  const stdoutDetector = createDetector();
+  const stderrDetector = createDetector();
+  pipeThrough(child.stdout, process.stdout, stdoutDetector);
+  pipeThrough(child.stderr, process.stderr, stderrDetector);
+  const forwarders = FORWARDED_SIGNALS.map(sig => [sig, () => child.kill(sig)]);
   for (const [sig, handler] of forwarders) process.on(sig, handler);
   let settled = false;
   const settle = () => {
     settled = true;
     for (const [sig, handler] of forwarders) process.off(sig, handler);
   };
-
-  child.on("error", (error) => {
+  child.on("error", error => {
     if (settled || child.pid !== undefined) return;
     settle();
-    process.stderr.write(`${cmd}: ${error.message}\n`);
-    process.exitCode = EX_SPAWN_FAILED;
+    process.stderr.write(`swift-lane: ${error.message}\n`);
+    process.exitCode = 127;
   });
   child.on("close", (code, signal) => {
     if (settled) return;
     settle();
-    const sawFailedSummary = stdoutDetector.seen() || stderrDetector.seen();
-    const result = classifyCargoExit({ code, signal, sawFailedSummary });
-    if ("exit" in result) {
-      process.exitCode = result.exit;
+    if (signal) { afterDrain(() => reraise(signal)); return; }
+    const out = stdoutDetector.seen();
+    const err = stderrDetector.seen();
+    // SwiftPM writes complete test output to stdout. Accept stderr-only fixtures
+    // too, but fail closed on two separate completed result streams.
+    const counts = out && err ? null : out || err;
+    if (!counts || (code !== 0 && code !== 1) || ((code === 0) !== (counts.failed === 0))) {
+      process.stderr.write("swift-lane: no reliable completed test result; environment failure\n");
+      process.exitCode = 70;
       return;
     }
-    afterDrain(() => reraise(result.signal));
+    process.stdout.write(`\nTests run: ${counts.total}, Failures: ${counts.failed}, Errors: 0, Skipped: ${counts.skipped}\n`);
+    process.exitCode = code;
   });
 }
-
-if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
-  main(process.argv.slice(2));
-}
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) main(process.argv.slice(2));

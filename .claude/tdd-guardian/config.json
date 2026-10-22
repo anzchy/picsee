@@ -14,16 +14,37 @@
       "description": "PicseeKit package tests (Swift Testing) via SwiftPM; in-process, no external services. Same command as the CI 'Swift Testing' step, plus coverage.",
       "command": "swift test --package-path Packages/PicseeKit --enable-code-coverage",
       "coverageReportCommand": "sh scripts/tdd/swift-lcov.sh",
-      "gateOn": ["taskCompleted", "commit"],
+      "gateOn": [
+        "taskCompleted",
+        "commit"
+      ],
       "coverage": "include",
       "coverageSummaryPath": "coverage/lcov.info",
       "probeCommand": "swift test --package-path Packages/PicseeKit --list-tests",
       "timeoutMs": 600000
+    },
+    {
+      "name": "swift-red",
+      "description": "Selected SwiftPM test for RED receipts. Set PICSEE_SWIFT_FILTER on both record and verify; --files only selects fingerprints.",
+      "command": "node scripts/tdd/swift-lane.mjs",
+      "gateOn": [
+        "manual"
+      ],
+      "coverage": "none",
+      "probeCommand": "scripts/heavy-lock.sh swift test --package-path Packages/PicseeKit --list-tests",
+      "timeoutMs": 600000
     }
   ],
-  "coverageThresholds": { "lines": 100, "functions": 100, "branches": 0, "statements": 100 },
+  "coverageThresholds": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 0,
+    "statements": 100
+  },
   "coverageMode": "absolute",
   "requireMutation": false,
   "mutationCommand": "",
-  "mutationGateOn": ["push"]
+  "mutationGateOn": [
+    "push"
+  ]
 }
