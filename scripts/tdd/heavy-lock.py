@@ -39,7 +39,7 @@ def group_alive(pid):
 
 def group_survivors(pid):
     try:
-        listing = subprocess.run(['ps', '-axo', 'pid=,pgid=,stat='],
+        listing = subprocess.run(['ps', '-axo', 'pid=,pgid=,stat=,command='],
                                  capture_output=True, text=True, check=True)
         return ', '.join(line.strip() for line in listing.stdout.splitlines()
                          if len(line.split()) >= 3 and line.split()[1] == str(pid)) or f'pgid={pid}'
@@ -84,7 +84,7 @@ def acquire_shared(lock, deadline, received, command):
         try:
             os.mkdir(lock)
         except FileExistsError:
-            if not lock.is_dir():
+            if (lock.is_symlink() or lock.exists()) and not lock.is_dir():
                 print(f'[heavy-lock] mdpro lock path is not a directory: {lock}',
                       file=sys.stderr, flush=True)
                 return False
@@ -136,6 +136,7 @@ def main():
     try:
         wait_seconds = nonnegative_env('PICSEE_HEAVY_LOCK_WAIT_SECS', '1800')
         grace = nonnegative_env('PICSEE_HEAVY_LOCK_KILL_GRACE_SECS', '10')
+        drain_seconds = nonnegative_env('PICSEE_HEAVY_LOCK_DRAIN_SECS', '300')
     except ValueError as error:
         print(f'[heavy-lock] {error}', file=sys.stderr)
         return 64
@@ -167,6 +168,11 @@ def main():
             except OSError as error:
                 if error.errno not in (errno.EAGAIN, errno.EACCES):
                     raise
+                if reverse:
+                    print('[heavy-lock] a picsee job holds the picsee lock while waiting for mdpro\'s '
+                          f'lock; picsee lock holder unknown ({lock}); reverse nesting refused',
+                          file=sys.stderr, flush=True)
+                    return 75
                 if not waiting:
                     print(f'[heavy-lock] waiting for {lock}', file=sys.stderr, flush=True)
                     waiting = True
@@ -190,6 +196,8 @@ def main():
                 return 127
             stopping = None
             killed_at = None
+            draining = None
+            drain_heartbeat = None
             while True:
                 result = child.poll()
                 if received:
@@ -213,8 +221,23 @@ def main():
                         print(f'[heavy-lock] WARNING: survivors {group_survivors(child.pid)}; '
                               'leaving shared directory in place', file=sys.stderr, flush=True)
                         break
-                elif result is not None and not group_alive(child.pid):
-                    break
+                elif result is not None:
+                    if not group_alive(child.pid):
+                        break
+                    now = time.monotonic()
+                    if draining is None:
+                        draining = now
+                        drain_heartbeat = now + 5
+                    if now >= drain_heartbeat:
+                        print(f'[heavy-lock] job exited ({result}); waiting for group survivors: '
+                              f'{group_survivors(child.pid)}', file=sys.stderr, flush=True)
+                        drain_heartbeat = now + 60
+                    if now - draining >= drain_seconds:
+                        retain_shared = True
+                        print(f'[heavy-lock] WARNING: survivors {group_survivors(child.pid)}; '
+                              'drain timed out; leaving shared directory in place',
+                              file=sys.stderr, flush=True)
+                        break
                 time.sleep(0.02)
             if not retain_shared:
                 child.wait()
