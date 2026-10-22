@@ -42,7 +42,7 @@ function parseOutput(text) {
       if (stack.pop() !== end[1]) invalid = true;
       if (!stack.length) rootPending = true;
     } else if (summary && rootPending) {
-      xct = {total:+summary[1], skipped:+(summary[2] || 0), failed:+summary[3]};
+      xct = {total:+summary[1], skipped:+(summary[2] || 0), failureEvents:+summary[3]};
       rootPending = false;
     }
     const event = /^Test Case '(.+)' (started\.|passed \(|failed \(|skipped \()/.exec(line);
@@ -58,10 +58,13 @@ function parseOutput(text) {
     }
   }
   if (xctStarted && (!xct || stack.length || rootPending)) invalid = true;
-  if (xct && cases.size) {
+  if (xct) {
     const statuses = [...cases.values()];
+    // XCTest's root reports assertion failure events, not failed case count.
+    // Emit failed cases only from stable terminal identities.
+    xct.failed = statuses.filter(v => v === 'failed').length;
     if (statuses.length !== xct.total || statuses.includes('started') ||
-        statuses.filter(v => v === 'failed').length !== xct.failed ||
+        xct.failureEvents < xct.failed ||
         statuses.filter(v => v === 'skipped').length !== xct.skipped) invalid = true;
   }
   const swiftStarts = lines.filter(l => /^◇ Test run started\./.test(l)).length;
