@@ -53,7 +53,12 @@ targets:
           if ! git diff-index --quiet HEAD --; then
             sha="$sha-dirty"
           fi
-          /usr/libexec/PlistBuddy -c "Add :PicseeGitSHA string $sha" "$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          if /usr/libexec/PlistBuddy -c "Print :PicseeGitSHA" "$plist" >/dev/null 2>&1; then
+            /usr/libexec/PlistBuddy -c "Set :PicseeGitSHA $sha" "$plist"
+          else
+            /usr/libexec/PlistBuddy -c "Add :PicseeGitSHA string $sha" "$plist"
+          fi
 schemes:
   Picsee:
     build:
