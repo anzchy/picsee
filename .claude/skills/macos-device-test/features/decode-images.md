@@ -39,3 +39,32 @@ Preconditions:
 - "Responsive" here is observed behaviour, not a measurement. Plan §10 timings come from signposts with ≥30
   samples, recorded separately.
 - A broken file is covered by `OPEN-05`, which is P1; P0 only checks that it fails cleanly in the unit seam.
+
+## Native P0 handles and fixtures (P0-05/06)
+
+- Window: title `Picsee`; use the PID/birth/window handle recorded by `scripts/device/launch.sh` in
+  `RUN_DIR/process.json`, never another running Picsee. The canvas accessibility role is `AXImage`
+  with localized label `Image` / `图像`; loading/failure text is localized.
+- Tier ① paths: `TestAssets/synthetic/orientation-1.tiff` through `orientation-8.tiff`,
+  `alpha-gradient.png`, `corrupt.png`, `truncated.png`, `oversize-header.png` in the same directory.
+- Real photo paths: `~/.picsee/testassets/photos/5B_JPEG_SDR.jpg` and `3B_HEIC_SDR.heic`.
+  Both are 8256×5504 (45.4MP), substituting for 48MP; provenance/hashes are in `TestAssets/manifest.json`.
+  The 50-photo S1 corpus is incomplete. The noise PNG is allocation stress, never a timing source.
+- P0-05 pipeline default: N=3 including the reserved current opportunity, visible≤2, heavy≤1 (>12MP),
+  source RGBA8 reservation ≤min(512MiB, 8% RAM). Initial preview≤512px, then viewport detail.
+  Logs use subsystem `io.github.anzchy.picsee`, category `decode`, private filenames and actual pixel bytes.
+
+For implementor smoke, set the brief's Xcode environment and use a new absolute run directory under
+`~/.picsee/device-runs/`. Build with `scripts/heavy-lock.sh scripts/device/build.sh "$RUN_DIR"`;
+if codesigning fails, retain `build.log` and skip launch. If another Picsee is running, its owner must exit it.
+Then run `scripts/device/launch.sh "$RUN_DIR"` and `scripts/device/doctor.sh "$RUN_DIR" --expected-sha <SHA>`.
+Open fixtures with `open -a "$(cat "$RUN_DIR/bundle.path")" <absolute-fixture-path>`.
+Immediately capture `scripts/device/shot.sh "$RUN_DIR" VIEW-08-during-load`, resize with
+`scripts/device/size.sh "$RUN_DIR" 1100 740`, and capture a separate ready image.
+Capture orientation-6 and alpha with the same shot helper. Finish with doctor and
+`scripts/device/cleanup.sh "$RUN_DIR"`. These helpers only address the owned run.
+
+The implementor smoke is not independent feature validation. Record whether a screenshot actually caught
+loading or preview; do not infer it from its filename. This branch has no main menu, so menu responsiveness
+must be checked after #10 lands. Background settings, physical drag, @2x and the remaining S1 corpus still
+need their full acceptance runs. Do not upgrade the ledger from this smoke alone.
