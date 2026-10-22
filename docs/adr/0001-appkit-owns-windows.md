@@ -7,7 +7,7 @@ date: 2026-10-21
 
 picsee 用原生 Swift（SwiftUI + AppKit + ImageIO），不用 Tauri、Electron、Qt 或 Rust UI：核心价值（瞬开、真实像素、色彩与 HDR、sandbox 授权、低内存）都直接依赖 ImageIO、Core Animation 和 AppKit 窗口系统，跨平台方案要把最难的部分重写，而产品只面向 macOS。
 
-在原生方案内，**窗口由 AppKit 拥有**：每个查看窗口是一个 `NSWindowController`，画布与网格是原生 AppKit 视图（网格用 `NSCollectionView`）；设置、Inspector、侧栏、空态等面板用 SwiftUI 编写，通过 `NSHostingView` / `NSHostingController` 嵌入。原因是 C 设计的关键体验都在窗口层：红绿灯随工具隐藏（P1-08）、置顶窗口（P4）、全屏、焦点链、多窗口生命周期；由 SwiftUI `WindowGroup` 拥有窗口时，这些都要穿过桥接层，并有 SwiftUI 重建画布与网格的风险（架构 §11 风险表已要求画布与交互收敛到 AppKit 单一所有者，这里把同一原则上移到窗口）。
+在原生方案内，**窗口由 AppKit 拥有**：每个查看窗口是一个 `NSWindowController`，画布与网格是原生 AppKit 视图（网格用 `NSCollectionView`）；设置、Inspector、侧栏、空态等面板用 SwiftUI 编写，通过 `NSHostingView` / `NSHostingController` 嵌入。原因是 C 设计的关键体验都在窗口层：红绿灯随工具隐藏（P1-08）、置顶窗口（P4）、全屏、焦点链、多窗口生命周期；由 SwiftUI `WindowGroup` 拥有窗口时，这些都要穿过桥接层，并有 SwiftUI 重建画布与网格的风险（开发计划 §11 风险表已要求画布与交互收敛到 AppKit 单一所有者，这里把同一原则上移到窗口）。
 
 ## Considered Options
 
