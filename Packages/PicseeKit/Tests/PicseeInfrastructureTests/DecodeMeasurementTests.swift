@@ -102,7 +102,7 @@ func measureRealPhotoDecodesAndConcurrency() async throws {
                     }
                 }
                 let start = ContinuousClock.now
-                let image = try await pipeline.image(for: ImageDecodeRequest(fileURL: jpeg, maximumPixelSize: 512))
+                let image = try await pipeline.image(for: ImageDecodeRequest(fileURL: jpeg, maximumPixelSize: 512, isPreview: true))
                 let first = elapsed(start)
                 // Also complete viewport refinement before sampling ends.
                 _ = try await pipeline.image(for: ImageDecodeRequest(fileURL: jpeg, maximumPixelSize: 1920))

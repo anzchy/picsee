@@ -23,7 +23,8 @@ public struct ImageIODecoder: ImageDecoding {
         }
         var options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: !request.isPreview,
-            kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
+            // Preview first asks only for embedded pixels; the fallback below generates from the source.
+            kCGImageSourceCreateThumbnailFromImageIfAbsent: false,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceThumbnailMaxPixelSize: request.maximumPixelSize

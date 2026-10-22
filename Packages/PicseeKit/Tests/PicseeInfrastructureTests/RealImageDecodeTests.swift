@@ -96,3 +96,29 @@ func rgba(_ image: CGImage) throws -> [UInt8] {
     let smaller = try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 320))
     #expect(smaller.image.width == 320)
 }
+
+@Test func previewWithoutEmbeddedThumbnailDecodesSourcePixels() async throws {
+    let pipeline = ImageIOPipeline()
+    let oriented = try await pipeline.image(for: ImageDecodeRequest(fileURL: fixture("orientation-6.tiff"),
+        maximumPixelSize: 128, isPreview: true))
+    #expect(oriented.image.width == 128 && oriented.image.height == 96)
+    let alpha = try await pipeline.image(for: ImageDecodeRequest(fileURL: fixture("alpha-gradient.png"),
+        maximumPixelSize: 256, isPreview: true))
+    #expect(try rgba(alpha.image)[3] == 0)
+}
+
+@Test func tinyAndTruncatedPreviewsRemainBoundedOrFailCleanly() async throws {
+    for name in ["alpha-gradient.png", "truncated.png"] {
+        for maximum in [1, 8, 128, 512] {
+            do {
+                let result = try await ImageIOPipeline().image(for: ImageDecodeRequest(fileURL: fixture(name),
+                    maximumPixelSize: maximum, isPreview: true))
+                #expect(result.image.width > 0 && result.image.height > 0)
+                #expect(max(result.image.width, result.image.height) <= maximum)
+            } catch {
+                #expect(name == "truncated.png")
+                #expect(error as? ImageDecodeError == .unreadableImage)
+            }
+        }
+    }
+}

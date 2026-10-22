@@ -15,3 +15,13 @@ import PicseeCore
     #expect(!token.accepts(key: key, expected: key, token: PresentationToken(binding: UUID(), generation: token.generation)))
     #expect(!token.accepts(key: key, expected: key, token: PresentationToken(binding: token.binding, generation: UUID())))
 }
+
+@Test func previewAndViewportHaveDistinctRenderIdentitiesAtTheSameSize() {
+    let key = RenderKey(itemID: ItemID(rawValue: UUID()), revision: FileRevision(byteCount: 42, modificationDate: nil), maximumPixelSize: 512)
+    let file = URL(fileURLWithPath: "/unused")
+    let preview = ImageDecodeRequest(fileURL: file, maximumPixelSize: 512, renderKey: key, isPreview: true)
+    let viewport = ImageDecodeRequest(fileURL: file, maximumPixelSize: 512, renderKey: key)
+    #expect(preview.renderKey != viewport.renderKey)
+    #expect(preview.renderKey?.isPreview == true)
+    #expect(viewport.renderKey == key)
+}
