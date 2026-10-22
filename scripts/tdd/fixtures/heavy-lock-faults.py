@@ -93,6 +93,7 @@ elif mode in ('drain-message', 'drain-bound'):
     def alive(pid):
         checks[0] += 1
         return checks[0] < (80 if mode == 'drain-message' else 100)
+    signals = []
     original_popen = launcher.subprocess.Popen
     def popen(command, *args, **kwargs):
         return Child() if command == ['fake-job'] else original_popen(command, *args, **kwargs)
@@ -100,10 +101,12 @@ elif mode in ('drain-message', 'drain-bound'):
          patch.object(launcher.time, 'monotonic', side_effect=clock), \
          patch.object(launcher.time, 'sleep'), \
          patch.object(launcher, 'group_alive', side_effect=alive), \
+         patch.object(launcher.os, 'killpg', side_effect=lambda pid, sig: signals.append(sig)), \
          patch.object(launcher, 'group_survivors', return_value='123456789 fake-worker'):
         assert launcher.main() == 3, 'preserve direct child status'
     if mode == 'drain-bound':
-        assert checks[0] < 10, 'drain bound must stop polling'
-        assert Path(os.environ['PICSEE_MDPRO_LOCK']).is_dir(), 'retain shared lock at bound'
+        assert signals == [signal.SIGTERM, signal.SIGKILL], signals
+        assert checks[0] < 30, 'post-KILL wait must be bounded'
+        assert Path(os.environ['PICSEE_MDPRO_LOCK']).is_dir(), 'retain shared lock when group survives KILL'
     else:
         assert not Path(os.environ['PICSEE_MDPRO_LOCK']).exists(), 'release when group empties'
