@@ -92,3 +92,22 @@ actor AccessPipelineProbe: ImagePipeline {
     #expect(await pipeline.requests == before)
     #expect(await access.count() == 0)
 }
+
+@Test func accessCancelledOpenAndClosedSourceDoNotLeakOrStartPipeline() async throws {
+    let access = AccessProbe(); let pipeline = AccessPipelineProbe(access: access)
+    let file = URL(fileURLWithPath: "/tmp/a.jpg")
+    let cancelled = Task {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return try await AccessImageSource.open(.fileGrant(file), access: access, pipeline: pipeline)
+    }
+    await #expect(throws: CancellationError.self) { try await cancelled.value }
+    #expect(await access.count() == 0)
+    let source = try await AccessImageSource.open(.root(AccessRootID(), file: file), access: access, pipeline: pipeline)
+    let (request, _) = try await source.image(maximumPixelSize: 12)
+    #expect(request.fileURL == file)
+    await source.close()
+    let before = await pipeline.requests
+    await #expect(throws: FileAccessError.startFailed) { try await source.image(maximumPixelSize: 12) }
+    #expect(await pipeline.requests == before)
+    #expect(await access.count() == 0)
+}
