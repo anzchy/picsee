@@ -31,9 +31,14 @@ public actor DecodeDelivery {
     private var result: Result<DecodedImage, Error>?
     private var waiters: [CheckedContinuation<DecodedImage, Error>] = []
     public init() { }
-    public func value() async throws -> DecodedImage {
+    public func value() async throws -> DecodedImage { try await value(onRegistration: {}) }
+    // Handshake seam for queue lifecycle tests; invoked only after a waiter is stored.
+    func value(onRegistration: @Sendable () -> Void) async throws -> DecodedImage {
         if let result { return try result.get() }
-        return try await withCheckedThrowingContinuation { waiters.append($0) }
+        return try await withCheckedThrowingContinuation {
+            waiters.append($0)
+            onRegistration()
+        }
     }
     func finish(_ result: Result<DecodedImage, Error>) {
         precondition(self.result == nil)
