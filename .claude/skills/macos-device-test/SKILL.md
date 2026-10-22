@@ -256,8 +256,7 @@ sips -g pixelWidth -g pixelHeight "$RUN_DIR/shots/P0-tooling-native-window.png"
 Screen Recording is preflighted without requesting or changing permission. If missing, the helper prints
 `FAIL` naming Screen Recording and exits non-zero. A temporary capture is decoded and sampled for visible
 pixels; a black, transparent or empty result is rejected and removed before publishing the PNG. Existing
-artifacts are never overwritten. On an @2x MacBook run driven over SSH through its desktop-started tmux session,
-a 960×672 pt window produces a 1920×1344 px proof. Screenshots go to
+artifacts are never overwritten. The @2x MacBook proof is 960×672 pt → 1920×1344 px. Screenshots go to
 `$RUN_DIR/shots/`, **never into the repo**. The repo is public.
 
 ## 11. Cleanup
@@ -290,8 +289,9 @@ Every run produces one row per criterion and entry point, keyed by ledger row ID
 |---|---|---|---|---|
 | 1 | VIEW-03 | Pixel under the cursor stays put, zoom in and out | `+`/`−` | pass |
 | 2 | VIEW-03 | Same | trackpad pinch | **NOT VERIFIED** — computer use can't pinch |
-| 3 | VIEW-02 | 1:1 checkerboard is crisp at actual pixels | `1` on @2x | **NOT VERIFIED** — MacBook SSH/tmux path is not set up |
-| 4 | CHROME-01 | Tools hide after ~2.5 s, reappear at the top edge | idle, mouse | **FAIL** — stays visible after a menu closes |
+| 3 | VIEW-02 | 1:1 survives moving between display scales | drag the window from a @2x display to a @1x display | **NOT VERIFIED** — no device-test machine has both scales |
+| 4 | VIEW-02 | 1:1 checkerboard is crisp at actual pixels | `1` on @2x | **NOT VERIFIED** — MacBook SSH/tmux path is not set up |
+| 5 | CHROME-01 | Tools hide after ~2.5 s, reappear at the top edge | idle, mouse | **FAIL** — stays visible after a menu closes |
 
 - A criterion or entry point you couldn't exercise is NOT VERIFIED, with the blocker named. Never upgrade it.
 - A criterion judged by feel says so.
@@ -334,11 +334,17 @@ changes no runtime helpers. The post-build metadata-only re-sign branch is cover
 failure and clean-stamp bypass; that branch is still not live-proven. Earlier runs and RED/GREEN outputs
 remain in the issue #4 handoff. This is helper proof, not independent feature-ledger acceptance.
 
-Still **NOT VERIFIED**: a Mac mini proof run, XCUITest, and all `features/` recipes (the skeleton has no
-image commands). No mini proof run has been done yet. On the mini, signed builds run from a Claude pane in the
-herdr session; the verified 2026-10-22 build used that path. Historically, direct SSH signing on the mini failed
-with `errSecInternalComponent`; the MacBook therefore also requires its desktop-started tmux session. Also unproven: keyboard helpers, native Escape,
-fixture-hash runs, bookmark restore and the other future feature checks. No performance measurements.
+On 2026-10-22, a delegator ran `20261022-204006-VIEW-02-03-1x-mini` from a Claude pane in the herdr session
+on the Mac mini, at main `8a007b3`. Signed `build.sh` → `launch.sh` → `doctor.sh` (12 PASS, including
+`machine` and `fixtures` with manifest-verified copies) → `shot.sh` (960×672 px for a 960×672 pt window,
+@1x) → `key.sh` (`1`, `=`, `-`) → `cleanup.sh` passed. This was a P0-03 @1x feature run, not a full §14
+proof; see `docs/validation/P0.md` once branch `docs/p0-03-1x-mini` lands. `size.sh` and `kc.sh` were not
+exercised on the mini.
+
+Still **NOT VERIFIED**: a full Mac mini §14 proof, XCUITest, native Escape, bookmark restore, and the other
+future feature checks. The keyboard helper and fixture-hash runs were exercised by the mini feature run.
+Historically, direct SSH signing on the mini failed with `errSecInternalComponent`; the MacBook therefore also
+requires its desktop-started tmux session. No performance measurements.
 
 Rerun the proof after changes to build, signing, launch, doctor or capture.
 

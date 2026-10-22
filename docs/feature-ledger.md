@@ -316,10 +316,10 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 环境 | 基准 | 状态 |
 |---|---|---|
-| 显示器 | Mac mini 本地 1× 屏 + MacBook Retina @2x 屏（经 SSH） | @2x SSH 未配置时记 NOT VERIFIED |
+| 显示器 | Mac mini 本地 1× 屏 + MacBook Retina @2x 屏（@2x 验收从 mini 经 SSH 执行） | Mac mini @1x 已测（P0-03）；MacBook @2x 已测（P0-03，本地运行）；经 SSH 的 @2x 未配置 |
 | 系统 | macOS 14（最低部署版本）与当前正式版 | 建账时均未测 |
 | 芯片 | Apple Silicon | Intel 为 `Unknown`，未验证前不声明支持 |
-| 机器 | Mac mini（本地、唯一的本地真机测试机）与 MacBook（仅 @2x，经 SSH） | MacBook 命令须进入其桌面启动的 tmux 会话 |
+| 机器 | Mac mini（本地、唯一的本地真机测试机）与 MacBook（仅 @2x；经 SSH 时命令须进入其桌面启动的 tmux 会话） | Mac mini @1x 已测（P0-03）；MacBook @2x 已测（P0-03，本地运行）；经 SSH 的 @2x 未配置 |
 
 某项能力在某个环境下行为不同，在本节加一行：`| <ID> | <环境> | <状态> | <差异与 validation 链接> |`。
 
