@@ -36,7 +36,7 @@ private struct ThreadProbeDecoder: ImageDecoding {
 
     @Test func requestsDecodeOffMainAndRespectPixelLimit() async throws {
         try await withImage { file in
-            let pipeline = ImageIOPipeline(decoder: ThreadProbeDecoder())
+            let pipeline = ImageIOPipeline(decoder: ThreadProbeDecoder(), configuration: DecodeConfiguration(workers: 1))
             for maximum in [1, 8, 64, 128] {
                 let result = try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: maximum))
                 #expect(result.image.width > 0 && result.image.height > 0)
@@ -67,7 +67,7 @@ private struct ThreadProbeDecoder: ImageDecoding {
     }
     @Test func zoomSequenceDecodesOnlyPreviewAndOneDetailOnPipelineQueue() async throws {
         try await withImage { file in
-            let pipeline = ImageIOPipeline(decoder: ThreadProbeDecoder())
+            let pipeline = ImageIOPipeline(decoder: ThreadProbeDecoder(), configuration: DecodeConfiguration(workers: 1))
             let source = CGSize(width: 64, height: 32)
             let viewport = CGSize(width: 8, height: 8)
             var completed = 0

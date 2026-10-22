@@ -1,7 +1,6 @@
 import Foundation
 import PicseeCore
 
-public enum DecodePriority: Int, Sendable { case prefetch, visible, current }
 public struct DecodeConfiguration: Sendable {
     public let workers: Int
     public let visible: Int
@@ -67,8 +66,27 @@ public actor DecodeAdmission {
     public init(configuration: DecodeConfiguration, executor: any DecodeExecuting, decoder: any ImageDecoding) {
         self.configuration = configuration; self.executor = executor; self.decoder = decoder
     }
+    private var identities: [URL: ItemID] = [:]
+    public func key(for url: URL, revision: FileRevision, maximumPixelSize: Int) -> RenderKey {
+        let path = url.standardizedFileURL
+        let item = identities[path] ?? ItemID(rawValue: UUID())
+        identities[path] = item
+        return RenderKey(itemID: item, revision: revision, maximumPixelSize: maximumPixelSize)
+    }
+    public func image(_ request: ImageDecodeRequest, key: RenderKey, cost: Int, heavy: Bool,
+                      priority: DecodePriority) async throws -> DecodedImage {
+        try Task.checkCancellation()
+        let subscription = subscribe(request, key: key, cost: cost, heavy: heavy, priority: priority)
+        return try await withTaskCancellationHandler {
+            if Task.isCancelled { await subscription.cancel() }
+            return try await subscription.value()
+        } onCancel: {
+            Task { await subscription.cancel() }
+        }
+    }
     private struct Job {
         let id: UUID
+        let trace: DecodeTrace
         let request: ImageDecodeRequest
         let key: RenderKey
         let cost: Int
@@ -93,7 +111,7 @@ public actor DecodeAdmission {
             return DecodeSubscription(id: subscriber, delivery: delivery, admission: self)
         }
         keyed[key] = id
-        jobs[id] = Job(id: id, request: request, key: key, cost: cost, heavy: heavy,
+        jobs[id] = Job(id: id, trace: DecodeTrace(), request: request, key: key, cost: cost, heavy: heavy,
                        priority: priority, subscribers: [subscriber: delivery])
         pending.append(id)
         drain()
@@ -122,15 +140,17 @@ public actor DecodeAdmission {
             // No await between checking all resources and taking them.
             jobs[id]!.admitted = jobs[id]!.priority
             pending.removeAll { $0 == id }
-            let request = jobs[id]!.request, decoder = decoder
+            let request = jobs[id]!.request, decoder = decoder, trace = jobs[id]!.trace
+            trace.reserve(jobs[id]!.cost)
             executor.submit {
-                let result = Result { try decoder.decode(request) }
+                let result = trace.decode(request, decoder: decoder)
                 Task { await self.finished(id, result: result) }
             }
         }
     }
     private func finished(_ id: UUID, result: Result<DecodedImage, Error>) async {
         let job = jobs.removeValue(forKey: id)!
+        job.trace.release(result)
         if keyed[job.key] == id { keyed.removeValue(forKey: job.key) }
         drain()
         for (subscriber, delivery) in job.subscribers {
@@ -144,11 +164,13 @@ public actor DecodeAdmission {
         let job = jobs[jobID]!
         if job.cancelled.count == job.subscribers.count && keyed[job.key] == jobID {
             keyed.removeValue(forKey: job.key)
+            job.trace.cancel()
         }
         if jobs[jobID]!.admitted == nil {
             let delivery = jobs[jobID]!.subscribers.removeValue(forKey: id)!
             jobs[jobID]!.cancelled.remove(id)
             if jobs[jobID]!.subscribers.isEmpty {
+                jobs[jobID]!.trace.cancelWaiting()
                 jobs.removeValue(forKey: jobID)
                 pending.removeAll { $0 == jobID }
             }

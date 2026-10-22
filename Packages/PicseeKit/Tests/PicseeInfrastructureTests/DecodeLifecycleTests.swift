@@ -1,0 +1,101 @@
+import Foundation
+import Testing
+import PicseeCore
+import PicseeInfrastructure
+
+@Test func cancelledBeforeRegistrationNeverSubmitsWork() async {
+    for realQueue in [false, true] {
+        let controlled = ControlledExecutor()
+        let executor: any DecodeExecuting = realQueue ? OperationDecodeExecutor(workers: 1) : controlled
+        let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1), executor: executor, decoder: TinyDecoder())
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await admission.image(tinyRequest, key: decodeKey(40), cost: 4, heavy: false, priority: .current)
+        }
+        do { _ = try await task.value; Issue.record("cancel before registration succeeded") }
+        catch { #expect(error is CancellationError) }
+        #expect(await admission.activity().running == 0)
+        #expect(await admission.activity().waiting == 0)
+        #expect(controlled.count == 0)
+    }
+    let pipeline = ImageIOPipeline()
+    let task = Task {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return try await pipeline.image(for: tinyRequest)
+    }
+    do { _ = try await task.value; Issue.record("pre-cancelled pipeline succeeded") }
+    catch { #expect(error is CancellationError) }
+}
+
+@Test func taskCancellationResumesOnceAfterBlockingDecoderReturns() async throws {
+    let decoder = BlockingDecoder()
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),
+        executor: OperationDecodeExecutor(workers: 1), decoder: decoder)
+    let task = Task { try await admission.image(tinyRequest, key: decodeKey(41), cost: 4, heavy: true, priority: .current) }
+    var iterator = decoder.started.makeAsyncIterator()
+    _ = await iterator.next()
+    task.cancel()
+    #expect(await admission.activity().reservedBytes == 4)
+    decoder.gate.signal()
+    var resumes = 0
+    do { _ = try await task.value; Issue.record("cancelled task succeeded") }
+    catch { resumes += 1; #expect(error is CancellationError) }
+    #expect(resumes == 1)
+    #expect(await admission.activity().running == 0)
+}
+
+private struct FailingDecoder: ImageDecoding {
+    func decode(_ request: ImageDecodeRequest) throws -> DecodedImage { throw ImageDecodeError.unreadableImage }
+}
+@Test func failureReleasesPermitsAndFinishesAllConsumersOnce() async {
+    for realQueue in [false, true] {
+        let controlled = ControlledExecutor()
+        let executor: any DecodeExecuting = realQueue ? OperationDecodeExecutor(workers: 1) : controlled
+        let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4), executor: executor, decoder: FailingDecoder())
+        let a = await admission.subscribe(tinyRequest, key: decodeKey(42), cost: 4, heavy: true, priority: .current)
+        if !realQueue { controlled.runFirst() }
+        var resumes = 0
+        do { _ = try await a.value(); Issue.record("failed decoder succeeded") }
+        catch { resumes += 1; #expect(error as? ImageDecodeError == .unreadableImage) }
+        #expect(resumes == 1)
+        #expect(await admission.activity().reservedBytes == 0)
+        await a.cancel() // late cancellation is harmless
+        await a.raisePriority(to: .current)
+    }
+}
+
+@Test func preparedRequestsShareIdentityAndRejectChangedRevisions() async throws {
+    let pipeline = ImageIOPipeline()
+    let file = fixture("orientation-1.tiff")
+    let a = try await pipeline.request(for: file, maximumPixelSize: 128)
+    let b = try await pipeline.request(for: file, maximumPixelSize: 128)
+    #expect(a.renderKey == b.renderKey)
+    #expect(try await pipeline.image(for: a).image.width == 128)
+    let key = try #require(a.renderKey)
+    let changed = RenderKey(itemID: key.itemID, revision: FileRevision(byteCount: 0, modificationDate: nil), maximumPixelSize: 128)
+    await #expect(throws: ImageDecodeError.invalidRequest) {
+        try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 128, renderKey: changed))
+    }
+    // These errors must also be typed at the synchronous decoder boundary.
+    #expect(throws: ImageDecodeError.invalidRequest) { try ImageIODecoder().decode(ImageDecodeRequest(fileURL: file, maximumPixelSize: 0)) }
+    #expect(throws: ImageDecodeError.unreadableImage) { try ImageIODecoder().decode(ImageDecodeRequest(fileURL: fixture("corrupt.png"), maximumPixelSize: 1)) }
+}
+
+@Test func eligibleVisibleWorkPrecedesPrefetchAndCurrentWorkCanUseAllSlots() async throws {
+    let executor = ControlledExecutor()
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 2, visible: 1, budget: 8), executor: executor, decoder: TinyDecoder())
+    let first = await admission.subscribe(tinyRequest, key: decodeKey(50), cost: 4, heavy: false, priority: .current)
+    let secondWindow = await admission.subscribe(tinyRequest, key: decodeKey(51), cost: 4, heavy: false, priority: .current)
+    let prefetch = await admission.subscribe(tinyRequest, key: decodeKey(52), cost: 4, heavy: false, priority: .prefetch)
+    let visible = await admission.subscribe(tinyRequest, key: decodeKey(53), cost: 4, heavy: false, priority: .visible)
+    #expect(await admission.activity().running == 2)
+    executor.runFirst(); _ = try await first.value()
+    #expect(await admission.activity().visible == 1)
+    executor.runFirst(); _ = try await secondWindow.value()
+    // The remaining slot stays reserved for current work, not filled by prefetch.
+    #expect(await admission.activity().waiting == 1)
+    executor.runFirst(); _ = try await visible.value()
+    #expect(await admission.activity().waiting == 0)
+    executor.runFirst(); _ = try await prefetch.value()
+    #expect(await admission.activity().running == 0)
+}
