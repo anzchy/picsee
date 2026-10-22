@@ -131,7 +131,8 @@ public actor DecodeAdmission {
         while let id = pending.sorted(by: { jobs[$0]!.priority.rawValue > jobs[$1]!.priority.rawValue })
             .first(where: { id in
                 let job = jobs[id]!, active = activity()
-                return active.running < configuration.workers &&
+                let sameKeyRunning = jobs.values.contains { $0.key == job.key && $0.admitted != nil }
+                return !sameKeyRunning && active.running < configuration.workers &&
                     (job.priority == .current || active.nonCurrent < configuration.workers - 1) &&
                     (job.priority != .visible || active.visible < configuration.visible) &&
                     (!job.heavy || active.heavy < configuration.heavy) &&
