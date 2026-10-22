@@ -52,7 +52,7 @@
 | 风险分级 | ADR-0121 映射 | **High**：FileAccess/sandbox/bookmark、磁盘缓存/SQLite、文件写入（导出、Trash、编辑另存）、entitlements、签名/公证、CI、依赖、未列出的路径。**Medium**：其余 `Sources/`。**Low**：文档、设计稿、预览、纯展示测试 |
 | 编号预留 | M70 Reserving numbers | ADR、F 编号和 receipt id 前缀（`P1-05-WI-2`）由 delegator 统一分配 |
 | 会话轮换 | M70 Session rotation + mdpro ADR-0131 | handoff 路径改为 `~/.picsee/handoff/`；hook 是否移植见第 3 节。安静时、没有 landing 进行且每次 wait 都已记录后，delegator 请用户输入 `/compact`，并点名保留 open findings、SHAs 和 waits |
-| 真机 | M71 device + M70 Mac mini/批次 | 只测 Mac，去掉 Windows。按区域分批：画布/像素、授权/sandbox、目录/FSEvents、缓存、窗口、发布包。每项写清失败条件和 log 证据。Mac mini 是否参与见第 4 节 |
+| 真机 | M71 device + M70 Mac mini/批次 | 只测 Mac，去掉 Windows。Mac mini 是唯一的本地真机测试机，除 @2x 外都在 mini 上验；@2x 从 mini 经 `ssh macbook` 把命令送进 MacBook 桌面启动的 tmux 会话，未配好 SSH 前记 NOT VERIFIED。mini 上从 herdr 会话的 Claude pane 运行，开始前确认 mdpro 的 `dtrack` 空闲且不触碰它。按区域分批：画布/像素、授权/sandbox、目录/FSEvents、缓存、窗口、发布包。每项写清失败条件和 log 证据。 |
 
 mdpro ADR-0131 的阶段读屏障：
 
@@ -120,7 +120,7 @@ record/verify、指纹、防削弱检查仍由插件完成，不像 mdpro 那样
 
 1. ~~名字前缀~~：沿用原名，目录隔离到 `~/.picsee/`。注意：如果 mdpro 的 Codex 智能体和 picsee 的在同一个 herdr server 里同时运行，`herdr agent prompt gpt-imple-1` 会有歧义；届时 picsee 一侧临时改名并在规则别名表记录。
 2. ~~实现名额~~：只算 picsee。
-3. **Mac mini 是否参与真机测试**：待定。
+3. ~~**Mac mini 是否参与真机测试**~~：已决定（2026-10-22）。「现在mac os device test 只需要在mac mini，也就是本机进行测试，看看相关rule哪些需要更新」；Mac mini 是唯一的本地真机测试机。显示验收仍保留 1× 与 2× 两档；「2x 验收，到时候ssh 接macbook」，即 @2x 从 mini 经 SSH 驱动 MacBook 桌面启动的 tmux 会话，接通前记 NOT VERIFIED。
 4. ~~入库范围~~：不入库。`.gitignore` 增加 `evidence/deep-*`、`evidence/*-assembly.txt`、`.stitch/`、`design/` 中的大体积导出、`.playwright-cli/`；具体清单在 git init 前列出给用户确认，建 GitHub 私有库前再确认一次。
 
 ## 5. 执行顺序（确认后）
