@@ -27,13 +27,18 @@ final class DecodeTrace: @unchecked Sendable {
         let result = Result { try decoder.decode(request) }
         let status = outcome(result)
         let bytes: Int
+        let width: Int, height: Int
+        let format: String
         switch result {
-        case .success(let image): bytes = image.image.bytesPerRow * image.image.height
-        case .failure: bytes = 0
+        case .success(let image):
+            bytes = image.image.bytesPerRow * image.image.height
+            width = image.image.width; height = image.image.height
+            format = image.formatIdentifier ?? "unknown"
+        case .failure: bytes = 0; width = 0; height = 0; format = "unknown"
         }
-        os_signpost(.end, log: Self.log, name: "Decode", signpostID: id, "outcome=%{public}s bytes=%ld", status, bytes)
+        os_signpost(.end, log: Self.log, name: "Decode", signpostID: id, "outcome=%{public}s bytes=%ld pixels=%ldx%ld format=%{public}s", status, bytes, width, height, format)
         let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "decode")
-        logger.notice("Decode outcome=\(status, privacy: .public) bytes=\(bytes, privacy: .public) file=\(request.fileURL.lastPathComponent, privacy: .private)")
+        logger.notice("Decode outcome=\(status, privacy: .public) bytes=\(bytes, privacy: .public) pixels=\(width, privacy: .public)x\(height, privacy: .public) format=\(format, privacy: .public) file=\(request.fileURL.lastPathComponent, privacy: .private)")
         return result
     }
     func release(_ result: Result<DecodedImage, Error>) {

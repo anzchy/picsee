@@ -80,7 +80,7 @@ func measureRealPhotoDecodesAndConcurrency() async throws {
             let result = try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: edge))
             let milliseconds = elapsed(start)
             times.append(decoder.milliseconds)
-            print("DECODE label=\(label) sample=\(sample) source=\(Int(result.sourcePixelSize.width))x\(Int(result.sourcePixelSize.height)) output=\(result.image.width)x\(result.image.height) bytes=\(result.image.bytesPerRow * result.image.height) decodeMs=\(decoder.milliseconds) requestMs=\(milliseconds)")
+            print("DECODE label=\(label) sample=\(sample) source=\(Int(result.sourcePixelSize.width))x\(Int(result.sourcePixelSize.height)) output=\(result.image.width)x\(result.image.height) bytes=\(result.image.bytesPerRow * result.image.height) format=\(result.formatIdentifier ?? "unknown") decodeMs=\(decoder.milliseconds) requestMs=\(milliseconds)")
         }
         print("DECODE_SUMMARY label=\(label) ms \(summary(times))")
     }

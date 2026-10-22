@@ -43,7 +43,8 @@ public struct ImageIODecoder: ImageDecoding {
         }
         guard let image = thumbnail else { throw ImageDecodeError.unreadableImage }
         let rotated = (5...8).contains(properties[kCGImagePropertyOrientation] as? Int ?? 1)
-        return DecodedImage(image: image, sourcePixelSize: CGSize(width: rotated ? height : width, height: rotated ? width : height))
+        return DecodedImage(image: image, sourcePixelSize: CGSize(width: rotated ? height : width, height: rotated ? width : height),
+                            formatIdentifier: CGImageSourceGetType(source) as String?)
     }
 }
 
