@@ -78,7 +78,8 @@ brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<
 - 机器：本机 Mac mini，1920×1080 @1x
 - @2x 机器：MacBook Pro；SSH：尚未配置
 - 要验的行与入口：
-  - VIEW-02：按 1（mini @1x）；MacBook @2x —— SSH 未配置，预期 NOT VERIFIED
+  - VIEW-02：按 1（mini @1x，补充证据）；按 1（MacBook @2x）—— SSH 未配置，预期 NOT VERIFIED；
+    窗口从 @2x 拖到 @1x —— 当前没有同时具备两种倍率的机器，预期 NOT VERIFIED
   - VIEW-03：+/−；触控板捏合（用户步骤）
 - 运行步骤：features/canvas-pixels.md
 - 沙盒容器：保持现状（不删除）
@@ -118,10 +119,11 @@ SSH shell 里签名或启动。该路径未配置时不要换验收标准，直�
 
 | # | 账簿行 | 验收 | 入口 | 结果 |
 |---|---|---|---|---|
-| 1 | VIEW-02 | 1:1 时棋盘格清晰 | 按 1（mini @1x） | pass |
+| 1 | VIEW-02 | 1:1 时棋盘格清晰 | 按 1（mini @1x，补充证据） | pass |
 | 2 | VIEW-02 | 同上 | 按 1（MacBook @2x） | **NOT VERIFIED** — SSH/tmux 路径尚未配置 |
-| 3 | VIEW-03 | 光标下像素不动 | +/− | pass |
-| 4 | VIEW-03 | 同上 | 触控板捏合 | pass（用户步骤） |
+| 3 | VIEW-02 | 拖到 @1x 后仍是 1:1 | 窗口从 @2x 拖到 @1x | **NOT VERIFIED** — 没有同时具备两种倍率的机器 |
+| 4 | VIEW-03 | 光标下像素不动 | +/− | pass |
+| 5 | VIEW-03 | 同上 | 触控板捏合 | pass（用户步骤） |
 
 核对三点：
 
@@ -158,7 +160,9 @@ Validated-by: claude-imple-1 run=20261105-143012-VIEW-02-03
 - **状态升级的那次提交，可以追加或修改「限制：」文本，但不得改写「怎么确认」中的验收本身。确需改验收时，单独提交并在提交说明里引用用户原话或 ADR。**
 - **不能靠删掉「怎么确认」里的入口让它升级**，删入口也算改验收。
 
-上面例子里 VIEW-02 的 2× 没验，所以 VIEW-02 记 `Partial`、`限制：@2x MacBook SSH/tmux 未验`；VIEW-03 两个入口都过了，可以记 `真机`。
+上面例子里 VIEW-02 的 2× 和从 @2x 拖到 @1x 两个入口都没验；mini 上按 `1` 只是补充 @1x 证据，
+不能替代拖窗入口。因此 VIEW-02 记 `Partial`，限制同时写明 `@2x MacBook SSH/tmux 未验` 和
+`从 @2x 拖到 @1x 未验`；VIEW-03 两个入口都过了，可以记 `真机`。
 
 ### ⑥ 跑 doc gardener
 
