@@ -24,7 +24,7 @@ struct InspectorPlaceholder: View {
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("inspector.focus-test")
                 .focused($fieldFocused)
-            ForEach([CommandID.fit, .actualPixels, .zoomIn, .zoomOut, .inspector], id: \.self) { id in
+            ForEach([CommandID.previous, .next, .fit, .actualPixels, .zoomIn, .zoomOut, .inspector], id: \.self) { id in
                 Button(id == .inspector ? "Hide Inspector" : id.menuTitle) { route(id) }
                     .accessibilityIdentifier("command.\(id.rawValue).button")
                     .disabled(id != .inspector && !model.hasImage)

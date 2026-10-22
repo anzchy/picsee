@@ -4,6 +4,8 @@ import PicseeCore
 extension CommandID {
     var menuTitle: String {
         switch self {
+        case .previous: String(localized: "Previous Image")
+        case .next: String(localized: "Next Image")
         case .fit: "Fit"
         case .actualPixels: "Actual Pixels"
         case .zoomIn: "Zoom In"
@@ -31,6 +33,8 @@ final class CommandMainMenu: NSMenu {
 final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     private let openWithoutWindow: () -> Void
     private(set) var isTracking = false
+    private let recentFolders = NSMenu(title: String(localized: "Open Recent"))
+    private let recentTarget = RecentFolderMenuTarget()
 
     init(openWithoutWindow: @escaping () -> Void) {
         self.openWithoutWindow = openWithoutWindow
@@ -62,8 +66,17 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             item.representedObject = id.rawValue
             item.setAccessibilityIdentifier("command.\(id.rawValue).menu")
             item.target = self
+            if id == .previous || id == .next {
+                item.target = AccessNavigationMenuTarget.shared
+                item.action = #selector(AccessNavigationMenuTarget.invoke(_:))
+            }
             (id == .open ? file : view).addItem(item)
         }
+        let recentItem = NSMenuItem(title: String(localized: "Open Recent"), action: nil, keyEquivalent: "")
+        recentItem.submenu = recentFolders
+        recentFolders.autoenablesItems = false
+        file.addItem(recentItem)
+        setRecentFolders([], onOpen: { _ in })
         let windows = submenu("Window")
         windows.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         #if DEBUG
@@ -72,6 +85,20 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         #endif
         NSApp.windowsMenu = windows
         NSApp.mainMenu = main
+    }
+
+    func setRecentFolders(_ folders: [RecentFolder], onOpen: @escaping (RecentFolder) -> Void) {
+        recentTarget.onOpen = onOpen
+        recentFolders.removeAllItems()
+        if folders.isEmpty {
+            let empty = recentFolders.addItem(withTitle: String(localized: "No Recent Folders"), action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+        }
+        for folder in folders {
+            let item = recentFolders.addItem(withTitle: folder.displayName, action: #selector(RecentFolderMenuTarget.open(_:)), keyEquivalent: "")
+            item.target = recentTarget
+            item.representedObject = folder
+        }
     }
 
     @objc private func invoke(_ item: NSMenuItem) {
