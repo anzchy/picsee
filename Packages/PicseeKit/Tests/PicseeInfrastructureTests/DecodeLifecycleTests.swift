@@ -134,3 +134,40 @@ private struct FailingDecoder: ImageDecoding {
     executor.runFirst(); _ = try await replacement.value()
     #expect(await admission.activity().reservedBytes == 0)
 }
+
+@Test func unavailableBytesDoNotTakeSlotsAndPendingPromotionDoesNotDuplicateWork() async throws {
+    let executor = ControlledExecutor()
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 3, budget: 8), executor: executor, decoder: TinyDecoder())
+    let a = await admission.subscribe(tinyRequest, key: decodeKey(70), cost: 8, heavy: false, priority: .current)
+    let visible = await admission.subscribe(tinyRequest, key: decodeKey(71), cost: 4, heavy: false, priority: .visible)
+    let current = await admission.subscribe(tinyRequest, key: decodeKey(72), cost: 4, heavy: false, priority: .current)
+    #expect(await admission.activity().running == 1)
+    #expect(await admission.activity().reservedBytes == 8)
+    #expect(await admission.activity().waiting == 2)
+    await a.cancel()
+    #expect(await admission.activity().running == 1)
+    executor.runFirst(); await expectCancelled(a)
+    #expect(await admission.activity().running == 2)
+    #expect(await admission.activity().visible == 1)
+    executor.runFirst(); _ = try await current.value()
+    executor.runFirst(); _ = try await visible.value()
+
+    let serialExecutor = ControlledExecutor()
+    let serial = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4), executor: serialExecutor, decoder: TinyDecoder())
+    let first = await serial.subscribe(tinyRequest, key: decodeKey(73), cost: 4, heavy: false, priority: .current)
+    let shared = await serial.subscribe(tinyRequest, key: decodeKey(74), cost: 4, heavy: false, priority: .prefetch)
+    let joined = await serial.subscribe(tinyRequest, key: decodeKey(74), cost: 4, heavy: false, priority: .visible)
+    await shared.raisePriority(to: .current)
+    #expect(await serial.activity().waiting == 1)
+    serialExecutor.runFirst(); _ = try await first.value()
+    #expect(serialExecutor.count == 1)
+    #expect(await serial.activity().nonCurrent == 0)
+    serialExecutor.runFirst(); _ = try await shared.value(); _ = try await joined.value()
+    #expect(await serial.activity().running == 0)
+
+}
+
+@Test func directDecoderUsesItsDefaultSourceBudget() throws {
+    let decoded = try ImageIODecoder().decode(ImageDecodeRequest(fileURL: fixture("orientation-1.tiff"), maximumPixelSize: 128))
+    #expect(decoded.image.width == 128 && decoded.image.height == 96)
+}
