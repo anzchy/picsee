@@ -6,8 +6,8 @@
  * tests / compile failure / inconsistent outcome => 70 (runner-error/environment).
  * Completed assertion failure => 1 plus Maven counts; pass => 0 plus counts.
  * Keeps raw-byte streaming, backpressure, per-stream decoding and signal relay
- * from the copied adapter. XCTest suite summaries repeat: take the last one,
- * then add Swift Testing's distinct run, including its zero-test companion.
+ * from the copied adapter. Require XCTest's root completion and Swift Testing's
+ * completed run; cross-check terminal events against their framework totals.
  * Counts failing tests, not Swift Testing issues or repeated XCTest suites.
  * An xcodebuild/UI lane is intentionally not implemented yet.
  */
@@ -24,21 +24,67 @@ const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
 function parseOutput(text) {
   const clean = text.replace(/\x1b\[[0-9;]*m/g, "").replace(/\r/g, "");
   const lines = clean.split("\n");
-  const xct = [...clean.matchAll(/^\s*Executed (\d+) tests?, with (?:(\d+) tests? skipped and )?(\d+) failures? \(\d+ unexpected\)/gm)].at(-1);
-  const swift = [...clean.matchAll(/^[✔✘] Test run with (\d+) tests? in \d+ suites? (passed|failed) after .+ seconds(?:\.| with \d+ issues?\.)$/gm)].at(-1);
-  const failures = new Set(lines.filter(l => /^✘ Test (?!run with ).+ failed after /.test(l)).map(l => l.split(' failed after ')[0]));
-  const skips = new Set(lines.filter(l => /^➜ Test .+ skipped(?::| after |\.)/.test(l)).map(l => l.split(' skipped')[0]));
-  const cases = new Set(lines.filter(l => /^Test Case '.+' failed \(/.test(l)).map(l => l.split("' failed (")[0]));
-  // Some XCTest outputs emit errors before the case summary. Never treat a
-  // compiler's 'error:' as a failed test: a completed Executed summary is required.
-  const errors = new Set([...clean.matchAll(/error: (-\[[^\]]+\]) : /g)].map(m => m[1]));
-  if (!xct && !swift) return null;
-  const total = +(xct?.[1] || 0) + +(swift?.[1] || 0);
-  const failed = (xct ? (cases.size || errors.size || +xct[3]) : 0) + (swift ? failures.size : 0);
-  const skipped = +(xct?.[2] || 0) + (swift ? skips.size : 0);
-  if (swift && ((swift[2] === 'failed') !== (failures.size > 0))) return null;
-  if (!total || failed + skipped > total) return null;
-  return {total, failed, skipped};
+  const crash = /Exited with signal|exited with (?:unexpected )?signal|Fatal error|\bCrash\b/i.test(clean);
+  const stack = [];
+  const cases = new Map();
+  let xctStarted = false, rootPending = false, xct = null, invalid = crash;
+  for (const line of lines) {
+    const begin = /^Test Suite '(.+)' started at /.exec(line);
+    const end = /^Test Suite '(.+)' (passed|failed) at /.exec(line);
+    const summary = /^\s*Executed (\d+) tests?, with (?:(\d+) tests? skipped and )?(\d+) failures? \(\d+ unexpected\)/.exec(line);
+    if (begin) {
+      if (!stack.length) {
+        if (xctStarted || !/^(All tests|Selected tests)$|\.xctest$/.test(begin[1])) invalid = true;
+        xctStarted = true;
+      }
+      stack.push(begin[1]);
+    } else if (end) {
+      if (stack.pop() !== end[1]) invalid = true;
+      if (!stack.length) rootPending = true;
+    } else if (summary && rootPending) {
+      xct = {total:+summary[1], skipped:+(summary[2] || 0), failed:+summary[3]};
+      rootPending = false;
+    }
+    const event = /^Test Case '(.+)' (started\.|passed \(|failed \(|skipped \()/.exec(line);
+    if (event) {
+      const previous = cases.get(event[1]);
+      if (event[2] === 'started.') {
+        if (previous) invalid = true;
+        cases.set(event[1], 'started');
+      } else {
+        if (previous !== 'started') invalid = true;
+        cases.set(event[1], event[2].split(' ')[0]);
+      }
+    }
+  }
+  if (xctStarted && (!xct || stack.length || rootPending)) invalid = true;
+  if (xct && cases.size) {
+    const statuses = [...cases.values()];
+    if (statuses.length !== xct.total || statuses.includes('started') ||
+        statuses.filter(v => v === 'failed').length !== xct.failed ||
+        statuses.filter(v => v === 'skipped').length !== xct.skipped) invalid = true;
+  }
+  const swiftStarts = lines.filter(l => /^◇ Test run started\./.test(l)).length;
+  const swiftSummaries = [...clean.matchAll(/^[✔✘] Test run with (\d+) tests? in \d+ suites? (passed|failed) after .+ seconds(?:\.| with \d+ issues?\.)$/gm)];
+  let swift = null;
+  if (swiftStarts || swiftSummaries.length) {
+    if (swiftStarts !== 1 || swiftSummaries.length !== 1) invalid = true;
+    else {
+      // Normal verbosity omits stable identities for display-named tests. Count
+      // terminal events, never unique labels; cross-check with the run's total.
+      const total = +swiftSummaries[0][1];
+      const failed = lines.filter(l => /^✘ Test (?!run with ).+ failed after /.test(l)).length;
+      const passed = lines.filter(l => /^✔ Test (?!run with ).+ passed after /.test(l)).length;
+      const skipped = lines.filter(l => /^➜ Test .+ skipped(?::| after |\.)/.test(l)).length;
+      if (failed + passed + skipped !== total ||
+          ((swiftSummaries[0][2] === 'failed') !== (failed > 0))) invalid = true;
+      swift = {total, failed, skipped};
+    }
+  }
+  const total = (xct?.total || 0) + (swift?.total || 0);
+  const failed = (xct?.failed || 0) + (swift?.failed || 0);
+  const skipped = (xct?.skipped || 0) + (swift?.skipped || 0);
+  return {invalid, counts: !invalid && total > 0 && failed + skipped <= total ? {total, failed, skipped} : null};
 }
 function createDetector() {
   let text = "";
@@ -114,13 +160,13 @@ function main(argv) {
     const err = stderrDetector.seen();
     // SwiftPM writes complete test output to stdout. Accept stderr-only fixtures
     // too, but fail closed on two separate completed result streams.
-    const counts = out && err ? null : out || err;
+    const counts = out.invalid || err.invalid || (out.counts && err.counts) ? null : out.counts || err.counts;
     if (!counts || (code !== 0 && code !== 1) || ((code === 0) !== (counts.failed === 0))) {
       process.stderr.write("swift-lane: no reliable completed test result; environment failure\n");
       process.exitCode = 70;
       return;
     }
-    process.stdout.write(`\nTests run: ${counts.total}, Failures: ${counts.failed}, Errors: 0, Skipped: ${counts.skipped}\n`);
+    process.stdout.write(`\nswift-lane filter=${JSON.stringify(filter).slice(1, -1)}\nTests run: ${counts.total}, Failures: ${counts.failed}, Errors: 0, Skipped: ${counts.skipped}\n`);
     process.exitCode = code;
   });
 }
