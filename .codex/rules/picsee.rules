@@ -1,0 +1,110 @@
+# picsee command rules for Codex (execpolicy, Starlark).
+#
+# Codex port of the delegator-only actions in the herdr roster plan
+# (docs/plans/20261021-herdr-roster-migration-plan.md) and AGENTS.md
+# "危险命令先问". Codex runs no role-guard hook, so these prefix rules stand in.
+#
+# Loaded only when this project's .codex/ layer is trusted.
+# Test: codex execpolicy check --pretty --rules .codex/rules/picsee.rules -- git push
+#
+# Limits: a rule matches the argv prefix only. `git -C <dir> push`, or a shell
+# script using $(...), redirection or variables, is not split and slips past.
+# These rules are a backstop, not the boundary; AGENTS.md still binds.
+
+# --- AGENTS.md: destructive commands ------------------------------------------
+
+prefix_rule(
+    pattern = ["rm", ["-rf", "-fr", "-r", "-R", "--recursive", "-Rf", "-fR"]],
+    decision = "forbidden",
+    justification = "AGENTS.md: recursive delete needs the user's confirmation. Ask the delegator, naming the exact path.",
+    match = ["rm -rf src", "rm -r docs/old", "rm --recursive tmp"],
+    not_match = ["rm -f a.txt", "rm a.txt"],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "Roster: only the delegator pushes. Commit on your branch and hand the SHA to the delegator.",
+    match = ["git push", "git push -f origin main", "git push origin p0-01/x"],
+)
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "AGENTS.md: destroys uncommitted work. Use `git stash` and ask the delegator.",
+    match = ["git reset --hard HEAD~1"],
+    not_match = ["git reset --soft HEAD~1", "git reset HEAD A.swift"],
+)
+
+prefix_rule(
+    pattern = ["git", ["checkout", "restore"], "."],
+    decision = "forbidden",
+    justification = "AGENTS.md: discards all local changes. Use `git stash`, or restore named paths only.",
+    match = ["git checkout .", "git restore ."],
+    not_match = ["git checkout Sources/A.swift", "git restore Sources/A.swift"],
+)
+
+prefix_rule(
+    pattern = ["git", "clean", ["-f", "-fd", "-df", "-fdx", "-xdf", "-fx", "-xf", "-ffdx"]],
+    decision = "forbidden",
+    justification = "AGENTS.md: removes untracked files permanently. Ask the delegator.",
+    match = ["git clean -f", "git clean -fd", "git clean -fdx"],
+    not_match = ["git clean -n"],
+)
+
+prefix_rule(
+    pattern = ["git", "branch", ["-D", "--delete", "-d"]],
+    decision = "forbidden",
+    justification = "branches are deleted by the delegator after landing.",
+    match = ["git branch -D p0-01/x", "git branch -d p0-01/x"],
+    not_match = ["git branch --show-current", "git branch"],
+)
+
+prefix_rule(
+    pattern = ["git", "worktree", "remove"],
+    decision = "forbidden",
+    justification = "Roster: the delegator removes worktrees with the user's confirmation.",
+    match = ["git worktree remove ../picsee-wt/x"],
+    not_match = ["git worktree list"],
+)
+
+# --- Roster: implementor limits (role-guard.sh equivalents) -----------------
+
+prefix_rule(
+    pattern = ["git", "add", ["-A", "--all", ".", "-u", "--update"]],
+    decision = "forbidden",
+    justification = "Roster: stage only paths you can name (`git add <path>...`), never the user's dirty files.",
+    match = ["git add -A", "git add .", "git add -u"],
+    not_match = ["git add Sources/A.swift Tests/ATests.swift"],
+)
+
+prefix_rule(
+    pattern = ["git", "commit", ["-a", "-am", "--all"]],
+    decision = "forbidden",
+    justification = "Roster: no blanket staging. Stage named paths, then `git commit -m`.",
+    match = ["git commit -a -m x", "git commit -am x"],
+    not_match = ["git commit -m 'feat(core): x'"],
+)
+
+prefix_rule(
+    pattern = ["git", ["checkout", "switch"], ["main"]],
+    decision = "forbidden",
+    justification = "Roster: never work on main. Stay on your own branch in your worktree.",
+    match = ["git checkout main", "git switch main"],
+    not_match = ["git checkout -b p0-01/x", "git switch p0-01/x"],
+)
+
+prefix_rule(
+    pattern = ["gh", ["release", "workflow"]],
+    decision = "forbidden",
+    justification = "Roster: releases and workflow dispatch belong to the delegator.",
+    match = ["gh release create v1", "gh workflow run release.yml"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["merge", "create", "close"]],
+    decision = "forbidden",
+    justification = "Roster: the delegator opens, merges and closes PRs.",
+    match = ["gh pr merge 12", "gh pr create"],
+    not_match = ["gh pr view 12", "gh pr diff 12"],
+)
