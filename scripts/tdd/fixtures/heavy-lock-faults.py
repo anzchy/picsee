@@ -110,3 +110,45 @@ elif mode in ('drain-message', 'drain-bound'):
         assert Path(os.environ['PICSEE_MDPRO_LOCK']).is_dir(), 'retain shared lock when group survives KILL'
     else:
         assert not Path(os.environ['PICSEE_MDPRO_LOCK']).exists(), 'release when group empties'
+
+elif mode == 'zombie-group':
+    # EOF establishes exit without wait/poll: the child stays our unreaped zombie.
+    child = launcher.subprocess.Popen(['sleep', '0.1'], start_new_session=True,
+                                      stdout=launcher.subprocess.PIPE)
+    try:
+        assert child.stdout.read() == b''
+        assert launcher.group_alive(child.pid) is True
+        assert launcher.stop_group(child, 0) is False
+    finally:
+        child.wait()
+        child.stdout.close()
+elif mode in ('eperm-drain', 'eperm-signal'):
+    class Child:
+        pid = 123456789
+        def poll(self):
+            if mode == 'eperm-signal':
+                os.kill(os.getpid(), signal.SIGTERM)
+            return 3
+        def wait(self):
+            return 3
+    probes = []
+    sends = []
+    def killpg(pid, sig):
+        assert pid == Child.pid
+        if sig == 0:
+            probes.append(sig)
+            if len(probes) == 1:
+                raise PermissionError(1, 'zombie group')
+            assert sends == ([signal.SIGTERM, signal.SIGKILL] if mode == 'eperm-signal' else []), sends
+            raise ProcessLookupError(3, 'group reaped')
+        sends.append(sig)
+        raise PermissionError(1, 'zombie group')
+    with patch.object(launcher.subprocess, 'Popen', return_value=Child()), \
+         patch.object(launcher.os, 'killpg', side_effect=killpg):
+        status = launcher.main()
+    assert probes == [0, 0], probes
+    assert not Path(os.environ['PICSEE_MDPRO_LOCK']).exists()
+    assert mode != 'eperm-drain' or sends == [], sends
+    # Signal mode really re-raises SIGTERM inside main; reaching here is a failure.
+    assert mode == 'eperm-drain', 'SIGTERM must be re-raised'
+    sys.exit(status)

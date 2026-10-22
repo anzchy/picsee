@@ -367,3 +367,22 @@ test('F4 drain bound stops worker before real mdpro waiter enters and preserves 
     if(waiterDone) await waiterDone;
   }
 });
+
+// F5: exercise the real liveness guard rather than replacing group_alive.
+test('F5 real-kernel unreaped zombie group drains without exception', {skip: process.platform !== 'darwin'}, () => {
+  const r = spawnSync('python3', ['scripts/tdd/fixtures/heavy-lock-faults.py', 'scripts/tdd/heavy-lock.py', 'zombie-group'], {env: environment(), timeout: 5000});
+  assert.equal(r.status, 0, r.stderr.toString());
+  assert.doesNotMatch(r.stderr.toString(), /Traceback/);
+});
+for (const mode of ['eperm-drain', 'eperm-signal']) {
+  test(`F5 launcher ${mode} preserves exit or signal after EPERM then ESRCH`, () => {
+    const env = {...environment(), PICSEE_HEAVY_LOCK_KILL_GRACE_SECS: '0'};
+    const r = spawnSync('python3', ['scripts/tdd/fixtures/heavy-lock-faults.py', 'scripts/tdd/heavy-lock.py', mode], {
+      env, timeout: 5000,
+    });
+    assert.doesNotMatch(r.stderr.toString(), /Traceback/);
+    assert.equal(r.status, mode === 'eperm-drain' ? 3 : null, r.stderr.toString());
+    assert.equal(r.signal, mode === 'eperm-signal' ? 'SIGTERM' : null);
+    assert.equal(existsSync(env.PICSEE_MDPRO_LOCK), false, 'release after group disappears');
+  });
+}
