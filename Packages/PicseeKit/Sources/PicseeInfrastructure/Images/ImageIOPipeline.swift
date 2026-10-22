@@ -34,6 +34,8 @@ public struct ImageIODecoder: ImageDecoding {
               let height = properties[kCGImagePropertyPixelHeight] as? Int else {
             throw ImageDecodeError.unreadableImage
         }
+        _ = try DecodeBudget.sourceCost(width: width, height: height,
+            budget: request.sourceByteBudget ?? DecodeConfiguration().budget)
         var thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         if thumbnail == nil {
             options[kCGImageSourceCreateThumbnailFromImageAlways] = true
@@ -75,8 +77,10 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         let key = await admission.key(for: request.fileURL, revision: header.revision, maximumPixelSize: request.maximumPixelSize)
         // An explicit request revision must still match at the last predecode check.
         if let requested = request.renderKey, requested != key { throw ImageDecodeError.invalidRequest }
-        return try await admission.image(request, key: key,
-            cost: DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget),
+        let cost = try DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget)
+        let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
+            renderKey: key, priority: request.priority, sourceByteBudget: cost)
+        return try await admission.image(admittedRequest, key: key, cost: cost,
             heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
     }
 }
