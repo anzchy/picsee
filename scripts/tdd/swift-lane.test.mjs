@@ -32,6 +32,7 @@ function run(fixture, code, { filter = 'FixtureTests/selectedOnly', args = [], s
   const argvFile = path.join(temp, 'argv.json');
   const env = { ...process.env, PATH: `${temp}:${process.env.PATH}`, PICSEE_SWIFT_FILTER: filter,
     PICSEE_HEAVY_LOCK: path.join(temp, 'heavy.lock'), PICSEE_HEAVY_LOCK_HELD: '',
+    PICSEE_MDPRO_LOCK: path.join(temp, 'mdpro.lock'), MDPRO_HEAVY_LOCK_HELD: '',
     SWIFT_START_FIXTURE: path.join(root,'scripts/tdd/fixtures/swift-pass.txt'), TRUNCATE_ROOT: truncateRoot ? '1' : '', INCOMPLETE_SWIFT: incompleteSwift ? '1' : '', CRASH_STDERR_FIXTURE: path.join(root,'scripts/tdd/fixtures/xctest-partial-crash.txt'), ARGV_FILE: argvFile, FIXTURE: path.join(root, 'scripts/tdd/fixtures', fixture + '.txt'),
     SWIFT_EXIT: String(code), ON_STDERR: stderr ? '1' : '', SPLIT: split ? '1' : '', CRASH_STDERR: crashStderr ? '1' : '' };
   const r = spawnSync(process.execPath, ['scripts/tdd/swift-lane.mjs', ...args], { env, encoding:'utf8', timeout:10000 });

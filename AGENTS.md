@@ -103,7 +103,7 @@ node --test scripts/tdd/*.test.mjs
 
 新 API 按此流程先写可编译桩，桩在 record 时是未提交的实现改动，Swift receipt 总会带 `implementation-already-present` MEDIUM；审计仍须核对桩与 RED。断言消息含 “No such file or directory” 时，插件会把失败升级为环境失败并拒收有效 RED。
 
-receipt lane 和两个 discovery probe 均走 `scripts/heavy-lock.sh`。其他重任务用 `scripts/heavy-lock.sh <命令…>`；整机各 worktree 先取持久锁文件 `~/.picsee/locks/heavy.lock` 的 flock，再取 mdpro 的目录锁 `~/.cache/mdpro-heavy.lock`，使 picsee 与 mdpro 的重任务互斥、不并发。`PICSEE_MDPRO_LOCK` 可覆盖 mdpro 目录锁路径，设为 `off` 可跳过共享锁（测试或无 mdpro 的机器）；子进程同时继承 `MDPRO_HEAVY_LOCK_HELD=1`。Python 3 的 `fcntl.flock` 由子进程继承描述符，最后一次关闭才解锁；不要删除锁文件。`PICSEE_HEAVY_LOCK` 可覆盖路径，`PICSEE_HEAVY_LOCK_WAIT_SECS` 默认 1800 秒、两个锁共用这一等待预算，超时退出 75；`PICSEE_HEAVY_LOCK_HELD=1` 支持嵌套。`unit` 测试和覆盖率配置不变。
+receipt lane 和两个 discovery probe 均走 `scripts/heavy-lock.sh`；其他重任务用 `scripts/heavy-lock.sh <命令…>`。先取持久 flock `~/.picsee/locks/heavy.lock`，再取 mdpro 目录锁 `~/.cache/mdpro-heavy.lock`，两项目通常不会同时运行重任务（**best effort**）。已知限制：mdpro 自身的 stale-lock reclaim 有竞争窗口；picsee holder 被 SIGKILL 后，mdpro 可能在其 workers 仍存活时回收死 owner；picsee 从不回收 stale 目录，超时退出 75 后须先对 owner 的 `cmd` 用 `pgrep -f` 确认该任务无进程存活，再手动删除目录。`PICSEE_MDPRO_LOCK` 覆盖共享路径（`off` 跳过），互操作测试用 `PICSEE_MDPRO_SCRIPT` 指定 mdpro 脚本，未设则显式 skip。反向嵌套时 `MDPRO_HEAVY_LOCK_HELD=1` 表示父 mdpro 已持锁，只取 picsee flock；只有实际取得共享锁才向子进程新增此标记。`PICSEE_HEAVY_LOCK_HELD=1` 直接运行并保留父环境。flock 描述符由子进程继承，最后关闭才解锁；不要删除锁文件。`PICSEE_HEAVY_LOCK` 覆盖 flock 路径，`PICSEE_HEAVY_LOCK_WAIT_SECS` 默认 1800 秒，两次等待共用预算。正常结束须等进程组清空；INT/TERM 经 TERM、grace、KILL 后最多再等 5 秒，若仍有进程则警告并保留共享目录。`unit` 测试和覆盖率配置不变。
 
 ## 必须遵守的规则
 

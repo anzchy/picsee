@@ -363,7 +363,7 @@ verdict formatting and non-zero failures and do not constitute device evidence. 
 in `doctor-input.json`. The test runner uses harmless copied sleep processes. Node tests allocate `fs.mkdtempSync` directories
 under `os.tmpdir()` and remove them in `after()`; Python offline fixtures use `TemporaryDirectory` with
 cleanup. Tests never write under `~/.picsee/device-runs/`. Run evidence stays outside the worktree. Build artifacts remain
-inside `.build/device-<run-id>/`. Heavy jobs use `scripts/heavy-lock.sh`: picsee flock first, then the shared mdpro directory lock, so the projects serialize. `PICSEE_MDPRO_LOCK` overrides the shared path (`off` skips it).
+inside `.build/device-<run-id>/`. Heavy jobs use `scripts/heavy-lock.sh`: picsee flock first, then mdpro’s directory lock, for **best effort** serialization. `PICSEE_MDPRO_LOCK` overrides the shared path (`off` skips); `PICSEE_MDPRO_SCRIPT` selects the optional interop test script. With inherited `MDPRO_HEAVY_LOCK_HELD=1`, only the picsee flock is taken. Limits: mdpro stale-reclaim races and SIGKILL of the picsee holder can overlap surviving workers. picsee never reclaims stale directories: after timeout, check the owner’s `cmd` with `pgrep -f`, confirm no job processes remain, then manually remove the directory. On INT/TERM, survivors after TERM/grace/KILL plus 5 seconds produce a warning and leave the directory in place.
 
 ## 16. Recording the result
 
