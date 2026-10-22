@@ -36,8 +36,8 @@ picsee 是面向 macOS 的本地图片浏览工具，优先解决 Finder 打开�
 | 系统下限 | macOS 14+ | 控制兼容成本；具体高级 API 仍使用可用性检查 |
 | 首发硬件 | Apple Silicon；Intel 暂不承诺 | 核心模块不故意绑定 ARM，但 Intel 需另建验证矩阵 |
 | 构建 | 原生 Xcode App target + 本地 Swift Package；Swift 6 语言模式 | Xcode 版本以 P0 本机可运行且匹配 SDK 的稳定工具链为准，锁定到 CI |
-| 分发 | 首发按启用 App Sandbox 的 Developer ID 应用设计，签名、公证后直接下载 | 提前验证目录授权；Mac App Store 和自动更新通道另作发布决策 |
-| 应用结构 | 单进程、模块化；按需预留解码服务边界 | 首版不引入 XPC、Rust、Web 前端或云服务 |
+| 分发 | 首发按启用 App Sandbox 的 Developer ID 应用设计，签名、公证后直接下载 | 提前验证目录授权；首发经 GitHub Releases 分发并用 Sparkle 2 自动更新（[ADR-006](./adr/0006-sandbox-from-p0-direct-distribution.md)）；Mac App Store 另作发布决策 |
+| 应用结构 | 单进程、模块化；按需预留解码服务边界 | 首版不自建 XPC 服务（Sparkle 自带的安装器与下载 XPC 是例外，见 ADR-006），不引入 Rust、Web 前端或云服务 |
 | 数据 | 图片原地访问，编辑默认另存；缓存可删除重建 | 不建立必须先导入的图片资产库 |
 | 语言 | 简体中文、英文；String Catalog 从首个界面建立 | 不在业务层硬编码显示文案 |
 | 网络与统计 | 首版核心功能离线；本地 Logger/signpost | 无账号、云同步和默认遥测依赖 |
@@ -360,7 +360,7 @@ AppKit WindowCoordinator 管理 NSWindow/NSPanel 生命周期、浮层、透明�
 | [ADR-006](./adr/0006-sandbox-from-p0-direct-distribution.md) | sandbox 从 P0 开始，先直接分发 | 提前验证授权，保持未来渠道选择空间 | 特定功能证明与 sandbox 冲突时 |
 | [ADR-007](./adr/0007-save-as-by-default-no-overwrite-in-v1.md) | 默认另存，首发不要求覆盖 | 把误覆盖风险与基础浏览解耦 | 编辑需求和冲突测试成熟后 |
 
-尚待 P0 验证：系统下限、签名工具链、ImageIO 格式覆盖、实际内存成本、队列参数与画布桥接。尚待产品决定但不阻塞架构草案：Intel、Mac App Store、付费模式、自动更新渠道。暂不引入 Firebase、第三方快捷键库或 Rust 来预先解决尚未出现的问题。
+尚待 P0 验证：系统下限、签名工具链、ImageIO 格式覆盖、实际内存成本、队列参数与画布桥接。尚待产品决定但不阻塞架构草案：Intel、Mac App Store、付费模式。自动更新渠道已由 ADR-006 决定。暂不引入 Firebase、第三方快捷键库或 Rust 来预先解决尚未出现的问题。
 
 工程自检按 gstack 的架构、代码组织、测试、性能四个维度执行；本轮是新方案编写，**未声称完成需要逐项交互的完整 `/plan-eng-review` 或独立外部评审**。
 
