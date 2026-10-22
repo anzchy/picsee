@@ -10,20 +10,29 @@ final class CanvasView: NSView {
     private var message: String? = nil
     var onResolutionNeeded: ((Int) -> Void)?
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.image)
+        setAccessibilityLabel(String(localized: "canvas.image", defaultValue: "Image"))
+    }
+
+    required init?(coder: NSCoder) { nil }
+
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
     func beginOpening() {
         image = nil
         sourceSize = .zero
-        message = "正在打开图片…"
+        message = String(localized: "canvas.opening", defaultValue: "Opening image…")
         needsDisplay = true
     }
 
     func showFailure() {
         image = nil
         sourceSize = .zero
-        message = "无法读取这张图片。请从访达打开另一张图片。"
+        message = String(localized: "canvas.failure", defaultValue: "Unable to read this image. Open another image from Finder.")
         needsDisplay = true
     }
 
