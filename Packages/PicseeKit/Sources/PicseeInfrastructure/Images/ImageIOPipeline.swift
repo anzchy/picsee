@@ -21,8 +21,9 @@ public struct ImageIODecoder: ImageDecoding {
         guard request.fileURL.isFileURL && request.maximumPixelSize > 0 else {
             throw ImageDecodeError.invalidRequest
         }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
+        var options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: request.maximumPixelSize > CanvasDecodePolicy.previewMaximumPixelSize,
+            kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceThumbnailMaxPixelSize: request.maximumPixelSize
@@ -30,41 +31,52 @@ public struct ImageIODecoder: ImageDecoding {
         guard let source = CGImageSourceCreateWithURL(request.fileURL as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
             throw ImageDecodeError.unreadableImage
         }
+        var thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        if thumbnail == nil {
+            options[kCGImageSourceCreateThumbnailFromImageAlways] = true
+            thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        }
+        guard let image = thumbnail else { throw ImageDecodeError.unreadableImage }
         let rotated = (5...8).contains(properties[kCGImagePropertyOrientation] as? Int ?? 1)
         return DecodedImage(image: image, sourcePixelSize: CGSize(width: rotated ? height : width, height: rotated ? width : height))
     }
 }
 
 public final class ImageIOPipeline: ImagePipeline, Sendable {
-    private let decoder: any ImageDecoding
-    private let queue: OperationQueue
-    private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "decode")
-
-    public init(decoder: any ImageDecoding = ImageIODecoder()) {
-        self.decoder = decoder
-        queue = OperationQueue()
-        queue.name = "io.github.anzchy.picsee.first-image-decode"
-        queue.maxConcurrentOperationCount = 1
+    private let configuration: DecodeConfiguration
+    private let executor: OperationDecodeExecutor
+    private let admission: DecodeAdmission
+    public init(decoder: any ImageDecoding = ImageIODecoder(), configuration: DecodeConfiguration = DecodeConfiguration()) {
+        self.configuration = configuration
+        let executor = OperationDecodeExecutor(workers: configuration.workers)
+        self.executor = executor
+        admission = DecodeAdmission(configuration: configuration, executor: executor, decoder: decoder)
     }
-    public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
-        let decoder = decoder
-        let logger = logger
+    private func header(_ request: ImageDecodeRequest) async throws -> ImageSourceHeader {
+        let budget = configuration.budget
         return try await withCheckedThrowingContinuation { continuation in
-            queue.addOperation {
-                let result = Result { try decoder.decode(request) }
-                switch result {
-                case .success(let image):
-                    logger.notice("Decode success file=\(request.fileURL.lastPathComponent, privacy: .private) pixels=\(image.image.width, privacy: .public)x\(image.image.height, privacy: .public)")
-                case .failure:
-                    // Error descriptions can contain personal paths; keep them out of logs.
-                    logger.error("Decode failure file=\(request.fileURL.lastPathComponent, privacy: .private)")
-                }
-                continuation.resume(with: result)
+            executor.submit {
+                continuation.resume(with: Result { try ImageSourceHeader.read(request, budget: budget) })
             }
         }
+    }
+    public func request(for fileURL: URL, maximumPixelSize: Int) async throws -> ImageDecodeRequest {
+        try Task.checkCancellation()
+        let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize))
+        let key = await admission.key(for: fileURL, revision: header.revision, maximumPixelSize: maximumPixelSize)
+        return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, renderKey: key)
+    }
+    public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
+        try Task.checkCancellation()
+        let header = try await header(request)
+        let key = await admission.key(for: request.fileURL, revision: header.revision, maximumPixelSize: request.maximumPixelSize)
+        // An explicit request revision must still match at the last predecode check.
+        if let requested = request.renderKey, requested != key { throw ImageDecodeError.invalidRequest }
+        return try await admission.image(request, key: key,
+            cost: DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget),
+            heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
     }
 }

@@ -1,12 +1,18 @@
 import CoreGraphics
 import Foundation
 
+public enum DecodePriority: Int, Sendable { case prefetch, visible, current }
+
 public struct ImageDecodeRequest: Sendable {
+    public let renderKey: RenderKey?
+    public let priority: DecodePriority
     public let fileURL: URL
     /// Longest edge in pixels; callers convert viewport points using backing scale.
     public let maximumPixelSize: Int
 
-    public init(fileURL: URL, maximumPixelSize: Int) {
+    public init(fileURL: URL, maximumPixelSize: Int, renderKey: RenderKey? = nil, priority: DecodePriority = .current) {
+        self.renderKey = renderKey
+        self.priority = priority
         self.fileURL = fileURL
         self.maximumPixelSize = maximumPixelSize
     }
@@ -24,5 +30,6 @@ public struct DecodedImage: Sendable {
 
 /// Request boundary: admission/cancellation policy can replace the first executor.
 public protocol ImagePipeline: Sendable {
+    func request(for fileURL: URL, maximumPixelSize: Int) async throws -> ImageDecodeRequest
     func image(for request: ImageDecodeRequest) async throws -> DecodedImage
 }
