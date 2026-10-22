@@ -50,7 +50,7 @@ targets:
           set -eu
           cd "$SRCROOT"
           sha=$(git rev-parse --short HEAD)
-          if ! git diff-index --quiet HEAD --; then
+          if ! git diff --quiet HEAD --; then
             sha="$sha-dirty"
           fi
           plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
