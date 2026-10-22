@@ -44,7 +44,7 @@ Preconditions:
 
 - Window: title `Picsee`; use the PID/birth/window handle recorded by `scripts/device/launch.sh` in
   `RUN_DIR/process.json`, never another running Picsee. The canvas accessibility role is `AXImage`
-  with localized label `Image` / `图像`; loading/failure text is localized.
+  with localized label `Image` / `图片`; loading/failure text is localized.
 - Tier ① paths: `TestAssets/synthetic/orientation-1.tiff` through `orientation-8.tiff`,
   `alpha-gradient.png`, `corrupt.png`, `truncated.png`, `oversize-header.png` in the same directory.
 - Real photo paths: `~/.picsee/testassets/photos/5B_JPEG_SDR.jpg` and `3B_HEIC_SDR.heic`.
