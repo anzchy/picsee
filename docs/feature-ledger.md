@@ -121,9 +121,9 @@
 | VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：zoomIn/zoomOut：P0-03 的 +/− 在 [@2x](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[@1x](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini) 已验；捏合、完整 VoiceOver 未验；现按键路由/菜单/按钮真机未验；按钮或指针在面板/画布外时以中心缩放，锚点选择已单测。 |
 | VIEW-04 | 平移与边界 | Absent | 无 | P1-03 | — | 放大后拖动，图像不会被拖出可见范围；回到适应窗口后位置复原（27 页） |
 | VIEW-05 | 全屏 | Absent | 无 | P1-03 | — | ⌃⌘F 进入和退出全屏，当前图和缩放状态保持 |
-| VIEW-06 | 按 EXIF 方向显示 | Partial | 单元 | P0-05、P1-03 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift` | 打开 S1 素材里八种 Orientation 的样本，全部正向显示；限制：@1x 真机方向 1–8 通过（P0-05/06 记录）；@2x 未验 |
-| VIEW-07 | 透明图 | Partial | 单元 | P0-05 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`App/CanvasView.swift` | 打开透明 PNG，透明区域按背景设置显示，不是黑色；限制：@1x 真机不发黑；尚无背景设置；@2x 未验 |
-| VIEW-08 | 大图不卡界面 | Partial | 单元 | P0-05、P1-04 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/DecodeAdmission.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePipeline.swift`、`Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasDecodePolicy.swift`、`App/CanvasWindowController.swift` | 打开 48MP 图：加载期间窗口能拖、菜单能开；先出预览再变清晰；限制：@1x 真机先预览再清晰、加载中可拖窗口；菜单因解码过快未验；48MP 以 45.4MP 照片代替；@2x 未验 |
+| VIEW-06 | 按 EXIF 方向显示 | Partial | 单元 | P0-05、P1-03 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift` | 打开 S1 素材里八种 Orientation 的样本，全部正向显示；限制：@1x 真机方向 1–8 通过（[P0-05/06 记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；@2x 未验 |
+| VIEW-07 | 透明图 | Partial | 单元 | P0-05 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`App/CanvasView.swift` | 打开透明 PNG，透明区域按背景设置显示，不是黑色；限制：@1x 真机不发黑（[记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；尚无背景设置；@2x 未验 |
+| VIEW-08 | 大图不卡界面 | Partial | 单元 | P0-05、P1-04 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/DecodeAdmission.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePipeline.swift`、`Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasDecodePolicy.swift`、`App/CanvasWindowController.swift` | 打开 48MP 图：加载期间窗口能拖、菜单能开；先出预览再变清晰；限制：@1x 真机先预览再清晰（日志）、加载中经辅助功能移动窗口可响应（[记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；鼠标拖动与菜单未验；48MP 以 45.4MP 代替；@2x 未验 |
 | VIEW-09 | 快速切图不串图 | Absent | 无 | P1-05 | — | 快速打开 A→B→C，让 A 最后才解码完：画布、标题、Inspector 都只显示 C |
 | VIEW-10 | 上一张 / 下一张 | Absent | 无 | P2-03 | — | ←/→ 按目录顺序翻图；到首尾时按设置停止或循环 |
 
@@ -257,7 +257,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| FMT-01 | JPEG、PNG、HEIC、TIFF | Partial | 单元 | P0-05、P6-01 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/DecodeBudget.swift`、`Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasDecodePolicy.swift`、`App/CanvasWindowController.swift` | 打开 S1 素材里这四种格式，颜色、方向、透明都正确；限制：@1x 真机四种格式显示正确（目视）；S1 素材集未完整；颜色未测量 |
+| FMT-01 | JPEG、PNG、HEIC、TIFF | Partial | 单元 | P0-05、P6-01 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/DecodeBudget.swift`、`Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasDecodePolicy.swift`、`App/CanvasWindowController.swift` | 打开 S1 素材里这四种格式，颜色、方向、透明都正确；限制：@1x 真机四种格式显示正确（目视，[记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；S1 素材集未完整；颜色未测量；@2x 未验 |
 | FMT-02 | GIF 动画 | Absent | 无 | P6-02 | — | 打开动画 GIF 正常播放；切走后停止播放、不再占用 CPU |
 | FMT-03 | PDF 分页 | Absent | 无 | P6-02 | — | 打开多页 PDF，可以翻页，页码显示正确 |
 | FMT-04 | 系统可读的 RAW | Absent | 无 | P6-03 | — | 打开 S4 里的 RAW 样本：能显示的标明是完整解码还是只显示内嵌预览；不能显示的给出明确提示 |
@@ -316,10 +316,10 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 环境 | 基准 | 状态 |
 |---|---|---|
-| 显示器 | Mac mini 本地 1× 屏 + MacBook Retina @2x 屏（@2x 验收从 mini 经 SSH 执行） | Mac mini @1x 已测（P0-03）；MacBook @2x 已测（P0-03，本地运行）；经 SSH 的 @2x 未配置 |
+| 显示器 | Mac mini 本地 1× 屏 + MacBook Retina @2x 屏（@2x 验收从 mini 经 SSH 执行） | Mac mini @1x 已测（P0-03、P0-09、P0-05/06）；MacBook @2x 已测（P0-03，本地运行）；经 SSH 的 @2x 未配置 |
 | 系统 | macOS 14（最低部署版本）与当前正式版 | 建账时均未测 |
 | 芯片 | Apple Silicon | Intel 为 `Unknown`，未验证前不声明支持 |
-| 机器 | Mac mini（本地、唯一的本地真机测试机）与 MacBook（仅 @2x；经 SSH 时命令须进入其桌面启动的 tmux 会话） | Mac mini @1x 已测（P0-03）；MacBook @2x 已测（P0-03，本地运行）；经 SSH 的 @2x 未配置 |
+| 机器 | Mac mini（本地、唯一的本地真机测试机）与 MacBook（仅 @2x；经 SSH 时命令须进入其桌面启动的 tmux 会话） | Mac mini @1x 已测（P0-03、P0-09、P0-05/06）；MacBook @2x 已测（P0-03，本地运行）；经 SSH 的 @2x 未配置 |
 
 某项能力在某个环境下行为不同，在本节加一行：`| <ID> | <环境> | <状态> | <差异与 validation 链接> |`。
 
@@ -328,7 +328,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
 | 打开与输入 | 2026-10-23 | doc-gardener | P0-08（#12，86950cc..f9c2ef6）只在 `App/Commands/CommandMenu.swift` 的 Window 菜单加 `#if DEBUG` 的 Component Preview 项，无快捷键，不改 File › Open…/⌘O；OPEN-02 不受影响。上次：P0-09 真机运行（88a76ef..24bd082），OPEN-02 与 P0.md 第 12–14 项一致 |
-| 查看与画布 | 2026-10-22 | doc-gardener | P0-05/P0-06（#9，54d9510..9b45af9）：VIEW-06/07/08 由 `Absent` 升到 `Partial`/`单元`，只加 `限制：真机未验` 等，验收未改；head 代码有 ImageIO 方向变换、透明背景填充、512 预览后再视口解码；范围内无 `docs/validation/` 记录；VIEW-08「仅 @1x mini；菜单未验」是计划中的运行条件，不是真机结果 |
+| 查看与画布 | 2026-10-23 | doc-gardener | P0-05/06 真机运行（#9，86950cc..8207237）：VIEW-06/07/08 仍 `Partial`/`单元`，只改限制，验收未改；与 P0.md 第 1、2、4–7 项一致，旧限制（尚无背景设置、45.4MP 代替、菜单未验、仅 @1x）均保留；VIEW-08「可拖窗口」来自辅助功能移动窗口，鼠标拖动未验，已提给 owner；限制里的「P0-05/06 记录」不是链接 |
 | C 沉浸界面 | 2026-10-21 | 建账 | 同上 |
 | 外观与显示偏好 | 2026-10-22 | doc-gardener | PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
@@ -340,7 +340,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 命令与键盘 | 2026-10-23 | doc-gardener | P0-08（#12，86950cc..f9c2ef6）：Window › Component Preview 仅 `#if DEBUG`、无 keyEquivalent、不经 CommandRouter，无新命令 ID 或菜单 identifier；预览组件的 Space 处理只在预览窗口内；CMD-01/02 不受影响。上次：P0-09 真机运行（88a76ef..24bd082），CMD-01/02 与 P0.md 第 1–9 项一致；Focus Canvas 菜单缺陷见 #29 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
-| 格式 | 2026-10-22 | doc-gardener | P0-05（#9，54d9510..9b45af9）：FMT-01 由 `Absent` 升到 `Partial`/`单元`，限制写真机未验与 S1 未完整，验收未改；范围内无真机记录 |
+| 格式 | 2026-10-23 | doc-gardener | P0-05/06 真机运行（#9，86950cc..8207237）：FMT-01 仍 `Partial`/`单元`，只改限制，验收未改；与 P0.md 第 3 项一致（目视，S1 未完整、颜色未测量）；新限制未写 @2x 未验（记录「没有检查的」列了 @2x），已提给 owner |
 | 可访问性与本地化 | 2026-10-22 | doc-gardener | P0-05/P0-06（#9，54d9510..9b45af9）改了 `App/CanvasWindowController.swift` 的解码任务与取消，不涉及焦点或键盘；A11Y-02 不受影响。上次：P0-09 真机运行（88a76ef..24bd082），A11Y-02 与 P0.md 第 5、6、10、11、15 项一致 |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
