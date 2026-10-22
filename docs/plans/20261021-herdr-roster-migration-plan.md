@@ -50,9 +50,9 @@
 
 | # | 文件 | 来自 mdpro | 改法 | 依赖 |
 |---|---|---|---|---|
-| A1 | `AGENTS.md` | Read first (Codex) + Claude/Codex 功能对照 | 新写：读 CLAUDE.md、always-on 规则、按路径读的规则表、命令 guard 说明；Swift/Xcode 测试和构建命令 | A2、B 组 |
-| A2 | `CLAUDE.md` | — | 新写一份简洁的项目说明：架构入口、五个 target、设计依据、各条规则链接 | — |
-| A3 | `.codex/rules/picsee.rules` | `mdpro.rules`（113 行） | rule 25 破坏性命令和实现者 git 限制照搬，`master` 改为 `main`；加上禁止 `tccutil reset`、`codesign --remove-signature`、改 entitlements 关闭 sandbox | — |
+| A1 | `AGENTS.md` | Read first (Codex) + Claude/Codex 功能对照 | **已完成（2026-10-21，`03a53bb`）**：实际为项目入口地图和按需阅读表，含 Swift/Xcode 测试与构建命令，未另列读 `CLAUDE.md`、always-on 规则或命令 guard 说明 | A2、B 组 |
+| A2 | `CLAUDE.md` | — | **已完成（2026-10-21，`03a53bb`）**：实际为 `@AGENTS.md` 导入与 Claude Code 补充，不另列架构入口、五个 target、设计依据和规则链接 | — |
+| A3 | `.codex/rules/picsee.rules` | `mdpro.rules`（113 行） | **已完成（2026-10-22，`06ac875`）**：实际为 110 行 execpolicy backstop，未包含禁止 `tccutil reset`、`codesign --remove-signature` 和通过 entitlements 关闭 sandbox 的规则 | — |
 | A4 | `.codex/skills/picsee-tdd-workflow/` | `mdpro-tdd-workflow`（SKILL + 6 个 references + openai.yaml） | 8 步结构照搬；policy、implement、coverage、review、handoff 改成 Swift：XCTest/Swift Testing、`swift test --filter`、`xcodebuild test -only-testing`、`xccov` 覆盖率；mock 边界改为文件系统、ImageIO 解码器协议、时钟、NSWorkspace/NSPasteboard | P0-01 |
 | A5 | `.codex/agents/picsee-spec-adversary.toml`、`picsee-tdd-reviewer.toml` | 同名 mdpro 文件 | 改项目路径和 review 的 critical pass（见 B3） | A4 |
 | A6 | `.claude/agents/picsee-fable-auditor.md`、`picsee-landing-verifier.md`、`picsee-number-registrar.md` | 同名 mdpro 文件 | 仓库路径、lanes、verify worktree 目录 `picsee-wt/verify-<sha7>`；registrar 扫描 `docs/adr/` 和 F 编号表 | A1 |
