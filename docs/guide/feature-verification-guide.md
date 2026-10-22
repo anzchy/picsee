@@ -49,7 +49,8 @@
 | 已安装的 Picsee | `/Applications` 里不要有旧的 Picsee，或验收时它不在运行 | `pgrep -fl Picsee` 没有输出 |
 
 本机 mini 是 1920×1080 @1x，也是计划 §10.1 的性能基准；除 @2x 外，所有真机验收都只在这里跑。
-mini 没有 HiDPI 模式。账簿里涉及 2× 的行（VIEW-02 的 @2x 半段、P0-03、27 页）从 mini 使用待配置的
+mini 没有 HiDPI 模式。VIEW-02 有三个入口：mini 按 `1`、MacBook 按 `1`、从 2× 拖到 1×；账簿里涉及
+2× 的行（P0-03、27 页）从 mini 使用待配置的
 `ssh macbook`，把命令送进 MacBook 自己桌面启动的 tmux 会话。签名构建和启动也必须在那个会话里执行，
 因为普通 SSH 会话读不到登录钥匙串并报 `errSecInternalComponent`。SSH 路径未配置前，@2x 一律记
 NOT VERIFIED。mini 上由 herdr 会话里的 Claude pane 执行；Codex pane 的 sandbox 会阻止 SwiftPM cache，
@@ -162,7 +163,7 @@ Validated-by: claude-imple-1 run=20261105-143012-VIEW-02-03
 
 上面例子里 VIEW-02 的 2× 和从 @2x 拖到 @1x 两个入口都没验；mini 上按 `1` 只是补充 @1x 证据，
 不能替代拖窗入口。因此 VIEW-02 记 `Partial`，限制同时写明 `@2x MacBook SSH/tmux 未验` 和
-`从 @2x 拖到 @1x 未验`；VIEW-03 两个入口都过了，可以记 `真机`。
+`从 @2x 拖到 @1x 未验`；VIEW-03 两个入口在 @1x 都过了，但 2× 未验，仍记 `Partial`。
 
 ### ⑥ 跑 doc gardener
 
