@@ -15,17 +15,19 @@ final class CountingScope: SecurityScope, @unchecked Sendable {
 
 @Test func accessLeasesBalanceAcrossWindowsFailuresAndCancellation() async throws {
     let scope = CountingScope()
-    let access = FileAccess(scope: scope)
+    let storeURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: storeURL) }
+    let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: BookmarkStore(url: storeURL), buildSHA: "test")
     let folder = URL(fileURLWithPath: "/tmp")
     let root = try await access.grant(folder: folder)
     let request = AccessRequest.root(root, file: folder.appendingPathComponent("a.jpg"))
     let first = try await access.acquire(request)
     let second = try await access.acquire(request)
-    #expect(scope.counts == [1, 0])
+    #expect(scope.counts == [2, 1])
     await access.release(first); await access.release(first)
-    #expect(scope.counts == [1, 0])
+    #expect(scope.counts == [2, 1])
     await access.release(second)
-    #expect(scope.counts == [1, 1])
+    #expect(scope.counts == [2, 2])
     await #expect(throws: FileAccessError.outsideRoot) {
         try await access.acquire(.root(root, file: URL(fileURLWithPath: "/elsewhere/a.jpg")))
     }
@@ -37,13 +39,17 @@ final class CountingScope: SecurityScope, @unchecked Sendable {
 
 @Test func accessFileGrantFailedStartNeverStopsAndScopesOnlyOneFile() async throws {
     let scope = CountingScope(); scope.succeeds = false
-    let access = FileAccess(scope: scope)
+    let storeURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: storeURL) }
+    let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: BookmarkStore(url: storeURL), buildSHA: "test")
     let file = URL(fileURLWithPath: "/tmp/a.jpg")
     await #expect(throws: FileAccessError.startFailed) { try await access.acquire(.fileGrant(file)) }
     #expect(scope.counts == [1, 0])
+    scope.succeeds = true
     let root = try await access.grant(folder: file.deletingLastPathComponent())
+    scope.succeeds = false
     await #expect(throws: FileAccessError.startFailed) { try await access.acquire(.root(root, file: file)) }
-    #expect(scope.counts == [2, 0])
+    #expect(scope.counts == [3, 1])
     scope.succeeds = true
     let lease = try await access.acquire(.fileGrant(file))
     #expect(lease.rootID == nil)
@@ -60,5 +66,5 @@ final class CountingScope: SecurityScope, @unchecked Sendable {
     await #expect(throws: CancellationError.self) { try await cancelled.value }
     let value = try await access.withLease(.fileGrant(file)) { _ in 42 }
     #expect(value == 42)
-    #expect(scope.counts == [6, 4])
+    #expect(scope.counts == [7, 5])
 }
