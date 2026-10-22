@@ -93,8 +93,7 @@ Release build takes minutes. If you test a Debug build, say so in the record: it
 its performance numbers don't count.
 
 **Signing matters for the sandbox.** The sandbox and security-scoped bookmarks only work in a signed app.
-Device-test builds are signed with the Apple Development certificate of team `GRT84NAK4T` (automatic signing,
-set in `project.yml`); an ad-hoc signed build isn't a valid device-test build. Whether a bookmark created by
+Device-test builds are signed with the Apple Development certificate of team `GRT84NAK4T` (manual signing: style, identity and team set in `project.yml`; Xcode 26.6's GUI won't open on macOS 27, so no Xcode account and no automatic signing); an ad-hoc signed build isn't a valid device-test build. Whether a bookmark created by
 one local build still resolves after a rebuild (a new signature) is **unverified**; P0-04 must find out. Until
 then, a bookmark-restore check relaunches the *same* bundle, and the record states which build created the
 bookmark and which one resolved it.
