@@ -266,7 +266,7 @@ test('B2 leader exit retains directory until same-group worker finishes', async 
     } finally { await job.done; await waiterDone; }
     assert.ok(existsSync(done));
     const result=await job.done;
-    assert.equal(result.code,ending==='exit 3'?3:null);
+    assert.equal(result.code,ending==='exit 3'?3:null,result.output);
     assert.equal(result.signal,ending==='exit 3'?null:'SIGTERM');
   }
 });
@@ -326,7 +326,7 @@ test('R1 contended reverse nesting fails promptly without disturbing the flock h
 
 for (const mode of ['vanished','drain-message','drain-bound']) {
   test(`R2/R3 fault injection: ${mode}`, () => {
-    const env={...environment(),PICSEE_HEAVY_LOCK_DRAIN_SECS:mode==='drain-message'?'100':'0.2'};
+    const env={...environment(),PICSEE_HEAVY_LOCK_DRAIN_SECS:mode==='drain-message'?'100':'0.2',PICSEE_HEAVY_LOCK_KILL_GRACE_SECS:'0'};
     const result=spawnSync('python3',['scripts/tdd/fixtures/heavy-lock-faults.py','scripts/tdd/heavy-lock.py',mode],{env,encoding:'utf8',timeout:5000});
     assert.ifError(result.error);
     assert.equal(result.status,0,result.stderr);
@@ -337,3 +337,33 @@ for (const mode of ['vanished','drain-message','drain-bound']) {
     if(mode==='drain-bound') assert.match(result.stderr,/WARNING.*survivors.*123456789 fake-worker/);
   });
 }
+
+
+test('F4 drain bound stops worker before real mdpro waiter enters and preserves status 3', {timeout:15000}, async t => {
+  if (!mdproLock) { t.skip('PICSEE_MDPRO_SCRIPT not set'); return; }
+  const env={...environment(),PICSEE_HEAVY_LOCK_DRAIN_SECS:'1',PICSEE_HEAVY_LOCK_KILL_GRACE_SECS:'0.1'};
+  env.MDPRO_HEAVY_LOCK=env.PICSEE_MDPRO_LOCK;
+  const ready=path.join(env.HOME,'worker'), entered=path.join(env.HOME,'entered');
+  const job=start(['bash','-c','(sleep 30) </dev/null >/dev/null 2>&1 & echo $! > "$1"; exit 3','_',ready],env);
+  let pid, waiter, waiterDone;
+  try {
+    await until(()=>existsSync(ready),'background worker started');
+    pid=Number(readFileSync(ready,'utf8'));
+    process.kill(pid,0);
+    waiter=spawn(mdproLock,['bash','-c','if kill -0 "$1" 2>/dev/null; then echo alive; else echo gone; fi > "$2"','_',String(pid),entered],{env,cwd:root});
+    let output=''; waiter.stdout.on('data',b=>output+=b);waiter.stderr.on('data',b=>output+=b);
+    waiterDone=new Promise((resolve,reject)=>{waiter.on('error',reject);waiter.on('close',code=>resolve({code,output}));});
+    await until(()=>output.includes('waiting for'),'real mdpro waiter queues while owner is live');
+    const result=await job.done;
+    const peer=await waiterDone;
+    assert.equal(result.code,3,result.output);
+    assert.equal(peer.code,0,peer.output);
+    assert.equal(readFileSync(entered,'utf8'),'gone\n','mdpro must never enter beside surviving worker');
+    assert.throws(()=>process.kill(pid,0),{code:'ESRCH'},'worker gone after drain termination');
+    assert.equal(existsSync(env.PICSEE_MDPRO_LOCK),false,'normal cleanup after group empties');
+  } finally {
+    if(pid) { try { process.kill(pid,'SIGKILL'); } catch(error) { if(error.code!=='ESRCH') throw error; } }
+    await job.done;
+    if(waiterDone) await waiterDone;
+  }
+});
