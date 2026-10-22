@@ -50,3 +50,8 @@ design/competence-report/*.zip
 
 # Superseded A/B/C viewer-option screenshots (A/B were dropped; see prototype README)
 /design/prototypes/picsee-browser/qa/viewer-options/
+
+# Generated native projects and build products
+*.xcodeproj/
+.build/
+DerivedData/
