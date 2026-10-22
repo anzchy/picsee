@@ -117,7 +117,7 @@
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | VIEW-01 | 适应窗口 | Absent | 无 | P1-03 | — | 分别打开横图和竖图，都完整居中显示；拖动改窗口大小，图随之适应 |
-| VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：仅单图实验；真机棋盘格精确像素验收、1× 外接屏、触控板捏合均未验，冒烟不替代独立设备验收。 |
+| VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：仅单图实验，多文件打开仅显示首个文件；超过适应缩放后仅请求一次原尺寸细节（完整预算属 #9）；真机棋盘格精确像素验收、1× 外接屏、触控板捏合均未验，冒烟不替代独立设备验收。 |
 | VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：仅单图实验；真机棋盘格/标签锚点精确验收、1× 外接屏、触控板捏合均未验；键盘只接画布，尚无 P0-09 命令路由。 |
 | VIEW-04 | 平移与边界 | Absent | 无 | P1-03 | — | 放大后拖动，图像不会被拖出可见范围；回到适应窗口后位置复原（27 页） |
 | VIEW-05 | 全屏 | Absent | 无 | P1-03 | — | ⌃⌘F 进入和退出全屏，当前图和缩放状态保持 |
