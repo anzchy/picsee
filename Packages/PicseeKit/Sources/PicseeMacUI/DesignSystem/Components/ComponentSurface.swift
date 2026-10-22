@@ -1,5 +1,5 @@
 import SwiftUI
-/// Shared state chrome; native interactive controls are composed by the App host.
+/// Shared state chrome used by reusable components and their App host.
 public struct ComponentSurface: View {
     public let kind: ComponentKind
     public let state: ComponentState

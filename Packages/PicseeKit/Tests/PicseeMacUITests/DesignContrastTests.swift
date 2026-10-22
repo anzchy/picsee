@@ -18,6 +18,8 @@ func contrast(_ a: [Double], _ b: [Double]) -> Double {
     let pairs: [(String, DesignColor, DesignColor?, Double)] = [
         ("Default text / canvas", .textPrimary, nil, 4.5),
         ("Secondary/status text / canvas", .textSecondary, nil, 4.5),
+        ("Folder count / hover", .textSecondary, .hoverBackground, 4.5),
+        ("Folder count / selected", .textSecondary, .selectionFill, 4.5),
         ("Icon / canvas", .textPrimary, nil, 3),
         ("Folder/icon text / hover", .textPrimary, .hoverBackground, 4.5),
         ("Icon graphic / hover", .textPrimary, .hoverBackground, 3),

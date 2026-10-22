@@ -3,6 +3,11 @@ import AppKit
 import SwiftUI
 import PicseeMacUI
 
+/// Menu target is cheap; the window and both hosting trees are created on first activation.
+@MainActor final class DesignPreviewLauncher: NSObject {
+    static let shared = DesignPreviewLauncher()
+    @objc func openPreview(_ sender: Any?) { DesignPreviewWindow.shared.openPreview(sender) }
+}
 @MainActor final class DesignPreviewWindow: NSWindowController {
     static let shared = DesignPreviewWindow()
     private init() {
@@ -77,8 +82,11 @@ struct DesignPreviewPage: View {
                 HStack { ImageStatusCount(count: 12); ShortcutHint(text: "Space"); Text("Quick Look · preview hint") }
                 Text("Live · hover, press and Tab · \(activations) activations")
                 HStack { ForEach([DesignSymbol.previous, .next, .info], id: \.self) { role in
-                    IconCommandButton(symbol: role, state: [], theme: theme) { activations += 1 }
+                    IconCommandButton(symbol: role, state: [], theme: theme, input: .live) { activations += 1 }
                 } }
+                FolderNavigationRow(nodeID: "live-folder", name: "Live folder · preview data", count: activations, expanded: expanded, state: [], theme: theme, input: .live, onSelect: { activations += 1 }, onExpand: { expanded.toggle() })
+                SearchFilterField(query: $query, resultCount: 0, state: [], theme: theme, input: .live) { query = "" }
+                HStack { ScaleIndicator(actualPixels: false, input: .live) { activations += 1 }; ImageErrorRow(message: "Live retry", state: [], input: .live) { activations += 1 } }
                 Toggle("Reduce Motion (preview override)", isOn: $reduceMotion)
                 Text("Transition: \(ComponentResolver.transition(reduceMotion: reduceMotion).formatted()) s")
                 Text("Colour roles · AppKit / SwiftUI on canvas background")
@@ -91,7 +99,7 @@ struct DesignPreviewPage: View {
                 }
             }.font(Font(DesignMetrics.font("ui"))).foregroundStyle(DesignColor.textPrimary.color)
                 .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .environment(\.previewReduceMotion, reduceMotion)
+                .environment(\.designReduceMotion, reduceMotion)
         }.background(DesignColor.canvasBackground.color)
     }
 }

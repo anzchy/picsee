@@ -1,0 +1,151 @@
+import SwiftUI
+
+private struct DesignReduceMotionKey: EnvironmentKey { static let defaultValue = false }
+public extension EnvironmentValues {
+    var designReduceMotion: Bool {
+        get { self[DesignReduceMotionKey.self] }
+        set { self[DesignReduceMotionKey.self] = newValue }
+    }
+}
+
+/// Shared button chrome; forced samples ignore all native interaction input.
+struct DesignCommandStyle: ButtonStyle {
+    let kind: ComponentKind; let state: ComponentState; let theme: DesignTheme; let input: ComponentInput
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.designReduceMotion) private var designReduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        let current = input.state(state, pressed: configuration.isPressed)
+        let style = ComponentResolver.resolve(kind, state: current, theme: theme)
+        configuration.label.padding(6).foregroundStyle(style.foreground.color.opacity(style.opacity))
+            .background(ComponentSurface(kind: kind, state: current, theme: theme))
+            .animation(.easeOut(duration: ComponentResolver.transition(reduceMotion: reduceMotion || designReduceMotion)), value: current)
+    }
+}
+public struct IconCommandButton: View {
+    public init(symbol: DesignSymbol, state: ComponentState, theme: DesignTheme, input: ComponentInput = .forced, action: @escaping () -> Void) {
+        self.symbol = symbol; self.state = state; self.theme = theme; self.input = input; self.action = action
+    }
+    func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: current, action: action) }
+    let symbol: DesignSymbol; let state: ComponentState; let theme: DesignTheme; let input: ComponentInput; let action: () -> Void
+    @State private var hover = false
+    @FocusState private var focused: Bool
+    var current: ComponentState { input.state(state, hover: hover, focused: focused) }
+    func updateHover(_ value: Bool) { hover = value }
+    public var body: some View {
+        Button(action: activate) {
+            Image(nsImage: symbol.image()).resizable().scaledToFit().frame(width: 16, height: 16)
+                .frame(width: DesignMetrics.hitArea[0]-12, height: DesignMetrics.hitArea[1]-12)
+        }
+        .buttonStyle(DesignCommandStyle(kind: .icon, state: current, theme: theme, input: input))
+        .disabled(state.contains(.disabled)).allowsHitTesting(input == .live).focusable(input == .live).focused($focused).focusEffectDisabled(input == .forced).onHover(perform: updateHover)
+        .accessibilityLabel(Text(String(localized: String.LocalizationValue(symbol.label)))).help(Text(String(localized: String.LocalizationValue(symbol.label))))
+    }
+}
+public struct ShortcutHint: View {
+    public init(text: String) { self.text = text }
+    let text: String
+    public var body: some View {
+        Text(text).foregroundStyle(DesignColor.textPrimary.color).font(Font(DesignMetrics.font("uiSmall", monospaced: true))).padding(4)
+            .background(DesignColor.hoverBackground.color, in: RoundedRectangle(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(DesignColor.divider.color))
+    }
+}
+public struct FolderNavigationRow: View {
+    public init(nodeID: String, name: String, count: Int?, expanded: Bool, state: ComponentState, theme: DesignTheme, input: ComponentInput = .forced, onSelect: @escaping () -> Void, onExpand: @escaping () -> Void) {
+        self.nodeID = nodeID; self.name = name; self.count = count; self.expanded = expanded; self.state = state; self.theme = theme; self.input = input; self.onSelect = onSelect; self.onExpand = onExpand
+    }
+    func select() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: onSelect) }
+    func expand() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: onExpand) }
+    let nodeID: String; let name: String; let count: Int?; let expanded: Bool
+    let state: ComponentState; let theme: DesignTheme; let input: ComponentInput; let onSelect: () -> Void; let onExpand: () -> Void
+    @State private var hover = false
+    @FocusState private var focused: Bool
+    var current: ComponentState { input.state(state, hover: hover, focused: focused) }
+    func updateHover(_ value: Bool) { hover = value }
+    public var body: some View {
+        HStack(spacing: 4) {
+            Button(expanded ? "▾" : "▸", action: expand).focusable(input == .live).focusEffectDisabled(input == .forced)
+                .accessibilityLabel(Text(expanded ? "Collapse folder" : "Expand folder"))
+            Button(action: select) {
+                HStack {
+                    Image(nsImage: DesignSymbol.folder.image()); Text(name).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    if let count { Text(count.formatted()).font(Font(DesignMetrics.font("uiSmall", monospaced: true))).foregroundStyle(DesignColor.textSecondary.color) }
+                }.frame(maxWidth: .infinity, minHeight: 20)
+            }.focusable(input == .live).focused($focused).focusEffectDisabled(input == .forced).accessibilityLabel(name).help(name)
+        }
+        .buttonStyle(DesignCommandStyle(kind: .folder, state: current, theme: theme, input: input))
+        .disabled(state.contains(.disabled)).allowsHitTesting(input == .live).onHover(perform: updateHover).id(nodeID)
+        .accessibilityAddTraits(state.contains(.selected) ? .isSelected : [])
+    }
+}
+public struct ThumbnailSelectionFrame: View {
+    public init(filename: String, state: ComponentState, theme: DesignTheme, input: ComponentInput = .forced, action: @escaping () -> Void) {
+        self.filename = filename; self.state = state; self.theme = theme; self.input = input; self.action = action
+    }
+    func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: action) }
+    let filename: String; let state: ComponentState; let theme: DesignTheme; let input: ComponentInput; let action: () -> Void
+    public var body: some View {
+        Button(action: activate) {
+            VStack(spacing: 4) {
+                // Drawn preview data, independent of image loading and file access.
+                ZStack { Rectangle().fill(DesignColor.sidebarBackground.color); Image(systemName: "mountain.2").font(.system(size: 28)) }
+                    .frame(width: 120, height: 64)
+                    .overlay(ComponentSurface(kind: .thumbnail, state: state, theme: theme))
+                Text(filename).lineLimit(1).truncationMode(.middle).frame(width: 120)
+                    .background(state.contains(.selected) ? DesignColor.selectionFill.color : .clear)
+            }
+        }.buttonStyle(.plain).focusable(input == .live).disabled(state.contains(.disabled)).allowsHitTesting(input == .live).help(filename).accessibilityLabel(filename)
+    }
+}
+public struct SearchFilterField: View {
+    public init(query: Binding<String>, resultCount: Int, state: ComponentState, theme: DesignTheme, input: ComponentInput = .forced, clear: @escaping () -> Void) {
+        self._query = query; self.resultCount = resultCount; self.state = state; self.theme = theme; self.input = input; self.clear = clear
+    }
+    func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: clear) }
+    @Binding var query: String
+    let resultCount: Int; let state: ComponentState; let theme: DesignTheme; let input: ComponentInput; let clear: () -> Void
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Search current folder", text: $query).textFieldStyle(.roundedBorder).focusable(input == .live)
+                .background(ComponentSurface(kind: .search, state: state, theme: theme))
+            HStack {
+                Text("Filter: \(query) · \(resultCount) results").foregroundStyle(DesignColor.selectionText.color)
+                Button("Clear search", action: activate).focusable(input == .live)
+            }.padding(4).background(DesignColor.selectionFill.color)
+            if resultCount == 0 { Text("No matching images").foregroundStyle(DesignColor.textSecondary.color) }
+        }.disabled(state.contains(.disabled)).allowsHitTesting(input == .live)
+    }
+}
+public struct ScaleIndicator: View {
+    public init(actualPixels: Bool, input: ComponentInput = .forced, action: @escaping () -> Void) {
+        self.actualPixels = actualPixels; self.input = input; self.action = action
+    }
+    func activate() { guard input == .live else { return }; action() }
+    let actualPixels: Bool; let input: ComponentInput; let action: () -> Void
+    public var body: some View { Button(action: activate) { ShortcutHint(text: actualPixels ? "1:1 · 100%" : String(localized: "Fit window")) }.buttonStyle(.plain).focusable(input == .live).allowsHitTesting(input == .live) }
+}
+public struct IndeterminateProgressRow: View {
+    public init(label: String) { self.label = label }
+    let label: String
+    public var body: some View { HStack { ProgressView().controlSize(.small); Text(label) } }
+}
+public struct ImageErrorRow: View {
+    public init(message: String, state: ComponentState, input: ComponentInput = .forced, retry: @escaping () -> Void) {
+        self.message = message; self.state = state; self.input = input; self.retry = retry
+    }
+    func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: retry) }
+    let message: String; let state: ComponentState; let input: ComponentInput; let retry: () -> Void
+    public var body: some View {
+        HStack {
+            Text(message).foregroundStyle(DesignColor.errorText.color)
+            Button("Retry", action: activate).focusable(input == .live)
+                .disabled(state.contains(.disabled)).allowsHitTesting(input == .live)
+        }
+    }
+}
+public struct ImageStatusCount: View {
+    public init(count: Int) { self.count = count }
+    let count: Int
+    public var body: some View { Text("\(count) images").font(Font(DesignMetrics.font("uiSmall", monospaced: true))).foregroundStyle(DesignColor.textSecondary.color) }
+}
