@@ -316,10 +316,10 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 环境 | 基准 | 状态 |
 |---|---|---|
-| 显示器 | 2× 内建屏 + 1× 外接屏 | 建账时均未测 |
+| 显示器 | Mac mini 本地 1× 屏 + MacBook Retina @2x 屏（经 SSH） | @2x SSH 未配置时记 NOT VERIFIED |
 | 系统 | macOS 14（最低部署版本）与当前正式版 | 建账时均未测 |
 | 芯片 | Apple Silicon | Intel 为 `Unknown`，未验证前不声明支持 |
-| 机器 | MacBook（开发机）与 Mac mini（真机测试机） | 建账时均未测 |
+| 机器 | Mac mini（本地、唯一的本地真机测试机）与 MacBook（仅 @2x，经 SSH） | MacBook 命令须进入其桌面启动的 tmux 会话 |
 
 某项能力在某个环境下行为不同，在本节加一行：`| <ID> | <环境> | <状态> | <差异与 validation 链接> |`。
 

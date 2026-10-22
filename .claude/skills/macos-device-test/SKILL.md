@@ -47,11 +47,14 @@ timing and permissions feeding those tested modules are real.
 
 | Machine | Use it for | Can't do |
 |---|---|---|
-| Mac mini (M4, 16 GiB, macOS 26.4, 1920×1080 @1x) | the plan §10 performance baseline; every check that doesn't need @2x | Retina criteria: record NOT VERIFIED (no @2x display) |
-| MacBook Pro (M4, 24 GiB, macOS 27.0.1, Retina @2x) | Retina criteria (P0-03, P1-03, state page 27) | baseline performance numbers (not the §10.1 baseline) |
+| Mac mini (M4, 16 GiB, macOS 26.4, 1920×1080 @1x) | the local device-test machine; the plan §10 performance baseline and every check that doesn't need @2x | Retina criteria: record NOT VERIFIED (no @2x display) |
+| MacBook Pro (M4, 24 GiB, macOS 27.0.1, Retina @2x) | @2x criteria only (P0-03, P1-03, state page 27), reached from the mini with the to-be-configured `ssh macbook` alias | baseline performance numbers (not the §10.1 baseline) |
 
-Runs on the mini go through the `picsee-dtrack` session; see the `remote-ssh` skill §6. Every record names
-the machine, chip, memory, macOS version, display and scale.
+On the mini, run from a Claude pane in the herdr session. For @2x, send commands over `ssh macbook` into a
+tmux session started on the MacBook's own desktop. Signed builds and launches must run inside that desktop-started
+session because a plain SSH session cannot reach the login keychain (`errSecInternalComponent`). Until the SSH alias
+and that session are available, record every @2x criterion as NOT VERIFIED. Every record names the machine, chip,
+memory, macOS version, display and scale.
 
 ## 3. Isolation: one instance per machine
 
@@ -62,8 +65,8 @@ So:
 
 - **One device run per machine at a time.** Never drive an instance this run didn't start (§5 records which
   one it started).
-- **One computer-use driver per desktop.** On the mini, mdpro's `dtrack` session drives the same screen; check
-  both sessions are idle before starting (`remote-ssh` §6).
+- **One computer-use driver per desktop.** On the mini, mdpro's `dtrack` tmux session drives the same screen;
+  confirm it is idle before starting, and never send it commands or otherwise touch it.
 - **The user's own Picsee is off limits.** If a Picsee is running that this run didn't start (an installed
   copy, a dev build from Xcode), stop and ask the user to quit it. Don't kill it.
 
@@ -94,7 +97,10 @@ metadata edits dirty, the helper normalizes the verified build SHA and re-signs 
 entitlements and signature metadata. Debug performance numbers do not count as a
 Release baseline. A Release performance run needs its own explicit build and record.
 
-The locked Xcode is **26.6, build 17F113** (decided 2026-10-22, following the Mac mini). `PICSEE_XCODE` is `/Applications/Xcode.app` on the mini and `/Applications/Xcode-26.6.app` on the MacBook, where it sits beside Xcode 27.1; picsee is never built with 27.1. Confirm `xcodebuild -version` prints `Build version 17F113` before building. Product and scheme `Picsee`, bundle identifier
+The locked Xcode is **26.6, build 17F113** (decided 2026-10-22, following the Mac mini). The default case is
+the mini, where `PICSEE_XCODE=/Applications/Xcode.app`; on the MacBook set it to
+`/Applications/Xcode-26.6.app`, where Xcode 26.6 sits beside Xcode 27.1. Picsee is never built with 27.1.
+Confirm `xcodebuild -version` prints `Build version 17F113` before building. Product and scheme `Picsee`, bundle identifier
 `io.github.anzchy.picsee` (decided 2026-10-21; P0-01 creates them). Run long builds in the background and monitor `build.log`. If you test a Debug build, say so in the record: it's a different binary, and
 its performance numbers don't count.
 
@@ -179,7 +185,7 @@ replace an already-running image. A private or missing SHA never passes.
   recipe in the same change and say so in the record.
 - **Stable handles first.** Prefer keyboard shortcuts and accessibility identifiers to coordinates. The
   identifier naming convention is set in P0-01 and listed in `features/README.md`. Coordinates are a last
-  resort; they differ between the @1x mini and the @2x MacBook.
+  resort; they differ between the local @1x mini and the @2x MacBook reached over SSH.
 - **Probe symmetrically.** Zoom in N steps, then out N steps, at the same cursor point. Navigate forward, then
   back. A directional defect is invisible to a one-way sweep.
 - **Hold still and re-check.** For chrome timing, wait with no input and note when the tools hide; then wake
@@ -250,7 +256,8 @@ sips -g pixelWidth -g pixelHeight "$RUN_DIR/shots/P0-tooling-native-window.png"
 Screen Recording is preflighted without requesting or changing permission. If missing, the helper prints
 `FAIL` naming Screen Recording and exits non-zero. A temporary capture is decoded and sampled for visible
 pixels; a black, transparent or empty result is rejected and removed before publishing the PNG. Existing
-artifacts are never overwritten. The @2x MacBook proof is 960×672 pt → 1920×1344 px. Screenshots go to
+artifacts are never overwritten. On an @2x MacBook run driven over SSH through its desktop-started tmux session,
+a 960×672 pt window produces a 1920×1344 px proof. Screenshots go to
 `$RUN_DIR/shots/`, **never into the repo**. The repo is public.
 
 ## 11. Cleanup
@@ -283,7 +290,7 @@ Every run produces one row per criterion and entry point, keyed by ledger row ID
 |---|---|---|---|---|
 | 1 | VIEW-03 | Pixel under the cursor stays put, zoom in and out | `+`/`−` | pass |
 | 2 | VIEW-03 | Same | trackpad pinch | **NOT VERIFIED** — computer use can't pinch |
-| 3 | VIEW-02 | 1:1 checkerboard is crisp at actual pixels | `1` | **NOT VERIFIED** — mini is @1x |
+| 3 | VIEW-02 | 1:1 checkerboard is crisp at actual pixels | `1` on @2x | **NOT VERIFIED** — MacBook SSH/tmux path is not set up |
 | 4 | CHROME-01 | Tools hide after ~2.5 s, reappear at the top edge | idle, mouse | **FAIL** — stays visible after a menu closes |
 
 - A criterion or entry point you couldn't exercise is NOT VERIFIED, with the blocker named. Never upgrade it.
@@ -327,9 +334,10 @@ changes no runtime helpers. The post-build metadata-only re-sign branch is cover
 failure and clean-stamp bypass; that branch is still not live-proven. Earlier runs and RED/GREEN outputs
 remain in the issue #4 handoff. This is helper proof, not independent feature-ledger acceptance.
 
-Still **NOT VERIFIED**: Mac mini `picsee-dtrack`, XCUITest, and all `features/` recipes (the skeleton has no
-image commands). On the mini, signed builds must run inside the user-owned `picsee-dtrack` tmux session;
-direct SSH signing fails with `errSecInternalComponent`. Also unproven: keyboard helpers, native Escape,
+Still **NOT VERIFIED**: a Mac mini proof run, XCUITest, and all `features/` recipes (the skeleton has no
+image commands). No mini proof run has been done yet. On the mini, signed builds run from a Claude pane in the
+herdr session; the verified 2026-10-22 build used that path. Historically, direct SSH signing on the mini failed
+with `errSecInternalComponent`; the MacBook therefore also requires its desktop-started tmux session. Also unproven: keyboard helpers, native Escape,
 fixture-hash runs, bookmark restore and the other future feature checks. No performance measurements.
 
 Rerun the proof after changes to build, signing, launch, doctor or capture.
@@ -374,7 +382,7 @@ inside `.build/device-<run-id>/`. Heavy jobs use `scripts/heavy-lock.sh`: picsee
 - Commit the record on its own, touching nothing outside `docs/`, with a trailer naming the role and run:
 
   ```text
-  docs(validation): P0-03 device run VIEW-02, VIEW-03 on MacBook
+  docs(validation): P0-03 device run VIEW-02, VIEW-03 on Mac mini @1x
 
   Validated-by: claude-imple-1 run=<run-id>
   ```
@@ -392,7 +400,7 @@ inside `.build/device-<run-id>/`. Heavy jobs use `scripts/heavy-lock.sh`: picsee
 
 ```
 [ ] The criteria genuinely need a real window, pixels, input or the sandbox (§1)
-[ ] Machine chosen; Retina rows go to the MacBook or are NOT VERIFIED (§2)
+[ ] Machine chosen; use the local mini except that @2x rows go over SSH to the MacBook or are NOT VERIFIED (§2)
 [ ] No other Picsee running; no other driver on this desktop (§3)
 [ ] Built the .app with the locked Xcode, signed by GRT84NAK4T (§4)
 [ ] Launched by absolute path with -n; PID recorded; window ready (§5)

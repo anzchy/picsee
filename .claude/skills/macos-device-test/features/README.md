@@ -11,7 +11,8 @@ real run.
 
 ## Baseline preconditions
 
-- Machine and display as the brief names (SKILL.md §2); Retina rows only on the MacBook's @2x display.
+- Machine and display as the brief names (SKILL.md §2): @1x runs locally on the mini; @2x rows run on the
+  MacBook over SSH through its desktop-started tmux session, or are NOT VERIFIED until that path is set up.
 - A fresh build of the code under test, signed by team `GRT84NAK4T`, launched by this run (SKILL.md §4–§5).
 - Doctor passes every line (SKILL.md §6).
 - No Picsee instance this run didn't start; the desktop's other computer-use driver idle (SKILL.md §3).

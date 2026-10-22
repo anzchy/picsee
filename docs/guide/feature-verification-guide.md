@@ -1,7 +1,8 @@
-# 用本机做功能验收：macos-device-test + doc gardener 使用指南
+# 用本机 Mac mini 做功能验收：macos-device-test + doc gardener 使用指南
 
-这份指南写给 picsee 的负责人（你）：一个功能开发完之后，怎么在**本机（MacBook Pro）**上用
+这份指南写给 picsee 的负责人（你）：一个功能开发完之后，怎么在**本机 Mac mini（@1x）**上用
 `macos-device-test` 技能在真实 App 里验收，再用 doc gardener 检查功能账簿，最后带着证据开 PR。
+只有 @2x 验收例外：从 mini 经 SSH 驱动 MacBook Pro，并把命令送进 MacBook 桌面启动的 tmux 会话。
 
 > **当前状态（2026-10-22）**：签名版 Picsee.app 已可构建并启动；技能 §15 的 `scripts/device/` 脚本按本指南执行真机验收流程；目前尚无账簿行达到「真机」。
 
@@ -23,7 +24,7 @@
   │
   ├─ ① 找出要验的账簿行和每个入口
   ├─ ② 写 brief
-  ├─ ③ 开一个新会话，跑 macos-device-test（本机）
+  ├─ ③ 在 herdr 会话中新开 Claude pane，跑 macos-device-test（本机 mini）
   ├─ ④ 读结论表，写/提交 docs/validation/P<n>.md
   ├─ ⑤ 你按记录更新账簿行（单独提交）
   ├─ ⑥ 跑 picsee-doc-gardener（pr 模式）
@@ -39,7 +40,7 @@
 
 | 项目 | 怎么做 | 怎么确认 |
 |---|---|---|
-| Xcode | 锁定版本 **Xcode 26.6（build 17F113）**。本机（macOS 27）把它装在 `/Applications/Xcode-26.6.app`，与 Xcode 27.1 并存；picsee 只用 26.6 构建 | `DEVELOPER_DIR=/Applications/Xcode-26.6.app/Contents/Developer xcodebuild -version` 输出 `Build version 17F113` |
+| Xcode | 锁定版本 **Xcode 26.6（build 17F113）**。本机 mini 使用 `/Applications/Xcode.app`；`PICSEE_XCODE=/Applications/Xcode.app` | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -version` 输出 `Build version 17F113` |
 | XcodeGen | 本机已装（`/opt/homebrew/bin/xcodegen`） | `xcodegen --version` |
 | 签名 | 钥匙串里已有团队 `GRT84NAK4T` 的 Apple Development 证书（2027-01-31 到期） | `security find-identity -v -p codesigning` 里能看到它 |
 | 终端权限 | 系统设置 → 隐私与安全性：给运行 Claude Code 的终端 App 打开**屏幕录制**和**辅助功能** | computer use 截图能看到桌面 |
@@ -47,8 +48,12 @@
 | 运行目录 | `mkdir -p ~/.picsee/device-runs` | 目录存在 |
 | 已安装的 Picsee | `/Applications` 里不要有旧的 Picsee，或验收时它不在运行 | `pgrep -fl Picsee` 没有输出 |
 
-本机是 Retina @2x 屏。账簿里涉及 2× 的行（VIEW-02 的前半、P0-03、27 页）**只能在本机验**；
-VIEW-02 后半要求拖到 1× 外接屏，没有外接屏就记 NOT VERIFIED。性能数字不在本机测（计划 §10.1 的基准是 Mac mini）。
+本机 mini 是 1920×1080 @1x，也是计划 §10.1 的性能基准；除 @2x 外，所有真机验收都只在这里跑。
+mini 没有 HiDPI 模式。账簿里涉及 2× 的行（VIEW-02 的 @2x 半段、P0-03、27 页）从 mini 使用待配置的
+`ssh macbook`，把命令送进 MacBook 自己桌面启动的 tmux 会话。签名构建和启动也必须在那个会话里执行，
+因为普通 SSH 会话读不到登录钥匙串并报 `errSecInternalComponent`。SSH 路径未配置前，@2x 一律记
+NOT VERIFIED。mini 上由 herdr 会话里的 Claude pane 执行；Codex pane 的 sandbox 会阻止 SwiftPM cache，
+不能运行 `xcodebuild`。
 
 ## 4. 逐步操作
 
@@ -70,9 +75,10 @@ brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<
 # Brief 2026-11-05 VIEW-02-03
 
 - 代码：分支 p0-03-canvas，HEAD <完整 SHA>，worktree <路径>
-- 机器：本机 MacBook Pro，内建屏 @2x；外接 1× 屏：无
+- 机器：本机 Mac mini，1920×1080 @1x
+- @2x 机器：MacBook Pro；SSH：尚未配置
 - 要验的行与入口：
-  - VIEW-02：按 1（2× 屏）；拖到 1× 屏 —— 无外接屏，预期 NOT VERIFIED
+  - VIEW-02：按 1（mini @1x）；MacBook @2x —— SSH 未配置，预期 NOT VERIFIED
   - VIEW-03：+/−；触控板捏合（用户步骤）
 - 运行步骤：features/canvas-pixels.md
 - 沙盒容器：保持现状（不删除）
@@ -84,8 +90,8 @@ brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<
 
 ### ③ 开新会话跑 macos-device-test
 
-在本机开一个**新的** Claude Code 会话（或在现有会话里先 `/clear`），不要用写这段代码的那个会话：
-实现者不能给自己出验收记录。然后输入：
+在本机 herdr 会话里开一个**新的 Claude pane**，不要用写这段代码的那个会话：实现者不能给自己出验收记录。
+开始前确认 mdpro 的 `dtrack` tmux 会话空闲；它驱动同一块屏幕，验收过程不要向它发命令或触碰它。然后输入：
 
 ```text
 /macos-device-test 读 ~/.picsee/dtrack/brief-2026-11-05-VIEW-02-03.md，按里面写的执行，报告写到 brief 指定的位置。brief 说需要我动手的时候停下来叫我。
@@ -94,6 +100,9 @@ brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<
 会话会按技能顺序做：选机器 → 检查没有别的 Picsee 在跑 → 用锁定的 Xcode 构建并检查签名团队 →
 `open -n` 启动并记录 PID → doctor 自检（每一行都要通过）→ 一次性申请 computer use 权限（只申请 brief 需要的 App，
 你点一次“本次会话允许”）→ 按运行步骤操作 → 存日志和截图 → 按 PID 清理并确认证据还在。
+
+若 brief 含 @2x，mini 上的会话改用 `ssh macbook` 把命令送进 MacBook 桌面启动的 tmux 会话；不能在普通
+SSH shell 里签名或启动。该路径未配置时不要换验收标准，直接把 @2x 项记为 NOT VERIFIED。
 
 你需要做的：
 
@@ -109,8 +118,8 @@ brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<
 
 | # | 账簿行 | 验收 | 入口 | 结果 |
 |---|---|---|---|---|
-| 1 | VIEW-02 | 1:1 时棋盘格清晰 | 按 1（2×） | pass |
-| 2 | VIEW-02 | 同上 | 拖到 1× 屏 | **NOT VERIFIED** — 没有外接屏 |
+| 1 | VIEW-02 | 1:1 时棋盘格清晰 | 按 1（mini @1x） | pass |
+| 2 | VIEW-02 | 同上 | 按 1（MacBook @2x） | **NOT VERIFIED** — SSH/tmux 路径尚未配置 |
 | 3 | VIEW-03 | 光标下像素不动 | +/− | pass |
 | 4 | VIEW-03 | 同上 | 触控板捏合 | pass（用户步骤） |
 
@@ -125,7 +134,7 @@ App 路径、git SHA 及核对方式、素材、结论表、偏差、NOT VERIFIE
 gardener 靠这些 ID 把记录对应到行。单独提交：
 
 ```text
-docs(validation): P0-03 device run VIEW-02, VIEW-03 on MacBook
+docs(validation): P0-03 device run VIEW-02, VIEW-03 on Mac mini @1x
 
 Validated-by: claude-imple-1 run=20261105-143012-VIEW-02-03
 ```
@@ -149,7 +158,7 @@ Validated-by: claude-imple-1 run=20261105-143012-VIEW-02-03
 - **状态升级的那次提交，可以追加或修改「限制：」文本，但不得改写「怎么确认」中的验收本身。确需改验收时，单独提交并在提交说明里引用用户原话或 ADR。**
 - **不能靠删掉「怎么确认」里的入口让它升级**，删入口也算改验收。
 
-上面例子里 VIEW-02 的 1× 没验，所以 VIEW-02 记 `Partial`、`限制：1× 外接屏未验`；VIEW-03 两个入口都过了，可以记 `真机`。
+上面例子里 VIEW-02 的 2× 没验，所以 VIEW-02 记 `Partial`、`限制：@2x MacBook SSH/tmux 未验`；VIEW-03 两个入口都过了，可以记 `真机`。
 
 ### ⑥ 跑 doc gardener
 
@@ -174,9 +183,10 @@ PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 里说�
 
 ## 5. 常见问题
 
-**本机验和 Mac mini 验有什么不同？**
-本机是 2× 屏，只用来验 Retina 相关的行和日常功能；Mac mini 是 1× 屏、16 GiB，是性能基准，走 `picsee-dtrack`
-会话（见 `remote-ssh` 技能 §6）。记录里永远写清楚是哪台机器。
+**本地 mini 验和远端 MacBook 验有什么不同？**
+本机就是 Mac mini：@1x、16 GiB，是唯一的本地真机测试机和性能基准，验收从 herdr 会话里的 Claude pane
+运行；开始前只确认 mdpro 的 `dtrack` 空闲，绝不触碰它。MacBook 只承担 @2x：从 mini 经 `ssh macbook`
+把命令送进 MacBook 桌面启动的 tmux 会话。SSH 未设置好时，@2x 记 NOT VERIFIED。记录里永远写清楚是哪台机器。
 
 **computer use 做不到的操作怎么办？**
 触控板捏合、可能还有 Esc（原生 App 能不能收到还没验证过），在 brief 里预先标成“用户步骤”。
