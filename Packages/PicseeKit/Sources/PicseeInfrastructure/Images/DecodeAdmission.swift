@@ -76,6 +76,7 @@ public actor DecodeAdmission {
         var priority: DecodePriority
         var admitted: DecodePriority?
         var subscribers: [UUID: DecodeDelivery]
+        var cancelled: Set<UUID> = []
     }
     private var jobs: [UUID: Job] = [:]
     private var pending: [UUID] = []
@@ -123,9 +124,24 @@ public actor DecodeAdmission {
     private func finished(_ id: UUID, result: Result<DecodedImage, Error>) async {
         let job = jobs.removeValue(forKey: id)!
         drain()
-        for delivery in job.subscribers.values { await delivery.finish(result) }
+        for (subscriber, delivery) in job.subscribers {
+            await delivery.finish(job.cancelled.contains(subscriber) ? .failure(CancellationError()) : result)
+        }
     }
-    func cancel(_ id: UUID) { }
+    func cancel(_ id: UUID) async {
+        guard let jobID = jobs.first(where: { $0.value.subscribers[id] != nil })?.key else { return }
+        guard !jobs[jobID]!.cancelled.contains(id) else { return }
+        jobs[jobID]!.cancelled.insert(id)
+        if jobs[jobID]!.admitted == nil {
+            let delivery = jobs[jobID]!.subscribers.removeValue(forKey: id)!
+            if jobs[jobID]!.subscribers.isEmpty {
+                jobs.removeValue(forKey: jobID)
+                pending.removeAll { $0 == jobID }
+            }
+            drain()
+            await delivery.finish(.failure(CancellationError()))
+        }
+    }
     func raise(_ id: UUID, to priority: DecodePriority) {
         guard let jobID = jobs.first(where: { $0.value.subscribers[id] != nil })?.key else { return }
         jobs[jobID]!.priority = DecodePriority(rawValue: max(jobs[jobID]!.priority.rawValue, priority.rawValue))!
