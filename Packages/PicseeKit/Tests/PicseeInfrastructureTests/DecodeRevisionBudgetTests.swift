@@ -20,3 +20,25 @@ private struct ReplacingDecoder: ImageDecoding {
         try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 128))
     }
 }
+
+private struct RevisionChangingDecoder: ImageDecoding {
+    func decode(_ request: ImageDecodeRequest) throws -> DecodedImage {
+        let image = try ImageIODecoder().decode(request)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_234_567)],
+                                             ofItemAtPath: request.fileURL.path)
+        return image
+    }
+}
+@Test func decodedResultCarriesPostDecodeRevision() async throws {
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("png")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(contentsOf: fixture("alpha-gradient.png")).write(to: file)
+    let pipeline = ImageIOPipeline(decoder: RevisionChangingDecoder())
+    let request = try await pipeline.request(for: file, maximumPixelSize: 128)
+    let decoded = try await pipeline.image(for: request)
+    let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+    let expected = FileRevision(byteCount: (attributes[.size] as! NSNumber).intValue,
+                                modificationDate: Date(timeIntervalSince1970: 1_234_567))
+    #expect(decoded.revision == expected)
+    #expect(decoded.revision != request.renderKey?.revision)
+}
