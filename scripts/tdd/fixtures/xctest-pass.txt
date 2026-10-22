@@ -1,0 +1,46 @@
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--112E4EF74740DA65.txt
+[3/5] Compiling LaneTests FixtureTests.swift
+[4/5] Emitting module LaneTests
+[4/6] Write Objects.LinkFileList
+[5/6] Linking LaneFixturesPackageTests
+Build complete! (0.59s)
+Test Suite 'All tests' started at 2026-10-22 11:45:01.524.
+Test Suite 'LaneFixturesPackageTests.xctest' started at 2026-10-22 11:45:01.525.
+Test Suite 'FixtureTests' started at 2026-10-22 11:45:01.525.
+Test Case '-[LaneTests.FixtureTests test00]' started.
+Test Case '-[LaneTests.FixtureTests test00]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test01]' started.
+Test Case '-[LaneTests.FixtureTests test01]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test02]' started.
+Test Case '-[LaneTests.FixtureTests test02]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test03]' started.
+Test Case '-[LaneTests.FixtureTests test03]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test04]' started.
+Test Case '-[LaneTests.FixtureTests test04]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test05]' started.
+Test Case '-[LaneTests.FixtureTests test05]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test06]' started.
+Test Case '-[LaneTests.FixtureTests test06]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test07]' started.
+Test Case '-[LaneTests.FixtureTests test07]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test08]' started.
+Test Case '-[LaneTests.FixtureTests test08]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test09]' started.
+Test Case '-[LaneTests.FixtureTests test09]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test10]' started.
+Test Case '-[LaneTests.FixtureTests test10]' passed (0.000 seconds).
+Test Case '-[LaneTests.FixtureTests test11]' started.
+/Users/jackcheng/.picsee/herdr/gpt-imple-1/scratch/Tests/LaneTests/FixtureTests.swift:14: -[LaneTests.FixtureTests test11] : Test skipped - fixture skip
+Test Case '-[LaneTests.FixtureTests test11]' skipped (0.000 seconds).
+Test Suite 'FixtureTests' passed at 2026-10-22 11:45:01.528.
+	 Executed 12 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'LaneFixturesPackageTests.xctest' passed at 2026-10-22 11:45:01.528.
+	 Executed 12 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'All tests' passed at 2026-10-22 11:45:01.528.
+	 Executed 12 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.002 (0.004) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
