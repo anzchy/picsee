@@ -79,7 +79,9 @@ public actor DecodeAdmission {
         let subscription = subscribe(request, key: key, cost: cost, heavy: heavy, priority: priority)
         return try await withTaskCancellationHandler {
             if Task.isCancelled { await subscription.cancel() }
-            return try await subscription.value()
+            let image = try await subscription.value()
+            try Task.checkCancellation()
+            return image
         } onCancel: {
             Task { await subscription.cancel() }
         }
