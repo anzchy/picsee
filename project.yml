@@ -1,0 +1,63 @@
+name: Picsee
+options:
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  PicseeKit:
+    path: Packages/PicseeKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Apple Development"
+    DEVELOPMENT_TEAM: GRT84NAK4T
+    ENABLE_HARDENED_RUNTIME: YES
+    # Git metadata lives outside a linked worktree; only build scripts are unsandboxed.
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  PicseeApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - Resources/Picsee.entitlements
+    dependencies:
+      - package: PicseeKit
+        product: PicseeCore
+      - package: PicseeKit
+        product: PicseeApplication
+      - package: PicseeKit
+        product: PicseeInfrastructure
+      - package: PicseeKit
+        product: PicseeMacUI
+    settings:
+      base:
+        PRODUCT_NAME: Picsee
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.anzchy.picsee
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Picsee
+        CODE_SIGN_ENTITLEMENTS: App/Resources/Picsee.entitlements
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_USER_SELECTED_FILES: readonly
+    postBuildScripts:
+      - name: Stamp build Git SHA
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+        script: |
+          set -eu
+          cd "$SRCROOT"
+          sha=$(git rev-parse --short HEAD)
+          if ! git diff-index --quiet HEAD --; then
+            sha="$sha-dirty"
+          fi
+          /usr/libexec/PlistBuddy -c "Add :PicseeGitSHA string $sha" "$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+schemes:
+  Picsee:
+    build:
+      targets:
+        PicseeApp: all
+    run:
+      config: Debug
