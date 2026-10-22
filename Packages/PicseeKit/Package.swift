@@ -16,6 +16,7 @@ let package = Package(
         .target(name: "PicseeInfrastructure", dependencies: ["PicseeCore"]),
         .target(name: "PicseeMacUI", dependencies: ["PicseeCore", "PicseeApplication"]),
         .testTarget(name: "PicseeCoreTests", dependencies: ["PicseeCore"]),
+        .testTarget(name: "PicseeInfrastructureTests", dependencies: ["PicseeCore", "PicseeInfrastructure"]),
     ],
     swiftLanguageModes: [.v6]
 )
