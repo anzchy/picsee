@@ -222,7 +222,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：fit/actualPixels/zoomIn/zoomOut、open（Open…）、inspector（Show/Hide Inspector）、escape（Focus Canvas）已接路由；Space、←/→、Enter、⌘F 未实现；open 无按钮，escape 无专用按钮；字段为 Inspector 占位、非搜索；菜单、按钮、按键均真机未验。 |
+| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：fit/actualPixels/zoomIn/zoomOut、open（Open…）、inspector（Show/Hide Inspector）、escape（Focus Canvas）已接路由；Space、←/→、Enter、⌘F 未实现；open 无按钮，escape 无专用按钮；字段为 Inspector 占位、非搜索；菜单、按钮、按键与面板合成均真机未验。 |
 | CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；输入框裸键和菜单 Esc 优先级有单元测试，AppKit 菜单、SwiftUI 按钮及原生按键接线真机未验。 |
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |
