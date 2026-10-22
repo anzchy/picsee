@@ -75,9 +75,10 @@ A wrong downgrade costs one re-check. A wrong upgrade is the false claim the led
    - **Unaffected.** The change provably has no user-visible effect, such as a pure rename, a test-only
      change, or a comment. Give the reason in one line.
 6. **Integrity checks across the whole range:**
-   - **Weakened acceptance.** In the same range, a row's state or 验证 went up **and** its 怎么确认 changed.
-     This verdict is BLOCK. The ledger forbids it: acceptance changes go in a separate commit that cites
-     the user's words or an ADR.
+   - **Weakened acceptance.** In the same range, a row's state or 验证 went up **and** the acceptance
+     itself in 怎么确认 was rewritten. This verdict is BLOCK. Appending or editing `限制：` text does
+     not block; any acceptance rewrite goes in a separate commit that cites the user's words or an ADR.
+     状态升级的那次提交，可以追加或修改「限制：」文本，但不得改写「怎么确认」中的验收本身。确需改验收时，单独提交并在提交说明里引用用户原话或 ADR。
    - **Upgrade without evidence.** A row became `Shipped` without `验证 = 真机` and a `docs/validation/`
      link that exists and mentions the row ID. This verdict is BLOCK.
    - **Entry points not all verified.** A row went up to `验证 = 真机` or `Shipped`, but its 怎么确认 lists
