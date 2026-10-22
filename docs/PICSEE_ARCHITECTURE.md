@@ -313,7 +313,7 @@ AppKit WindowCoordinator 管理 NSWindow/NSPanel 生命周期、浮层、透明�
 `EditRecipe` 保存旋转、翻转、裁剪等非破坏参数。预览与导出共用变换逻辑，显示坐标先还原为方向归一后的图像像素坐标，保留显式的变换顺序；UndoManager 支持撤销。
 
 - 首发默认另存 JPEG/PNG，明确输出尺寸、质量、色彩及 metadata 策略。选择删除 metadata 时验证不残留 GPS/IPTC，不只是去掉一个 EXIF 字段。
-- 覆盖原文件属于后续写入能力：重查源修订、检查授权、临时写入、协调与替换；外部修改产生冲突时另存，不静默覆盖。首发允许推迟覆盖功能。
+- 覆盖原文件属于后续写入能力：重查源修订、检查授权、临时写入、协调与替换；外部修改产生冲突时另存，不静默覆盖。首发不提供覆盖原文件（[ADR-007](./adr/0007-save-as-by-default-no-overwrite-in-v1.md)）。
 - Finder 标签读写走独立适配器；不以 xattr 的猜测编码直接操作用户文件。
 - 删除优先系统 Trash；失败保留原文件与可重试错误。首发不自动改为永久删除，不要求通过 Finder Apple Events 获取“放回原处”能力。
 
@@ -353,12 +353,12 @@ AppKit WindowCoordinator 管理 NSWindow/NSPanel 生命周期、浮层、透明�
 | ADR | 决策 | 为什么这样选 | 何时重评 |
 |---|---|---|---|
 | [ADR-001](./adr/0001-appkit-owns-windows.md) | Swift 原生；AppKit 拥有窗口、画布与网格，SwiftUI 只做面板 | 贴近 macOS 窗口、输入与图像 API | 确定其他平台并有可共享核心时 |
-| ADR-002 | Session 隔离、服务共享 | 多窗口状态独立，避免重复解码 | 真实多窗口内存数据表明需细分服务时 |
-| ADR-003 | Task/actor 协调 + 有界 OperationQueue | 隔离同步解码并显式控制取消与并发 | 新 executor 或解码 API 带来明确收益时 |
-| ADR-004 | 文件系统真相源，版本化快照 | 开箱即用、减少导入与同步成本 | 产品转为大型资产管理库时 |
-| ADR-005 | 内存预算 + SQLite 磁盘索引 | 缓存有界、跨窗口共享、可修复 | 真实规模需要额外索引能力时 |
-| ADR-006 | sandbox 从 P0 开始，先直接分发 | 提前验证授权，保持未来渠道选择空间 | 特定功能证明与 sandbox 冲突时 |
-| ADR-007 | 默认另存，首发不要求覆盖 | 把误覆盖风险与基础浏览解耦 | 编辑需求和冲突测试成熟后 |
+| [ADR-002](./adr/0002-session-isolation-shared-services.md) | Session 隔离、服务共享 | 多窗口状态独立，避免重复解码 | 真实多窗口内存数据表明需细分服务时 |
+| [ADR-003](./adr/0003-task-actor-coordination-bounded-operation-queue.md) | Task/actor 协调 + 有界 OperationQueue | 隔离同步解码并显式控制取消与并发 | 新 executor 或解码 API 带来明确收益时 |
+| [ADR-004](./adr/0004-filesystem-source-of-truth-versioned-snapshots.md) | 文件系统真相源，版本化快照 | 开箱即用、减少导入与同步成本 | 产品转为大型资产管理库时 |
+| [ADR-005](./adr/0005-memory-budget-sqlite-disk-index.md) | 内存预算 + SQLite 磁盘索引 | 缓存有界、跨窗口共享、可修复 | 真实规模需要额外索引能力时 |
+| [ADR-006](./adr/0006-sandbox-from-p0-direct-distribution.md) | sandbox 从 P0 开始，先直接分发 | 提前验证授权，保持未来渠道选择空间 | 特定功能证明与 sandbox 冲突时 |
+| [ADR-007](./adr/0007-save-as-by-default-no-overwrite-in-v1.md) | 默认另存，首发不要求覆盖 | 把误覆盖风险与基础浏览解耦 | 编辑需求和冲突测试成熟后 |
 
 尚待 P0 验证：系统下限、签名工具链、ImageIO 格式覆盖、实际内存成本、队列参数与画布桥接。尚待产品决定但不阻塞架构草案：Intel、Mac App Store、付费模式、自动更新渠道。暂不引入 Firebase、第三方快捷键库或 Rust 来预先解决尚未出现的问题。
 
