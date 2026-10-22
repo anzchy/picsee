@@ -22,10 +22,12 @@ public struct ImageDecodeRequest: Sendable {
 }
 
 public struct DecodedImage: Sendable {
+    public let formatIdentifier: String?
     public let image: CGImage
     public let sourcePixelSize: CGSize
 
-    public init(image: CGImage, sourcePixelSize: CGSize) {
+    public init(image: CGImage, sourcePixelSize: CGSize, formatIdentifier: String? = nil) {
+        self.formatIdentifier = formatIdentifier
         self.image = image
         self.sourcePixelSize = sourcePixelSize
     }

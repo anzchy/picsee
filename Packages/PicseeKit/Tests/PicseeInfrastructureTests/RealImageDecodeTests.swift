@@ -72,5 +72,6 @@ func rgba(_ image: CGImage) throws -> [UInt8] {
         #expect(CGImageDestinationFinalize(destination))
         let decoded = try await ImageIOPipeline().image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 16))
         #expect(decoded.image.width == 16 && decoded.image.height == 8)
+        #expect(decoded.formatIdentifier == type.identifier)
     }
 }
