@@ -39,7 +39,12 @@ def process_snapshot(pid):
     before = executable(pid)
     if before is None:
         return None
-    birth = checked(['/bin/ps', '-o', 'lstart=', '-p', str(pid)])
+    try:
+        birth = checked(['/bin/ps', '-o', 'lstart=', '-p', str(pid)])
+    except RuntimeError:
+        if executable(pid) is None:
+            return None  # The process exited between path and birth reads.
+        raise
     datetime.datetime.strptime(birth, '%a %b %d %H:%M:%S %Y')
     if executable(pid) != before:
         raise RuntimeError('process identity changed while reading birth time')

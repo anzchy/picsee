@@ -41,6 +41,10 @@ class Regressions(unittest.TestCase):
                 d.cleanup(self.run)
             kill.assert_not_called()
 
+    def test_process_exit_between_path_and_birth_reads(self):
+        with patch.object(d, 'executable', side_effect=[self.exe, None]), patch.object(d, 'checked', side_effect=RuntimeError('ps process exited')):
+            self.assertIsNone(d.process_snapshot(4242))
+
     def test_missing_ambiguous_and_retired_identity_refused(self):
         for mode in ['missing', 'ambiguous', 'retired']:
             with self.subTest(mode=mode):
