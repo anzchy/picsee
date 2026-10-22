@@ -9,10 +9,6 @@ Ported from mdpro's `macos-device-test` on 2026-10-21, rewritten for a native Sw
 the structure of pstack's `create-verification-skill` (doctor, isolation, proof standards, cleanup, helpers,
 a feature map, and a proof run of the skill itself).
 
-> **Status: DRAFT.** This skill has never been run end to end, because Picsee.app doesn't exist until P0-01.
-> It stops being a draft only after §14's proof run passes. Until then, treat every command here as the
-> intended recipe, not a verified one.
-
 This is the lane of last resort: slow, and it puts a real desktop on screen. Use it only for obligations the
 automated lanes provably can't discharge. In the herdr roster it belongs to the device tester
 (`claude-imple-1`), who is never the implementer of the work under test: a `Shipped` row whose validation
@@ -59,8 +55,9 @@ the machine, chip, memory, macOS version, display and scale.
 
 ## 3. Isolation: one instance per machine
 
-Two Picsee instances can't run side by side on one machine. They share the bundle identifier, so they share
-the sandbox container, preferences and bookmarks, and macOS routes a second `open` into the first instance.
+Two Picsee instances must not be driven side by side on one machine. They share the bundle identifier, so
+they share the sandbox container, preferences and bookmarks. Plain `open` may route to an existing instance;
+`open -n` can create another, so isolation is checked before launch and the recorded PID identifies this run.
 So:
 
 - **One device run per machine at a time.** Never drive an instance this run didn't start (§5 records which
@@ -80,16 +77,20 @@ Quit the previous run's instance first (§11 cleanup kills it by its recorded PI
 
 ```bash
 export PATH=/opt/homebrew/bin:$PATH
-xcodegen generate
-DEVELOPER_DIR="$PICSEE_XCODE/Contents/Developer" \
-xcodebuild -project Picsee.xcodeproj -scheme Picsee -configuration Release \
-  -derivedDataPath build/DerivedData build > ~/.picsee/build.log 2>&1
-APP="$PWD/build/DerivedData/Build/Products/Release/Picsee.app"
+RUN_ID="$(date +%Y%m%d-%H%M%S)-<ledger-ids>"
+RUN_DIR="$HOME/.picsee/device-runs/$RUN_ID"
+scripts/device/build.sh "$RUN_DIR"
+APP="$(cat "$RUN_DIR/bundle.path")"
 ```
 
+The helper generates the project, then makes a signed **Debug** build in
+`.build/device-<run-id>/` inside this worktree. It requires committed tracked changes, refuses a running
+Picsee, records the short and full SHA and machine facts in `build.json`, and saves build output in
+`build.log`. Untracked agent rules do not dirty the build. Debug performance numbers do not count as a
+Release baseline. A Release performance run needs its own explicit build and record.
+
 The locked Xcode is **26.6, build 17F113** (decided 2026-10-22, following the Mac mini). `PICSEE_XCODE` is `/Applications/Xcode.app` on the mini and `/Applications/Xcode-26.6.app` on the MacBook, where it sits beside Xcode 27.1; picsee is never built with 27.1. Confirm `xcodebuild -version` prints `Build version 17F113` before building. Product and scheme `Picsee`, bundle identifier
-`io.github.anzchy.picsee` (decided 2026-10-21; P0-01 creates them). Run the build in the background; a cold
-Release build takes minutes. If you test a Debug build, say so in the record: it's a different binary, and
+`io.github.anzchy.picsee` (decided 2026-10-21; P0-01 creates them). Run long builds in the background and monitor `build.log`. If you test a Debug build, say so in the record: it's a different binary, and
 its performance numbers don't count.
 
 **Signing matters for the sandbox.** The sandbox and security-scoped bookmarks only work in a signed app.
@@ -103,20 +104,24 @@ bookmark and which one resolved it.
 Each run gets an ID and a run folder outside the repo. Evidence goes there and survives cleanup:
 
 ```bash
-RUN_ID="$(date +%Y%m%d-%H%M%S)-<ledger-ids>"
-RUN_DIR="$HOME/.picsee/dtrack/reports/$RUN_ID"; mkdir -p "$RUN_DIR/shots" "$RUN_DIR/fixtures"
-START=$(date '+%Y-%m-%d %H:%M:%S')
-open -n -a "$APP" "$RUN_DIR/fixtures/<fixture>"      # by absolute path, on a scratch copy (§8)
-sleep 2; pgrep -n -f "$APP/Contents/MacOS/Picsee" > "$RUN_DIR/picsee.pid"
+scripts/device/launch.sh "$RUN_DIR"
+# Records bundle.path, picsee.pid, start.txt, ready.json and app.log in RUN_DIR.
 ```
 
-`-n` forces a new instance instead of routing into a running one; §3 already guarantees none is running.
+The helper checks isolation, calls `open -n` with the absolute bundle path, finds the new PID by its exact
+executable path, and records it before checking readiness. It never picks a PID by owner name or newest
+name match. The P0 skeleton run opens no fixture; it has one empty window.
+
+For a future file-opening recipe, pass the scratch fixture through the app's normal open entry point.
 Opening a file this way is a **File Grant**: the sandboxed app can read that file without a dialog. A folder
 must become an **Access Root** through the powerbox (`NSOpenPanel`), driven with computer use. Never work
 around the powerbox: no Full Disk Access, no entitlement change, no copying files into the container.
 
-**Ready means usable, not just "a process exists":** the window is on screen showing the fixture, and the
-launch log line with the build SHA has appeared (§6). Time out after 30 s and report what was missing.
+**Ready means usable, not just "a process exists":** exactly one accessibility window titled `Picsee` is
+present, its PID has an on-screen layer-0 CGWindow, and the public launch log with the expected build SHA
+has appeared. The P0 skeleton is an empty window; future recipes also confirm their fixture is displayed.
+Time out after 30 s and report what was missing. An Automation/Accessibility failure stops immediately;
+an interactive prompt is a blocker to report, never something to dismiss automatically.
 
 **First-launch state.** To test a fresh install (no bookmarks, no preferences), the app's sandbox container
 has to go. Deleting `~/Library/Containers/io.github.anzchy.picsee` is a destructive `rm -r`: do it only when
@@ -127,20 +132,34 @@ the brief lists it as a step the user approved, on the machine named, and record
 Run this read-only check first, and again whenever anything looks off. Every line must pass; a failing line
 stops the run with that line as the reason.
 
-| Check | Command | Pass when |
-|---|---|---|
-| It's ours | `cat "$RUN_DIR/picsee.pid"`, `ps -o pid=,lstart=,comm= -p <pid>` | the PID is alive and its path is `$APP`, not `/Applications` or Xcode's build folder |
-| It's fresh | `find Packages/PicseeKit/Sources App -newer "$APP/Contents/Info.plist" -name '*.swift'` | no output (no source newer than the bundle) |
-| It's the right image | `defaults read "$APP/Contents/Info" <GitSHA key>` and `log show --start "$START" --predicate 'subsystem == "io.github.anzchy.picsee"' \| grep -i launch` | both equal `git rev-parse HEAD` of the code under test |
-| It's signed right | `codesign -dv --verbose=2 "$APP" 2>&1 \| grep TeamIdentifier` | `TeamIdentifier=GRT84NAK4T` |
-| It's alone | `pgrep -fl 'Picsee.app/Contents/MacOS/Picsee'` | exactly one line, the PID above |
-| The machine is as recorded | `system_profiler SPDisplaysDataType \| grep -E "Resolution\|UI Looks like"`, `sw_vers -productVersion` | matches the brief (and @2x for Retina rows) |
-| Fixtures are intact | `shasum -a 256` on each fixture copy | matches `TestAssets/manifest.json` |
+```bash
+scripts/device/doctor.sh "$RUN_DIR" --expected-sha "$(git rev-parse --short HEAD)"
+```
 
-The SHA line can't pass until P0-01 embeds the git SHA in `Info.plist` and logs it at launch through `Logger`
-as a public field. Until then, record "build identity: not available" and rely on the PID, path and `lstart`
-lines. Why the SHA check matters: macOS routes `open` into an already-running instance, and replacing a bundle
-on disk doesn't replace the process running it, so `ps` can show the right path while the old image runs.
+The helper prints exactly one `PASS <check>` or `FAIL <check> — <why>` line for each check below, saves the
+output as `doctor.txt`, and exits non-zero if any fail. `doctor-input.json` keeps the observations.
+
+| Check | Pass when |
+|---|---|
+| `build-sha` | `Info.plist`'s `PicseeGitSHA` equals the expected short SHA (defaults to this worktree's HEAD) |
+| `bundle-id` | `CFBundleIdentifier` is `io.github.anzchy.picsee` |
+| `signature-team` | codesign reports `TeamIdentifier=GRT84NAK4T` |
+| `signature-valid` | `codesign --verify --deep --strict` succeeds |
+| `sandbox` | the signed `com.apple.security.app-sandbox` entitlement is true (XML or macOS 27's typed dump) |
+| `process-bundle` | recorded PID's executable is exactly the recorded bundle's `Contents/MacOS/Picsee` |
+| `fresh-sources` | no Swift source in `App/` or `Packages/PicseeKit/Sources/` is newer than the bundle Info.plist |
+| `single-instance` | the recorded PID is the only running process named Picsee |
+| `window` | System Events, addressed by unix PID, reports exactly one window titled `Picsee` |
+| `launch-log` | this PID's unified log since `start.txt` contains `Picsee launch git=<expected SHA>`, unredacted |
+| `machine` | model, chip, memory, macOS and main-display backing scale match `build.json`; check these against the brief too |
+| `fixtures` | no fixtures for a skeleton run, or all fixture files match the run's `fixtures.sha256.json` |
+
+For an image recipe, first verify the copies against `TestAssets/manifest.json`, then record the verified
+relative paths and SHA-256 values as a JSON object in `fixtures.sha256.json`. Missing hashes with nonempty
+fixtures fail. This fixture path has not been exercised by the skeleton proof.
+
+The SHA in both the signed plist and the live process log matters: replacing a bundle on disk does not
+replace an already-running image. A private or missing SHA never passes.
 
 ## 7. Drive
 
@@ -208,8 +227,20 @@ logging defect to report, not a reason to guess.
 
 ### Screenshots
 
-Prefer `zoom` on the region of interest over a full screenshot: it's more readable and exposes less of the
-desktop. Screenshots go to `$RUN_DIR/shots/`, **never into the repo**. The repo is public.
+Capture the window, not a screen rectangle: a terminal can cover Picsee while a rectangle capture silently
+records the terminal. The helper selects the on-screen layer-0 window by this run's PID and calls
+`screencapture -l<CGWindowID> -o`, preserving native backing pixels without the shadow.
+
+```bash
+scripts/device/shot.sh "$RUN_DIR" P0-tooling-native-window
+sips -g pixelWidth -g pixelHeight "$RUN_DIR/shots/P0-tooling-native-window.png"
+```
+
+Screen Recording is preflighted without requesting or changing permission. If missing, the helper prints
+`FAIL` naming Screen Recording and exits non-zero. A temporary capture is decoded and sampled for visible
+pixels; a black, transparent or empty result is rejected and removed before publishing the PNG. Existing
+artifacts are never overwritten. The @2x MacBook proof is 960×672 pt → 1920×1344 px. Screenshots go to
+`$RUN_DIR/shots/`, **never into the repo**. The repo is public.
 
 ## 11. Cleanup
 
@@ -217,17 +248,17 @@ Kill what this run started, by its recorded PID. Never by process name: `pkill -
 user's own copy.
 
 ```bash
-kill "$(cat "$RUN_DIR/picsee.pid")"; sleep 1
-pgrep -fl 'Picsee.app/Contents/MacOS/Picsee' || echo "no Picsee left running"
-rm -rf "$RUN_DIR/fixtures"                       # scratch copies only
-ls "$RUN_DIR/shots" "$RUN_DIR/app.log"          # the evidence must still be here
+scripts/device/cleanup.sh "$RUN_DIR"
+ls "$RUN_DIR/shots" "$RUN_DIR/app.log" "$RUN_DIR/doctor.txt"
 ```
 
-- Cleanup removes the instance and the scratch copies, **never the evidence**: `app.log`, `shots/` and the
-  report stay in `$RUN_DIR`.
+- The helper checks the PID's executable path is inside the recorded bundle's `Contents/MacOS/`, then
+  sends SIGTERM to that PID only. A path mismatch refuses cleanup; an already-exited PID is reported.
+- No process-name kill and no escalation to SIGKILL. If SIGTERM does not finish within five seconds,
+  report the failure. Never kill an instance this run did not start.
+- Evidence and scratch copies remain in the run folder. No recursive deletion is part of cleanup.
 - Restore the sandbox container only if the brief changed it, and only as the brief says.
-- Run cleanup after a failed or aborted run too, so a broken attempt doesn't leave an instance that the next
-  run would mistake for its own.
+- Run cleanup after a failed or aborted run too, so a broken attempt does not contaminate the next run.
 
 ## 12. The verdict table
 
@@ -248,9 +279,12 @@ Every run produces one row per criterion and entry point, keyed by ledger row ID
 
 ## 13. Privacy and safety
 
-- **Request every app in one `request_access` call, as the run's first computer-use step**, listing only what
-  the brief needs (Picsee, plus e.g. Finder for drag-in). Grants last only for the session, and each run
-  starts with `/clear`.
+- **When the computer-use provider offers `request_access`, request every required app in one call as its
+  first step**, listing only what the brief needs. Start a fresh session for an independent acceptance.
+  The shell-only P0 helper proof uses existing terminal Automation/Accessibility and Screen Recording
+  grants; it does not manufacture a `request_access` call on a provider that has no such API.
+- If an interactive permission prompt blocks a step, stop and report the question. Do not change privacy
+  settings or click “Always allow” for anything other than Picsee.
 - Take the minimum screenshots needed. Never save one into the repo.
 - **Never change system, privacy or security settings** to unblock a test, and never click a web link.
 - **Menu-bar utilities** may own menu-bar coordinates and block clicks there. Don't request access to them;
@@ -263,22 +297,56 @@ Every run produces one row per criterion and entry point, keyed by ledger row ID
 
 ## 14. Proving this skill (do once, then after big changes)
 
-The first time Picsee.app can be built (after P0-01), run this skill end to end once: build, launch, doctor,
-drive **one** feature recipe, collect evidence, clean up, then confirm the evidence still exists in `$RUN_DIR`.
-Fix whatever fails, running cleanup after every failed attempt. Then:
+Run build → launch → doctor → one observable smoke action → evidence → cleanup. Fix a helper defect with a
+failing regression test, clean up each failed attempt, then rerun the whole sequence. Preserve explicit
+NOT VERIFIED entries for features the skeleton cannot exercise.
 
-- remove the DRAFT note at the top, and record the proof run's date, machine and SHA here;
-- list anything the proof run skipped (e.g. it ran on the MacBook, so the mini's `picsee-dtrack` path is still
-  unproven) — those steps stay unverified until a run covers them.
+**Proof run: 2026-10-22**, MacBook Pro M4, 24 GiB, macOS 27.0.1, internal Retina @2x, Xcode 26.6 (17F113),
+signed Debug. Implementation SHA `fd1c45c`; run `20261022-issue4-proof-2` under
+`~/.picsee/device-runs/`. All twelve doctor checks passed, including signed plist and public live-log SHA.
+`size.sh` changed 960×672 to 800×600 pt; a separate System Events read confirmed 800×600, then the helper
+restored 960×672. Window-only capture was 1920×1344 px and visually showed the Picsee skeleton. Cleanup
+terminated only the recorded PID and left the log, doctor output and PNG. The final committed helper/skill
+state is rerun as `20261022-issue4-final`; its exact SHA and transcript are in that run's `build.json` and
+`transcript.txt` and the issue #4 implementor handoff. This proves the helper workflow, not feature-ledger
+acceptance; the delegator independently reruns it before writing a validation record.
 
-Rerun the proof after changes to the build, signing, launch or doctor sections.
+Still **NOT VERIFIED**: Mac mini `picsee-dtrack`, XCUITest, and all `features/` recipes (the skeleton has no
+image commands). On the mini, signed builds must run inside the user-owned `picsee-dtrack` tmux session;
+direct SSH signing fails with `errSecInternalComponent`. Also unproven: keyboard helpers, native Escape,
+fixture-hash runs, bookmark restore and the other future feature checks. No performance measurements.
+
+Rerun the proof after changes to build, signing, launch, doctor or capture.
 
 ## 15. Helpers
 
-Planned, not yet written (they need Picsee.app to exist): `scripts/device/build.sh`, `launch.sh`, `doctor.sh`
-and `cleanup.sh`, each wrapping the matching section above and printing one PASS/FAIL line per check. When
-they're added, they must be executable, and this section must show how to call each one. Until then the
-commands in §4–§11 are the reference.
+Run from the worktree root. Requires Python 3, Node (tests only), macOS tools, XcodeGen on PATH and the
+locked Xcode. `PICSEE_XCODE` overrides the Xcode application path, never the required build version.
+
+```bash
+export PATH=/opt/homebrew/bin:$PATH
+RUN_DIR="$HOME/.picsee/device-runs/$(date +%Y%m%d-%H%M%S)-<ledger-ids>"
+scripts/device/build.sh "$RUN_DIR"
+scripts/device/launch.sh "$RUN_DIR"
+scripts/device/doctor.sh "$RUN_DIR" --expected-sha "$(git rev-parse --short HEAD)"
+scripts/device/shot.sh "$RUN_DIR" <ledger-id>-<entry-point>-<state>
+scripts/device/size.sh "$RUN_DIR" 800 600       # points, prints the resulting size
+scripts/device/key.sh "$RUN_DIR" o command   # example only; needs an implemented command
+scripts/device/kc.sh "$RUN_DIR" 53           # example only; Escape remains unverified
+scripts/device/cleanup.sh "$RUN_DIR"
+node --test scripts/device/tests/device.test.cjs
+```
+
+`winid.js` can also be called as `osascript -l JavaScript scripts/device/winid.js <pid>`; its tab-separated
+columns are window ID, PID, layer, width and height in points, and title. Selection ignores owner names.
+The helpers copied from mdpro `scripts/redesign/device/` at `9f133f1d` were committed unchanged first,
+then adapted locally; no mdpro checkout is needed to run them.
+
+Offline doctor contract tests use `scripts/device/doctor.sh --fixture <observations.json>`; they test
+verdict formatting and non-zero failures and do not constitute device evidence. Real doctor input lives
+in `doctor-input.json`. The test runner uses harmless copied sleep processes and retains its artifacts
+under `~/.picsee/device-runs/tests-*`. Run evidence stays outside the worktree. Build artifacts remain
+inside `.build/device-<run-id>/`. The heavy-lock integration is a TODO for issue #3.
 
 ## 16. Recording the result
 
@@ -312,7 +380,7 @@ commands in §4–§11 are the reference.
 [ ] Built the .app with the locked Xcode, signed by GRT84NAK4T (§4)
 [ ] Launched by absolute path with -n; PID recorded; window ready (§5)
 [ ] Doctor passed, every line (§6)
-[ ] One up-front request_access listing every app the run needs (§13)
+[ ] Provider app grants or existing shell permissions confirmed; no privacy changes (§13)
 [ ] Followed the feature recipe; every listed entry point driven (§7, §9)
 [ ] Persistence and writes checked through a second view (§9)
 [ ] Log window opened with a start time before interacting (§10)
