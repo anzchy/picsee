@@ -99,3 +99,38 @@ private struct FailingDecoder: ImageDecoding {
     executor.runFirst(); _ = try await prefetch.value()
     #expect(await admission.activity().running == 0)
 }
+
+@Test func controlledExecutorMidDecodeCancellationWaitsForRealReturn() async throws {
+    let executor = ControlledExecutor()
+    let decoder = BlockingDecoder()
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4), executor: executor, decoder: decoder)
+    let consumer = await admission.subscribe(tinyRequest, key: decodeKey(60), cost: 4, heavy: true, priority: .current)
+    // The fake controls dispatch; the decoder controls its real return independently.
+    DispatchQueue.global().async { executor.runFirst() }
+    var iterator = decoder.started.makeAsyncIterator()
+    _ = await iterator.next()
+    await consumer.cancel()
+    #expect(await admission.activity().reservedBytes == 4)
+    #expect(await admission.activity().running == 1)
+    decoder.gate.signal()
+    var resumes = 0
+    do { _ = try await consumer.value(); Issue.record("cancelled decode succeeded") }
+    catch { resumes += 1; #expect(error is CancellationError) }
+    #expect(resumes == 1)
+    #expect(await admission.activity().running == 0)
+}
+
+@Test func cancellingAllQueuedConsumersAllowsSameKeyToBeRegisteredAgain() async throws {
+    let executor = ControlledExecutor()
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4), executor: executor, decoder: TinyDecoder())
+    let current = await admission.subscribe(tinyRequest, key: decodeKey(61), cost: 4, heavy: true, priority: .current)
+    let a = await admission.subscribe(tinyRequest, key: decodeKey(62), cost: 4, heavy: true, priority: .visible)
+    let b = await admission.subscribe(tinyRequest, key: decodeKey(62), cost: 4, heavy: true, priority: .current)
+    await a.cancel(); await expectCancelled(a)
+    await b.cancel(); await expectCancelled(b)
+    #expect(await admission.activity().waiting == 0)
+    let replacement = await admission.subscribe(tinyRequest, key: decodeKey(62), cost: 4, heavy: true, priority: .current)
+    executor.runFirst(); _ = try await current.value()
+    executor.runFirst(); _ = try await replacement.value()
+    #expect(await admission.activity().reservedBytes == 0)
+}
