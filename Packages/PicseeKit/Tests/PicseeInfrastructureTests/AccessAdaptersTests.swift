@@ -1,0 +1,43 @@
+import Foundation
+import Testing
+import PicseeCore
+import PicseeInfrastructure
+
+@Test func accessSiblingListingSkipsHiddenNestedAndOutsideLinks() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    let root = base.appendingPathComponent("root")
+    let nested = root.appendingPathComponent("nested")
+    try fm.createDirectory(at: nested, withIntermediateDirectories: true)
+    for name in ["image10.jpg", "image2.png", ".hidden.jpg", "notes.txt"] {
+        try Data().write(to: root.appendingPathComponent(name))
+    }
+    try Data().write(to: nested.appendingPathComponent("nested.jpg"))
+    let outside = base.appendingPathComponent("outside.jpg")
+    try Data().write(to: outside)
+    try fm.createSymbolicLink(at: root.appendingPathComponent("escape.jpg"), withDestinationURL: outside)
+    try fm.createSymbolicLink(at: root.appendingPathComponent("inside.jpg"), withDestinationURL: root.appendingPathComponent("image2.png"))
+    try fm.createSymbolicLink(at: root.appendingPathComponent("outside-folder"), withDestinationURL: base)
+    let lister = SiblingLister()
+    let names = try await lister.images(in: root, root: root).map(\.lastPathComponent).sorted()
+    #expect(names == ["image10.jpg", "image2.png", "inside.jpg"])
+    await #expect(throws: FileAccessError.outsideRoot) { try await lister.images(in: base, root: root) }
+}
+
+@Test func accessSystemAdapterCreatesAndResolvesRealBookmark() throws {
+    let fm = FileManager.default
+    let folder = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: folder) }
+    let adapter = SystemSecurityScope()
+    let bookmark = try adapter.create(for: folder)
+    #expect(!bookmark.isEmpty)
+    let result = try adapter.resolve(bookmark)
+    #expect(result.url.resolvingSymlinksInPath().path == folder.resolvingSymlinksInPath().path)
+    #expect(!result.stale)
+    // Unsandboxed execution exercises Foundation forwarding, not powerbox permission or cross-signature restore.
+    let started = adapter.start(result.url)
+    if started { adapter.stop(result.url) }
+    #expect(throws: (any Error).self) { try adapter.resolve(Data("broken".utf8)) }
+}
