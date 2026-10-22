@@ -70,7 +70,18 @@ npm run preview:prototype        # 浏览器原型，http://127.0.0.1:4311
 npm run preview:states           # 20 页状态稿，http://127.0.0.1:4313
 ```
 
-构建、测试、`ledger:check` 的命令在 P0-01 建好工程后补到这里。在那之前，不要编造 `xcodebuild` 或 `swift test` 的调用来声称“已通过”。
+原生工程使用 Xcode 26.6（17F113），先生成再构建；产物留在当前 worktree：
+
+```sh
+xcodegen generate
+swift test --package-path Packages/PicseeKit
+xcodebuild build -scheme Picsee -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -derivedDataPath .build/dd-ci
+# 本机手动签名（Apple Development，团队 GRT84NAK4T）并启动
+xcodebuild build -scheme Picsee -destination 'platform=macOS' -derivedDataPath .build/dd-signed
+open -n .build/dd-signed/Build/Products/Debug/Picsee.app
+```
+
+`*.xcodeproj` 由 `project.yml` 生成，不入库。`ledger:check` / `ledger:build` 尚未建立。
 
 ## 必须遵守的规则
 
