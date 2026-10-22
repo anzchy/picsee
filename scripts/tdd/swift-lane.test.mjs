@@ -43,6 +43,9 @@ for (const [fixture, code, expected, kind] of [
   ['swift-fail',1,{total:3,failed:1,passed:1,skipped:1},'assertion-failure'],
   ['xctest-pass',0,{total:12,failed:0,passed:11,skipped:1},'green'],
   ['xctest-fail',1,{total:12,failed:1,passed:10,skipped:1},'assertion-failure'],
+  ['xctest-two-assertions',1,{total:1,failed:1,passed:0,skipped:0},'assertion-failure'],
+  ['swift-crash-name-pass',0,{total:1,failed:0,passed:1,skipped:0},'green'],
+  ['swift-crash-name-fail',1,{total:1,failed:1,passed:0,skipped:0},'assertion-failure'],
 ]) {
   test(`${fixture}: counted once, classified ${kind} by real plugin`, () => {
     const r = run(fixture,code,{stderr:fixture.startsWith('xctest')});
@@ -120,4 +123,12 @@ test('both discovery probes share the heavy lock', () => {
   const probes=config.lanes.map(l=>l.probeCommand);
   assert.equal(probes.length,2);
   assert.ok(probes.every(command=>command.startsWith('scripts/heavy-lock.sh swift test ')));
+});
+
+test('crash-related test name and assertion message on stderr remain assertion RED', () => {
+  const r=run('swift-crash-name-fail',1,{stderr:true});
+  assert.equal(r.status,1,r.stderr);
+  const counts=exec.parseCounts(r.stdout,r.stderr);
+  assert.deepEqual(counts,{total:1,failed:1,passed:0,skipped:0});
+  assert.equal(classifyRedRun({status:exec.classify(r.status,r.stdout,r.stderr),testCounts:counts}).kind,'assertion-failure');
 });

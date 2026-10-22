@@ -25,8 +25,23 @@ final class BCrashTests: XCTestCase {
     func testSecond() { fatalError("intentional fixture trap") }
 }
 """
+multi_assertion = """import XCTest
+final class FixtureTests: XCTestCase {
+    func testTwoFailures() {
+        XCTAssertEqual(1, 0)
+        XCTAssertEqual(2, 0)
+    }
+}
+"""
+crash_name = """import Testing
+@Test("does not crash") func benignName() {
+    #expect(1 == VALUE, "Crash recovery: Fatal error: and error: Exited with signal code 5 are assertion text")
+}
+"""
 with (h/'fixture-capture.txt').open('w') as log:
- for name,source in [('swift-pass',swift.replace('VALUE','1').replace('#expect(2 == 1)','#expect(2 == 2)')),('swift-fail',swift.replace('VALUE','0')),('compile-fail',swift.replace('VALUE','missingFixtureSymbol')),('xctest-fail',xct.replace('VALUE','0')),('xctest-pass',xct.replace('VALUE','1')),('swift-duplicate',duplicate),('xctest-partial-crash',crash)]:
+ for name,source in [('swift-pass',swift.replace('VALUE','1').replace('#expect(2 == 1)','#expect(2 == 2)')),('swift-fail',swift.replace('VALUE','0')),('compile-fail',swift.replace('VALUE','missingFixtureSymbol')),('xctest-fail',xct.replace('VALUE','0')),('xctest-pass',xct.replace('VALUE','1')),('swift-duplicate',duplicate),('xctest-partial-crash',crash),('xctest-two-assertions',multi_assertion),('swift-crash-name-pass',crash_name.replace('VALUE','1')),('swift-crash-name-fail',crash_name.replace('VALUE','0'))]:
+  if len(sys.argv) > 2 and name not in sys.argv[2:]:
+   continue
   t.write_text(source)
   (h/(name+'.swift')).write_text(source)
   cmd=['swift','test','--package-path',str(s)]

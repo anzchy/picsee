@@ -1,0 +1,19 @@
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--112E4EF74740DA65.txt
+[3/5] Emitting module LaneTests
+[4/5] Compiling LaneTests FixtureTests.swift
+[4/6] Write Objects.LinkFileList
+[5/6] Linking LaneFixturesPackageTests
+Build complete! (0.56s)
+Test Suite 'All tests' started at 2026-10-22 12:32:14.253.
+Test Suite 'All tests' passed at 2026-10-22 12:32:14.254.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Test "does not crash" started.
+✘ Test "does not crash" recorded an issue at FixtureTests.swift:3:5: Expectation failed: 1 == 0
+↳ Crash recovery: Fatal error: and error: Exited with signal code 5 are assertion text
+✘ Test "does not crash" failed after 0.001 seconds with 1 issue.
+✘ Test run with 1 test in 0 suites failed after 0.001 seconds with 1 issue.
