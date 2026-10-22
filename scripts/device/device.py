@@ -205,13 +205,13 @@ def build(run):
     print(f'PASS build bundle={app} git={sha}')
 
 def launch(run):
+    if (run / 'process.json').exists() or (run / 'retired').exists():
+        raise RuntimeError('run already has an ownership record; use a new run directory')
     if running():
         raise RuntimeError('another Picsee is running; ask its owner to quit it')
     app = Path((run / 'bundle.path').read_text().strip()).resolve()
     sha = json.loads((run / 'build.json').read_text())['sha']
     (run / 'start.txt').write_text(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    if (run / 'process.json').exists() or (run / 'retired').exists():
-        raise RuntimeError('run already has an ownership record; use a new run directory')
     checked(['/usr/bin/open', '-n', app])
     deadline = time.monotonic() + 30
     missing = 'process'
@@ -353,9 +353,26 @@ def doctor(run, expected=None, fixture=None):
         data = dict(errors={name: str(e) for name in CHECKS})
         lines, passed = verdicts(data)
     output = '\n'.join(lines) + '\n'
+    print(output, end='', flush=True)
     if run:
-        atomic_text(run / 'doctor.txt', output)
-    print(output, end='')
+        report = run / 'doctor.txt'
+        try:
+            atomic_text(report, output)
+        except Exception as e:
+            status = 'no current report saved'
+            try:
+                if report.exists():
+                    os.replace(report, run / 'doctor.stale.txt')
+                    status = 'previous report moved to doctor.stale.txt (unusable)'
+            except OSError:
+                try:
+                    report.unlink()
+                    status = 'previous report removed'
+                except OSError:
+                    status = 'existing doctor.txt is STALE/UNUSABLE; storage prevents invalidation'
+            why = ' '.join(str(e).split())
+            print(f'FAIL report-write — {why}; {status}')
+            return 1
     return 0 if passed else 1
 
 def main():

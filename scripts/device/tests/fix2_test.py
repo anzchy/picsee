@@ -30,9 +30,10 @@ class RoundTwo(unittest.TestCase):
                     log='Picsee launch git=abcdefg', machineMatches=True, fixturesIntact=True)
         old = self.run / 'doctor.txt'
         old.write_text('PASS stale previous report\n')
+        observed_line_counts = []
         with contextlib.redirect_stdout(io.StringIO()) as output:
             def fail_write(path, value):
-                self.assertEqual(len(output.getvalue().splitlines()), 12)
+                observed_line_counts.append(len(output.getvalue().splitlines()))
                 raise OSError(errno.ENOSPC, 'No space left on device')
             with patch.object(d, 'collect', return_value=data), patch.object(d, 'atomic_text', side_effect=fail_write), patch.object(sys, 'argv', ['device.py','doctor',str(self.run),'--expected-sha','abcdefg']):
                 result = d.main()
@@ -40,6 +41,7 @@ class RoundTwo(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertEqual(lines[:12], ['PASS ' + check for check in d.CHECKS])
         self.assertEqual(len(lines), 13)
+        self.assertEqual(observed_line_counts, [12])
         self.assertTrue(lines[12].startswith('FAIL report-write — '))
         self.assertIn('No space left', lines[12])
         self.assertFalse(old.exists())
