@@ -70,7 +70,7 @@ NOT VERIFIED。mini 上由 herdr 会话里的 Claude pane 执行；Codex pane �
 
 ### ② 写 brief
 
-brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<ID>.md`（不进仓库）。至少写这些：
+brief 是给验收会话的任务单，放在 `~/.picsee/device-briefs/brief-<日期>-<ID>.md`（不进仓库）。至少写这些：
 
 ```markdown
 # Brief 2026-11-05 VIEW-02-03
@@ -96,7 +96,7 @@ brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<
 开始前确认 mdpro 的 `dtrack` tmux 会话空闲；它驱动同一块屏幕，验收过程不要向它发命令或触碰它。然后输入：
 
 ```text
-/macos-device-test 读 ~/.picsee/dtrack/brief-2026-11-05-VIEW-02-03.md，按里面写的执行，报告写到 brief 指定的位置。brief 说需要我动手的时候停下来叫我。
+/macos-device-test 读 ~/.picsee/device-briefs/brief-2026-11-05-VIEW-02-03.md，按里面写的执行，报告写到 brief 指定的位置。brief 说需要我动手的时候停下来叫我。
 ```
 
 会话会按技能顺序做：选机器 → 检查没有别的 Picsee 在跑 → 用锁定的 Xcode 构建并检查签名团队 →
