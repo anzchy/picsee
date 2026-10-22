@@ -8,7 +8,7 @@ import PicseeMacUI
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var windowController: NSWindowController?
+    private var windowController: CanvasWindowController?
     private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "lifecycle")
 
     static func main() {
@@ -25,17 +25,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sha = Bundle.main.object(forInfoDictionaryKey: "PicseeGitSHA") as? String ?? "unknown"
         logger.notice("Picsee launch git=\(sha, privacy: .public)")
 
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Picsee"
-        window.center()
-        let controller = NSWindowController(window: window)
-        windowController = controller
-        controller.showWindow(nil)
+        viewer().showWindow(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let file = urls.first(where: { $0.isFileURL }) else { return }
+        viewer().open(file)
+        application.activate(ignoringOtherApps: true)
+    }
+
+    private func viewer() -> CanvasWindowController {
+        if let windowController { return windowController }
+        let controller = CanvasWindowController(pipeline: ImageIOPipeline())
+        windowController = controller
+        return controller
     }
 }
