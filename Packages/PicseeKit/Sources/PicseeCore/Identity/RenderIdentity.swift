@@ -13,8 +13,10 @@ public struct FileRevision: Hashable, Sendable {
 public struct RenderKey: Hashable, Sendable {
     public let itemID: ItemID
     public let revision: FileRevision
+    public let isPreview: Bool
     public let maximumPixelSize: Int
-    public init(itemID: ItemID, revision: FileRevision, maximumPixelSize: Int) {
+    public init(itemID: ItemID, revision: FileRevision, maximumPixelSize: Int, isPreview: Bool = false) {
+        self.isPreview = isPreview
         self.itemID = itemID
         self.revision = revision
         self.maximumPixelSize = maximumPixelSize

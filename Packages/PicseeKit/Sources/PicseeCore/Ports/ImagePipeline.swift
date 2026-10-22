@@ -4,6 +4,7 @@ import Foundation
 public enum DecodePriority: Int, Sendable { case prefetch, visible, current }
 
 public struct ImageDecodeRequest: Sendable {
+    public let isPreview: Bool
     /// Pixel allocation ceiling for this admitted decode, rechecked against its own header.
     public let sourceByteBudget: Int?
     public let renderKey: RenderKey?
@@ -12,9 +13,12 @@ public struct ImageDecodeRequest: Sendable {
     /// Longest edge in pixels; callers convert viewport points using backing scale.
     public let maximumPixelSize: Int
 
-    public init(fileURL: URL, maximumPixelSize: Int, renderKey: RenderKey? = nil, priority: DecodePriority = .current, sourceByteBudget: Int? = nil) {
+    public init(fileURL: URL, maximumPixelSize: Int, renderKey: RenderKey? = nil, priority: DecodePriority = .current, sourceByteBudget: Int? = nil, isPreview: Bool = false) {
+        self.isPreview = isPreview
         self.sourceByteBudget = sourceByteBudget
-        self.renderKey = renderKey
+        // The render identity includes the mode because embedded previews and image-derived pixels differ.
+        self.renderKey = renderKey.map { RenderKey(itemID: $0.itemID, revision: $0.revision,
+            maximumPixelSize: $0.maximumPixelSize, isPreview: isPreview) }
         self.priority = priority
         self.fileURL = fileURL
         self.maximumPixelSize = maximumPixelSize

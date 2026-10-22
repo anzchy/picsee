@@ -22,7 +22,7 @@ public struct ImageIODecoder: ImageDecoding {
             throw ImageDecodeError.invalidRequest
         }
         var options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: request.maximumPixelSize > CanvasDecodePolicy.previewMaximumPixelSize,
+            kCGImageSourceCreateThumbnailFromImageAlways: !request.isPreview,
             kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceShouldCacheImmediately: true,
@@ -75,12 +75,12 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
     public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
         try Task.checkCancellation()
         let header = try await header(request)
-        let key = await admission.key(for: request.fileURL, revision: header.revision, maximumPixelSize: request.maximumPixelSize)
+        let key = await admission.key(for: request.fileURL, revision: header.revision, maximumPixelSize: request.maximumPixelSize, isPreview: request.isPreview)
         // An explicit request revision must still match at the last predecode check.
         if let requested = request.renderKey, requested != key { throw ImageDecodeError.invalidRequest }
         let cost = try DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget)
         let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
-            renderKey: key, priority: request.priority, sourceByteBudget: cost)
+            renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview)
         return try await admission.image(admittedRequest, key: key, cost: cost,
             heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
     }

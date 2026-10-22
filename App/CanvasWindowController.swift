@@ -13,7 +13,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var fileURL: URL?
     private var generation = UUID()
     private var desiredMaximum = 0
-    private var completedMaximum = 0
+    private var decodeProgress = CanvasDecodeProgress()
     private var decoding = false
     private var decodeTask: Task<Void, Never>?
     private let binding = UUID()
@@ -90,7 +90,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         generation = UUID()
         fileURL = url
         currentKey = nil
-        completedMaximum = 0
+        decodeProgress = CanvasDecodeProgress()
         let scale = window?.backingScaleFactor ?? 1
         desiredMaximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
         canvas.beginOpening()
@@ -111,17 +111,19 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func decodeIfNeeded() {
-        guard !decoding, let url = fileURL, desiredMaximum > completedMaximum else { return }
+        guard !decoding, let url = fileURL, let maximum = decodeProgress.nextMaximum(desired: desiredMaximum) else { return }
         decoding = true
         let token = PresentationToken(binding: binding, generation: generation)
-        let maximum = completedMaximum == 0 ? min(CanvasDecodePolicy.previewMaximumPixelSize, desiredMaximum) : desiredMaximum
+        let isPreview = !decodeProgress.previewCompleted
         decodeTask = Task { [self] in
             let scoped = url.startAccessingSecurityScopedResource()
             // A running cancellation returns only after the synchronous decoder returns.
             // This keeps this consumer's File Grant alive without inventing #8's leases.
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
-                let request = try await pipeline.request(for: url, maximumPixelSize: maximum)
+                let prepared = try await pipeline.request(for: url, maximumPixelSize: maximum)
+                let request = ImageDecodeRequest(fileURL: url, maximumPixelSize: maximum,
+                    renderKey: prepared.renderKey, isPreview: isPreview)
                 try Task.checkCancellation()
                 guard token.generation == generation else { return }
                 currentKey = request.renderKey
@@ -133,7 +135,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     if current.accepts(key: key, expected: expected, token: token) {
                         try Task.checkCancellation()
                         guard token == PresentationToken(binding: binding, generation: generation) else { return }
-                        completedMaximum = maximum
+                        decodeProgress.completed(image, isPreview: isPreview)
                         canvas.install(image)
                     } else if token == current {
                         canvas.showFailure(); desiredMaximum = 0
