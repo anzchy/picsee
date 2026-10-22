@@ -1,6 +1,8 @@
 import AppKit
 import os
 import PicseeCore
+import PicseeApplication
+import SwiftUI
 
 /// One P0 window and one in-flight request. New intent coalesces behind it.
 /// The admission actor, shared budgets and full cancellation belong to P0-05/06.
@@ -15,9 +17,15 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var completedMaximum = 0
     private var decoding = false
 
+    private let inspector = InspectorModel()
+    private let router = CommandRouter()
+    private var inspectorHost: NSHostingView<InspectorPlaceholder>!
+    var onOpenRequest: (() -> Void)?
+    var menuTracking: () -> Bool = { false }
+
     init(pipeline: any ImagePipeline) {
         self.pipeline = pipeline
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
+        let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "Picsee"
@@ -25,10 +33,36 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         window.center()
         super.init(window: window)
         window.delegate = self
-        canvas.frame = window.contentView!.bounds
+        let content = NSView(frame: window.contentView!.bounds)
+        canvas.frame = content.bounds
         canvas.autoresizingMask = [.width, .height]
-        window.contentView = canvas
+        canvas.focusRingType = .exterior
+        canvas.setAccessibilityIdentifier("viewer.canvas")
+        content.addSubview(canvas)
+        inspectorHost = NSHostingView(rootView: InspectorPlaceholder(model: inspector) { [weak self] id in
+            self?.route(id, from: .button)
+        })
+        inspectorHost.frame = NSRect(x: content.bounds.width - 272, y: 0, width: 272, height: content.bounds.height)
+        inspectorHost.autoresizingMask = [.minXMargin, .height]
+        inspectorHost.isHidden = true
+        content.addSubview(inspectorHost)
+        window.contentView = content
         window.makeFirstResponder(canvas)
+        window.preserveResponder = { [weak self] responder in
+            guard let self else { return false }
+            return responder === self.canvas && self.inspector.state.focus != .canvas
+        }
+        window.didChangeResponder = { [weak self] in
+            guard let self else { return }
+            self.inspector.state.updateFocus(self.focusContext)
+        }
+        window.consumeKey = { [weak self] event in self?.consumePanelKey(event) ?? false }
+        canvas.onCanvasFocus = { [weak self] in self?.inspector.state.updateFocus(.canvas) }
+        canvas.onTab = { [weak self] reverse in
+            self?.inspector.state.tab(reverse: reverse)
+            self?.applyFocus()
+        }
+        canvas.onCommand = { [weak self] id in self?.route(id, from: .key) ?? false }
         canvas.onResolutionNeeded = { [weak self] maximum in
             self?.desiredMaximum = maximum
             self?.decodeIfNeeded()
@@ -81,5 +115,57 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             decoding = false
             decodeIfNeeded()
         }
+    }
+}
+
+// The UI adapter resolves its own window; no global current-image state.
+extension CanvasWindowController: WindowCommandTarget {
+    var inspectorVisible: Bool { inspector.state.isVisible }
+    private var focusContext: FocusContext {
+        if window?.firstResponder is NSTextInputClient { return .textInput }
+        return window?.firstResponder === canvas ? .canvas : .panel
+    }
+    func isEnabled(_ command: CommandID) -> Bool {
+        switch command {
+        case .fit, .actualPixels, .zoomIn, .zoomOut: canvas.hasImage
+        case .escape: inspectorVisible && focusContext != .canvas
+        case .open, .inspector: true
+        default: false
+        }
+    }
+    @discardableResult
+    func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
+        inspector.state.updateFocus(focusContext)
+        return router.route(command, from: entry, focus: focusContext, menuTracking: menuTracking(), to: self)
+    }
+    func perform(_ command: CommandID) {
+        switch command {
+        case .open: onOpenRequest?()
+        case .inspector:
+            inspector.state.setVisible(!inspectorVisible)
+            inspector.hasImage = canvas.hasImage
+            inspectorHost.isHidden = !inspectorVisible
+            applyFocus()
+        case .escape:
+            inspector.state.escape()
+            applyFocus()
+        default: canvas.apply(command)
+        }
+    }
+    private func applyFocus() {
+        if inspector.state.focus == .canvas { window?.makeFirstResponder(canvas) }
+    }
+    private func consumePanelKey(_ event: NSEvent) -> Bool {
+        guard !menuTracking(), inspectorVisible, focusContext != .canvas else { return false }
+        if event.keyCode == 53 { return route(.escape, from: .key) }
+        if event.keyCode == 48 && event.modifierFlags.contains(.shift) {
+            inspector.state.tab(reverse: true)
+            applyFocus()
+            return true
+        }
+        return false
+    }
+    func windowDidUpdate(_ notification: Notification) {
+        if inspector.hasImage != canvas.hasImage { inspector.hasImage = canvas.hasImage }
     }
 }
