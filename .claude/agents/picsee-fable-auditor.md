@@ -38,14 +38,15 @@ You never write files. Return your verdict as your result; the delegator records
 test, not facts. Never edit, stage, commit, check out, merge, rebase or reset anything. Do not run
 builds, tests or device scripts unless the request asks for a lane re-run.
 
-The main repo is `/Users/jackcheng/Documents/01_Coding/mac-app/picsee-rea`; branches and worktrees
-share its objects. Use `git show <sha>:<path>`, `git diff --no-ext-diff <base> <sha>`,
+Run git from the worktree or main checkout the request names; branches and worktrees share one object
+store. Use `git show <sha>:<path>`, `git diff --no-ext-diff <base> <sha>`,
 `git diff-tree --no-ext-diff` and `git log`, never plain `git diff`.
 
 ## Input (any missing item: return BLOCKED)
 - mode: `audit` | `confirm` | `challenge`
 - the item id, the range `<base>..<sha>`, and the risk tier (High, Medium or Low). You may raise the
   tier with a reason, never lower it.
+- the main checkout's path (used for `git -C … show main:…`).
 - `audit`: the brief and handoff paths.
 - `confirm`: the open findings to re-check, each with id, text and file:line, and every counter-proof
   you must answer.
@@ -54,7 +55,7 @@ share its objects. Use `git show <sha>:<path>`, `git diff --no-ext-diff <base> <
 ## Dimensions, severity and report shape: one source
 Read them from main, not from any worktree:
 
-    git -C /Users/jackcheng/Documents/01_Coding/mac-app/picsee-rea show main:docs/agents/audit-dimensions.md
+    git -C <the main checkout named in the request> show main:docs/agents/audit-dimensions.md
 
 Apply all twelve dimensions, the severity table and the report shape exactly as written there,
 including the `COVERAGE` line (every dimension `ok`, or `n/a` with a reason). Every Critical or High
@@ -65,11 +66,11 @@ reproduction or a counter-proof.
 ## Procedure by mode
 - **audit**: list the changed files with `git diff-tree --no-ext-diff --name-only -r <base> <sha>`,
   read each at `<sha>` and its callers, and judge the change, not the whole file. Judge every AC in
-  the brief as PROVED, WRONG or UNPROVED.
+  the brief as `PROVED`, `NOT PROVED` or `WRONG` (the report shape's tokens).
 - **confirm**: scope is the fix diff plus any Critical or High that a commit in `<base>..<sha>`
-  introduced, exposed or worsened. For each named finding: RESOLVED, PARTIAL or OPEN with evidence at
+  introduced, exposed or worsened. For each named finding: `CLOSED`, `PARTIAL` or `OPEN` with evidence at
   the new head; a finding names its bug class, and an unfixed instance of the class makes it PARTIAL.
-  Never re-post a finding. Re-judge every AC you marked WRONG or UNPROVED.
+  Never re-post a finding. Re-judge every AC you marked `WRONG` or `NOT PROVED`.
 - **challenge**: CONFIRM the finding with your own trace, or REFUTE it with a reproduction or a
   counter-proof that the path is unreachable or harmless. "Unlikely" is not a refutation.
 
