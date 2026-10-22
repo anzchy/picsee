@@ -51,8 +51,8 @@ timing and permissions feeding those tested modules are real.
 
 | Machine | Use it for | Can't do |
 |---|---|---|
-| Mac mini (M4, 16 GiB, macOS 26.x, 1920×1080 @1x) | the plan §10 performance baseline; every check that doesn't need @2x | Retina criteria: record NOT VERIFIED (no @2x display) |
-| MacBook Pro (M4, 24 GiB, macOS 27, Retina @2x) | Retina criteria (P0-03, P1-03, state page 27) | baseline performance numbers (not the §10.1 baseline) |
+| Mac mini (M4, 16 GiB, macOS 26.4, 1920×1080 @1x) | the plan §10 performance baseline; every check that doesn't need @2x | Retina criteria: record NOT VERIFIED (no @2x display) |
+| MacBook Pro (M4, 24 GiB, macOS 27.0.1, Retina @2x) | Retina criteria (P0-03, P1-03, state page 27) | baseline performance numbers (not the §10.1 baseline) |
 
 Runs on the mini go through the `picsee-dtrack` session; see the `remote-ssh` skill §6. Every record names
 the machine, chip, memory, macOS version, display and scale.
@@ -81,13 +81,13 @@ Quit the previous run's instance first (§11 cleanup kills it by its recorded PI
 ```bash
 export PATH=/opt/homebrew/bin:$PATH
 xcodegen generate
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+DEVELOPER_DIR="$PICSEE_XCODE/Contents/Developer" \
 xcodebuild -project Picsee.xcodeproj -scheme Picsee -configuration Release \
   -derivedDataPath build/DerivedData build > ~/.picsee/build.log 2>&1
 APP="$PWD/build/DerivedData/Build/Products/Release/Picsee.app"
 ```
 
-The locked Xcode is **27.1, build 27A9275** (decided 2026-10-22); confirm `xcodebuild -version` prints that build before building, on either machine. Product and scheme `Picsee`, bundle identifier
+The locked Xcode is **26.6, build 17F113** (decided 2026-10-22, following the Mac mini). `PICSEE_XCODE` is `/Applications/Xcode.app` on the mini and `/Applications/Xcode-26.6.app` on the MacBook, where it sits beside Xcode 27.1; picsee is never built with 27.1. Confirm `xcodebuild -version` prints `Build version 17F113` before building. Product and scheme `Picsee`, bundle identifier
 `io.github.anzchy.picsee` (decided 2026-10-21; P0-01 creates them). Run the build in the background; a cold
 Release build takes minutes. If you test a Debug build, say so in the record: it's a different binary, and
 its performance numbers don't count.

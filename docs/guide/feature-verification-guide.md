@@ -41,7 +41,7 @@
 
 | 项目 | 怎么做 | 怎么确认 |
 |---|---|---|
-| Xcode | 锁定版本 **Xcode 27.1（build 27A9275）**，本机已装在 `/Applications/Xcode.app` | `xcodebuild -version` 输出 `Build version 27A9275` |
+| Xcode | 锁定版本 **Xcode 26.6（build 17F113）**。本机（macOS 27）把它装在 `/Applications/Xcode-26.6.app`，与 Xcode 27.1 并存；picsee 只用 26.6 构建 | `DEVELOPER_DIR=/Applications/Xcode-26.6.app/Contents/Developer xcodebuild -version` 输出 `Build version 17F113` |
 | XcodeGen | 本机已装（`/opt/homebrew/bin/xcodegen`） | `xcodegen --version` |
 | 签名 | 钥匙串里已有团队 `GRT84NAK4T` 的 Apple Development 证书（2027-01-31 到期） | `security find-identity -v -p codesigning` 里能看到它 |
 | 终端权限 | 系统设置 → 隐私与安全性：给运行 Claude Code 的终端 App 打开**屏幕录制**和**辅助功能** | computer use 截图能看到桌面 |
