@@ -117,7 +117,7 @@
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | VIEW-01 | 适应窗口 | Stub | 无 | P1-03 | `App/CanvasView.swift` | 分别打开横图和竖图，都完整居中显示；拖动改窗口大小，图随之适应。限制：打开时会以不超过 1 的倍率适应窗口；窗口缩放时重新适应和适应窗口切换命令属于 P1-03；本行未单独真机验证。 |
-| VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：@2x 真机按 `1` 已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)），Mac mini 原生 @1x 屏按 `1` 已通过（见 [P0-03 @1x 真机记录](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini)）；窗口从 2× 屏拖到 1× 屏未验；多文件打开仅显示首个文件；中文界面和 VoiceOver 未验。 |
+| VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：`1` 键在 @2x 与 @1x 真机已通过（见 [@2x 记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[@1x 记录](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini)）；从 2× 屏拖到 1× 屏、中文界面和 VoiceOver 未验；多文件仅显示首个文件。 |
 | VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：+/− 锚点缩放在 @2x 与 @1x 真机已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[P0-03 @1x 真机记录](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini)）；触控板捏合和完整 VoiceOver 未验；键盘只接画布，尚无 P0-09 命令路由。 |
 | VIEW-04 | 平移与边界 | Absent | 无 | P1-03 | — | 放大后拖动，图像不会被拖出可见范围；回到适应窗口后位置复原（27 页） |
 | VIEW-05 | 全屏 | Absent | 无 | P1-03 | — | ⌃⌘F 进入和退出全屏，当前图和缩放状态保持 |
@@ -328,7 +328,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
 | 打开与输入 | 2026-10-22 | doc-gardener | P0-03（#7）在 `App/Info.plist` 声明 `public.image` 文档类型（Viewer）并接 `application(_:open:)`；OPEN-03 已按未覆盖 Finder 入口记为 `Stub`/`无`；Finder“打开方式”与双击仍未真机验 |
-| 查看与画布 | 2026-10-22 | doc-gardener | P0-03（#7）：VIEW-02/03 保持 `Partial`/`单元`，限制已对齐 `docs/validation/P0.md` 的 @2x 按 `1` 与 +/− 真机记录；VIEW-01 打开时适应窗口已有代码，按未独立测试记为 `Stub`/`无` |
+| 查看与画布 | 2026-10-22 | doc-gardener | P0-03（#7）：VIEW-02/03 保持 `Partial`/`单元`，限制已对齐 `docs/validation/P0.md` 的 @2x 与 Mac mini @1x 按 `1`、+/− 真机记录（`1` 键与 +/− 在 1×、2× 均通过；VIEW-02 跨屏拖动、VIEW-03 捏合未验，故未升 `真机`）；VIEW-02「怎么确认」约 179 字，超过 150 字上限，待 owner 精简；VIEW-01 打开时适应窗口已有代码，按未独立测试记为 `Stub`/`无` |
 | C 沉浸界面 | 2026-10-21 | 建账 | 同上 |
 | 外观与显示偏好 | 2026-10-22 | doc-gardener | PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
