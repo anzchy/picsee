@@ -363,7 +363,7 @@ verdict formatting and non-zero failures and do not constitute device evidence. 
 in `doctor-input.json`. The test runner uses harmless copied sleep processes. Node tests allocate `fs.mkdtempSync` directories
 under `os.tmpdir()` and remove them in `after()`; Python offline fixtures use `TemporaryDirectory` with
 cleanup. Tests never write under `~/.picsee/device-runs/`. Run evidence stays outside the worktree. Build artifacts remain
-inside `.build/device-<run-id>/`. The heavy-lock integration is a TODO for issue #3.
+inside `.build/device-<run-id>/`. Heavy jobs use `scripts/heavy-lock.sh`: picsee flock first, then the shared mdpro directory lock, so the projects serialize. `PICSEE_MDPRO_LOCK` overrides the shared path (`off` skips it).
 
 ## 16. Recording the result
 
