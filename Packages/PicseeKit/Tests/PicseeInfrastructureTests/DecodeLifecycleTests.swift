@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import PicseeCore
-import PicseeInfrastructure
+@testable import PicseeInfrastructure
 
 @Test func cancelledBeforeRegistrationNeverSubmitsWork() async {
     for realQueue in [false, true] {
@@ -170,4 +170,43 @@ private struct FailingDecoder: ImageDecoding {
 @Test func directDecoderUsesItsDefaultSourceBudget() throws {
     let decoded = try ImageIODecoder().decode(ImageDecodeRequest(fileURL: fixture("orientation-1.tiff"), maximumPixelSize: 128))
     #expect(decoded.image.width == 128 && decoded.image.height == 96)
+}
+
+private final class SubmissionHandshake: DecodeExecuting, Sendable {
+    let controlled = ControlledExecutor()
+    let submitted: AsyncStream<Void>
+    private let signal: AsyncStream<Void>.Continuation
+    init() { (submitted, signal) = AsyncStream.makeStream() }
+    func submit(_ work: @escaping @Sendable () -> Void) {
+        controlled.submit(work)
+        signal.yield(())
+    }
+}
+@Test(.timeLimit(.minutes(1))) func cancellationAfterCompletionWinsStillRejectsDeliveredSuccess() async throws {
+    let executor = SubmissionHandshake()
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),
+                                    executor: executor, decoder: TinyDecoder())
+    let (completed, signalCompleted) = AsyncStream<Void>.makeStream()
+    let (release, signalRelease) = AsyncStream<Void>.makeStream()
+    await admission.setCompletionBarrier {
+        signalCompleted.yield(())
+        var gate = release.makeAsyncIterator()
+        _ = await gate.next()
+    }
+    let task = Task { try await admission.image(tinyRequest, key: decodeKey(81), cost: 4, heavy: false, priority: .current) }
+    var submitted = executor.submitted.makeAsyncIterator()
+    _ = await submitted.next()
+    executor.controlled.runFirst()
+    var completion = completed.makeAsyncIterator()
+    _ = await completion.next()
+    // Completion already won: the job and resources are gone. The cancellation
+    // message cannot mark that finished job; the consumer must recheck its Task.
+    #expect(await admission.activity().running == 0)
+    task.cancel()
+    signalRelease.yield(())
+    var completions = 0
+    do { _ = try await task.value; completions += 1; Issue.record("cancelled task accepted delivered success") }
+    catch { completions += 1; #expect(error is CancellationError) }
+    #expect(completions == 1)
+    #expect(await admission.activity().reservedBytes == 0)
 }
