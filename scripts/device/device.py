@@ -46,7 +46,10 @@ def process_snapshot(pid):
             return None  # The process exited between path and birth reads.
         raise
     datetime.datetime.strptime(birth, '%a %b %d %H:%M:%S %Y')
-    if executable(pid) != before:
+    after = executable(pid)
+    if after is None:
+        return None
+    if after != before:
         raise RuntimeError('process identity changed while reading birth time')
     return dict(pid=pid, executable=str(before), birth=birth)
 
