@@ -1,0 +1,28 @@
+Building for debugging...
+[0/6] /SCRATCH/LaneFixtures/.build/arm64-apple-macosx/debug/LaneFixturesPackageTests.derived/runner.swift
+[1/6] Write sources
+[3/6] Write swift-version--112E4EF74740DA65.txt
+[5/8] Emitting module LaneTests
+[6/8] Compiling LaneTests FixtureTests.swift
+[7/10] Emitting module LaneFixturesPackageTests
+[8/10] Compiling LaneFixturesPackageTests runner.swift
+[8/10] Write Objects.LinkFileList
+[9/10] Linking LaneFixturesPackageTests
+Build complete! (10.28s)
+Test Suite 'All tests' started at 2026-10-22 12:32:11.442.
+Test Suite 'LaneFixturesPackageTests.xctest' started at 2026-10-22 12:32:11.447.
+Test Suite 'FixtureTests' started at 2026-10-22 12:32:11.447.
+Test Case '-[LaneTests.FixtureTests testTwoFailures]' started.
+/SCRATCH/LaneFixtures/Tests/LaneTests/FixtureTests.swift:4: error: -[LaneTests.FixtureTests testTwoFailures] : XCTAssertEqual failed: ("1") is not equal to ("0")
+/SCRATCH/LaneFixtures/Tests/LaneTests/FixtureTests.swift:5: error: -[LaneTests.FixtureTests testTwoFailures] : XCTAssertEqual failed: ("2") is not equal to ("0")
+Test Case '-[LaneTests.FixtureTests testTwoFailures]' failed (0.097 seconds).
+Test Suite 'FixtureTests' failed at 2026-10-22 12:32:11.544.
+	 Executed 1 test, with 2 failures (0 unexpected) in 0.097 (0.097) seconds
+Test Suite 'LaneFixturesPackageTests.xctest' failed at 2026-10-22 12:32:11.544.
+	 Executed 1 test, with 2 failures (0 unexpected) in 0.097 (0.097) seconds
+Test Suite 'All tests' failed at 2026-10-22 12:32:11.544.
+	 Executed 1 test, with 2 failures (0 unexpected) in 0.097 (0.103) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
