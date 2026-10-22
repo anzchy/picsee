@@ -84,9 +84,14 @@ APP="$(cat "$RUN_DIR/bundle.path")"
 ```
 
 The helper generates the project, then makes a signed **Debug** build in
-`.build/device-<run-id>/` inside this worktree. It requires committed tracked changes, refuses a running
-Picsee, records the short and full SHA and machine facts in `build.json`, and saves build output in
-`build.log`. Untracked agent rules do not dirty the build. Debug performance numbers do not count as a
+`.build/device-<run-id>/` inside this worktree. It rejects modified, missing or untracked build inputs (including resources, plist, entitlements,
+package files, test assets and project configuration), while allowing agent metadata in `.codex/`,
+`.claude/` and `docs/`. It verifies the full input inventory against HEAD before and after the build,
+refuses a running Picsee, records input hashes, the short/full SHA and machine facts in `build.json`, and
+saves build output in
+`build.log`. Generated package caches are excluded from build inputs. If the inherited Xcode stamp marks allowed
+metadata edits dirty, the helper normalizes the verified build SHA and re-signs the bundle, preserving
+entitlements and signature metadata. Debug performance numbers do not count as a
 Release baseline. A Release performance run needs its own explicit build and record.
 
 The locked Xcode is **26.6, build 17F113** (decided 2026-10-22, following the Mac mini). `PICSEE_XCODE` is `/Applications/Xcode.app` on the mini and `/Applications/Xcode-26.6.app` on the MacBook, where it sits beside Xcode 27.1; picsee is never built with 27.1. Confirm `xcodebuild -version` prints `Build version 17F113` before building. Product and scheme `Picsee`, bundle identifier
@@ -105,11 +110,12 @@ Each run gets an ID and a run folder outside the repo. Evidence goes there and s
 
 ```bash
 scripts/device/launch.sh "$RUN_DIR"
-# Records bundle.path, picsee.pid, start.txt, ready.json and app.log in RUN_DIR.
+# Records bundle.path, picsee.pid, process.json (PID/path/birth), start.txt, ready.json and app.log.
 ```
 
 The helper checks isolation, calls `open -n` with the absolute bundle path, finds the new PID by its exact
-executable path, and records it before checking readiness. It never picks a PID by owner name or newest
+executable path, and records its executable path and process start time (`ps -o lstart=`) in `process.json` before checking
+readiness. Old, missing, ambiguous or retired ownership records are refused; use a fresh run directory. It never picks a PID by owner name or newest
 name match. The P0 skeleton run opens no fixture; it has one empty window.
 
 For a future file-opening recipe, pass the scratch fixture through the app's normal open entry point.
@@ -137,7 +143,9 @@ scripts/device/doctor.sh "$RUN_DIR" --expected-sha "$(git rev-parse --short HEAD
 ```
 
 The helper prints exactly one `PASS <check>` or `FAIL <check> — <why>` line for each check below, saves the
-output as `doctor.txt`, and exits non-zero if any fail. `doctor-input.json` keeps the observations.
+output atomically as `doctor.txt`, and exits non-zero if any fail. Collection errors become FAIL on the
+affected checks; all twelve lines replace the previous report even when a bundle, plist or record is
+missing or malformed. `doctor-input.json` keeps the observations.
 
 | Check | Pass when |
 |---|---|
@@ -145,11 +153,11 @@ output as `doctor.txt`, and exits non-zero if any fail. `doctor-input.json` keep
 | `bundle-id` | `CFBundleIdentifier` is `io.github.anzchy.picsee` |
 | `signature-team` | codesign reports `TeamIdentifier=GRT84NAK4T` |
 | `signature-valid` | `codesign --verify --deep --strict` succeeds |
-| `sandbox` | the signed `com.apple.security.app-sandbox` entitlement is true (XML or macOS 27's typed dump) |
-| `process-bundle` | recorded PID's executable is exactly the recorded bundle's `Contents/MacOS/Picsee` |
-| `fresh-sources` | no Swift source in `App/` or `Packages/PicseeKit/Sources/` is newer than the bundle Info.plist |
+| `sandbox` | the signed `com.apple.security.app-sandbox` entitlement is true (explicit XML from `codesign -d --entitlements :-`) |
+| `process-bundle` | recorded PID, executable and process birth all match the live process; the record is active |
+| `fresh-sources` | every build input matches the committed inventory and recorded hashes; none is newer than the bundle Info.plist |
 | `single-instance` | the recorded PID is the only running process named Picsee |
-| `window` | System Events, addressed by unix PID, reports exactly one window titled `Picsee` |
+| `window` | one snapshot of `properties of every window`, addressed by PID, contains one window titled `Picsee`; untitled windows become empty titles, and `0 windows` is distinct from an AX error |
 | `launch-log` | this PID's unified log since `start.txt` contains `Picsee launch git=<expected SHA>`, unredacted |
 | `machine` | model, chip, memory, macOS and main-display backing scale match `build.json`; check these against the brief too |
 | `fixtures` | no fixtures for a skeleton run, or all fixture files match the run's `fixtures.sha256.json` |
@@ -252,8 +260,12 @@ scripts/device/cleanup.sh "$RUN_DIR"
 ls "$RUN_DIR/shots" "$RUN_DIR/app.log" "$RUN_DIR/doctor.txt"
 ```
 
-- The helper checks the PID's executable path is inside the recorded bundle's `Contents/MacOS/`, then
-  sends SIGTERM to that PID only. A path mismatch refuses cleanup; an already-exited PID is reported.
+- Cleanup requires an active ownership record. It compares the live PID, executable path and birth time
+  to `process.json`, validates again immediately before SIGTERM, and signals that PID only. An identity
+  mismatch refuses action; an independently confirmed exited process is reported without a signal.
+- Every cleanup attempt writes the `retired` marker, including refused or failed attempts. Retired records
+  cannot drive cleanup, doctor, capture or input. Evidence stays intact; a new launch needs a new run folder.
+  Capture and input also validate birth identity immediately before their action.
 - No process-name kill and no escalation to SIGKILL. If SIGTERM does not finish within five seconds,
   report the failure. Never kill an instance this run did not start.
 - Evidence and scratch copies remain in the run folder. No recursive deletion is part of cleanup.
@@ -302,14 +314,15 @@ failing regression test, clean up each failed attempt, then rerun the whole sequ
 NOT VERIFIED entries for features the skeleton cannot exercise.
 
 **Proof run: 2026-10-22**, MacBook Pro M4, 24 GiB, macOS 27.0.1, internal Retina @2x, Xcode 26.6 (17F113),
-signed Debug. Implementation SHA `fd1c45c`; run `20261022-issue4-proof-2` under
-`~/.picsee/device-runs/`. All twelve doctor checks passed, including signed plist and public live-log SHA.
-`size.sh` changed 960×672 to 800×600 pt; a separate System Events read confirmed 800×600, then the helper
-restored 960×672. Window-only capture was 1920×1344 px and visually showed the Picsee skeleton. Cleanup
-terminated only the recorded PID and left the log, doctor output and PNG. The final committed helper/skill
-state is rerun as `20261022-issue4-final`; its exact SHA and transcript are in that run's `build.json` and
-`transcript.txt` and the issue #4 implementor handoff. This proves the helper workflow, not feature-ledger
-acceptance; the delegator independently reruns it before writing a validation record.
+signed Debug. Runtime implementation SHA `04edb7c`; run `20261022-issue4-fix1-proof2` under
+`~/.picsee/device-runs/`. Build → launch → doctor → cleanup passed. All twelve doctor checks passed,
+including public live-log SHA, active PID/path/birth ownership, committed input hashes and XML sandbox
+entitlement. Cleanup terminated only PID 79040, retired the ownership record and preserved evidence.
+The subsequent documentation commit changes no runtime helper. The earlier complete smoke/capture proof
+at `a2be193` (`20261022-issue4-final`) remains in the handoff: 960×672 → 800×600 → 960×672 points, with a
+1920×1344 window-only PNG. This fix-round proof did not repeat the capture or resize action; the capture
+entrypoint additionally has offline denied-permission/black/empty publication tests. This is helper
+workflow proof, not independent feature-ledger acceptance. The delegator reruns it before validation.
 
 Still **NOT VERIFIED**: Mac mini `picsee-dtrack`, XCUITest, and all `features/` recipes (the skeleton has no
 image commands). On the mini, signed builds must run inside the user-owned `picsee-dtrack` tmux session;
@@ -320,7 +333,7 @@ Rerun the proof after changes to build, signing, launch, doctor or capture.
 
 ## 15. Helpers
 
-Run from the worktree root. Requires Python 3, Node (tests only), macOS tools, XcodeGen on PATH and the
+Run from the worktree root. Requires Python ≥ 3.9, Node (tests only), macOS tools, XcodeGen on PATH and the
 locked Xcode. `PICSEE_XCODE` overrides the Xcode application path, never the required build version.
 
 ```bash
@@ -344,8 +357,9 @@ then adapted locally; no mdpro checkout is needed to run them.
 
 Offline doctor contract tests use `scripts/device/doctor.sh --fixture <observations.json>`; they test
 verdict formatting and non-zero failures and do not constitute device evidence. Real doctor input lives
-in `doctor-input.json`. The test runner uses harmless copied sleep processes and retains its artifacts
-under `~/.picsee/device-runs/tests-*`. Run evidence stays outside the worktree. Build artifacts remain
+in `doctor-input.json`. The test runner uses harmless copied sleep processes. Node tests allocate `fs.mkdtempSync` directories
+under `os.tmpdir()` and remove them in `after()`; Python offline fixtures use `TemporaryDirectory` with
+cleanup. Tests never write under `~/.picsee/device-runs/`. Run evidence stays outside the worktree. Build artifacts remain
 inside `.build/device-<run-id>/`. The heavy-lock integration is a TODO for issue #3.
 
 ## 16. Recording the result
