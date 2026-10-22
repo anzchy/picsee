@@ -34,6 +34,14 @@ const forbidden = [
   ['/usr/bin/tccutil', 'reset', 'SystemPolicyAllFiles'],
   ['/usr/bin/codesign', '--remove-signature', app],
 ];
+for (const wrapper of ['xcrun', '/usr/bin/xcrun']) {
+  forbidden.push([wrapper, 'codesign', '--remove-signature', app]);
+  for (const key of ['com.apple.security.app-sandbox', escapedKey]) {
+    forbidden.push([wrapper, 'plutil', '-remove', key, file]);
+    forbidden.push([wrapper, 'plutil', '-replace', key, '-bool', 'NO', file]);
+    forbidden.push([wrapper, 'plutil', '-insert', key, '-bool', 'YES', file]);
+  }
+}
 // PlistBuddy takes its entire operation as ONE argv token. Cover both executable
 // spellings, optional root colon, Set/Add boolean spellings, and Delete.
 for (const tool of ['PlistBuddy', '/usr/libexec/PlistBuddy']) {
@@ -74,6 +82,10 @@ const allowed = [
   ['/usr/libexec/PlistBuddy', '-c', `Print :${key}`, file],
   ['plutil', '-replace', 'unrelated.key', '-bool', 'NO', file],
   ['/usr/libexec/PlistBuddy', '-c', 'Set :unrelated.key false', file],
+  ['xcrun', 'codesign', '-d', '--entitlements', ':-', app],
+  ['/usr/bin/xcrun', 'codesign', '--force', '--sign', 'Apple Development', '--entitlements', file, app],
+  ['xcrun', 'plutil', '-p', file],
+  ['/usr/bin/xcrun', 'plutil', '-replace', 'unrelated.key', '-bool', 'NO', file],
 ];
 
 for (const argv of forbidden) {
