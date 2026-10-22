@@ -43,3 +43,25 @@ extension AccessLeasing {
         }
     }
 }
+
+public struct ResolvedBookmark: Sendable {
+    public let url: URL
+    public let stale: Bool
+    public init(url: URL, stale: Bool) { self.url = url; self.stale = stale }
+}
+public protocol BookmarkCoding: Sendable {
+    func create(for url: URL) throws -> Data
+    func resolve(_ data: Data) throws -> ResolvedBookmark
+}
+
+public struct AccessRootRecord: Codable, Equatable, Sendable {
+    public let id: AccessRootID
+    public var bookmark: Data
+    public let displayName: String
+    public let creatingBuildSHA: String
+    public let createdAt: Date
+    public init(id: AccessRootID, bookmark: Data, displayName: String, creatingBuildSHA: String, createdAt: Date) {
+        self.id = id; self.bookmark = bookmark; self.displayName = displayName
+        self.creatingBuildSHA = creatingBuildSHA; self.createdAt = createdAt
+    }
+}

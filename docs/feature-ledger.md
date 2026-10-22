@@ -204,7 +204,7 @@
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | ACCESS-01 | 单文件打开后的目录授权入口 | Absent | 无 | P0-04 | — | 在 sandbox 版本里只打开一张图，按 → 时提示授权所在目录，不会静默失败 |
-| ACCESS-02 | 目录授权跨重启保留 | Stub | 无 | P0-04、P2-01 | `App/Resources/Picsee.entitlements`、`docs/adr/0008-folder-access-read-only-app-scoped-bookmarks.md` | 授权一个目录，退出重开后直接可浏览，不再弹授权。限制：仅声明 `com.apple.security.files.bookmarks.app-scope`，恢复未实现；真机未验，bookmark 重建后结果未知。 |
+| ACCESS-02 | 目录授权跨重启保留 | Partial | 单元 | P0-04、P2-01 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/`、`App/Resources/Picsee.entitlements`、`docs/adr/0008-folder-access-read-only-app-scoped-bookmarks.md` | 授权一个目录，退出重开后直接可浏览，不再弹授权。限制：真机未验；窗口待接线；bookmark 重建后结果未知；新增 `com.apple.security.files.bookmarks.app-scope`，保持只读。 |
 | ACCESS-03 | 失效授权的修复 | Absent | 无 | P2-01 | — | 授权目录被移动后打开最近项，提示重新连接；重新选择后恢复浏览 |
 | ACCESS-04 | 权限被撤销 | Absent | 无 | P2-08 | — | 浏览中撤销目录访问，显示 26 页提示并可重新授权；不会从缓存里继续显示原图 |
 | ACCESS-05 | 访问范围用完即释放 | Partial | 单元 | P0-04 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/FileAccess.swift` | 打开再关闭授权目录的窗口，诊断日志显示访问范围已释放（方法见 `docs/validation/P0.md`）。限制：真机未验；窗口待接线；释放日志 `AccessLease root=<ID> remaining=0 outcome=released`。 |
