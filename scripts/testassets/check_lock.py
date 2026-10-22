@@ -38,7 +38,9 @@ with open(os.environ['PICSEE_HEAVY_LOCK'],'a') as lock:
             **os.environ,
             "PATH": str(folder) + os.pathsep + os.environ["PATH"],
             "PICSEE_HEAVY_LOCK": str(folder / "heavy.lock"),
-            "PICSEE_HEAVY_LOCK_HELD": "0",
+            "PICSEE_HEAVY_LOCK_HELD": "",
+            "PICSEE_MDPRO_LOCK": str(folder / "mdpro.lock"),
+            "MDPRO_HEAVY_LOCK_HELD": "",
         },
     )
     print(result.stdout, end="")

@@ -14,7 +14,6 @@ if [[ $# -eq 0 ]]; then
   exit 64
 fi
 if [[ "${PICSEE_HEAVY_LOCK_HELD:-}" == "1" ]]; then
-  export MDPRO_HEAVY_LOCK_HELD=1
   exec "$@"
 fi
 exec python3 "$(dirname "$0")/tdd/heavy-lock.py" "$@"

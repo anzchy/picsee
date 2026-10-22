@@ -11,7 +11,6 @@ import math
 import os
 from pathlib import Path
 import signal
-import shutil
 import subprocess
 import sys
 import time
@@ -38,18 +37,28 @@ def group_alive(pid):
         return False
 
 
+def group_survivors(pid):
+    try:
+        listing = subprocess.run(['ps', '-axo', 'pid=,pgid=,stat='],
+                                 capture_output=True, text=True, check=True)
+        return ', '.join(line.strip() for line in listing.stdout.splitlines()
+                         if len(line.split()) >= 3 and line.split()[1] == str(pid)) or f'pgid={pid}'
+    except (OSError, subprocess.CalledProcessError):
+        return f'pgid={pid} (process listing unavailable)'
+
+
 def owner_pid(lock):
     try:
         return next((line[4:] for line in (lock / 'owner').read_text().splitlines()
                      if line.startswith('pid=')), '')
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         return ''
 
 
 def holder_desc(lock):
     try:
         return (lock / 'owner').read_text().replace('\n', ' ')
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         return '(no owner file)'
 
 
@@ -66,60 +75,51 @@ def pid_alive(pid):
         return True
 
 
-def reclaim(lock, expected):
-    # Match mdpro: rename, re-check identity, delete only the renamed copy.
-    grave = Path(f'{lock}.stale.{os.getpid()}')
-    try:
-        lock.rename(grave)
-    except FileNotFoundError:
-        return
-    if owner_pid(grave) != expected:
-        if not lock.exists():
-            try:
-                grave.rename(lock)
-            except OSError:
-                pass
-        return
-    print(f'[heavy-lock] reclaiming stale lock {lock}: {holder_desc(grave)}',
-          file=sys.stderr, flush=True)
-    shutil.rmtree(grave)
-
-
 def acquire_shared(lock, deadline, received, command):
     lock.parent.mkdir(parents=True, exist_ok=True)
-    ownerless = 0
-    heartbeat = 0
+    started = time.monotonic()
+    heartbeat = started
+    first = True
     while not received:
         try:
             os.mkdir(lock)
         except FileExistsError:
-            pid = owner_pid(lock)
-            if pid and not pid_alive(pid):
-                reclaim(lock, pid)
-                continue
-            ownerless = ownerless + 1 if not pid and lock.is_dir() else 0
-            if ownerless >= 2:
-                reclaim(lock, '')
-                ownerless = 0
-                continue
-            now = time.monotonic()
-            if now >= heartbeat:
-                print(f'[heavy-lock] waiting for {lock}, held by: {holder_desc(lock)}',
-                      file=sys.stderr, flush=True)
-                heartbeat = now + 60
-            if now >= deadline:
-                print(f'[heavy-lock] lock wait timed out; held by: {holder_desc(lock)}',
+            if not lock.is_dir():
+                print(f'[heavy-lock] mdpro lock path is not a directory: {lock}',
                       file=sys.stderr, flush=True)
                 return False
-            # mdpro's ownerless reclaim requires two polls five seconds apart.
-            wake = min(now + 5, deadline)
-            while not received and time.monotonic() < wake:
-                time.sleep(min(0.05, max(0, wake - time.monotonic())))
         else:
-            (lock / 'owner').write_text(
-                f'pid={os.getpid()}\nstarted={time.strftime("%Y-%m-%dT%H:%M:%S%z")}\n'
-                f'cwd={os.getcwd()}\ncmd={" ".join(command)}\n')
-            return True
+            try:
+                (lock / 'owner').write_text(
+                    f'pid={os.getpid()}\nstarted={time.strftime("%Y-%m-%dT%H:%M:%S%z")}\n'
+                    f'cwd={os.getcwd()}\ncmd={" ".join(command)}\n')
+            except OSError as error:
+                # A peer may reclaim the ownerless directory before publication.
+                # We have no published ownership: never clean it up or launch.
+                print(f'[heavy-lock] owner publication failed: {error}; waiting',
+                      file=sys.stderr, flush=True)
+            else:
+                return True
+        now = time.monotonic()
+        if now >= heartbeat:
+            pid = owner_pid(lock)
+            if not pid or not pid_alive(pid):
+                print(f'[heavy-lock] mdpro lock owner {pid or "(none)"} is dead; '
+                      'waiting for an mdpro waiter to reclaim it', file=sys.stderr, flush=True)
+            status = 'waiting' if first else f'still waiting ({int(now - started)}s)'
+            print(f'[heavy-lock] {status} for {lock}, held by: {holder_desc(lock)}',
+                  file=sys.stderr, flush=True)
+            first = False
+            heartbeat = now + 60
+        if now >= deadline:
+            print(f'[heavy-lock] lock wait timed out; held by: {holder_desc(lock)}. '
+                  f'Manual recovery: first confirm no process from that job is still running '
+                  f'(pgrep -f on its cmd); then remove the directory {lock}.',
+                  file=sys.stderr, flush=True)
+            return False
+        wake = min(now + 5, deadline)
+        while not received and time.monotonic() < wake:
+            time.sleep(min(0.05, max(0, wake - time.monotonic())))
     return False
 
 
@@ -148,7 +148,13 @@ def main():
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda number, frame: received.append(number))
     shared_path = os.environ.get('PICSEE_MDPRO_LOCK', str(Path.home() / '.cache/mdpro-heavy.lock'))
-    shared = None if shared_path == 'off' else Path(shared_path)
+    reverse = os.environ.get('MDPRO_HEAVY_LOCK_HELD') == '1'
+    shared = None if shared_path == 'off' or reverse else Path(shared_path)
+    if reverse:
+        print('[heavy-lock] mdpro parent already holds the shared lock; taking picsee flock only',
+              file=sys.stderr, flush=True)
+    acquired = False
+    retain_shared = False
     child = None
     result = 70
     try:
@@ -169,17 +175,21 @@ def main():
                     return 75
                 time.sleep(min(0.05, max(0, deadline - time.monotonic())))
         if not received and shared is not None:
-            if not acquire_shared(shared, deadline, received, sys.argv[1:]) and not received:
+            acquired = acquire_shared(shared, deadline, received, sys.argv[1:])
+            if not acquired and not received:
                 return 75
         if not received:
             try:
-                child = subprocess.Popen(sys.argv[1:], env={**os.environ, 'PICSEE_HEAVY_LOCK_HELD': '1',
-                                                                    'MDPRO_HEAVY_LOCK_HELD': '1'},
+                child_env = {**os.environ, 'PICSEE_HEAVY_LOCK_HELD': '1'}
+                if acquired:
+                    child_env['MDPRO_HEAVY_LOCK_HELD'] = '1'
+                child = subprocess.Popen(sys.argv[1:], env=child_env,
                                          pass_fds=(fd,), start_new_session=True)
             except OSError as error:
                 print(f'[heavy-lock] {error}', file=sys.stderr)
                 return 127
             stopping = None
+            killed_at = None
             while True:
                 result = child.poll()
                 if received:
@@ -192,18 +202,24 @@ def main():
                             pass
                     if not group_alive(child.pid):
                         break
-                    if now - stopping >= grace:
+                    if now - stopping >= grace and killed_at is None:
+                        killed_at = now
                         try:
                             os.killpg(child.pid, signal.SIGKILL)
                         except ProcessLookupError:
                             pass
-                    # Keep the shared directory until the group actually exits.
-                elif result is not None:
+                    if killed_at is not None and now - killed_at >= 5:
+                        retain_shared = True
+                        print(f'[heavy-lock] WARNING: survivors {group_survivors(child.pid)}; '
+                              'leaving shared directory in place', file=sys.stderr, flush=True)
+                        break
+                elif result is not None and not group_alive(child.pid):
                     break
                 time.sleep(0.02)
-            child.wait()
+            if not retain_shared:
+                child.wait()
     finally:
-        if shared is not None:
+        if acquired and not retain_shared:
             release_shared(shared)
         os.close(fd)  # no unlink, no stale recovery, no explicit LOCK_UN
     if received:
