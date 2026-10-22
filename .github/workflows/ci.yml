@@ -4,13 +4,18 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   walking-skeleton:
     name: Walking skeleton
     runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Select locked Xcode
         run: |
           set -euo pipefail
@@ -20,7 +25,14 @@ jobs:
           grep -Fx 'Xcode 26.6' /tmp/picsee-xcode-version.txt
           grep -Fx 'Build version 17F113' /tmp/picsee-xcode-version.txt
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          set -euo pipefail
+          mkdir -p .build/ci-tools
+          curl --fail --location --silent --show-error https://github.com/yonaskolb/XcodeGen/releases/download/2.44.1/xcodegen.zip --output .build/ci-tools/xcodegen.zip
+          echo 'a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73  .build/ci-tools/xcodegen.zip' | shasum -a 256 --check
+          unzip -q -o .build/ci-tools/xcodegen.zip -d .build/ci-tools
+          .build/ci-tools/xcodegen/bin/xcodegen --version | grep -Fx 'Version: 2.44.1'
+          echo "$PWD/.build/ci-tools/xcodegen/bin" >> "$GITHUB_PATH"
       - name: Generate project
         run: xcodegen generate
       - name: Swift Testing
