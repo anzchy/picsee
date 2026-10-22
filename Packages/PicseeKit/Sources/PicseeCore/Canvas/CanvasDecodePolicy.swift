@@ -1,8 +1,8 @@
 import Foundation
 
-/// Two tiers per source and viewport: preview, then source resolution beyond fit.
-/// P0 sizing only; admission, memory budgets and cancellation belong to P0-05/06.
+/// Initial small preview, viewport detail, then source resolution beyond fit.
 public enum CanvasDecodePolicy {
+    public static let previewMaximumPixelSize = 512
     public static func maximumPixelSize(source: CGSize, viewport: CGSize, zoom: Double) -> Int {
         precondition(source.width > 0 && source.height > 0 && viewport.width > 0 && viewport.height > 0)
         let sourceEdge = max(source.width, source.height)
