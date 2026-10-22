@@ -97,9 +97,10 @@ metadata edits dirty, the helper normalizes the verified build SHA and re-signs 
 entitlements and signature metadata. Debug performance numbers do not count as a
 Release baseline. A Release performance run needs its own explicit build and record.
 
-The locked Xcode is **26.6, build 17F113** (decided 2026-10-22, following the Mac mini). The default case is
-the mini, where `PICSEE_XCODE=/Applications/Xcode.app`; on the MacBook set it to
-`/Applications/Xcode-26.6.app`, where Xcode 26.6 sits beside Xcode 27.1. Picsee is never built with 27.1.
+The locked Xcode is **26.6, build 17F113** (decided 2026-10-22, following the Mac mini). The helper uses the
+first of `/Applications/Xcode-26.6.app` and `/Applications/Xcode.app` whose `xcodebuild -version` reports that
+build. `PICSEE_XCODE` explicitly overrides this search but is checked against the same build. On the MacBook,
+Xcode 26.6 sits beside Xcode 27.1; Picsee is never built with 27.1.
 Confirm `xcodebuild -version` prints `Build version 17F113` before building. Product and scheme `Picsee`, bundle identifier
 `io.github.anzchy.picsee` (decided 2026-10-21; P0-01 creates them). Run long builds in the background and monitor `build.log`. If you test a Debug build, say so in the record: it's a different binary, and
 its performance numbers don't count.
@@ -351,7 +352,8 @@ Rerun the proof after changes to build, signing, launch, doctor or capture.
 ## 15. Helpers
 
 Run from the worktree root. Requires Python ≥ 3.9, Node (tests only), macOS tools, XcodeGen on PATH and the
-locked Xcode. `PICSEE_XCODE` overrides the Xcode application path, never the required build version.
+locked Xcode. By default the helper selects the first matching locked build from `/Applications/Xcode-26.6.app`
+and `/Applications/Xcode.app`; `PICSEE_XCODE` overrides the application path, never the required build version.
 
 ```bash
 export PATH=/opt/homebrew/bin:$PATH

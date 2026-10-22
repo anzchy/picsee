@@ -40,7 +40,7 @@
 
 | 项目 | 怎么做 | 怎么确认 |
 |---|---|---|
-| Xcode | 锁定版本 **Xcode 26.6（build 17F113）**。本机 mini 使用 `/Applications/Xcode.app`；`PICSEE_XCODE=/Applications/Xcode.app` | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -version` 输出 `Build version 17F113` |
+| Xcode | 锁定 **Xcode 26.6（build 17F113）**。脚本依次检查 `/Applications/Xcode-26.6.app`、`/Applications/Xcode.app`；`PICSEE_XCODE` 可显式覆盖 | 选中路径的 `Contents/Developer/usr/bin/xcodebuild -version` 输出 `Build version 17F113` |
 | XcodeGen | 本机已装（`/opt/homebrew/bin/xcodegen`） | `xcodegen --version` |
 | 签名 | 钥匙串里已有团队 `GRT84NAK4T` 的 Apple Development 证书（2027-01-31 到期） | `security find-identity -v -p codesigning` 里能看到它 |
 | 终端权限 | 系统设置 → 隐私与安全性：给运行 Claude Code 的终端 App 打开**屏幕录制**和**辅助功能** | computer use 截图能看到桌面 |

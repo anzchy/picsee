@@ -8,7 +8,15 @@ const base=path.resolve(__dirname,'..');
 const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'picsee-device-'));
 after(()=>fs.rmSync(scratch,{recursive:true,force:true}));
 function call(name,args){return spawnSync(path.join(base,name+'.sh'),args,{encoding:'utf8'});}
-function dummy(dir){fs.mkdirSync(dir,{recursive:true});const exe=path.join(dir,'sleep');fs.copyFileSync('/bin/sleep',exe);fs.chmodSync(exe,0o755);return spawn(exe,['120'],{stdio:'ignore'});}
+function dummy(dir){
+ fs.mkdirSync(dir,{recursive:true});
+ const source=path.join(dir,'sleep.c'),exe=path.join(dir,'sleep');
+ fs.writeFileSync(source,'#include <unistd.h>\nint main(void){for(;;) sleep(1);}\n');
+ const built=spawnSync('/usr/bin/clang',[source,'-o',exe],{encoding:'utf8'});
+ assert.equal(built.status,0,built.stderr||built.error?.message);
+ fs.unlinkSync(source);
+ return spawn(exe,[],{stdio:'ignore'});
+}
 function record(dir,pid,bundle){fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'picsee.pid'),String(pid));fs.writeFileSync(path.join(dir,'bundle.path'),bundle);const r=spawnSync('python3',['-c',`import sys,json;sys.path.insert(0,sys.argv[1]);from device import process_snapshot;print(json.dumps(process_snapshot(int(sys.argv[2]))))`,base,String(pid)],{encoding:'utf8'});if(r.status===0)fs.writeFileSync(path.join(dir,'process.json'),r.stdout);}
 test('cleanup kills only recorded PID, spares same-name process',async()=>{
  const bundle=path.join(scratch,'Good.app'),one=dummy(path.join(bundle,'Contents/MacOS')),two=dummy(path.join(scratch,'other'));

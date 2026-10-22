@@ -17,6 +17,8 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
+LOCKED_XCODE_BUILD = 'Build version 17F113'
+DEFAULT_XCODE_APPS = (Path('/Applications/Xcode-26.6.app'), Path('/Applications/Xcode.app'))
 
 def command(argv, timeout=30):
     return subprocess.run([str(a) for a in argv], text=True, stdout=subprocess.PIPE,
@@ -27,6 +29,18 @@ def checked(argv, timeout=30, strip=True):
     if r.returncode:
         raise RuntimeError(r.stderr.strip() or r.stdout.strip() or str(argv))
     return r.stdout.strip() if strip else r.stdout
+
+def select_xcode(candidates=DEFAULT_XCODE_APPS):
+    explicit = os.environ.get('PICSEE_XCODE')
+    choices = (Path(explicit),) if explicit else tuple(Path(path) for path in candidates)
+    for app in choices:
+        try:
+            version = checked([app / 'Contents/Developer/usr/bin/xcodebuild', '-version'])
+        except (OSError, RuntimeError, subprocess.TimeoutExpired):
+            continue
+        if LOCKED_XCODE_BUILD in version:
+            return app, version
+    raise RuntimeError('requires Xcode 26.6 build 17F113')
 
 def executable(pid):
     lib = ctypes.CDLL('/usr/lib/libproc.dylib')
@@ -174,11 +188,8 @@ def build(run):
     if running():
         raise RuntimeError('another Picsee is running; ask its owner to quit it')
     inputs = assert_clean_inputs(ROOT)
-    developer = os.environ.get('PICSEE_XCODE', '/Applications/Xcode-26.6.app') + '/Contents/Developer'
-    os.environ['DEVELOPER_DIR'] = developer
-    version = checked(['/usr/bin/xcodebuild', '-version'])
-    if 'Build version 17F113' not in version:
-        raise RuntimeError('requires Xcode 26.6 build 17F113')
+    xcode, version = select_xcode()
+    os.environ['DEVELOPER_DIR'] = str(xcode / 'Contents/Developer')
     sha = checked(['git', '-C', ROOT, 'rev-parse', '--short', 'HEAD'])
     full = checked(['git', '-C', ROOT, 'rev-parse', 'HEAD'])
     dd = ROOT / '.build' / ('device-' + run.name)
