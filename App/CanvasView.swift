@@ -90,9 +90,11 @@ final class CanvasView: NSView {
 
     private func requestDetail() {
         guard sourceSize.width > 0 else { return }
-        // Never ask ImageIO to upscale. Higher zoom can display already decoded pixels.
-        let maximum = max(sourceSize.width, sourceSize.height)
-        onResolutionNeeded?(max(1, Int(ceil(maximum * min(1, transform.zoom)))))
+        let backing = window?.backingScaleFactor ?? 1
+        let viewport = CGSize(width: max(1, bounds.width - 32) * backing,
+                              height: max(1, bounds.height - 32) * backing)
+        onResolutionNeeded?(CanvasDecodePolicy.maximumPixelSize(source: sourceSize, viewport: viewport,
+                                                                zoom: transform.zoom))
     }
 
     override func draw(_ dirtyRect: NSRect) {
