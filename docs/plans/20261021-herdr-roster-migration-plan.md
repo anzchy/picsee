@@ -72,7 +72,7 @@ mdpro ADR-0131 的阶段读屏障：
 |---|---|---|---|---|
 | A1 | `AGENTS.md` | Read first (Codex) + Claude/Codex 功能对照 | **已完成（2026-10-21，`03a53bb`）**：实际为项目入口地图和按需阅读表，含 Swift/Xcode 测试与构建命令，未另列读 `CLAUDE.md`、always-on 规则或命令 guard 说明 | A2、B 组 |
 | A2 | `CLAUDE.md` | — | **已完成（2026-10-21，`03a53bb`）**：实际为 `@AGENTS.md` 导入与 Claude Code 补充，不另列架构入口、五个 target、设计依据和规则链接 | — |
-| A3 | `.codex/rules/picsee.rules` | `mdpro.rules`（113 行） | **已完成（2026-10-22，`06ac875`）**：实际为 110 行 execpolicy backstop，未包含禁止 `tccutil reset`、`codesign --remove-signature` 和通过 entitlements 关闭 sandbox 的规则 | — |
+| A3 | `.codex/rules/picsee.rules` | `mdpro.rules`（113 行） | **已完成（2026-10-22，`06ac875`）**：execpolicy backstop 已补禁止 `tccutil reset`、`codesign --remove-signature` 和通过 entitlements 关闭 sandbox 的规则（见 `chore/codex-rules-bans`）；仅覆盖 argv 前缀，具体范围与限制见规则文件 | — |
 | A4 | `.codex/skills/picsee-tdd-workflow/` | `mdpro-tdd-workflow`（SKILL + 6 个 references + openai.yaml） | 8 步结构照搬；policy、implement、coverage、review、handoff 改成 Swift：XCTest/Swift Testing、`swift test --filter`、`xcodebuild test -only-testing`、`xccov` 覆盖率；mock 边界改为文件系统、ImageIO 解码器协议、时钟、NSWorkspace/NSPasteboard | P0-01 |
 | A5 | `.codex/agents/picsee-spec-adversary.toml`、`picsee-tdd-reviewer.toml` | 同名 mdpro 文件 | 改项目路径和 review 的 critical pass（见 B3） | A4 |
 | A6 | `.claude/agents/picsee-fable-auditor.md`、`picsee-landing-verifier.md`、`picsee-number-registrar.md` | 同名 mdpro 文件 | 仓库路径、lanes、verify worktree 目录 `picsee-wt/verify-<sha7>`；registrar 扫描 `docs/adr/` 和 F 编号表。按 2026-10-22 第二轮决定，`picsee-fable-auditor.md` 必须建立，写明阶段读屏障并保持 read-only。**部分完成（2026-10-22，`cff345a`）**：`picsee-fable-auditor.md` 已建立；`picsee-landing-verifier.md`、`picsee-number-registrar.md` 未做 | A1 |
