@@ -62,6 +62,9 @@ scripts/               研究与设计工具脚本（Python / Node）
 
 ## 命令
 
+素材生成/检查：`python3 scripts/testassets/generate.py --output TestAssets`；`python3 scripts/testassets/check.py`。
+全量确定性/照片下载：`scripts/heavy-lock.sh python3 scripts/testassets/determinism.py --tier all`；`python3 scripts/testassets/download.py`（详见 `TestAssets/README.md`）。
+
 研究和设计预览命令：
 
 ```sh
