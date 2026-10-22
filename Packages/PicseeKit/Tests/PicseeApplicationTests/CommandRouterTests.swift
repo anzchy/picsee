@@ -6,10 +6,12 @@ import PicseeApplication
     var hasImage = true
     var zoom = 1
     var inspector = false
+    var focus: FocusContext = .panel
     func isEnabled(_ command: CommandID) -> Bool { hasImage || command == .inspector }
     func perform(_ command: CommandID) {
         if command == .zoomIn { zoom += 1 }
         if command == .inspector { inspector.toggle() }
+        if command == .escape { focus = .canvas }
     }
 }
 
@@ -42,7 +44,9 @@ import PicseeApplication
     #expect(router.route(.zoomIn, from: .menu, focus: .panel, to: first))
     #expect(first.zoom == 4)
     #expect(!router.route(.escape, from: .key, focus: .panel, menuTracking: true, to: first))
+    #expect(first.focus == .panel)
     #expect(!router.route(.zoomIn, from: .key, focus: .canvas, menuTracking: true, to: first))
     #expect(first.zoom == 4)
     #expect(router.route(.escape, from: .key, focus: .panel, to: first))
+    #expect(first.focus == .canvas)
 }
