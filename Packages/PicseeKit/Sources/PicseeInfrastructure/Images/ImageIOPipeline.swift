@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import os
 import PicseeCore
 
 public enum ImageDecodeError: Error, Equatable {
@@ -40,6 +41,7 @@ public struct ImageIODecoder: ImageDecoding {
 public final class ImageIOPipeline: ImagePipeline, Sendable {
     private let decoder: any ImageDecoding
     private let queue: OperationQueue
+    private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "decode")
 
     public init(decoder: any ImageDecoding = ImageIODecoder()) {
         self.decoder = decoder
@@ -49,9 +51,18 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
     }
     public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
         let decoder = decoder
+        let logger = logger
         return try await withCheckedThrowingContinuation { continuation in
             queue.addOperation {
-                continuation.resume(with: Result { try decoder.decode(request) })
+                let result = Result { try decoder.decode(request) }
+                switch result {
+                case .success(let image):
+                    logger.notice("Decode success file=\(request.fileURL.lastPathComponent, privacy: .private) pixels=\(image.image.width, privacy: .public)x\(image.image.height, privacy: .public)")
+                case .failure:
+                    // Error descriptions can contain personal paths; keep them out of logs.
+                    logger.error("Decode failure file=\(request.fileURL.lastPathComponent, privacy: .private)")
+                }
+                continuation.resume(with: result)
             }
         }
     }

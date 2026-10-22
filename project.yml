@@ -30,21 +30,12 @@ targets:
         product: PicseeInfrastructure
       - package: PicseeKit
         product: PicseeMacUI
-    info:
-      path: App/Info.plist
-      properties:
-        CFBundleDocumentTypes:
-          - CFBundleTypeName: Image
-            CFBundleTypeRole: Viewer
-            LSHandlerRank: Alternate
-            LSItemContentTypes:
-              - public.image
     settings:
       base:
         PRODUCT_NAME: Picsee
         PRODUCT_BUNDLE_IDENTIFIER: io.github.anzchy.picsee
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Picsee
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/Resources/Picsee.entitlements
         # Git metadata lives outside a linked worktree; only this target's build script is unsandboxed.
         ENABLE_USER_SCRIPT_SANDBOXING: NO

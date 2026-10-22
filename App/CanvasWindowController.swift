@@ -1,11 +1,13 @@
 import AppKit
+import os
 import PicseeCore
 
 /// One P0 window and one in-flight request. New intent coalesces behind it.
 /// The admission actor, shared budgets and full cancellation belong to P0-05/06.
 @MainActor
 final class CanvasWindowController: NSWindowController, NSWindowDelegate {
-    private let canvas = CanvasView()
+    private let canvas = CanvasView(frame: .zero)
+    private let filesystemLogger = Logger(subsystem: "io.github.anzchy.picsee", category: "filesystem")
     private let pipeline: any ImagePipeline
     private var fileURL: URL?
     private var generation = UUID()
@@ -36,6 +38,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { nil }
 
     func open(_ url: URL) {
+        filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
         generation = UUID()
         fileURL = url
         completedMaximum = 0
