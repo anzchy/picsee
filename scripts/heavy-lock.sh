@@ -2,16 +2,16 @@
 # heavy-lock.sh — run a heavy job under one machine-wide lock.
 #
 # Purpose: serialise heavy jobs (vitest --coverage, cargo test, tauri build)
-#   across every mdpro checkout and worktree on this machine, so concurrent
+#   across every picsee checkout and worktree on this machine, so concurrent
 #   sessions queue instead of overloading CPU and memory together.
 #
 # Usage: scripts/heavy-lock.sh <command...>
 # Env:
-#   MDPRO_HEAVY_LOCK            lock dir (default $HOME/.cache/mdpro-heavy.lock),
+#   PICSEE_HEAVY_LOCK            lock dir (default $HOME/.picsee/locks/heavy.lock),
 #                               outside the repo so all worktrees share it.
-#   MDPRO_HEAVY_LOCK_WAIT_SECS  max wait for the lock (default 1800); exit 75.
-#   MDPRO_HEAVY_LOCK_HELD=1     exported to the child; a nested call runs directly.
-#   MDPRO_HEAVY_LOCK_KILL_GRACE_SECS  on INT/TERM, how long the job's process
+#   PICSEE_HEAVY_LOCK_WAIT_SECS  max wait for the lock (default 1800); exit 75.
+#   PICSEE_HEAVY_LOCK_HELD=1     exported to the child; a nested call runs directly.
+#   PICSEE_HEAVY_LOCK_KILL_GRACE_SECS  on INT/TERM, how long the job's process
 #                               group gets after TERM before KILL (default 10).
 #
 # Key decisions: macOS has no flock(1), so the lock is an atomic `mkdir` dir
@@ -28,12 +28,12 @@ if [[ $# -eq 0 ]]; then
   echo "usage: $0 <command...>" >&2
   exit 64
 fi
-[[ "${MDPRO_HEAVY_LOCK_HELD:-}" == "1" ]] && exec "$@"
+[[ "${PICSEE_HEAVY_LOCK_HELD:-}" == "1" ]] && exec "$@"
 
-LOCK="${MDPRO_HEAVY_LOCK:-$HOME/.cache/mdpro-heavy.lock}"
-MAX_WAIT="${MDPRO_HEAVY_LOCK_WAIT_SECS:-1800}"
+LOCK="${PICSEE_HEAVY_LOCK:-$HOME/.picsee/locks/heavy.lock}"
+MAX_WAIT="${PICSEE_HEAVY_LOCK_WAIT_SECS:-1800}"
 POLL_SECS=5
-KILL_GRACE_SECS="${MDPRO_HEAVY_LOCK_KILL_GRACE_SECS:-10}"
+KILL_GRACE_SECS="${PICSEE_HEAVY_LOCK_KILL_GRACE_SECS:-10}"
 HEARTBEAT_SECS=60
 TAG="[heavy-lock]"
 mkdir -p "$(dirname "$LOCK")"
@@ -88,7 +88,7 @@ until try_acquire "$@"; do
     next_heartbeat=$((next_heartbeat + HEARTBEAT_SECS))
   fi
   if ((waited >= MAX_WAIT)); then
-    echo "$TAG gave up after ${waited}s (MDPRO_HEAVY_LOCK_WAIT_SECS=$MAX_WAIT); held by: $(holder_desc)" >&2
+    echo "$TAG gave up after ${waited}s (PICSEE_HEAVY_LOCK_WAIT_SECS=$MAX_WAIT); held by: $(holder_desc)" >&2
     exit 75
   fi
   nap=$((MAX_WAIT - waited < POLL_SECS ? MAX_WAIT - waited : POLL_SECS))
@@ -135,7 +135,7 @@ trap release EXIT
 trap 'on_signal INT' INT
 trap 'on_signal TERM' TERM
 
-export MDPRO_HEAVY_LOCK_HELD=1
+export PICSEE_HEAVY_LOCK_HELD=1
 set +e
 # Job control gives the async child its own process group (pgid = $child), so
 # stop_group can reach every descendant, even ones orphaned when the child dies.
