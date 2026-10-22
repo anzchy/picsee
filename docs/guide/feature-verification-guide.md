@@ -46,7 +46,7 @@
 | 签名 | 钥匙串里已有团队 `GRT84NAK4T` 的 Apple Development 证书（2027-01-31 到期） | `security find-identity -v -p codesigning` 里能看到它 |
 | 终端权限 | 系统设置 → 隐私与安全性：给运行 Claude Code 的终端 App 打开**屏幕录制**和**辅助功能** | computer use 截图能看到桌面 |
 | 输入法 | 验收前切到 **ABC** | 菜单栏输入法图标 |
-| 运行目录 | `mkdir -p ~/.picsee/dtrack/reports` | 目录存在 |
+| 运行目录 | `mkdir -p ~/.picsee/device-runs` | 目录存在 |
 | 已安装的 Picsee | `/Applications` 里不要有旧的 Picsee，或验收时它不在运行 | `pgrep -fl Picsee` 没有输出 |
 
 本机是 Retina @2x 屏。账簿里涉及 2× 的行（VIEW-02 的前半、P0-03、27 页）**只能在本机验**；
@@ -79,7 +79,7 @@ brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<
 - 运行步骤：features/canvas-pixels.md
 - 沙盒容器：保持现状（不删除）
 - 需要用户动手的步骤：VIEW-03 触控板捏合 —— 到这一步停下来叫我
-- 报告写到：~/.picsee/dtrack/reports/<run-id>/report.md
+- 报告写到：~/.picsee/device-runs/<run-id>/report.md
 ```
 
 需要“全新安装”状态（删除沙盒容器）时，在 brief 里写明并注明“用户已同意”；验收会话不会自己删。
@@ -103,7 +103,7 @@ brief 是给验收会话的任务单，放在 `~/.picsee/dtrack/brief-<日期>-<
 - 会话停下来叫你时（例如触控板捏合、按物理 Esc），照做后告诉它继续；
 - 运行期间别动鼠标键盘，别切到别的 App。
 
-截图和日志都在 `~/.picsee/dtrack/reports/<run-id>/`，**永远不进仓库**（仓库是公开的）。
+截图和日志都在 `~/.picsee/device-runs/<run-id>/`，**永远不进仓库**（仓库是公开的）。
 
 ### ④ 读结论表，写验证记录
 
@@ -197,7 +197,7 @@ PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 里说�
 - `Validated-by` 的角色，同时出现在这次改动里实现提交的 `Implemented-by` 上；
 - 验证记录和代码改动在同一次提交里。
 
-trailer 只是声明，真正的保证仍是流程：验收一定在新会话里跑，运行 ID 对应 `~/.picsee/dtrack/reports/` 里真实存在的报告。
+trailer 只是声明，真正的保证仍是流程：验收一定在新会话里跑，运行 ID 对应 `~/.picsee/device-runs/` 里真实存在的报告。
 
 **截图能不能放进 PR 或 issue？**
 不建议。截图会暴露桌面内容，而仓库与 issue 都是公开的。PR 里放验证记录的链接和结论表即可；确实需要图时，
