@@ -139,15 +139,22 @@ def launch(run):
         time.sleep(0.5)
     raise RuntimeError('ready timeout after 30 s: missing ' + missing)
 
+def sandbox_enabled(output):
+    raw = output.encode() if isinstance(output, str) else output
+    try:
+        return plistlib.loads(raw).get('com.apple.security.app-sandbox') is True
+    except Exception:
+        # macOS 27 codesign emits a typed text dump by default.
+        text = raw.decode(errors='replace')
+        return bool(re.search(r'(?m)^\s*\[Key\] com\.apple\.security\.app-sandbox\s*\n'
+                              r'\s*\[Value\]\s*\n\s*\[Bool\] true\s*$', text))
+
 def collect(run, expected):
     pid, app = identity(run)
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     signing = command(['/usr/bin/codesign', '-dv', '--verbose=2', app])
     ent = command(['/usr/bin/codesign', '-d', '--entitlements', '-', app])
-    try:
-        sandbox = plistlib.loads(ent.stdout.encode()).get('com.apple.security.app-sandbox') is True
-    except Exception:
-        sandbox = False
+    sandbox = ent.returncode == 0 and sandbox_enabled(ent.stdout)
     ws, log = [], ''
     errors = {}
     try:
