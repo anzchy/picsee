@@ -2,6 +2,7 @@ import AppKit
 import os
 import PicseeCore
 import PicseeApplication
+import PicseeInfrastructure
 import SwiftUI
 
 /// Window intent is isolated; decode admission and buffers are shared by the pipeline.
@@ -138,12 +139,27 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                         decodeProgress.completed(image, isPreview: isPreview)
                         canvas.install(image)
                     } else if token == current {
-                        canvas.showFailure(); desiredMaximum = 0
+                        if key.itemID == expectedKey.itemID, key.revision != revision,
+                           decodeProgress.restartForRevision(request: token, current: current) {
+                            currentKey = nil
+                            canvas.beginOpening()
+                        } else {
+                            canvas.showFailure(); desiredMaximum = 0
+                        }
                     }
                 }
             } catch {
-                if token.generation == generation && !Task.isCancelled {
-                    canvas.showFailure(); desiredMaximum = 0
+                let current = PresentationToken(binding: binding, generation: generation)
+                if token == current && !Task.isCancelled {
+                    // This controller supplies valid URLs and positive sizes. invalidRequest
+                    // here means the prepared render identity no longer matches the file.
+                    if error as? ImageDecodeError == .invalidRequest,
+                       decodeProgress.restartForRevision(request: token, current: current) {
+                        currentKey = nil
+                        canvas.beginOpening()
+                    } else {
+                        canvas.showFailure(); desiredMaximum = 0
+                    }
                 }
             }
             if token.generation == generation {

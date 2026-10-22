@@ -18,6 +18,7 @@ public struct CanvasDecodeProgress: Sendable {
     public private(set) var previewCompleted = false
     private var sourceMaximum = Int.max
     private var viewportCompleted = false
+    private var revisionRetryUsed = false
     public init() { }
     public func nextMaximum(desired: Int) -> Int? {
         guard desired > 0 else { return nil }
@@ -25,7 +26,15 @@ public struct CanvasDecodeProgress: Sendable {
         let target = min(desired, sourceMaximum)
         return !viewportCompleted || target > completedMaximum ? target : nil
     }
+    /// Retry only a still-bound request, once until a successful install breaks the sequence.
+    public mutating func restartForRevision(request: PresentationToken, current: PresentationToken) -> Bool {
+        guard request == current, !revisionRetryUsed else { return false }
+        self = CanvasDecodeProgress()
+        revisionRetryUsed = true
+        return true
+    }
     public mutating func completed(_ image: DecodedImage, isPreview: Bool) {
+        revisionRetryUsed = false
         completedMaximum = max(image.image.width, image.image.height)
         sourceMaximum = Int(max(image.sourcePixelSize.width, image.sourcePixelSize.height))
         previewCompleted = true
