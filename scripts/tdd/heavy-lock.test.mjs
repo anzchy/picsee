@@ -120,3 +120,17 @@ test('three-way contention never overlaps', {timeout:25000}, async () => {
   assert.deepEqual(result.map(r=>r.code),[0,0,0]);
   assert.equal(readFileSync(events,'utf8'),'start\nend\nstart\nend\nstart\nend\n');
 });
+test('lock wait timeout keeps exit 75 without entering the command', async () => {
+  const env=environment();
+  const ready=path.join(env.HOME,'ready');
+  const holder=start(['bash','-c','touch "$1"; sleep 4','_',ready],env);
+  try {
+    await until(()=>existsSync(ready),'holder owns kernel lock');
+    const waiting=await run(['bash','-c','echo must-not-run'],{...env,PICSEE_HEAVY_LOCK_WAIT_SECS:'1'});
+    assert.equal(waiting.code,75);
+    assert.doesNotMatch(waiting.output,/must-not-run/);
+  } finally {
+    holder.child.kill('SIGTERM');
+    await holder.done;
+  }
+});
