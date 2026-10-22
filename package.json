@@ -8,6 +8,7 @@
   "private": true,
   "description": "Project-scoped REA installation and static Picview analysis",
   "scripts": {
+    "rules:check": "node --test scripts/codex-rules/rules.test.mjs",
     "rea": "rea",
     "analyze": "python3 scripts/analyze_picview.py",
     "stitch": "node scripts/stitch.mjs",

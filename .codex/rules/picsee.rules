@@ -5,12 +5,19 @@
 # "危险命令先问". Codex runs no role-guard hook, so these prefix rules stand in.
 #
 # Loaded only when this project's .codex/ layer is trusted.
-# Test: codex execpolicy check --pretty --rules .codex/rules/picsee.rules -- git push
+# Test: npm run rules:check (requires codex on PATH; not wired into CI).
 #
-# Limits: a rule matches the argv prefix only. `git -C <dir> push`, or a shell
-# script using $(...), redirection or variables, is not split and slips past.
+# Limits: a rule matches the argv prefix only. `git -C <dir> push`, sudo/env
+# wrappers, and bash -c scripts using $(...), redirection or variables slip past;
+# execpolicy does not split shell commands.
 # These rules are a backstop, not the boundary; AGENTS.md still binds.
-# apply_patch/editor edits to *.entitlements or project.yml are NOT caught; AGENTS.md and audit D4 check entitlements, and doctor sandbox verifies the signed app.
+#
+# apply_patch/editor edits to *.entitlements or project.yml are NOT caught.
+# AGENTS.md and audit D4 check entitlements; doctor sandbox verifies the signed app.
+#
+# Ad-hoc re-signing (codesign --force --sign - without entitlements) also drops
+# the sandbox entitlement. Signing stays allowed for device scripts; doctor
+# sandbox is the guard for the signed app.
 
 # --- AGENTS.md: destructive commands ------------------------------------------
 
@@ -113,18 +120,20 @@ prefix_rule(
 # --- AGENTS.md: sandbox, signing and privacy grants ---
 
 prefix_rule(
-    pattern = ["tccutil", "reset"],
+    pattern = [["tccutil", "/usr/bin/tccutil"], "reset"],
     decision = "forbidden",
     justification = "AGENTS.md and migration plan A3: preserve privacy grants used by device acceptance. Ask the delegator, naming the service, bundle ID and acceptance state at risk; use read-only inspection instead.",
-    match = ["tccutil reset All", "tccutil reset All io.github.anzchy.picsee", "tccutil reset SystemPolicyAllFiles"],
+    match = ["/usr/bin/tccutil reset All", "tccutil reset All", "tccutil reset All io.github.anzchy.picsee", "tccutil reset SystemPolicyAllFiles"],
     not_match = ["tccutil --help"],
 )
 
+# Flags before --remove-signature (e.g. -f/--force/-v/--verbose) are NOT caught.
+# This rule covers only the immediate operation prefix; AGENTS.md still binds.
 prefix_rule(
-    pattern = ["codesign", "--remove-signature"],
+    pattern = [["codesign", "/usr/bin/codesign"], "--remove-signature"],
     decision = "forbidden",
     justification = "AGENTS.md and migration plan A3: preserve the signature and sandbox entitlements. Ask the delegator, naming the app and signing problem; inspect with codesign -d or --verify instead.",
-    match = ["codesign --remove-signature Picsee.app"],
+    match = ["codesign --remove-signature Picsee.app", "/usr/bin/codesign --remove-signature Picsee.app"],
     not_match = ["codesign -d --entitlements :- Picsee.app", "codesign --verify --deep --strict Picsee.app", "codesign --force --sign 'Apple Development' --entitlements Picsee.entitlements Picsee.app"],
 )
 
@@ -167,10 +176,12 @@ prefix_rule(
     not_match = ["PlistBuddy -c Print Picsee.entitlements", "/usr/libexec/PlistBuddy -c Print Picsee.entitlements", "/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' Picsee.entitlements", "/usr/libexec/PlistBuddy -c 'Set :unrelated.key false' Picsee.entitlements"],
 )
 
+# plutil uses dot-separated keypaths: backslash-dot addresses a literal dot.
+# Both spellings are banned; options before the operation (e.g. -s) are NOT caught.
 prefix_rule(
-    pattern = [["plutil", "/usr/bin/plutil"], ["-replace", "-remove", "-insert"], "com.apple.security.app-sandbox"],
+    pattern = [["plutil", "/usr/bin/plutil"], ["-replace", "-remove", "-insert"], ["com.apple.security.app-sandbox", "com\\.apple\\.security\\.app-sandbox"]],
     decision = "forbidden",
     justification = "AGENTS.md sandbox stays on; migration plan A3: do not replace, remove or insert the App Sandbox key. Ask the delegator, naming the entitlement file, exact operation and sandbox conflict; use plutil -p and record an ADR instead.",
-    match = ["plutil -replace com.apple.security.app-sandbox -bool NO Picsee.entitlements", "/usr/bin/plutil -remove com.apple.security.app-sandbox Picsee.entitlements", "plutil -insert com.apple.security.app-sandbox -bool YES Picsee.entitlements"],
+    match = ["plutil -replace com.apple.security.app-sandbox -bool NO Picsee.entitlements", "/usr/bin/plutil -remove com.apple.security.app-sandbox Picsee.entitlements", "plutil -insert com.apple.security.app-sandbox -bool YES Picsee.entitlements", "plutil -replace 'com\\.apple\\.security\\.app-sandbox' -bool NO Picsee.entitlements", "plutil -remove 'com\\.apple\\.security\\.app-sandbox' Picsee.entitlements", "plutil -insert 'com\\.apple\\.security\\.app-sandbox' -bool NO Picsee.entitlements"],
     not_match = ["plutil -p Picsee.entitlements", "/usr/bin/plutil -p Picsee.entitlements", "plutil -replace unrelated.key -bool NO Picsee.entitlements"],
 )

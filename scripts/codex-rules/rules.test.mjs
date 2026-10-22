@@ -9,6 +9,8 @@ const rules = '.codex/rules/picsee.rules';
 const app = 'Picsee.app';
 const file = 'Picsee.entitlements';
 const key = 'com.apple.security.app-sandbox';
+// A literal dot in plutil keypaths must reach execpolicy as backslash + dot.
+const escapedKey = String.raw`com\.apple\.security\.app-sandbox`;
 
 function decision(argv) {
   // Only execpolicy runs; argv is data, never executed or passed through a shell.
@@ -27,6 +29,10 @@ const forbidden = [
   ['tccutil', 'reset', 'All', 'io.github.anzchy.picsee'],
   ['tccutil', 'reset', 'SystemPolicyAllFiles'],
   ['codesign', '--remove-signature', app],
+  ['/usr/bin/tccutil', 'reset', 'All'],
+  ['/usr/bin/tccutil', 'reset', 'All', 'io.github.anzchy.picsee'],
+  ['/usr/bin/tccutil', 'reset', 'SystemPolicyAllFiles'],
+  ['/usr/bin/codesign', '--remove-signature', app],
 ];
 // PlistBuddy takes its entire operation as ONE argv token. Cover both executable
 // spellings, optional root colon, Set/Add boolean spellings, and Delete.
@@ -41,17 +47,23 @@ for (const tool of ['PlistBuddy', '/usr/libexec/PlistBuddy']) {
 }
 // plutil key mutations: trailing value/type/file tokens do not affect the ban.
 for (const tool of ['plutil', '/usr/bin/plutil']) {
-  forbidden.push([tool, '-remove', key, file]);
-  for (const operation of ['-replace', '-insert']) {
-    for (const value of ['NO', 'YES']) {
-      forbidden.push([tool, operation, key, '-bool', value, file]);
+  for (const key of ['com.apple.security.app-sandbox', escapedKey]) {
+    forbidden.push([tool, '-remove', key, file]);
+    for (const operation of ['-replace', '-insert']) {
+      for (const value of ['NO', 'YES']) {
+        forbidden.push([tool, operation, key, '-bool', value, file]);
+      }
+      forbidden.push([tool, operation, key, '-json', 'false', file]);
     }
-    forbidden.push([tool, operation, key, '-json', 'false', file]);
   }
 }
 
 const allowed = [
   ['tccutil', '--help'],
+  ['/usr/bin/tccutil', '--help'],
+  ['/usr/bin/codesign', '-d', '--entitlements', ':-', app],
+  ['/usr/bin/codesign', '--verify', '--deep', '--strict', app],
+  ['codesign', '--force', '--sign', '-', app],
   ['codesign', '-d', '--entitlements', ':-', app],
   ['codesign', '--verify', '--deep', '--strict', app],
   ['codesign', '--force', '--sign', 'Apple Development', '--entitlements', file, app],
@@ -75,6 +87,39 @@ for (const argv of allowed) {
     assert.notEqual(output.decision, 'forbidden');
     assert.ok(!output.matchedRules.some(rule => rule.prefixRuleMatch?.decision === 'forbidden'));
   });
+}
+
+// Independent legacy contract: deleting a rule must not delete its expectations.
+const legacyForbidden = [
+  ['rm', '-rf', 'src'], ['rm', '-r', 'docs/old'], ['rm', '--recursive', 'tmp'],
+  ['git', 'push'], ['git', 'push', '-f', 'origin', 'main'],
+  ['git', 'push', 'origin', 'p0-01/x'], ['git', 'reset', '--hard', 'HEAD~1'],
+  ['git', 'checkout', '.'], ['git', 'restore', '.'],
+  ['git', 'clean', '-f'], ['git', 'clean', '-fd'], ['git', 'clean', '-fdx'],
+  ['git', 'branch', '-D', 'p0-01/x'], ['git', 'branch', '-d', 'p0-01/x'],
+  ['git', 'worktree', 'remove', '../picsee-wt/x'],
+  ['git', 'add', '-A'], ['git', 'add', '.'], ['git', 'add', '-u'],
+  ['git', 'commit', '-a', '-m', 'x'], ['git', 'commit', '-am', 'x'],
+  ['git', 'checkout', 'main'], ['git', 'switch', 'main'],
+  ['gh', 'release', 'create', 'v1'], ['gh', 'workflow', 'run', 'release.yml'],
+  ['gh', 'pr', 'merge', '12'], ['gh', 'pr', 'create'],
+];
+const legacyAllowed = [
+  ['rm', '-f', 'a.txt'], ['rm', 'a.txt'],
+  ['git', 'reset', '--soft', 'HEAD~1'], ['git', 'reset', 'HEAD', 'A.swift'],
+  ['git', 'checkout', 'Sources/A.swift'], ['git', 'restore', 'Sources/A.swift'],
+  ['git', 'clean', '-n'], ['git', 'branch', '--show-current'], ['git', 'branch'],
+  ['git', 'worktree', 'list'], ['git', 'add', 'Sources/A.swift', 'Tests/ATests.swift'],
+  ['git', 'commit', '-m', 'feat(core): x'],
+  ['git', 'checkout', '-b', 'p0-01/x'], ['git', 'switch', 'p0-01/x'],
+  ['gh', 'pr', 'view', '12'], ['gh', 'pr', 'diff', '12'],
+];
+for (const [expectedForbidden, cases] of [[true, legacyForbidden], [false, legacyAllowed]]) {
+  for (const argv of cases) {
+    test(`legacy ${expectedForbidden ? 'forbidden' : 'allowed'}: ${JSON.stringify(argv)}`, () => {
+      assert.equal(decision(argv).decision === 'forbidden', expectedForbidden);
+    });
+  }
 }
 
 // Replay every embedded example, including all pre-existing ones. These simple
