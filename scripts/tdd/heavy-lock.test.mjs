@@ -57,3 +57,18 @@ test('TERM reaches child group before releasing the lock', async () => {
   assert.ok(existsSync(stopped), 'child received TERM');
   assert.ok(!existsSync(path.join(env.HOME, '.picsee/locks/heavy.lock')), 'released lock');
 });
+test('HUP stops the command before releasing the lock', async () => {
+  const env = environment();
+  const ready = path.join(env.HOME, 'ready');
+  const stopped = path.join(env.HOME, 'stopped');
+  // Natural completion is bounded so a failing baseline leaves no orphan job.
+  const child = spawn(lock, ['bash', '-c', 'trap \'echo stopped > "$2"; exit 0\' TERM; touch "$1"; sleep 0.8', '_', ready, stopped], { env });
+  child.stdout.resume(); child.stderr.resume();
+  const done = new Promise(resolve => child.on('close', (code, signal) => resolve({code, signal})));
+  for (let i = 0; i < 100 && !existsSync(ready); i++) await new Promise(r => setTimeout(r, 20));
+  assert.ok(existsSync(ready));
+  child.kill('SIGHUP');
+  assert.equal((await done).signal, 'SIGHUP');
+  assert.ok(existsSync(stopped), 'child must receive termination before lock release');
+  assert.ok(!existsSync(path.join(env.HOME, '.picsee/locks/heavy.lock')));
+});
