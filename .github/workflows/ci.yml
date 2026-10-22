@@ -1,0 +1,29 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  walking-skeleton:
+    name: Walking skeleton
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Select locked Xcode
+        run: |
+          set -euo pipefail
+          test -d /Applications/Xcode_26.6.app
+          sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version | tee /tmp/picsee-xcode-version.txt
+          grep -Fx 'Xcode 26.6' /tmp/picsee-xcode-version.txt
+          grep -Fx 'Build version 17F113' /tmp/picsee-xcode-version.txt
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Swift Testing
+        run: swift test --package-path Packages/PicseeKit
+      - name: Build unsigned app
+        run: xcodebuild build -scheme Picsee -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -derivedDataPath .build/dd-ci
