@@ -5,6 +5,7 @@ import os
 import PicseeCore
 
 public enum ImageDecodeError: Error, Equatable {
+    case budgetExceeded
     case invalidRequest
     case unreadableImage
 }
