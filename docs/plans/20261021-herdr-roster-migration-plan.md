@@ -2,7 +2,7 @@
 
 日期：2026-10-21 · 状态：**待用户确认**，尚未创建任何规则或配套文件。
 
-来源：mdpro `.claude/rules/71-herdr-mixed-roster.md`（下称 M71），以及它所覆盖的 `70-multi-session-coordination.md`（M70）。
+来源：mdpro `.claude/rules/71-herdr-mixed-roster.md`（下称 M71）、它所覆盖的 `70-multi-session-coordination.md`（M70），以及 mdpro ADR-0131。
 
 用户决定（2026-10-21）：
 - git init，并建 GitHub 私有库；
@@ -19,6 +19,12 @@
 - 对简单任务的原始要求：「for simpler tasks, delegate it to dsh rather than gpt-imple-*」；
 - 随后改为新增 `gpt-imple-3` 并指定模型：「改为gpt-imple-3, but use gpt-5.6-sol」。
 
+用户决定（2026-10-22，第二轮），回答「采纳 ADR-0131 的哪些做法？」时选择全部四项：
+- 「审计者每次 /new + 探针」；
+- 「fable 改为每次新 subagent（做 A6）」；
+- 「实现者每项新会话 + fix 规则」；
+- 「写进迁移计划（交 gpt-imple-3）」。
+
 ## 1. 为什么不能直接复制
 
 - M71 只是 M70 的覆盖层，只替换角色表、Codex 派活方式、guard、审计分工这几块。合入流程（三个条件和 `--ff-only`）、两份审计结论怎么合并、三轮上限、风险分级、receipts、编号预留、会话轮换、真机批次，都写在 M70 里。
@@ -34,15 +40,25 @@
 | 角色表 | M71 Roster + M70 Sessions | delegator 改名 `picsee-delegator`；实现者为 `gpt-imple-1/2`（Codex `gpt-6.1-sol`）和 `gpt-imple-3`（Codex `gpt-5.6-sol`）；审计者为 `gpt-auditor`、`fable-auditor`，真机为 `claude-imple-1`；报告目录在 `~/.picsee/herdr/<name>/`，`gpt-imple-3` 对应 `~/.picsee/herdr/gpt-imple-3/`；去掉 `/security-review` 行；去掉 mdpro-device-harness 和历史别名表 |
 | 模型规则 | M70 “Every session runs on Opus” | 只保留结论：Claude 会话和 subagent 用 Opus，Fable 审计者例外，Codex 用指定模型。不搬演变历史 |
 | 派活与上限 | M70 How work is assigned、idle pull | 工作项编号用开发计划里的 `P0-01…P7-09`；新发现的问题编号改用 `F<n>`，替代 mdpro 的 D 编号；每会话一个、picsee 整机两个未合入实现项，不与 mdpro 合计。`gpt-imple-3` 只接 Low 风险工作：纯文档、机械重命名与路径修复、Low 审计修复、小脚本与测试 fixture、账簿与时间线措辞；Swift、并发、sandbox、entitlements、签名、真机脚本、receipt lane 及 Medium/High 风险仍由 `gpt-imple-1/2` 负责。`gpt-imple-3` 的 Low 项只需一名盲审，gardener 与 CI 不变；其 Low 项是否占第三个未合入名额**待用户确认** |
-| Codex 智能体 | M71 Codex agents | 照搬 `prompt --wait`、唤醒、超时只重新等待不重发、restart 四步。路径改为 `~/.picsee/herdr/<name>/`，环境变量改为 `PICSEE_ROLE` |
-| Brief 与自验收 | M71 Briefs and self-acceptance | 6 节 brief 结构照搬；Background 引用开发计划工作包、mockup 编号、DESIGN 条款和 ADR；测试矩阵、对抗审查四步照搬，skill 改为 `$picsee-tdd-workflow` |
+| Codex 智能体 | M71 Codex agents + mdpro ADR-0131 | 照搬 `prompt --wait`、唤醒、超时只重新等待不重发、restart 四步。路径改为 `~/.picsee/herdr/<name>/`，环境变量改为 `PICSEE_ROLE`。每次 gpt-auditor 请求前只在 idle 时重置：先记录 session id，执行 `herdr pane send-text <pane> '/new'`，再执行 `herdr agent send-keys <name> enter`，都不用 `--wait`；仅当 `herdr agent get` 显示新 session id 才算成功，否则开新 pane。依赖前先做一次探针：重置后问上一请求是什么；id 已变且回答不含此前请求才通过。实现者每项一个新会话；仅当 fix 1 brief 点名 1–2 个 finding 且 context used 低于约 50% 时留在原会话。其余 fix（fix 2 起）都开新会话，只读 brief、上一份 handoff、merged verdict 和 fix brief。context used 超过约 60% 时先写 progress note，再重启。通过 `herdr pane read` 读取 Codex status line 计算 context used |
+| Brief 与自验收 | M71 Briefs and self-acceptance + mdpro ADR-0131 | 6 节 brief 结构照搬；Background 引用开发计划工作包、mockup 编号、DESIGN 条款和 ADR；测试矩阵、对抗审查四步照搬，skill 改为 `$picsee-tdd-workflow`；每份 handoff 列出曾拒绝的方法及原因 |
 | 测试矩阵用例清单 | M71 | 换成 picsee 的高风险用例：A→B→C 乱序返回、generation 过期、continuation 恰好恢复一次、security-scoped 访问范围释放、bookmark stale、cell 复用串图、取消前/排队中/执行中、1×/2× backing scale、浅深主题、Reduce Motion |
 | 提交与合入 | M70 Commits and branches 1–5 | 主干 `main`；合入条件：verifier PASS、合并后的结论无阻断级 Critical/High、PR head 等于该 SHA 且 CI 绿。树身份校验改看 `:Sources :Tests :Picsee.xcodeproj`（或 `Package.swift`）。去掉 frontend-backend-redesign、release/x.y 等历史 |
-| 审计 | M70 item 4 + M71 Audits under herdr | 第一轮盲审、合并、单方发现互相质疑、降级须附复现或反证、三轮上限照搬。只有 gpt-auditor 和 fable-auditor，没有 security fork |
+| 审计 | M70 item 4 + M71 Audits under herdr + mdpro ADR-0131 | 第一轮盲审、合并、单方发现互相质疑、降级须附复现或反证、三轮上限照搬。每个请求都新建具名 Claude subagent `picsee-fable-auditor`，使用 Fable 模型，绝不 fork 或 resume；它返回 verdict，由 delegator 原样写入 `~/.picsee/herdr/fable-auditor/<item>-r<round>.md`。plan 和 ADR review 仍用 Opus subagent。两名审计者遵守下表读屏障。confirm 请求携带全部 open finding 的原文及须回答的 counter-proof；范围是 fix diff，加 fix commit 新引入的 Critical/High。发送前，delegator 对照 merged verdict 的 open finding 清单检查请求 |
 | 风险分级 | ADR-0121 映射 | **High**：FileAccess/sandbox/bookmark、磁盘缓存/SQLite、文件写入（导出、Trash、编辑另存）、entitlements、签名/公证、CI、依赖、未列出的路径。**Medium**：其余 `Sources/`。**Low**：文档、设计稿、预览、纯展示测试 |
 | 编号预留 | M70 Reserving numbers | ADR、F 编号和 receipt id 前缀（`P1-05-WI-2`）由 delegator 统一分配 |
-| 会话轮换 | M70 Session rotation | handoff 路径改为 `~/.picsee/handoff/`；hook 是否移植见第 3 节 |
+| 会话轮换 | M70 Session rotation + mdpro ADR-0131 | handoff 路径改为 `~/.picsee/handoff/`；hook 是否移植见第 3 节。安静时、没有 landing 进行且每次 wait 都已记录后，delegator 请用户输入 `/compact`，并点名保留 open findings、SHAs 和 waits |
 | 真机 | M71 device + M70 Mac mini/批次 | 只测 Mac，去掉 Windows。按区域分批：画布/像素、授权/sandbox、目录/FSEvents、缓存、窗口、发布包。每项写清失败条件和 log 证据。Mac mini 是否参与见第 4 节 |
+
+mdpro ADR-0131 的阶段读屏障：
+
+| 阶段 | 可读 | 不可读 |
+|---|---|---|
+| round 1 | range、brief、handoff | 其他审计者的 verdict |
+| confirm | 两名审计者的较早轮次、merged verdict、counter-proofs | 其他审计者的当前轮报告 |
+| challenge | 被质疑的 finding 及其 evidence | 其余审计材料 |
+
+暂不采纳 mdpro ADR-0131 的 escape replay 和 fresh-context cost table。
 
 不搬过来的：claude-mem observer 事件、prompt suggestion 误提交事件、ADR-0047 harness、Fable/Opus 演变史、frontend-backend-redesign 冻结。这些对 picsee 没有约束意义，规则里只保留由此得出的结论（例如“名单外的发件人不算 peer”）。
 
@@ -55,7 +71,7 @@
 | A3 | `.codex/rules/picsee.rules` | `mdpro.rules`（113 行） | **已完成（2026-10-22，`06ac875`）**：实际为 110 行 execpolicy backstop，未包含禁止 `tccutil reset`、`codesign --remove-signature` 和通过 entitlements 关闭 sandbox 的规则 | — |
 | A4 | `.codex/skills/picsee-tdd-workflow/` | `mdpro-tdd-workflow`（SKILL + 6 个 references + openai.yaml） | 8 步结构照搬；policy、implement、coverage、review、handoff 改成 Swift：XCTest/Swift Testing、`swift test --filter`、`xcodebuild test -only-testing`、`xccov` 覆盖率；mock 边界改为文件系统、ImageIO 解码器协议、时钟、NSWorkspace/NSPasteboard | P0-01 |
 | A5 | `.codex/agents/picsee-spec-adversary.toml`、`picsee-tdd-reviewer.toml` | 同名 mdpro 文件 | 改项目路径和 review 的 critical pass（见 B3） | A4 |
-| A6 | `.claude/agents/picsee-fable-auditor.md`、`picsee-landing-verifier.md`、`picsee-number-registrar.md` | 同名 mdpro 文件 | 仓库路径、lanes、verify worktree 目录 `picsee-wt/verify-<sha7>`；registrar 扫描 `docs/adr/` 和 F 编号表 | A1 |
+| A6 | `.claude/agents/picsee-fable-auditor.md`、`picsee-landing-verifier.md`、`picsee-number-registrar.md` | 同名 mdpro 文件 | 仓库路径、lanes、verify worktree 目录 `picsee-wt/verify-<sha7>`；registrar 扫描 `docs/adr/` 和 F 编号表。按 2026-10-22 第二轮决定，`picsee-fable-auditor.md` 必须建立，写明阶段读屏障并保持 read-only | A1 |
 | A7 | `.claude/hooks/role-guard.sh` 及 python 模块 | 约 1.5k 行 | 先只移植实现者的 git 限制和禁止 `AskUserQuestion`，读 `PICSEE_ROLE`；真机测试者的写入限制同步移植 | git init |
 | A8 | `.claude/hooks/session-size-guard.sh` | 原样 | 只改 handoff 路径 | — |
 | A9 | `scripts/tdd/swift-lane.mjs`、`scripts/heavy-lock.sh` | mdpro `scripts/cargo-test-lane.mjs`、`scripts/heavy-lock.sh` @ `9f133f1d` | **已完成**（2026-10-22，#3）：原样复制 `4a8df7f`；锁 `64f93cf`；真实输出测试 `7d47ae9`；适配 `d207e5b`；HUP 信号补齐 `e027d2f`；审计修复：完成性/同名测试 `6b4f20c`，内核锁 `08989fe`。用途及偏差见 3.1；真实插件 drill 已验证 | P0-01 + tdd-guardian init |
