@@ -338,7 +338,7 @@ On 2026-10-22, a delegator ran `20261022-204006-VIEW-02-03-1x-mini` from a Claud
 on the Mac mini, at main `8a007b3`. Signed `build.sh` → `launch.sh` → `doctor.sh` (12 PASS, including
 `machine` and `fixtures` with manifest-verified copies) → `shot.sh` (960×672 px for a 960×672 pt window,
 @1x) → `key.sh` (`1`, `=`, `-`) → `cleanup.sh` passed. This was a P0-03 @1x feature run, not a full §14
-proof; see `docs/validation/P0.md` once branch `docs/p0-03-1x-mini` lands. `size.sh` and `kc.sh` were not
+proof; see `docs/validation/P0.md` §P0-03 @1x. `size.sh` and `kc.sh` were not
 exercised on the mini.
 
 Still **NOT VERIFIED**: a full Mac mini §14 proof, XCUITest, native Escape, bookmark restore, and the other
