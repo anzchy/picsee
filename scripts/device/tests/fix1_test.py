@@ -45,6 +45,10 @@ class Regressions(unittest.TestCase):
         with patch.object(d, 'executable', side_effect=[self.exe, None]), patch.object(d, 'checked', side_effect=RuntimeError('ps process exited')):
             self.assertIsNone(d.process_snapshot(4242))
 
+    def test_process_exit_after_birth_read(self):
+        with patch.object(d, 'executable', side_effect=[self.exe, None]), patch.object(d, 'checked', return_value=self.record['birth']):
+            self.assertIsNone(d.process_snapshot(4242))
+
     def test_missing_ambiguous_and_retired_identity_refused(self):
         for mode in ['missing', 'ambiguous', 'retired']:
             with self.subTest(mode=mode):
