@@ -18,13 +18,22 @@ import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const SIGNAL_EXIT_BASE = 128;
 const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
+// Diagnostic records only: test labels and assertion prose can discuss crashes.
+// Runtime traps may prefix Fatal error with a Swift source location.
+const CRASH_RECORDS = [
+  /^error: Exited with signal code \d+\s*$/i,
+  /^error: Process '[^'\r\n]+' exited with (?:unexpected )?signal code \d+\s*$/i,
+  /^(?:[^:\r\n]+\.swift:\d+(?::\d+)?: )?Fatal error:(?: |$)/,
+  /^Test (?:Case|Suite) '.+' crashed(?: \([^\r\n]*\))?\.?$/,
+  /^✘ Test .+ crashed after \d+(?:\.\d+)? seconds(?: with \d+ issues?)?\.$/,
+];
 
 // Only completed summaries prove tests actually ran. Each stream is parsed
 // independently so interleaved partial stdout/stderr cannot forge a summary.
 function parseOutput(text) {
   const clean = text.replace(/\x1b\[[0-9;]*m/g, "").replace(/\r/g, "");
   const lines = clean.split("\n");
-  const crash = /Exited with signal|exited with (?:unexpected )?signal|Fatal error|\bCrash\b/i.test(clean);
+  const crash = lines.some(line => CRASH_RECORDS.some(record => record.test(line)));
   const stack = [];
   const cases = new Map();
   let xctStarted = false, rootPending = false, xct = null, invalid = crash;
