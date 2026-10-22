@@ -1,5 +1,6 @@
 import AppKit
 import PicseeCore
+import PicseeApplication
 
 /// P0 native adapter. Math lives in CanvasTransform; command routing is P0-09.
 @MainActor
@@ -62,25 +63,57 @@ final class CanvasView: NSView {
         requestDetail()
     }
 
+    var onCommand: ((CommandID) -> Bool)?
+    var onCanvasFocus: (() -> Void)?
+    var onTab: ((Bool) -> Void)?
+    var hasImage: Bool { image != nil }
+
+    override func becomeFirstResponder() -> Bool {
+        needsDisplay = true
+        return true
+    }
+    override func resignFirstResponder() -> Bool {
+        needsDisplay = true
+        return true
+    }
+    override var focusRingMaskBounds: NSRect { bounds.insetBy(dx: 3, dy: 3) }
+    override func drawFocusRingMask() { NSBezierPath(rect: focusRingMaskBounds).fill() }
+
     override func mouseDown(with event: NSEvent) {
+        onCanvasFocus?()
         window?.makeFirstResponder(self)
     }
 
     override func keyDown(with event: NSEvent) {
-        guard image != nil, event.modifierFlags.intersection([.command, .control, .option]).isEmpty else {
-            super.keyDown(with: event)
-            return
-        }
-        switch event.charactersIgnoringModifiers {
-        case "1": transform.actualPixels(about: centre)
-        case "+", "=": transform.zoom(to: transform.zoom * 1.25, about: cursorAnchor)
-        case "-", "−": transform.zoom(to: transform.zoom / 1.25, about: cursorAnchor)
-        default:
-            super.keyDown(with: event)
-            return
+        if event.keyCode == 48 { onTab?(event.modifierFlags.contains(.shift)); return }
+        if event.modifierFlags.intersection([.control, .option]).isEmpty,
+           let key = event.charactersIgnoringModifiers,
+           let id = CommandID.matching(key: key, command: event.modifierFlags.contains(.command)),
+           onCommand?(id) == true { return }
+        super.keyDown(with: event)
+    }
+
+    func apply(_ command: CommandID) {
+        guard image != nil else { return }
+        switch command {
+        case .fit: fit()
+        case .actualPixels: transform.actualPixels(about: centre)
+        case .zoomIn: transform.zoom(to: transform.zoom * 1.25, about: cursorAnchor)
+        case .zoomOut: transform.zoom(to: transform.zoom / 1.25, about: cursorAnchor)
+        default: return
         }
         needsDisplay = true
         requestDetail()
+    }
+
+    private func fit() {
+        let backing = window?.backingScaleFactor ?? 1
+        let zoom = min(1, min(max(1, bounds.width - 32) * backing / sourceSize.width,
+                              max(1, bounds.height - 32) * backing / sourceSize.height))
+        let clamped = max(CanvasTransform.zoomLimits.lowerBound, zoom)
+        transform = CanvasTransform(backingScale: backing, zoom: clamped,
+            origin: CGPoint(x: bounds.midX - sourceSize.width * clamped / backing / 2,
+                            y: bounds.midY - sourceSize.height * clamped / backing / 2))
     }
 
     override func magnify(with event: NSEvent) {

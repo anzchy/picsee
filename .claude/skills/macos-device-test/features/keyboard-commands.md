@@ -1,48 +1,55 @@
 # Keyboard and command routing
 
-The basic commands do the same thing whether triggered from the menu, a button or the keyboard; a text field
-or an open menu gets its keys first; and the core path can be done without the mouse with focus always
-visible.
+One command route for menus, buttons and keys; fields and menus consume their keys first. This recipe
+covers P0-09's Inspector placeholder, not the real information Inspector or folder browser.
 
 ## Sub-features
 
-- `CMD-01` Space, ←/→, Esc, Enter, 0/1, +/−, ⌘F, ⌘O, ⌘I trigger the same action from menu, button and key;
-  unimplemented commands show no shortcut.
-- `CMD-02` in the search field, Space and ← edit text instead of flipping images; with a menu open, Esc only
-  closes the menu.
-- `A11Y-02` open a folder, select an image, view it, go back and open the Inspector without the mouse, with
-  focus always visible.
+- `CMD-01`: fit (`0`), actualPixels (`1`), zoomIn (`+`/`=`), zoomOut (`-`/`−`), open (⌘O),
+  inspector (⌘I), escape (Esc from panel to canvas). Space, arrows, Enter and ⌘F are unimplemented.
+- `CMD-02`: the Inspector placeholder field edits text without routing bare image commands; Esc closes
+  an open menu before moving focus. The real search field remains unavailable.
+- `A11Y-02`: canvas/panel Tab, Shift-Tab, Esc, visibility and focus rings. Opening a folder needs #8;
+  selecting images and returning to grid need P3. Those acceptance steps are NOT VERIFIED here.
 
 ## How to get to it (user POV)
 
-- Each command's menu item.
-- Each command's button, where one exists.
-- Each command's keyboard shortcut.
-- The search field (⌘F) and any open menu.
+- File → Open…; View → Fit, Actual Pixels, Zoom In, Zoom Out, Show Inspector / Hide Inspector,
+  Focus Canvas. App → Quit Picsee; Edit → Cut, Copy, Paste, Select All; Window → Minimize.
+- ⌘I reveals “Inspector Placeholder”. Tab enters “Focus test (not saved)”, which is transient and is not search.
+- Panel buttons: Fit, Actual Pixels, Zoom In, Zoom Out, Hide Inspector. Open and Esc have no dedicated button.
+- Accessibility IDs: `viewer.canvas`; `inspector.focus-test`; `command.<ID>.menu` and
+  `command.<ID>.button` (button IDs only for fit, actualPixels, zoomIn, zoomOut, inspector).
+  The menu IDs include open and escape as well. Plain key events have no accessibility element.
 
 ## Driving it with computer use
 
-Preconditions:
+Preconditions: ABC input; open `TestAssets/synthetic/coordinate-grid.png` from Finder or File → Open….
 
-- A granted fixture folder with at least five images (see open-and-grant.md).
-- Input source ABC.
-
-- **Same action, three ways.** For each command in CMD-01, trigger it from the menu, then the button (if any),
-  then the key, from the same starting state. Each gives the same resulting state. One verdict line per
-  command and entry point.
-- **No false hints.** Open each menu. Commands not yet implemented show no shortcut.
-- **Field priority.** Press ⌘F, type `a b`, press ←. The field contains `a b` with the caret moved; the image
-  didn't change.
-- **Menu priority.** Open a menu, press Esc. The menu closes and the viewer stays as it was.
-- **Keyboard only.** Without touching the mouse, open the folder, select an image, view it, return, open the
-  Inspector. A focus ring is visible at every step.
-- **Proof.** `CMD-01-<command>-<entry>.png` where the state is visual, `CMD-02-field.png`, and a short
-  screenshot sequence for A11Y-02.
+- **Three entries.** From equal starting transforms, test Fit/0, Actual Pixels/1, Zoom In/+, Zoom Out/−
+  using the View menu, placeholder button and canvas key separately. Record a verdict per command × entry.
+  Reset the transform between entries; keep the pointer at the same canvas position for zoom checks.
+- **Open.** Test File → Open… and ⌘O separately. Choose an image, then repeat and cancel: image/transform/focus
+  stay unchanged on cancellation. Directories cannot be selected; folder acceptance needs #8.
+- **Inspector.** Test View → Show/Hide Inspector and ⌘I. Showing preserves canvas focus; hiding while a panel
+  control has focus returns it to canvas. The Hide Inspector button is the button entry (show has no button).
+- **Field priority.** Show Inspector and press Tab. Type `0 1 + − a b`, Space and arrows: only the field changes.
+  Test Edit → Cut/Copy/Paste/Select All and their shortcuts. Press Shift-Tab from the field: canvas focus returns.
+- **Esc.** Tab into the panel, press Esc: focus returns to canvas while panel stays visible. Test View → Focus
+  Canvas separately. Esc on canvas does nothing. There is no dedicated Esc button.
+- **Menu priority.** Focus the field, open View, then press Esc: only the menu closes; field focus remains.
+  A second Esc returns focus to canvas. No Space/arrows/Enter/⌘F menu items or shortcut hints should exist.
+- **Disabled.** With no image loaded, menu zoom items and panel zoom buttons are disabled; image keys do nothing.
+- **Focus.** Without the mouse, ⌘O chooses an image, ⌘I shows the panel, Tab enters it, Tab traverses controls,
+  Shift-Tab leaves it, Esc returns to canvas. Confirm visible rings. Open another image with field focus and
+  confirm focus is preserved. Folder/grid portions of A11Y-02 remain NOT VERIFIED pending #8/P3.
+- **Proof.** `CMD-01-<ID>-<entry>.png`, `CMD-02-field.png`, `CMD-02-menu-escape.png` and an A11Y-02 focus sequence.
 
 ## Gotchas
 
-- Esc through computer use may not reach a native app as a key-down (unverified); check the log, and if it
-  doesn't arrive, make Esc a user step.
-- A menu-bar utility can block clicks in the menu bar; use the key for the command and record the menu entry
-  point as NOT VERIFIED.
-- Space in the grid and Space in the viewer are different commands; start each check from the stated view.
+- This is a seeded recipe, not evidence that native wiring passed. App menu/button/key wiring needs a device run.
+- If automation cannot deliver Esc, record it as NOT VERIFIED and request a human device step.
+- If another utility blocks menu clicks, record the menu entry as NOT VERIFIED separately from the key entry.
+- Panel overlay preserves canvas geometry; use a pointer location outside the panel for anchored zoom comparisons.
+- No folder, grid, preview, navigation or search behavior exists yet. Never replace those acceptance steps with
+  placeholder behavior in the ledger.

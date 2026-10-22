@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import os
 import PicseeCore
 import PicseeApplication
@@ -8,6 +9,7 @@ import PicseeMacUI
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var commandMenu: CommandMenu?
     private var windowController: CanvasWindowController?
     private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "lifecycle")
 
@@ -25,6 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sha = Bundle.main.object(forInfoDictionaryKey: "PicseeGitSHA") as? String ?? "unknown"
         logger.notice("Picsee launch git=\(sha, privacy: .public)")
 
+        commandMenu = CommandMenu { [weak self] in
+            self?.viewer().route(.open, from: .menu)
+        }
         viewer().showWindow(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
@@ -38,6 +43,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func viewer() -> CanvasWindowController {
         if let windowController { return windowController }
         let controller = CanvasWindowController(pipeline: ImageIOPipeline())
+        controller.onOpenRequest = { [weak self] in
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [.image]
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            if panel.runModal() == .OK, let url = panel.url {
+                self?.application(NSApp, open: [url])
+            }
+        }
+        controller.menuTracking = { [weak self] in self?.commandMenu?.isTracking ?? false }
         windowController = controller
         return controller
     }

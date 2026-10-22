@@ -15,6 +15,7 @@ let package = Package(
         .target(name: "PicseeApplication", dependencies: ["PicseeCore"]),
         .target(name: "PicseeInfrastructure", dependencies: ["PicseeCore"]),
         .target(name: "PicseeMacUI", dependencies: ["PicseeCore", "PicseeApplication"]),
+        .testTarget(name: "PicseeApplicationTests", dependencies: ["PicseeCore", "PicseeApplication"]),
         .testTarget(name: "PicseeCoreTests", dependencies: ["PicseeCore"]),
         .testTarget(name: "PicseeInfrastructureTests", dependencies: ["PicseeCore", "PicseeInfrastructure"]),
     ],
