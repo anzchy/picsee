@@ -19,7 +19,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private let inspector = InspectorModel()
     private let router = CommandRouter()
-    private var returningToCanvas = false
+    private var commandEntry: CommandEntry = .key
     private var inspectorHost: NSHostingView<InspectorPlaceholder>!
     var onOpenRequest: (() -> Void)?
     var menuTracking: () -> Bool = { false }
@@ -41,9 +41,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         canvas.focusRingType = .exterior
         canvas.setAccessibilityIdentifier("viewer.canvas")
         content.addSubview(canvas)
-        inspectorHost = NSHostingView(rootView: InspectorPlaceholder(model: inspector) { [weak self] id in
+        inspectorHost = NSHostingView(rootView: InspectorPlaceholder(model: inspector, route: { [weak self] id in
             self?.route(id, from: .button)
-        })
+        }, restoreCanvasFocus: { [weak self] in
+            self?.window?.makeFirstResponder(self?.canvas)
+        }))
         inspectorHost.frame = NSRect(x: content.bounds.width - 272, y: 0, width: 272, height: content.bounds.height)
         inspectorHost.autoresizingMask = [.minXMargin, .height]
         inspectorHost.isHidden = true
@@ -55,10 +57,15 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             return responder === self.canvas && self.inspector.state.focus != .canvas
         }
         window.didChangeResponder = { [weak self] in
-            guard let self, !self.returningToCanvas else { return }
+            guard let self else { return }
             self.inspector.state.updateFocus(self.focusContext)
         }
         window.consumeKey = { [weak self] event in self?.consumePanelKey(event) ?? false }
+        canvas.pointerIsOverPanel = { [weak self] in
+            guard let self, !self.inspectorHost.isHidden, let window = self.window else { return false }
+            return self.inspectorHost.bounds.contains(
+                self.inspectorHost.convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        }
         canvas.onCanvasFocus = { [weak self] in self?.inspector.state.updateFocus(.canvas) }
         canvas.onTab = { [weak self] reverse in
             self?.inspector.state.tab(reverse: reverse)
@@ -138,6 +145,9 @@ extension CanvasWindowController: WindowCommandTarget {
     @discardableResult
     func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
         inspector.state.updateFocus(focusContext)
+        let previousEntry = commandEntry
+        commandEntry = entry
+        defer { commandEntry = previousEntry }
         return router.route(command, from: entry, focus: focusContext, menuTracking: menuTracking(), to: self)
     }
     func perform(_ command: CommandID) {
@@ -151,20 +161,12 @@ extension CanvasWindowController: WindowCommandTarget {
         case .escape:
             inspector.state.escape()
             applyFocus()
-        default: canvas.apply(command)
+        default: canvas.apply(command, from: commandEntry)
         }
     }
     private func applyFocus() {
         guard inspector.state.focus == .canvas else { return }
-        returningToCanvas = true
         window?.makeFirstResponder(canvas)
-        // SwiftUI relinquishes its FocusState during the next view update. Reapply
-        // the requested responder afterwards, without accepting that transient host focus.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.window?.makeFirstResponder(self.canvas)
-            self.returningToCanvas = false
-        }
     }
     private func consumePanelKey(_ event: NSEvent) -> Bool {
         guard !menuTracking(), inspectorVisible, focusContext != .canvas else { return false }

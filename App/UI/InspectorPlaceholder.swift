@@ -11,6 +11,7 @@ final class InspectorModel {
 struct InspectorPlaceholder: View {
     @Bindable var model: InspectorModel
     let route: (CommandID) -> Void
+    let restoreCanvasFocus: () -> Void
     @State private var text = ""
     @FocusState private var fieldFocused: Bool
 
@@ -34,6 +35,7 @@ struct InspectorPlaceholder: View {
         .onChange(of: model.state.focus) { _, focus in fieldFocused = focus == .textInput }
         .onChange(of: fieldFocused) { _, focused in
             if focused { model.state.updateFocus(.textInput) }
+            else if model.state.focus == .canvas { restoreCanvasFocus() }
             else if model.state.focus == .textInput { model.state.updateFocus(.panel) }
         }
     }

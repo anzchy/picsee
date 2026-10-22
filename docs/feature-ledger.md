@@ -118,7 +118,7 @@
 |---|---|---|---|---|---|---|
 | VIEW-01 | 适应窗口 | Stub | 无 | P1-03 | `App/CanvasView.swift` | 分别打开横图和竖图，都完整居中显示；拖动改窗口大小，图随之适应。限制：打开时会以不超过 1 的倍率适应窗口；窗口缩放时重新适应和适应窗口切换命令属于 P1-03；本行未单独真机验证。 |
 | VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：`1` 键在 @2x 与 @1x 真机已通过（见 [@2x 记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[@1x 记录](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini)）；从 2× 屏拖到 1× 屏、中文界面和 VoiceOver 未验；多文件仅显示首个文件。 |
-| VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：+/− 锚点缩放在 @2x 与 @1x 真机已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[P0-03 @1x 真机记录](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini)）；触控板捏合和完整 VoiceOver 未验；+/− 已改经 CommandRouter，新增菜单/按钮与按键路由接线真机未验。 |
+| VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：+/− 锚点缩放在 @2x 与 @1x 真机已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)、[P0-03 @1x 真机记录](validation/P0.md#p0-03画布真机验收-1x7view-02--view-03mac-mini)）；触控板捏合和完整 VoiceOver 未验；+/− 已改经 CommandRouter，按钮及指针位于面板/画布外时以视图中心缩放，锚点选择已单元测试；新增菜单/按钮与按键路由接线真机未验。 |
 | VIEW-04 | 平移与边界 | Absent | 无 | P1-03 | — | 放大后拖动，图像不会被拖出可见范围；回到适应窗口后位置复原（27 页） |
 | VIEW-05 | 全屏 | Absent | 无 | P1-03 | — | ⌃⌘F 进入和退出全屏，当前图和缩放状态保持 |
 | VIEW-06 | 按 EXIF 方向显示 | Absent | 无 | P0-05、P1-03 | — | 打开 S1 素材里八种 Orientation 的样本，全部正向显示 |
@@ -223,7 +223,7 @@
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：fit/actualPixels/zoomIn/zoomOut、open（Open…）、inspector（Show/Hide Inspector）、escape（Focus Canvas）已接路由；Space、←/→、Enter、⌘F 未实现；open 无按钮，escape 无专用按钮；字段为 Inspector 占位、非搜索；菜单、按钮、按键与面板合成均真机未验。 |
-| CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；输入框裸键和菜单 Esc 优先级有单元测试，AppKit 菜单、SwiftUI 按钮及原生按键接线真机未验。 |
+| CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/CommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；输入框裸键和菜单 Esc 优先级有单元测试；非画布窗口不处理裸键菜单等价键，原生接线未自动测试；AppKit 菜单、SwiftUI 按钮及原生按键接线真机未验。 |
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |
 | CMD-05 | 全局快捷键 | Absent | 无 | P7-09 | — | App 在后台时按全局快捷键，picsee 被唤到前台 |
@@ -273,7 +273,7 @@ MVP 起就是门槛（见计划 P3「MVP 还需检查」），P6-04 补全全部
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | A11Y-01 | VoiceOver | Absent | 无 | P3-10、P6-04 | — | 开 VoiceOver 走一遍打开→网格→大图→Inspector，每个控件都有正确的名称，隐藏的工具不被读出 |
-| A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/InspectorFocus.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：仅画布与 Inspector 占位字段/按钮的 Tab、Shift-Tab、Esc 状态已单元测试；打开目录、选图、返回网格未实现（#8/P3）；⌘O、⌘I、Tab、Esc 和焦点环真机未验；App 桥接在 SwiftUI 释放焦点后恢复画布，字段不是搜索。 |
+| A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/InspectorFocus.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：仅画布与 Inspector 占位字段/按钮的 Tab、Shift-Tab、Esc 状态已单元测试；打开目录、选图、返回网格未实现（#8/P3）；⌘O、⌘I、Tab、Esc 和焦点环真机未验；App 桥接由 SwiftUI 字段失焦回调同步恢复画布，原生接线未自动测试，字段不是搜索。 |
 | A11Y-03 | 对比度与焦点不被遮挡 | Absent | 无 | P6-04 | — | 浅色和深色下文字与控件对比度符合 `design/DESIGN.md` 的目标；获得焦点的控件不被其他元素挡住 |
 | A11Y-04 | 中英文界面 | Absent | 无 | P1-07、P6-04 | — | 系统语言切到中文或英文，界面文字跟随变化，没有截断和未翻译的键名 |
 

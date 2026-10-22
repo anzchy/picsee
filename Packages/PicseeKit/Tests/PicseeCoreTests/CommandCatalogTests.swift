@@ -22,7 +22,7 @@ import PicseeCore
         #expect(CommandID.allCases.filter { $0.defaultKey == key && $0.usesCommand == modifier }.count == 1)
     }
     #expect(CommandID.fit.shortcutHint == "0")
-    #expect(CommandID.open.shortcutHint == "⌘o")
+    #expect(CommandID.open.shortcutHint == "⌘O")
     #expect(CommandID.matching(key: "=", command: false) == .zoomIn)
     #expect(CommandID.matching(key: "−", command: false) == .zoomOut)
     #expect(CommandID.matching(key: "z", command: false) == nil)
