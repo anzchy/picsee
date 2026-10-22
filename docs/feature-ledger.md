@@ -118,7 +118,7 @@
 |---|---|---|---|---|---|---|
 | VIEW-01 | 适应窗口 | Stub | 无 | P1-03 | `App/CanvasView.swift` | 分别打开横图和竖图，都完整居中显示；拖动改窗口大小，图随之适应。限制：打开时会以不超过 1 的倍率适应窗口；窗口缩放时重新适应和适应窗口切换命令属于 P1-03；本行未单独真机验证。 |
 | VIEW-02 | 实际像素 1:1 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 按 1，在 2× 屏上一个图像像素对应一个物理像素；窗口拖到 1× 外接屏后仍是 1:1（27 页）。限制：@2x 真机按 `1` 已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；@1x 外接屏未验；多文件打开仅显示首个文件；中文界面和 VoiceOver 未验。 |
-| VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：@2x 真机 +/− 锚点缩放已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；触控板捏合、@1x 和完整 VoiceOver 未验。 |
+| VIEW-03 | 以光标为锚点缩放 | Partial | 单元 | P0-03、P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`App/CanvasView.swift` | 触控板捏合或按 +/−，光标下的那个像素始终停在光标下。限制：@2x 真机 +/− 锚点缩放已通过（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；触控板捏合、@1x 和完整 VoiceOver 未验；键盘只接画布，尚无 P0-09 命令路由。 |
 | VIEW-04 | 平移与边界 | Absent | 无 | P1-03 | — | 放大后拖动，图像不会被拖出可见范围；回到适应窗口后位置复原（27 页） |
 | VIEW-05 | 全屏 | Absent | 无 | P1-03 | — | ⌃⌘F 进入和退出全屏，当前图和缩放状态保持 |
 | VIEW-06 | 按 EXIF 方向显示 | Absent | 无 | P0-05、P1-03 | — | 打开 S1 素材里八种 Orientation 的样本，全部正向显示 |
