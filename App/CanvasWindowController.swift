@@ -64,6 +64,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         }
         window.didChangeResponder = { [weak self] in
             guard let self else { return }
+            // SwiftUI briefly resigns its field editor to the window while clearing FocusState.
+            // It is not panel focus; preserving canvas intent lets the field-release callback restore it.
+            guard self.window?.firstResponder !== self.window else { return }
             self.session.updateFocus(self.focusContext)
         }
         window.consumeKey = { [weak self] event in self?.consumePanelKey(event) ?? false }
