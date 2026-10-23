@@ -2,21 +2,26 @@ import Foundation
 import PicseeCore
 import os
 
-/// One actual start/stop pair, including temporary bookmark refresh/grant work.
+/// One lease lifetime; only a successfully started security scope requires a stop.
 private struct ScopeSession {
     static let log = OSLog(subsystem: "io.github.anzchy.picsee", category: "access")
     let scope: any SecurityScope
     let url: URL
     let rootID: AccessRootID?
     let trace: OSSignpostID
+    let scopeStarted: Bool
     init(scope: any SecurityScope, url: URL, rootID: AccessRootID?) throws {
-        guard scope.start(url) else { throw FileAccessError.startFailed }
+        let started = scope.start(url)
+        // Finder drops/open events may already carry sandbox read access without
+        // a startable URL scope. Bookmark roots still require their own scope.
+        guard started || (rootID == nil && scope.isReadable(url)) else { throw FileAccessError.startFailed }
+        scopeStarted = started
         self.scope = scope; self.url = url; self.rootID = rootID
         trace = OSSignpostID(log: Self.log)
-        os_signpost(.begin, log: Self.log, name: "AccessLease", signpostID: trace, "outcome=started")
+        os_signpost(.begin, log: Self.log, name: "AccessLease", signpostID: trace, "outcome=leased scopeStarted=%{public}d", started ? 1 : 0)
     }
     func stop() {
-        scope.stop(url)
+        if scopeStarted { scope.stop(url) }
         os_signpost(.end, log: Self.log, name: "AccessLease", signpostID: trace, "outcome=released")
         Logger(subsystem: "io.github.anzchy.picsee", category: "access").notice("AccessLease root=\(rootID?.rawValue.uuidString ?? "file", privacy: .public) remaining=0 outcome=released path=\(url.path, privacy: .private)")
     }

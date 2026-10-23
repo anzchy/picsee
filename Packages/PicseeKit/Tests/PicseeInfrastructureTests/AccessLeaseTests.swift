@@ -8,6 +8,7 @@ final class CountingScope: SecurityScope, @unchecked Sendable {
     private var starts = 0
     private var stops = 0
     var succeeds = true
+    func isReadable(_ url: URL) -> Bool { false }
     func start(_ url: URL) -> Bool { lock.withLock { starts += 1; return succeeds } }
     func stop(_ url: URL) { lock.withLock { stops += 1 } }
     var counts: [Int] { lock.withLock { [starts, stops] } }
@@ -78,6 +79,7 @@ private final class LinkChangingScope: SecurityScope, @unchecked Sendable {
     private var stops = 0
     init(link: URL, outside: URL) { self.link = link; self.outside = outside }
     func arm() { lock.withLock { armed = true } }
+    func isReadable(_ url: URL) -> Bool { false }
     func start(_ url: URL) -> Bool {
         lock.withLock {
             starts += 1
@@ -121,6 +123,7 @@ private final class ScopeSensitiveBoundary: SecurityScope, @unchecked Sendable {
     private var checks = 0
     private var unscoped = 0
     var allowsStart = true
+    func isReadable(_ url: URL) -> Bool { false }
     func start(_ url: URL) -> Bool {
         lock.withLock { if allowsStart { live += 1 }; return allowsStart }
     }
