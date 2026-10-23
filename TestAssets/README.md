@@ -1,4 +1,4 @@
-# P0-07 reproducible image fixtures
+# Reproducible image fixtures
 
 These are test data, not App resources. P0-07 has no user-visible ledger row. Nothing here is wired into a
 Swift/App target. Python ≥3.9 and its standard library generate all synthetic files; no Pillow, host fonts,
@@ -10,7 +10,7 @@ Generated fixtures are dedicated to CC0-1.0. No Git LFS is used in this reposito
 
 | Tier | Location | Content |
 |---|---|---|
-| ① | committed `TestAssets/synthetic/` | 14 small self-verifying files; byte sizes and SHA-256 in manifest |
+| ① | committed `TestAssets/synthetic/` | 20 small self-verifying files; byte sizes and SHA-256 in manifest |
 | ② | `~/.picsee/testassets/generated/` | S2: 5,000 mixed PNG/TIFF files, 50 groups, nested directories and repeated basenames; S3: valid 8,000×6,000 (48MP) and 10,000×10,000 (100MP) noise PNGs |
 | ③ | `~/.picsee/testassets/photos/` | CC0 real-scene Nikon Z8 SDR JPEG and HEIC, both with EXIF; immutable source URLs, bytes, SHA-256 and licence evidence in manifest |
 
@@ -18,6 +18,14 @@ The checkerboard path and bytes, and the coordinate-grid path and bytes, were la
 1024×768 and 1280×960 respectively. Each grid cell is labelled by its top-left **image-pixel** coordinates,
 with major lines/labels every 128 pixels and minor lines every 32 pixels. Labels remain readable at 1:1.
 Do not rescale these images before an actual-pixels check.
+
+P1 adds labelled 3:2 landscape and 2:3 portrait frames with centre marks for VIEW-01, plus a labelled
+4096×3072 coordinate grid for VIEW-04. The pan grid is 117,185 bytes; every other new fixture is below
+3 KiB. `not-an-image.jpg` is plain text behind a misleading image extension. `unsupported-container.zip`
+is a valid ZIP archive with one stored text member: ZIP was chosen because it is a genuine, deterministic
+non-image container and ImageIO has no image representation to decode from it. Both are expected to be
+rejected without replacing the current image. `gradient-16bit.png` is 16-bit-per-channel grayscale for
+bit-depth-aware decode-cost checks. These are correctness fixtures, not performance inputs.
 
 The eight orientation files are TIFF with the EXIF/TIFF Orientation tag (0x0112), ExifVersion and an Exif
 IFD. The stored pixel data is inversely rotated/mirrored for each tag so a reader honoring orientation
@@ -50,13 +58,13 @@ python3 scripts/testassets/check_lock.py
 ```
 
 `determinism.py` defaults to the small tier for a cheap CI-ready check; `--tier all` independently creates
-all 5,016 synthetic fixtures twice under the external root (`--output <dir>` overrides it). It uses system `shasum -a 256`, compares sorted
-inventories, verifies regenerated tier ① against the committed manifest, prints the 14 committed hashes plus an inventory digest, and retains both inventories and
+all 5,022 synthetic fixtures twice under the external root (`--output <dir>` overrides it). It uses system `shasum -a 256`, compares sorted
+inventories, verifies regenerated tier ① against the committed manifest, prints the 20 committed hashes plus an inventory digest, and retains both inventories and
 outputs outside the repo. Bulk/large generation refuses any output inside the repository.
 
 `check.py` validates the individual records and S2 recipe/count/inventory SHA-256. S2 uses the digest of
 the sorted `shasum -a 256` list, with paths relative to the generated root, rather than 5,000 records. By default it hashes
-the 14 committed files. `--external` also requires/hashes all external files. `--native` independently
+the 20 committed files. `--external` also requires/hashes all external files. `--native` independently
 checks small valid assets and, with `--external`, real-photo metadata with macOS ImageIO (JXA), including identical upright
 rendered pixels for all eight EXIF orientations; all platforms can run the
 stdlib header/hash check. Only the known tiny truncated fixture receives a bounded negative decode; the corrupt/oversize files

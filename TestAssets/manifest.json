@@ -1,8 +1,8 @@
 {
   "schema": "picsee-testassets/v1",
-  "generator_version": 1,
+  "generator_version": 2,
   "generator_environment": {
-    "python": "3.14.3",
+    "python": "3.9.6",
     "zlib": "1.2.12"
   },
   "bulk": {
@@ -26,7 +26,7 @@
     "inventory_format": "sorted sha256  relative-path\n; paths relative to generated root",
     "inventory_sha256": "e9c1bf59345d1e10d1cd4ce7234a3f6475b373026d14f7e0869890f90a296ca1"
   },
-  "generator_sha256": "ec84517ae3eb1c3d62e3b22f20ca1e51d1a39ab42690bee5077d194be7f5b39c",
+  "generator_sha256": "278d9c76c58bfd30ae1bdf8270632ca2a70561da884e0b57fa0a9ba52722d9d4",
   "roots": {
     "1": "TestAssets/",
     "2": "~/.picsee/testassets/generated/",
@@ -41,6 +41,9 @@
   "assets": [
     {"byte_size":5509,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":768,"kind":"checkerboard","width":1024},"path":"synthetic/checkerboard-1px.png","pixel_size":[1024,768],"sha256":"733607111da49c660082fe046958399ef8809baf5a63b96600c50ca95420336e","tier":1},
     {"byte_size":15599,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":960,"kind":"grid","spacing":128,"width":1280},"path":"synthetic/coordinate-grid.png","pixel_size":[1280,960],"sha256":"2e8d175be009982660bd083590f4427586481da0b934c386390c5b82dbfecf33","tier":1},
+    {"byte_size":2248,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":400,"kind":"framed","label":"LANDSCAPE","width":600},"path":"synthetic/landscape-3x2.png","pixel_size":[600,400],"sha256":"13cf7a5214e8721895d2f2dfbc2b17fb9ab500d94466ec265fe854da68fee8ed","tier":1},
+    {"byte_size":2342,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":600,"kind":"framed","label":"PORTRAIT","width":400},"path":"synthetic/portrait-2x3.png","pixel_size":[400,600],"sha256":"322d77f02c9d5668e9ca2838832587ef3c03a8d3cf0633868a6375a2fafe4967","tier":1},
+    {"byte_size":117185,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":3072,"kind":"grid","spacing":512,"width":4096},"path":"synthetic/pan-grid-4096x3072.png","pixel_size":[4096,3072],"sha256":"2fd2d92e2522c4327be0678d2ccbe50be9b2d8c9417c251003d40b73a3dc9810","tier":1},
     {"byte_size":12476,"display_size":[128,96],"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":96,"kind":"orientation","orientation":1,"width":128},"path":"synthetic/orientation-1.tiff","pixel_size":[128,96],"sha256":"bb6f9a6f93d21bc4cc5c3a4fb628f1a9da4f8e284e9182cb0e55f0882e6cd121","tier":1},
     {"byte_size":12476,"display_size":[128,96],"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":96,"kind":"orientation","orientation":2,"width":128},"path":"synthetic/orientation-2.tiff","pixel_size":[128,96],"sha256":"f507508f5bf7057ff46623126869d2cab59fd2ea7a474a8d15ffbf73ffdd96f9","tier":1},
     {"byte_size":12476,"display_size":[128,96],"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":96,"kind":"orientation","orientation":3,"width":128},"path":"synthetic/orientation-3.tiff","pixel_size":[128,96],"sha256":"097ea7bc28e6cc442acf403e2cd9cbc0218c6e78c36a32c2e9ba97e9ac51e1b7","tier":1},
@@ -52,6 +55,9 @@
     {"byte_size":2112,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":128,"kind":"alpha","width":256},"path":"synthetic/alpha-gradient.png","pixel_size":[256,128],"sha256":"1d4e8ddab86d6d7c9d6c0a63c90da256d528e8e69a1154f0e78089a54bb18beb","tier":1},
     {"byte_size":48,"expected":"partial or failed, never a crash","generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":48,"kind":"truncated","width":64},"path":"synthetic/truncated.png","pixel_size":[64,48],"sha256":"c0befcaa7e888bc09ebf2f7b07039addc235269301619048612e37f8cefb49a7","tier":1},
     {"byte_size":44,"expected":"decode failure","generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":null,"kind":"corrupt","width":null},"path":"synthetic/corrupt.png","pixel_size":[null,null],"sha256":"8799f9f410ff3ec867879b84d25a23b6b477533a743addda2a21a1d768701b9d","tier":1},
+    {"byte_size":54,"expected":"decode failure","generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":null,"kind":"not-image","width":null},"path":"synthetic/not-an-image.jpg","pixel_size":[null,null],"sha256":"ae945dce728439a4d9b87b00edcb3595249606e087dcaacb8c6962ac698f01e3","tier":1},
+    {"byte_size":170,"expected":"unsupported non-image ZIP container; ImageIO rejection","generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"container":"ZIP","height":null,"kind":"unsupported-container","width":null},"path":"synthetic/unsupported-container.zip","pixel_size":[null,null],"sha256":"e971b46c9b6c7bad8828a213b1a19b7b0e42330fe9a95074949a22216609841e","tier":1},
+    {"byte_size":1271,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"bit_depth":16,"height":128,"kind":"gradient-16bit","width":256},"path":"synthetic/gradient-16bit.png","pixel_size":[256,128],"sha256":"b2ff2d49707123230b73ec193bce2becde174465c723d2f07285cf27a6a0f9a3","tier":1},
     {"byte_size":45,"expected":"decode failure; oversize dimensions must be rejected before pixel allocation","generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":2147483647,"kind":"oversize","width":2147483647},"path":"synthetic/oversize-header.png","pixel_size":[2147483647,2147483647],"sha256":"d52d3fb828226e113bf5b46792bbcef2271bbab7a036ec8acd4f8425ab43cd22","tier":1},
     {"byte_size":48020708,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":6000,"kind":"noise","seed":48007,"width":8000},"path":"S3/noise-48mp.png","pixel_size":[8000,6000],"sha256":"83857c148a951962887f6546259d3c06316316cce44d9e7e774a5a5ccdcaba98","tier":2},
     {"byte_size":100040573,"generator":"scripts/testassets/generate.py","license":"CC0-1.0","parameters":{"height":10000,"kind":"noise","seed":100007,"width":10000},"path":"S3/noise-100mp.png","pixel_size":[10000,10000],"sha256":"88b366809509cfc368ee64c12c4a73a709ff36b42cccea5eec0d9eee0e60e3fa","tier":2},

@@ -151,18 +151,21 @@ def check_asset_bytes(asset, args, tier, path, relative):
         raise ValueError("byte size mismatch " + path)
     if hashlib.sha256(data).hexdigest() != asset["sha256"]:
         raise ValueError("sha256 mismatch " + path)
-    if (
-        tier in (1, 2)
-        and dimensions(data) != asset["pixel_size"]
-        and asset["parameters"]["kind"] != "corrupt"
-    ):
-        raise ValueError("header dimensions mismatch " + path)
+    if tier in (1, 2):
+        observed_dimensions = dimensions(data)
+        expected_dimensions = asset["pixel_size"]
+        if expected_dimensions == [None, None]:
+            if observed_dimensions is not None:
+                raise ValueError("non-image has image dimensions " + path)
+        elif observed_dimensions != expected_dimensions:
+            raise ValueError("header dimensions mismatch " + path)
     if tier == 3 and data.startswith(b"version https://git-lfs"):
         raise ValueError("download is a pointer, not image bytes")
     return target, data
 
 
 def check_native(asset, target, tier, path, oriented_hashes):
+    kind = asset["parameters"]["kind"] if tier == 1 else None
     if tier == 1 and asset["parameters"]["kind"] == "truncated":
         subprocess.run(
             [
@@ -178,6 +181,22 @@ def check_native(asset, target, tier, path, oriented_hashes):
             text=True,
             timeout=30,
         )
+    if tier == 1 and kind in ("not-image", "unsupported-container", "corrupt"):
+        subprocess.run(
+            [
+                "/usr/bin/osascript",
+                "-l",
+                "JavaScript",
+                str(ROOT / "scripts/testassets/inspect.js"),
+                str(target),
+                "rejected",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return
     if not (
         tier == 3
         or (
@@ -231,6 +250,8 @@ def check_native(asset, target, tier, path, oriented_hashes):
         and not observed["hasAlpha"]
     ):
         raise ValueError("ImageIO found no alpha " + path)
+    if tier == 1 and kind == "gradient-16bit" and observed["depth"] != 16:
+        raise ValueError("ImageIO bit depth mismatch " + path)
 
 
 def check_manifest_coverage(manifest, args, specs, seen, counts):
@@ -260,7 +281,7 @@ def check_native_summary(oriented_hashes, checked):
     if len(oriented_hashes) != 8 or len(set(oriented_hashes)) != 1:
         raise ValueError("orientations do not render identical upright pixels")
     print(
-        "PASS independent ImageIO: dimensions, EXIF orientations 1–8 render identical upright 128x96 pixels, alpha; truncated: partial or failed, never a crash; "
+        "PASS independent ImageIO: dimensions, EXIF orientations 1–8 render identical upright 128x96 pixels, alpha, 16-bit depth, P1 non-images rejected; truncated: partial or failed, never a crash; "
         + ("photo EXIF verified" if checked[3] else "photo EXIF skipped (use --external)")
     )
 

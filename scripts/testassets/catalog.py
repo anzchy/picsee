@@ -54,14 +54,24 @@ def generated_record(spec, tier, root):
     )
     if spec["kind"] == "orientation":
         result["display_size"] = [128, 96]
-    if spec["kind"] in ("corrupt", "truncated", "oversize"):
+    if spec["kind"] in (
+        "corrupt",
+        "truncated",
+        "oversize",
+        "not-image",
+        "unsupported-container",
+    ):
         result["expected"] = (
             "decode failure; oversize dimensions must be rejected before pixel allocation"
             if spec["kind"] == "oversize"
             else (
                 "partial or failed, never a crash"
                 if spec["kind"] == "truncated"
-                else "decode failure"
+                else (
+                    "unsupported non-image ZIP container; ImageIO rejection"
+                    if spec["kind"] == "unsupported-container"
+                    else "decode failure"
+                )
             )
         )
     return result
