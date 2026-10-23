@@ -67,18 +67,23 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else {
             throw ImageLoadError(.sourceChanged, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision)
         }
-        let item = try await identityResolver.identity(for: request.fileURL)
+        let item: ItemID
+        do { item = try await identityResolver.identity(for: request.fileURL) }
+        catch { throw loadFailure(error, request: request, revision: request.renderKey?.revision, unreadableKind: .corruptImage) }
         let budget = configuration.budget
         return try await withCheckedThrowingContinuation { continuation in
             executor.submit {
                 continuation.resume(with: Result {
                     do { return try ImageSourceHeader.read(request, budget: budget, itemID: item) }
                     catch {
-                        let revision = try? FileRevisionReader.read(request.fileURL)
-                        let disappeared = request.renderKey != nil && revision == nil && error as? ImageDecodeError == .unreadableImage
-                        let failure: any Error = disappeared ? ImageDecodeError.invalidRequest : error
-                        throw loadFailure(failure, request: request, revision: revision, itemID: request.renderKey?.itemID ?? item,
-                                          unreadableKind: failure as? ImageDecodeError == .unreadableImage
+                        let revision: FileRevision
+                        do { revision = try FileRevisionReader.read(request.fileURL) }
+                        catch {
+                            throw loadFailure(error, request: request, revision: request.renderKey?.revision,
+                                              itemID: request.renderKey?.itemID ?? item, unreadableKind: .corruptImage)
+                        }
+                        throw loadFailure(error, request: request, revision: revision, itemID: request.renderKey?.itemID ?? item,
+                                          unreadableKind: error as? ImageDecodeError == .unreadableImage
                                             ? imageFailureKind(request.fileURL) : .corruptImage)
                     }
                 })
@@ -146,7 +151,13 @@ private func loadFailure(_ error: Error, request: ImageDecodeRequest, revision: 
     case ImageDecodeError.invalidRequest: kind = .sourceChanged
     case ImageDecodeError.unreadableImage: kind = unreadableKind
     case is CancellationError: kind = .cancelled
-    default: return error // Includes FileAccess errors; never reinterpret permission failures.
+    default:
+        let sourceError = error as NSError
+        let missing = (sourceError.domain == NSCocoaErrorDomain &&
+            [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(sourceError.code)) ||
+            (sourceError.domain == NSPOSIXErrorDomain && sourceError.code == Int(ENOENT))
+        guard missing else { return error } // Includes permission and FileAccess errors, unchanged.
+        kind = .sourceChanged
     }
     return ImageLoadError(kind, itemID: itemID ?? request.renderKey?.itemID, revision: revision ?? request.renderKey?.revision)
 }
