@@ -167,7 +167,7 @@ Finder 打开 / 拖入 / 打开面板
   → 打开新窗口或复用当前窗口：由用户设置决定
 ```
 
-FileAccess 管理引用计数的 `AccessLease`。先 resolve bookmark，处理 stale bookmark，成功开始访问后才返回租约；最后一个使用者释放时平衡 stop。请求取消、异常、窗口关闭和导出结束均需释放。新请求获取授权后才查找用户图片的缓存，避免权限已撤销却从全局缓存继续暴露原图内容。
+FileAccess 管理引用计数的 `AccessLease`。Access Root 先 resolve bookmark、处理 stale bookmark，成功 start 后才返回租约；File Grant 在 start 返回 false 但系统已允许读取该文件时也可建立租约。最后一个使用者释放时结束租约会话，仅对实际成功 start 的 scope 配平 stop，详见 [ADR-008](adr/0008-folder-access-read-only-app-scoped-bookmarks.md)。请求取消、异常、窗口关闭和导出结束均需释放。新请求获取授权后才查找用户图片的缓存，避免权限已撤销却从全局缓存继续暴露原图内容。
 
 单文件授权不能被视为整个父目录授权；使用路径包含判断时检查规范化后的目录边界。首版不自动跟随符号链接出授权根，不循环遍历链接目录；用户明确选择的新范围另行授权。无需 Full Disk Access 也应完成正常核心流程。
 
