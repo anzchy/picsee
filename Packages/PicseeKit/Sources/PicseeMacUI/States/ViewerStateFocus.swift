@@ -7,6 +7,9 @@ import PicseeApplication
         state.buttons.filter(\.acceptsFirstResponder) + chrome.tools.filter(\.acceptsFirstResponder)
     }
     public static func link(canvas: NSView, state: ViewerStateHost, chrome: ViewerChromeOverlay) {
+        if chrome.tools.contains(where: { !$0.isHiddenOrHasHiddenAncestor && $0.isAccessibilityEnabled() != $0.acceptsFirstResponder }) {
+            chrome.refresh(filename: chrome.filename, position: chrome.position)
+        }
         chrome.linkKeyViews(to: canvas)
         let loop = [canvas] + controls(state, chrome)
         for index in loop.indices { loop[index].nextKeyView = loop[(index + 1) % loop.count] }
@@ -36,6 +39,11 @@ import PicseeApplication
     override func becomeFirstResponder() -> Bool {
         guard acceptsFirstResponder, super.becomeFirstResponder() else { return false }
         session?.updateFocus(.tools)
+        return true
+    }
+    override func accessibilityPerformPress() -> Bool {
+        guard acceptsFirstResponder else { return false }
+        performClick(nil)
         return true
     }
     override func keyDown(with event: NSEvent) {

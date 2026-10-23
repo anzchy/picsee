@@ -11,7 +11,7 @@ private struct StateText: View {
     let isNotice: Bool
     var body: some View {
         VStack(spacing: 12) {
-            if isLoading { IndeterminateProgressRow(label: lines.first ?? "") }
+            if isLoading { IndeterminateProgressRow(label: lines[0]) }
             else {
                 ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                     Text(line).font(Font(DesignMetrics.font(isNotice ? "uiSmall" : index == 0 ? "title" : "ui")))
@@ -67,7 +67,14 @@ public final class ViewerStateHost: NSView {
         defer {
             if let keyCanvas, let keyChrome { ViewerStateFocus.link(canvas: keyCanvas, state: self, chrome: keyChrome) }
         }
-        subviews.forEach { $0.removeFromSuperview() }
+        setAccessibilityChildren([])
+        isHidden = status == .showing
+        setAccessibilityHidden(isHidden)
+        subviews.forEach {
+            $0.isHidden = true; $0.setAccessibilityHidden(true); $0.nextKeyView = nil
+            if let button = $0 as? NSButton { button.isEnabled = false; button.setAccessibilityEnabled(false) }
+            $0.removeFromSuperview()
+        }
         buttons = []; textLines = []; showsProgress = false
         var actions: [(String, String)] = []
         var failure = false
@@ -110,9 +117,11 @@ public final class ViewerStateHost: NSView {
             button.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
             addSubview(button); buttons.append(button)
         }
+        setAccessibilityChildren([text as NSView] + buttons)
     }
     @objc private func activate(_ sender: NSButton) {
-        guard let session else { return }
+        guard !isHiddenOrHasHiddenAncestor, sender.isEnabled, !sender.isHiddenOrHasHiddenAncestor,
+              buttons.contains(where: { $0 === sender }), let session else { return }
         switch sender.identifier?.rawValue {
         case "state.cancel": session.cancelImageOpening(); refresh()
         case "state.retry": onRetry?()
@@ -121,6 +130,7 @@ public final class ViewerStateHost: NSView {
         }
     }
     public override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHiddenOrHasHiddenAncestor else { return nil }
         let local = convert(point, from: superview)
         return buttons.first { !$0.isHidden && $0.frame.contains(local) }
     }
