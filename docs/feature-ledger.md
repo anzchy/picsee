@@ -207,7 +207,7 @@
 | ACCESS-02 | 目录授权跨重启保留 | Partial | 单元 | P0-04、P2-01 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/`、`App/Resources/Picsee.entitlements`、`docs/adr/0008-folder-access-read-only-app-scoped-bookmarks.md` | 授权一个目录，退出重开后直接可浏览，不再弹授权。限制：重启与跨签名重建后均直接浏览（@1x 真机，[记录](validation/P0.md#p0-04--p0-09授权与-session-真机验收811access-01--access-02--access-05--open-02--open-06--view-10--cmd-02--a11y-02mac-mini)）；损坏库与移动根仅单元验证；新增 `com.apple.security.files.bookmarks.app-scope`，保持只读。 |
 | ACCESS-03 | 失效授权的修复 | Absent | 无 | P2-01 | — | 授权目录被移动后打开最近项，提示重新连接；重新选择后恢复浏览 |
 | ACCESS-04 | 权限被撤销 | Absent | 无 | P2-08 | — | 浏览中撤销目录访问，显示 26 页提示并可重新授权；不会从缓存里继续显示原图 |
-| ACCESS-05 | 访问范围用完即释放 | Partial | 单元 | P0-04 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/FileAccess.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Access/AccessImageSource.swift`、`App/CanvasWindowController.swift` | 打开再关闭授权目录的窗口，诊断日志显示访问范围已释放（方法见 `docs/validation/P0.md`）。限制：关闭窗口后 `remaining=0 outcome=released` @1x 真机通过（[记录](validation/P0.md#p0-04--p0-09授权与-session-真机验收811access-01--access-02--access-05--open-02--open-06--view-10--cmd-02--a11y-02mac-mini)）；日志不区分临时与租约会话。 |
+| ACCESS-05 | 访问范围用完即释放 | Partial | 单元 | P0-04 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/FileAccess.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Access/AccessImageSource.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageLoader.swift` | 打开再关闭授权目录的窗口，诊断日志显示访问范围已释放（方法见 `docs/validation/P0.md`）。限制：关闭窗口后 `remaining=0 outcome=released` @1x 真机通过（[记录](validation/P0.md#p0-04--p0-09授权与-session-真机验收811access-01--access-02--access-05--open-02--open-06--view-10--cmd-02--a11y-02mac-mini)）；日志不区分临时与租约会话；P0 记录早于 P1-04 把关闭／续租迁入 ViewerImageLoader，新路径真机未验；租约平衡仅单元证明。 |
 
 ### 缓存与资源
 
@@ -327,21 +327,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 P1-07/P1-09 归入依据，OPEN-01…05 仍无结果；状态不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-03 真机记录（docs/p1-03-device-mini，1a08ba5..8644e0b）：P1.md 运行 `20261023-114600-VIEW-01-04-05-mini`（Validated-by picsee-delegator，单独提交）给 VIEW-01/04/05 @1x pass；同范围只改三行「限制：」，状态 `Partial`、验证 `单元` 与验收不变，显示行缺 @2x 不能升 `真机`；VIEW-02/03/06 只引用 P0 记录。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`App/PicseeApp.swift` 只改为一条 app 级共享 ImageIOPipeline，打开面板与 Finder 打开入口未改；OPEN-02/03 不受影响。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：解码编排迁入 `ViewerImageLoader`；VIEW-08 只追加「限制：」（状态、验证与验收不变），VIEW-09 由 `Absent` 升 `Partial`/`单元`，验收原文保留、追加「限制：」；两行均无新 validation 记录，dd43b52 smoke 未作证据。VIEW-01…07、VIEW-10 只是 Session 构造参数或 Inspector 文件名行，不受影响。VIEW-08/09 的「怎么确认」各一句但远超约 150 字。上次：P1-03 真机记录（docs/p1-03-device-mini，1a08ba5..8644e0b） |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 注明 CHROME-04 持久化部分按开发计划 P1-09 文本归入（计划列 P1-08、P3-11），无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
-| 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/CanvasWindowController.swift` 只改画布构造、打开代次闭包、全屏行为与视口同步，授权提示、租约与释放未改；ACCESS-01/05 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
+| 信息与元数据 | 2026-10-23 | picsee-delegator | P1-04/05（#41）Inspector 占位面板只加当前已接受图片的文件名行（属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent` |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：源获取、关闭与续租从 `App/CanvasWindowController.swift` 迁入 `ViewerImageLoader`，`AccessImageSource` 把租约根传入解码请求；ACCESS-05 的 P0 释放记录早于迁移，已提议补「限制：」与位置（待 owner）。ACCESS-01 授权提示与导航未改，不受影响。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 注明 CMD-01 按开发计划 P1-07 文本归入（计划列 P0-09）；keyboard-commands.md 补面板可见时 Esc 回画布一步、参考运行改称 delegator 运行；无新证据，CMD-01/02 不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`ViewerSession` 只加 imageLoader 构造参数，控制器移除解码块，命令路由、菜单与 Inspector 切换未改；CMD-01/02 不受影响。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
-| 格式 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/CanvasWindowController.swift` 改动不涉及解码与格式；FMT-01 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 注明 A11Y-02 按开发计划 P1-07 文本归入（计划列 P0-09、P6-04），A11Y-04 仍无结果；状态不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
+| 格式 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`DecodeBudget`/`ImageSourceHeader` 改为按位深估算请求输出预约，`ImageIOPipeline` 只加预约复核与根作用域身份，方向、透明与格式解码未改；FMT-01 只改「在哪」，状态与验收不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`App/UI/InspectorPlaceholder.swift` 只在占位字段前加一个不可聚焦的文件名 `Text`（`inspector.item-name`），焦点与 Tab 目标未改；A11Y-02 不受影响。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
