@@ -266,7 +266,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <p>某项能力在某个环境下行为不同，在本节加一行：<code>| &lt;ID&gt; | &lt;环境&gt; | &lt;状态&gt; | &lt;差异与 validation 链接&gt; |</code>。</p>
 <h2 id="part-3-区域审查">Part 3 — 区域审查</h2>
 <div class="table-wrap"><table><thead><tr><th scope="col">区域</th><th scope="col">最近审查</th><th scope="col">审查人</th><th scope="col">备注</th></tr></thead><tbody>
-<tr><td>打开与输入</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 真机记录（#70，docs/p1-02-device-mini，060ac0e..dfc68ff，run 20261024-025857-P1-02-OPEN-01-04）：OPEN-04 只改「限制：」写明拖入未打开过的图片 FAIL（#73），状态/验证/验收不变。发现：其「文件夹与多文件夹提示 @1x 通过」只经 <code>open -a</code>（记录 #7/#8），拖入仅 ZIP（#13）；OPEN-01 拖入提示、OPEN-02 不支持文件、OPEN-03 多文件集合的「仅单元」已被 @1x 记录超越，均待 owner。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..730eca9）</td></tr>
+<tr><td>打开与输入</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 真机记录（#70，docs/p1-02-device-mini，060ac0e..0f0be5b，run 20261024-025857-P1-02-OPEN-01-04）：OPEN-01…04 只改「限制：」，状态/验证/验收不变。上轮发现已由 0f0be5b 解决：OPEN-04 只记拖入 ZIP 通过（#13），文件夹与多文件夹拖入未验（提示只经 <code>open -a</code>，#7/#8），拖入未打开过的图片 FAIL（#73）；OPEN-01 拖入提示（#1）、OPEN-02 不支持文件（#10）、OPEN-03 <code>open -a</code> 多文件集合（#4/#5）与记录一致。OPEN-01…04 均在约 150 字内（OPEN-03 约 142）。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..730eca9）</td></tr>
 <tr><td>查看与画布</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：←/→ 在多文件集合内按集合翻页，输入探测以加载代次丢弃过期结果；画布与缩放未改，VIEW-01…09 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）</td></tr>
 <tr><td>C 沉浸界面</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：多文件集合时 Esc 禁用（无来源），与 CHROME-05「单独打开不出现网格」一致；窗口内容视图换成拖入视图，不改 chrome 命中；CHROME-01…05 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）</td></tr>
 <tr><td>外观与显示偏好</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：工具显隐与面板切换未改；PREF-02 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）</td></tr>
@@ -294,7 +294,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>107 项能力</span><span>·</span><span>Shipped 0 · Partial 34 · Stub 0 · Absent 73 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 6f845b5be482 · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 c48071be5939 · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>
