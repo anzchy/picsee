@@ -1,7 +1,7 @@
 import Foundation
 
 public struct FileRevision: Hashable, Sendable {
-    /// Resource bytes distinguish atomic replacement even if size and timestamp were preserved.
+    /// Session-only resource bytes distinguish atomic replacement even if size and timestamp were preserved.
     public let resourceIdentifier: String?
     public let byteCount: Int
     public let modificationDate: Date?
@@ -19,7 +19,9 @@ public struct RenderKey: Hashable, Sendable {
     public let policy: RenderPolicy
     public let decoderVersion: Int
     public let purpose: RenderPurpose
-    /// Versioned UTF-8 cache-key text. P3-03 hashes this with SHA-256 for disk filenames.
+    /// Versioned UTF-8 text over every field, deterministic for equal keys within a session.
+    /// Root-relative ItemIDs persist across launches; res/ephemeral ItemIDs and resource revision
+    /// tokens do not. P3-03 must hash persistentEncoding (when non-nil), never this text, for disk filenames.
     /// Field order: item, bytes, date bits (reference epoch), frame, edge, preview, policy, decoder, purpose, resource bytes (Base64 or none).
     public var stableEncoding: String {
         let date = revision.modificationDate.map {
