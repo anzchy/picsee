@@ -27,6 +27,7 @@ public actor FileAccess: AccessLeasing {
     private let scope: any SecurityScope
     private let bookmarks: any BookmarkCoding
     private let store: BookmarkStore
+    private let boundary: @Sendable (URL, URL) -> Bool
     private let buildSHA: String
     public let storeCorrupt: Bool
     private var saved: [AccessRootRecord]
@@ -37,7 +38,9 @@ public actor FileAccess: AccessLeasing {
     private var active: [SessionKey: Active] = [:]
     private var requests: [UUID: SessionKey] = [:]
 
-    public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String) throws {
+    public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String,
+                boundary: @escaping @Sendable (URL, URL) -> Bool = { AccessBoundary.contains($0, in: $1) }) throws {
+        self.boundary = boundary
         self.scope = scope; self.bookmarks = bookmarks; self.buildSHA = buildSHA
         do {
             saved = try store.load()
@@ -73,7 +76,15 @@ public actor FileAccess: AccessLeasing {
     public func records() -> [AccessRootRecord] { saved }
     public func launchOutcomes() -> [AccessRootID: String] { outcomes }
     public func rootCovering(_ file: URL) -> AccessRootID? {
-        saved.first { roots[$0.id].map { AccessBoundary.contains(file, in: $0) } ?? false }?.id
+        // Unscoped path resolution cannot establish authority. Confirm each
+        // candidate using the same balanced, scoped check as an actual lease.
+        for record in saved {
+            if let lease = try? acquire(.root(record.id, file: file)) {
+                release(lease)
+                return record.id
+            }
+        }
+        return nil
     }
     /// Only the composition root's successful system panel invokes this operation.
     public func grant(folder: URL) throws -> AccessRootID {
@@ -111,7 +122,7 @@ public actor FileAccess: AccessLeasing {
                 }
                 catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
             }
-            if active[key] != nil, !AccessBoundary.contains(file, in: url) { throw FileAccessError.outsideRoot }
+            if active[key] != nil, !boundary(file, url) { throw FileAccessError.outsideRoot }
         case .fileGrant(let file):
             key = .file(file.standardizedFileURL); url = file; rootID = nil
         }
@@ -120,7 +131,7 @@ public actor FileAccess: AccessLeasing {
             entry.tokens.insert(lease.token); active[key] = entry
         } else {
             let session = try ScopeSession(scope: scope, url: url, rootID: rootID)
-            if case .root(_, let file) = request, !AccessBoundary.contains(file, in: url) {
+            if case .root(_, let file) = request, !boundary(file, url) {
                 session.stop()
                 throw FileAccessError.outsideRoot
             }

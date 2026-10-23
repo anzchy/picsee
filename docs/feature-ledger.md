@@ -203,7 +203,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| ACCESS-01 | 单文件打开后的目录授权入口 | Partial | 单元 | P0-04 | `Packages/PicseeKit/Sources/PicseeApplication/Access/FolderNavigation.swift`、`App/Access/FolderGrantPrompt.swift`、`App/CanvasWindowController.swift` | 在 sandbox 版本里只打开一张图，按 → 时提示授权所在目录，不会静默失败。限制：真机未验；sheet 和系统打开面板仅原生接线，无单元 UI 证据。 |
+| ACCESS-01 | 单文件打开后的目录授权入口 | Partial | 单元 | P0-04 | `Packages/PicseeKit/Sources/PicseeApplication/Access/FolderNavigation.swift`、`App/Access/FolderGrantPrompt.swift`、`App/CanvasWindowController.swift` | 在 sandbox 版本里只打开一张图，按 → 时提示授权所在目录，不会静默失败。限制：真机未验；根匹配在 scope 内确认；sheet 和系统打开面板仅原生接线，无单元 UI 证据。 |
 | ACCESS-02 | 目录授权跨重启保留 | Partial | 单元 | P0-04、P2-01 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/`、`App/Resources/Picsee.entitlements`、`docs/adr/0008-folder-access-read-only-app-scoped-bookmarks.md` | 授权一个目录，退出重开后直接可浏览，不再弹授权。限制：真机未验；bookmark 重建后结果未知；损坏库保留原件、新授权写恢复库；移动后以解析地址共享租约；新增 `com.apple.security.files.bookmarks.app-scope`，保持只读。 |
 | ACCESS-03 | 失效授权的修复 | Absent | 无 | P2-01 | — | 授权目录被移动后打开最近项，提示重新连接；重新选择后恢复浏览 |
 | ACCESS-04 | 权限被撤销 | Absent | 无 | P2-08 | — | 浏览中撤销目录访问，显示 26 页提示并可重新授权；不会从缓存里继续显示原图 |
