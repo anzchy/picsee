@@ -132,6 +132,9 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
                 heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
             let retained = await cache.finish(cached, image: image)
             try Task.checkCancellation()
+            if retained == nil, image.itemID == key.itemID, image.revision == key.revision {
+                throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: image.revision)
+            }
             return retained ?? image
         } catch {
             _ = await cache.finish(cached, image: nil)
