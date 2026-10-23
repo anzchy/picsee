@@ -32,7 +32,6 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var navigationTask: Task<Void, Never>?
     var onRecentsChanged: (([RecentFolder]) -> Void)?
     var canNavigate: Bool { fileURL != nil && window?.attachedSheet == nil }
-
     private var inspectorHost: NSHostingView<InspectorPlaceholder>!
     var onOpenRequest: (() -> Void)?
     var menuTracking: () -> Bool = { false }
@@ -288,7 +287,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    private func navigate(_ direction: NavigationDirection) {
+    func navigate(_ direction: NavigationDirection) {
         guard let file = fileURL else { return }
         let operation = accessIntent.begin()
         navigationTask?.cancel()
@@ -361,7 +360,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 }
 
 // Native effects only. The Session decides command availability and transitions.
-extension CanvasWindowController: ViewerSessionHost {
+extension CanvasWindowController: ViewerSessionNavigationHost {
     var inspectorVisible: Bool { session.inspectorFocus.isVisible }
     var hasImage: Bool { canvas.hasImage }
     private var focusContext: FocusContext {

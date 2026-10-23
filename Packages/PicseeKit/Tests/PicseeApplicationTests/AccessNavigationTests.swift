@@ -20,21 +20,35 @@ import PicseeApplication
     #expect(FolderNavigation(images: []).step(from: a, direction: .next, covered: true) == .end)
 }
 
-@MainActor private final class AccessNavigationTarget: WindowCommandTarget {
+@MainActor private final class AccessNavigationTarget: ViewerSessionNavigationHost {
     var commands: [CommandID] = []
-    func isEnabled(_ command: CommandID) -> Bool { true }
-    func perform(_ command: CommandID) { commands.append(command) }
+    var hasImage = true
+    var canNavigate = true
+    func navigate(_ direction: NavigationDirection) {
+        commands.append(direction == .next ? .next : .previous)
+    }
+    func performCanvas(_ command: CommandID, from entry: CommandEntry) { commands.append(command) }
+    func requestOpen() { commands.append(.open) }
+    func applyFocus(_ focus: FocusContext) {}
+    func showInspector(_ visible: Bool) {}
 }
 
 @Test @MainActor func accessArrowCommandsRouteFromAllEntriesAndRespectTextInput() {
     let target = AccessNavigationTarget()
+    let session = ViewerSession(host: target)
     for entry in CommandEntry.allCases {
-        #expect(CommandRouter().route(.next, from: entry, focus: .canvas, to: target))
-        #expect(CommandRouter().route(.previous, from: entry, focus: .panel, to: target))
+        session.updateFocus(.canvas)
+        #expect(CommandRouter().route(.next, from: entry, to: session))
+        session.setInspectorVisible(true)
+        session.updateFocus(.panel)
+        #expect(CommandRouter().route(.previous, from: entry, to: session))
     }
     #expect(target.commands == [.next, .previous, .next, .previous, .next, .previous])
-    #expect(!CommandRouter().route(.next, from: .key, focus: .textInput, to: target))
-    #expect(!CommandRouter().route(.previous, from: .key, focus: .canvas, menuTracking: true, to: target))
+    session.updateFocus(.textInput)
+    #expect(!CommandRouter().route(.next, from: .key, to: session))
+    session.updateFocus(.canvas)
+    session.setMenuTracking(true)
+    #expect(!CommandRouter().route(.previous, from: .key, to: session))
     #expect(CommandID.menuCommands.contains(.next) && CommandID.menuCommands.contains(.previous))
     #expect(CommandID.next.shortcutHint != nil && CommandID.previous.shortcutHint != nil)
 }
@@ -55,4 +69,32 @@ import PicseeApplication
     #expect(navigation.step(from: directoryHint, direction: .next, covered: true) == .move(second))
     let escaped = try #require(URL(string: first.absoluteString.replacingOccurrences(of: "a%20", with: "%61%20")))
     #expect(navigation.step(from: escaped, direction: .next, covered: true) == .move(second))
+}
+
+@Test @MainActor func accessSessionKeepsPreviewSteppingAndFolderHostAvailabilitySeparate() {
+    let target = AccessNavigationTarget()
+    let session = ViewerSession(host: target)
+    let router = CommandRouter(implementedCommands: Set(CommandID.allCases))
+    target.canNavigate = false
+    #expect(!router.route(.next, from: .menu, to: session))
+    #expect(!router.route(.previous, from: .button, to: session))
+    target.canNavigate = true
+    let first = ItemID(rawValue: UUID()); let second = ItemID(rawValue: UUID())
+    session.beginBrowsing(items: [first, second], sourceVersion: .init(1), scrollAnchor: first)
+    session.select(first)
+    #expect(!router.route(.next, from: .key, to: session))
+    #expect(router.route(.preview, from: .key, to: session))
+    #expect(router.route(.next, from: .key, to: session))
+    #expect(session.currentItemID == second)
+    #expect(router.route(.previous, from: .button, to: session))
+    #expect(session.currentItemID == first)
+    #expect(target.commands.isEmpty)
+    #expect(router.route(.escape, from: .key, to: session))
+    #expect(session.mode == .browsing)
+    #expect(!router.route(.next, from: .key, to: session))
+    // Independent file-opening windows have no Preview Set and use their own host.
+    let other = ViewerSession(host: target)
+    #expect(router.route(.next, from: .menu, to: other))
+    #expect(target.commands == [.next])
+    #expect(session.mode == .browsing && session.currentItemID == first)
 }
