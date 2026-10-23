@@ -27,6 +27,8 @@ real run.
 - Prefer keyboard shortcuts, then accessibility identifiers, then menu titles; coordinates last.
 - Accessibility identifier convention: set in P0-01 and recorded here. (Pending.)
 - Treat every key and menu name in a recipe as literal.
+- Use `key.sh` only for one printable character. Named keys go through `kc.sh`: Tab `48`, Esc `53`, Return
+  `36`, Left/Right/Down/Up `123`–`126`, and Space `49`.
 - Undo what a recipe changes (preferences, granted folders) when the brief asks for a clean machine
   afterwards; never delete evidence.
 
@@ -69,3 +71,5 @@ Record here what a real run found out about the tools, so the next run doesn't r
   files.
 - [Keyboard and command routing](./keyboard-commands.md) covers the basic shortcuts and input-field and menu
   priority.
+- [Chrome show, hide and interaction locks](./chrome-show-hide.md) covers immersive toolbar/window chrome,
+  edge and Tab recall, lock states, responsive layout, and window closing.
