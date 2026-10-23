@@ -133,7 +133,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CHROME-01 | 工具自动隐藏 | Absent | 无 | P1-08 | — | 不动鼠标约 2.5 秒，底部三组工具和窗口红绿灯一起消失；隐藏后 Tab 聚焦不到、VoiceOver 读不到它们（13 页） |
+| CHROME-01 | 工具自动隐藏 | Partial | 单元 | P1-08 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerChromeScheduler.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift` | 不动鼠标约 2.5 秒，底部三组工具和窗口红绿灯一起消失；隐藏后 Tab 聚焦不到、VoiceOver 读不到它们（13 页）。限制：隐藏时的命中、焦点链与 AX 子节点仅单元证明；App 接线与真机未验，VoiceOver 读出未验。 |
 | CHROME-02 | 唤回工具 | Absent | 无 | P1-08 | — | 鼠标移到底边或按 Tab，工具出现；移到顶部，红绿灯出现；按 Tab 时先唤回、再聚焦第一个控件（14 页） |
 | CHROME-03 | 操作中不隐藏 | Absent | 无 | P1-08 | — | 打开菜单、拖动控件、Inspector 或 Filmstrip 展开时工具不消失；结束后重新计时 |
 | CHROME-04 | 工具常驻 | Absent | 无 | P1-08、P3-11 | — | 开启“始终显示工具”，工具不再隐藏；退出重开后设置仍在 |

@@ -43,10 +43,16 @@ public final class ChromeToolView: NSView {
         let face = NSHostingView(rootView: ChromeToolFace(session: session, id: command))
         face.frame = bounds; face.autoresizingMask = [.width, .height]
         addSubview(face); self.face = face
+        face.setAccessibilityHidden(true)
+        focusRingType = .exterior
         setAccessibilityElement(true); setAccessibilityRole(.button)
         setAccessibilityIdentifier("command.\(command.rawValue).button")
         setAccessibilityLabel(command == .actualPixels ? "Zoom mode" : ChromeToolFace.symbol(command).label)
         toolTip = command.shortcutHint
+    }
+    public override var acceptsFirstResponder: Bool { !isHiddenOrHasHiddenAncestor && session?.isEnabled(command) == true }
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        !isHiddenOrHasHiddenAncestor && frame.contains(point) ? self : nil
     }
     public func activate() {
         face?.rootView.activate()
@@ -88,9 +94,29 @@ public final class ViewerChromeOverlay: NSView {
         groups[1].addSubview(fileLabel)
         refresh()
     }
+    private weak var canvas: NSView?
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        for group in groups.reversed() where !group.isHidden && group.frame.contains(local) {
+            return group.hitTest(local)
+        }
+        return nil
+    }
+    public func setToolsVisible(_ visible: Bool) {
+        for view in groups + tools { view.isHidden = !visible }
+        setAccessibilityChildren(visible ? tools : [])
+        if let canvas { linkKeyViews(to: canvas) }
+    }
+    public func linkKeyViews(to canvas: NSView) {
+        self.canvas = canvas
+        let enabled = tools.filter(\.acceptsFirstResponder)
+        let loop: [NSView] = [canvas] + enabled
+        for index in loop.indices { loop[index].nextKeyView = loop[(index + 1) % loop.count] }
+    }
     public func refresh(filename: String? = nil, position: String? = nil) {
         self.filename = filename; self.position = position
         fileLabel.stringValue = [filename, position].compactMap { $0 }.joined(separator: " · ")
         for tool in tools { tool.refresh() }
+        if let canvas { linkKeyViews(to: canvas) }
     }
 }
