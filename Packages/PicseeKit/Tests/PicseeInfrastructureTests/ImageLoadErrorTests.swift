@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import PicseeCore
-import PicseeInfrastructure
+@testable import PicseeInfrastructure
 
 @Test func loadErrorsClassifyRealInputs() async throws {
     let text = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
@@ -181,5 +181,16 @@ private struct RealReadingThenRemoving: FileIdentityResourceReading {
         #expect(failure.kind == .sourceChanged)
         #expect(failure.itemID == .rootRelative(rootID: tree.id, relativePath: "b.png"))
         #expect(failure.revision == nil)
+    }
+}
+
+// Keep this prerequisite coverage independent of asynchronous pipeline classification.
+@Test func loadErrorsMissingPNGEndChunkFailsDirectHeaderRead() throws {
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(contentsOf: fixture("alpha-gradient.png")).prefix(33).write(to: file)
+    #expect(throws: ImageDecodeError.unreadableImage) {
+        _ = try ImageSourceHeader.read(ImageDecodeRequest(fileURL: file, maximumPixelSize: 128),
+            budget: 1_000_000, itemID: .ephemeral(UUID()))
     }
 }
