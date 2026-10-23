@@ -3,6 +3,7 @@ import ImageIO
 import PicseeCore
 
 struct ImageSourceHeader: Sendable {
+    let bytesPerPixel: Int
     let itemID: ItemID
     let width: Int
     let height: Int
@@ -23,6 +24,13 @@ struct ImageSourceHeader: Sendable {
         }
         throw ImageDecodeError.unreadableImage
     }
+    static func pixelBytes(_ properties: [CFString: Any]) -> Int {
+        let model = properties[kCGImagePropertyColorModel] as? String
+        let components = model == (kCGImagePropertyColorModelGray as String) ? 1 : 3
+        return DecodeBudget.bytesPerPixel(depth: properties[kCGImagePropertyDepth] as? Int ?? 8,
+            components: components, hasAlpha: properties[kCGImagePropertyHasAlpha] as? Bool ?? false,
+            isFloat: properties[kCGImagePropertyIsFloat] as? Bool ?? false)
+    }
     static func read(_ request: ImageDecodeRequest, budget: Int, itemID: ItemID) throws -> ImageSourceHeader {
         guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else { throw ImageDecodeError.invalidRequest }
         // A header-only PNG may be too incomplete for ImageIO properties. Inspect
@@ -42,9 +50,10 @@ struct ImageSourceHeader: Sendable {
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int else { throw ImageDecodeError.unreadableImage }
-        _ = try DecodeBudget.sourceCost(width: width, height: height, budget: budget)
+        let bytesPerPixel = pixelBytes(properties)
+        _ = try DecodeBudget.sourceCost(width: width, height: height, budget: budget, bytesPerPixel: bytesPerPixel)
         guard CGImageSourceGetStatus(source) == .statusComplete else { throw ImageDecodeError.unreadableImage }
-        return ImageSourceHeader(itemID: itemID, width: width, height: height,
+        return ImageSourceHeader(bytesPerPixel: bytesPerPixel, itemID: itemID, width: width, height: height,
                                  revision: try FileRevisionReader.read(request.fileURL))
     }
 }
