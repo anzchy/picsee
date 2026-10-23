@@ -344,7 +344,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         if chromeGeneration != generation || chromeHasImage != canvas.hasImage {
             let opened = chromeGeneration != generation
             chromeGeneration = generation; chromeHasImage = canvas.hasImage
-            chromeOverlay.refresh(filename: fileURL?.lastPathComponent)
+            chromeOverlay.refresh(session: session)
             stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
             if opened { session.activity() }
         }
