@@ -68,6 +68,10 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             item.target = self
             (id == .open ? file : view).addItem(item)
         }
+        view.addItem(.separator())
+        let fullScreen = view.addItem(withTitle: String(localized: "Enter Full Screen"),
+            action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+        fullScreen.keyEquivalentModifierMask = [.control, .command]
         let recentItem = NSMenuItem(title: String(localized: "Open Recent"), action: nil, keyEquivalent: "")
         recentItem.submenu = recentFolders
         recentFolders.autoenablesItems = false

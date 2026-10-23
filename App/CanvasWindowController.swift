@@ -8,7 +8,7 @@ import SwiftUI
 /// Window intent is isolated; decode admission and buffers are shared by the pipeline.
 @MainActor
 final class CanvasWindowController: NSWindowController, NSWindowDelegate {
-    private let canvas = CanvasView(frame: .zero)
+    private let canvas: CanvasInputBridge
     private let filesystemLogger = Logger(subsystem: "io.github.anzchy.picsee", category: "filesystem")
     private let pipeline: any ImagePipeline
     private var fileURL: URL?
@@ -40,12 +40,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         self.pipeline = pipeline
         self.accessServices = accessServices
         session = ViewerSession(preferencesStore: preferencesStore)
+        canvas = CanvasInputBridge(frame: .zero, session: session)
         inspector = InspectorModel(session: session)
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "Picsee"
         window.isReleasedWhenClosed = false
+        window.collectionBehavior.insert(.fullScreenPrimary)
         window.center()
         super.init(window: window)
         session.host = self
@@ -85,6 +87,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             return self.inspectorHost.bounds.contains(
                 self.inspectorHost.convert(window.mouseLocationOutsideOfEventStream, from: nil))
         }
+        // A same-path revision retry hides stale pixels but preserves placement at the same source size.
+        var openingURL: URL?
+        canvas.openingChangesItem = { [weak self] in
+            let next = self?.fileURL
+            defer { openingURL = next }
+            return next != openingURL
+        }
         canvas.onCanvasFocus = { [weak self] in self?.session.updateFocus(.canvas) }
         canvas.onTab = { [weak self] reverse in
             self?.session.tab(reverse: reverse)
@@ -97,6 +106,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    func windowDidResize(_ notification: Notification) { canvas.synchronizeViewport() }
+    func windowDidEnterFullScreen(_ notification: Notification) { canvas.synchronizeViewport() }
+    func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport() }
 
     func open(_ url: URL, accessRequest: AccessRequest? = nil) {
         let operation = accessIntent.begin()
@@ -376,6 +389,9 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         return router.route(command, from: entry, to: session)
     }
     func performCanvas(_ command: CommandID, from entry: CommandEntry) {
+        _ = canvas.apply(command, from: entry)
+    }
+    func performCanvasZoom(_ command: CommandID, from entry: CommandEntry) -> Double? {
         canvas.apply(command, from: entry)
     }
     func requestOpen() { onOpenRequest?() }

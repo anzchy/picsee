@@ -2,90 +2,128 @@ import AppKit
 import PicseeCore
 import PicseeApplication
 
-/// P0 native adapter. Math lives in CanvasTransform; command routing is P0-09.
+/// Reusable renderer and input adapter. Geometry is pure; zoom intent belongs to the Session.
 @MainActor
-final class CanvasView: NSView {
+open class CanvasView: NSView {
+    public let session: ViewerSession
+    /// The host distinguishes a new input from a retry of the same item. No file access occurs here.
+    public var openingChangesItem: (() -> Bool)?
     private var transform = CanvasTransform(backingScale: 1)
     private var image: NSImage?
     private var sourceSize = CGSize.zero
-    private var message: String? = nil
-    var onResolutionNeeded: ((Int) -> Void)?
+    private var message: String?
+    private var dragPoint: CGPoint?
+    private var previousViewport = CGSize.zero
+    public var onResolutionNeeded: ((Int) -> Void)?
 
-    override init(frame frameRect: NSRect) {
+    public init(frame frameRect: NSRect, session: ViewerSession) {
+        self.session = session
         super.init(frame: frameRect)
+        previousViewport = frameRect.size
+        clipsToBounds = true
+        setAccessibilityIdentifier("viewer.canvas")
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
         setAccessibilityLabel(String(localized: "canvas.image", defaultValue: "Image"))
     }
 
-    required init?(coder: NSCoder) { nil }
+    required public init?(coder: NSCoder) { nil }
 
-    override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
+    public override var isFlipped: Bool { true }
+    public override var acceptsFirstResponder: Bool { true }
+    public override var mouseDownCanMoveWindow: Bool { false }
 
-    func beginOpening() {
+    public func beginOpening() {
         image = nil
-        sourceSize = .zero
+        dragPoint = nil
+        if openingChangesItem?() ?? true {
+            sourceSize = .zero
+            session.beginCanvasImage()
+        }
         message = String(localized: "canvas.opening", defaultValue: "Opening image…")
         needsDisplay = true
     }
 
-    func showFailure() {
+    public func showFailure() {
+        dragPoint = nil
         image = nil
         sourceSize = .zero
         message = String(localized: "canvas.failure", defaultValue: "Unable to read this image. Open another image from Finder.")
         needsDisplay = true
     }
 
-    func install(_ result: DecodedImage) {
-        let first = image == nil
+    public func install(_ result: DecodedImage) {
+        let changedSize = sourceSize != result.sourcePixelSize
         sourceSize = result.sourcePixelSize
         image = NSImage(cgImage: result.image, size: NSSize(width: result.image.width, height: result.image.height))
         message = nil
-        if first {
-            let backing = window?.backingScaleFactor ?? 1
-            let fit = min(1, min(max(1, bounds.width - 32) * backing / sourceSize.width,
-                                 max(1, bounds.height - 32) * backing / sourceSize.height))
-            let zoom = max(CanvasTransform.zoomLimits.lowerBound, fit)
-            let origin = CGPoint(x: bounds.midX - sourceSize.width * zoom / backing / 2,
-                                 y: bounds.midY - sourceSize.height * zoom / backing / 2)
-            transform = CanvasTransform(backingScale: backing, zoom: zoom, origin: origin)
-            if zoom == 1 { transform.actualPixels(about: centre) }
+        if changedSize {
+            session.beginCanvasImage()
+            fit()
         }
+        previousViewport = bounds.size
         needsDisplay = true
     }
 
-    override func viewDidChangeBackingProperties() {
+    public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        transform.setBackingScale(Double(window?.backingScaleFactor ?? 1), about: centre)
-        if transform.zoom == 1 { transform.actualPixels(about: centre) }
+        synchronizeViewport()
+    }
+
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        synchronizeViewport()
+    }
+
+    /// Also used by the App's full-screen handoff; all viewport changes use the same rule.
+    public func synchronizeViewport() {
+        defer { previousViewport = bounds.size }
+        guard sourceSize.width > 0 else { return }
+        transform.viewportChanged(source: sourceSize, from: previousViewport, to: bounds.size,
+            backingScale: Double(window?.backingScaleFactor ?? 1), mode: session.zoomMode)
         needsDisplay = true
         requestDetail()
     }
 
-    var onCommand: ((CommandID) -> Bool)?
-    var pointerIsOverPanel: (() -> Bool)?
-    var onCanvasFocus: (() -> Void)?
-    var onTab: ((Bool) -> Void)?
-    var hasImage: Bool { image != nil }
+    public var onCommand: ((CommandID) -> Bool)?
+    public var pointerIsOverPanel: (() -> Bool)?
+    public var onCanvasFocus: (() -> Void)?
+    public var onTab: ((Bool) -> Void)?
+    public var hasImage: Bool { image != nil }
 
-    override func becomeFirstResponder() -> Bool {
+    public override func becomeFirstResponder() -> Bool {
         needsDisplay = true
         return true
     }
-    override func resignFirstResponder() -> Bool {
+    public override func resignFirstResponder() -> Bool {
         needsDisplay = true
         return true
     }
-    override var focusRingMaskBounds: NSRect { bounds.insetBy(dx: 3, dy: 3) }
-    override func drawFocusRingMask() { NSBezierPath(rect: focusRingMaskBounds).fill() }
+    public override var focusRingMaskBounds: NSRect { bounds.insetBy(dx: 3, dy: 3) }
+    public override func drawFocusRingMask() { NSBezierPath(rect: focusRingMaskBounds).fill() }
 
-    override func mouseDown(with event: NSEvent) {
+    public override func mouseDown(with event: NSEvent) {
         onCanvasFocus?()
         window?.makeFirstResponder(self)
+        let point = convert(event.locationInWindow, from: nil)
+        let end = transform.imageToView(CGPoint(x: sourceSize.width, y: sourceSize.height))
+        let rectangle = CGRect(origin: transform.origin,
+            size: CGSize(width: end.x - transform.origin.x, height: end.y - transform.origin.y))
+        dragPoint = image != nil && rectangle.contains(point) ? point : nil
     }
 
-    override func keyDown(with event: NSEvent) {
+    public override func mouseDragged(with event: NSEvent) {
+        guard let previous = dragPoint else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        transform.pan(by: CGPoint(x: point.x - previous.x, y: point.y - previous.y),
+            source: sourceSize, viewport: bounds.size, snap: session.zoomMode == .actualPixels)
+        dragPoint = point
+        needsDisplay = true
+    }
+
+    public override func mouseUp(with event: NSEvent) { dragPoint = nil }
+
+    public override func keyDown(with event: NSEvent) {
         if event.keyCode == 48 { onTab?(event.modifierFlags.contains(.shift)); return }
         if event.modifierFlags.intersection([.control, .option]).isEmpty,
            let key = event.charactersIgnoringModifiers,
@@ -94,33 +132,33 @@ final class CanvasView: NSView {
         super.keyDown(with: event)
     }
 
-    func apply(_ command: CommandID, from entry: CommandEntry) {
-        guard image != nil else { return }
+    public func apply(_ command: CommandID, from entry: CommandEntry) -> Double? {
+        guard image != nil else { return nil }
         switch command {
         case .fit: fit()
-        case .actualPixels: transform.actualPixels(about: centre)
-        case .zoomIn: transform.zoom(to: transform.zoom * 1.25, about: commandAnchor(from: entry))
-        case .zoomOut: transform.zoom(to: transform.zoom / 1.25, about: commandAnchor(from: entry))
-        default: return
+        case .actualPixels:
+            transform.actualPixels(about: centre)
+            transform.bound(source: sourceSize, viewport: bounds.size, snap: true)
+        case .zoomIn: transform.zoom(to: transform.zoom * 1.25, about: commandAnchor(from: entry), source: sourceSize, viewport: bounds.size)
+        case .zoomOut: transform.zoom(to: transform.zoom / 1.25, about: commandAnchor(from: entry), source: sourceSize, viewport: bounds.size)
+        default: return nil
         }
         needsDisplay = true
         requestDetail()
+        return transform.zoom
     }
 
     private func fit() {
-        let backing = window?.backingScaleFactor ?? 1
-        let zoom = min(1, min(max(1, bounds.width - 32) * backing / sourceSize.width,
-                              max(1, bounds.height - 32) * backing / sourceSize.height))
-        let clamped = max(CanvasTransform.zoomLimits.lowerBound, zoom)
-        transform = CanvasTransform(backingScale: backing, zoom: clamped,
-            origin: CGPoint(x: bounds.midX - sourceSize.width * clamped / backing / 2,
-                            y: bounds.midY - sourceSize.height * clamped / backing / 2))
+        transform = .fitted(source: sourceSize, viewport: bounds.size,
+                            backingScale: Double(window?.backingScaleFactor ?? 1))
     }
 
-    override func magnify(with event: NSEvent) {
+    /// Gesture values are testable independently of AppKit's non-constructible magnify event.
+    public func magnify(by magnification: Double, at point: CGPoint) {
         guard image != nil else { return }
-        transform.zoom(to: transform.zoom * exp(Double(event.magnification)),
-                       about: convert(event.locationInWindow, from: nil))
+        transform.zoom(to: transform.zoom * exp(magnification), about: point,
+                       source: sourceSize, viewport: bounds.size)
+        session.reportCanvasZoom(transform.zoom)
         needsDisplay = true
         requestDetail()
     }
@@ -138,7 +176,7 @@ final class CanvasView: NSView {
     }
 
     private func requestDetail() {
-        guard sourceSize.width > 0 else { return }
+        guard image != nil, sourceSize.width > 0 else { return }
         let backing = window?.backingScaleFactor ?? 1
         let viewport = CGSize(width: max(1, bounds.width - 32) * backing,
                               height: max(1, bounds.height - 32) * backing)
@@ -146,10 +184,11 @@ final class CanvasView: NSView {
                                                                 zoom: transform.zoom))
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        (dark ? NSColor(srgbRed: 15 / 255, green: 17 / 255, blue: 21 / 255, alpha: 1) : .white).setFill()
-        bounds.fill()
+    public override func draw(_ dirtyRect: NSRect) {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            DesignColor.canvasBackground.nsColor.setFill()
+            bounds.fill()
+        }
         if let image {
             let origin = transform.imageToView(.zero)
             let end = transform.imageToView(CGPoint(x: sourceSize.width, y: sourceSize.height))
