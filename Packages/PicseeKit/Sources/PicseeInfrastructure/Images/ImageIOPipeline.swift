@@ -56,9 +56,14 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
     private let identityResolver: any ItemIdentityResolving
     private let executor: OperationDecodeExecutor
     private let admission: DecodeAdmission
+    private let cache: ImageMemoryCache
+    private let cacheTrace: (any ResourceSnapshotTracing)?
     public init(decoder: any ImageDecoding = ImageIODecoder(), configuration: DecodeConfiguration = DecodeConfiguration(),
-                identityResolver: any ItemIdentityResolving = FileItemIdentityResolver()) {
+                identityResolver: any ItemIdentityResolving = FileItemIdentityResolver(),
+                cache: ImageMemoryCache? = nil, cacheTrace: (any ResourceSnapshotTracing)? = nil) {
         self.configuration = configuration
+        self.cache = cache ?? ImageMemoryCache(capacity: configuration.cacheCapacity)
+        self.cacheTrace = cacheTrace
         self.identityResolver = identityResolver
         let executor = OperationDecodeExecutor(workers: configuration.workers)
         self.executor = executor
@@ -113,13 +118,25 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         if let requested = request.renderKey, requested != key {
             throw ImageLoadError(.sourceChanged, itemID: requested.itemID, revision: header.revision)
         }
+        let cached = await cache.lookup(key)
+        cacheTrace?.lookup(isPreview: key.isPreview, hit: cached.image != nil)
+        if let image = cached.image {
+            if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
+            return image
+        }
         let cost = try DecodeBudget.outputCost(width: header.width, height: header.height, maximumPixelSize: request.maximumPixelSize, bytesPerPixel: header.bytesPerPixel, budget: configuration.budget)
         let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
             renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview, identityRoot: request.identityRoot)
         do {
-            return try await admission.image(admittedRequest, key: key, cost: cost,
+            let image = try await admission.image(admittedRequest, key: key, cost: cost,
                 heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
-        } catch { throw loadFailure(error, request: admittedRequest, revision: header.revision, unreadableKind: .corruptImage) }
+            let retained = await cache.finish(cached, image: image)
+            try Task.checkCancellation()
+            return retained ?? image
+        } catch {
+            _ = await cache.finish(cached, image: nil)
+            throw loadFailure(error, request: admittedRequest, revision: header.revision, unreadableKind: .corruptImage)
+        }
     }
 }
 
