@@ -18,6 +18,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private var chromeOverlay: ViewerChromeOverlay!
     private var stateHost: ViewerStateHost!
+    private var retryIntent: ViewerRetryIntent?
     private let chromeTimer = ChromeTimerAdapter()
     private var chromeEvents: ChromeEventBridge?
     private var chromeGeneration: UUID?
@@ -68,6 +69,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         content.addSubview(canvas)
         stateHost = ViewerStateHost(frame: content.bounds, session: session)
         stateHost.autoresizingMask = [.width, .height]
+        stateHost.onRetry = { [weak self] in
+            self?.retryIntent?.reopen { url, request in self?.open(url, accessRequest: request) }
+        }
         content.addSubview(stateHost)
         let dragStrip = ChromeDragStrip(frame: NSRect(x: 0, y: content.bounds.height - 28, width: content.bounds.width, height: 28))
         dragStrip.autoresizingMask = [.width, .minYMargin]
@@ -129,6 +133,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
 
     func open(_ url: URL, accessRequest: AccessRequest? = nil) {
+        retryIntent = ViewerRetryIntent(fileURL: url, accessRequest: accessRequest)
         _ = accessIntent.begin()
         refreshRecents()
         filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
