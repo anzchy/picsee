@@ -148,6 +148,6 @@ Each verdict means:
 | Verdict | Meaning | What the caller does next |
 |---|---|---|
 | CLEAN | Nothing stale, nothing proposed | Puts the PR line in the PR body and opens the PR |
-| UPDATED | Only edits you were allowed to apply | Commits the ledger diff, then opens the PR |
+| UPDATED | Only edits you were allowed to apply | Commits the ledger and HTML diff, then opens the PR |
 | NEEDS-OWNER | At least one proposal | The owner updates the rows, or writes `无用户可见变化：<ID> <reason>` in the PR body for each one; then the gardener runs again |
 | BLOCK | Weakened acceptance or an unevidenced upgrade | The PR does not open until the commit is split or the evidence exists |
