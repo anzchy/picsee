@@ -144,10 +144,10 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| PREF-01 | 跟随系统 / 浅色 / 深色 | Absent | 无 | P1-09 | — | 默认跟随系统，系统外观切换时窗口即时变化；手动选深色后不再跟随（11/12 页） |
+| PREF-01 | 跟随系统 / 浅色 / 深色 | Partial | 单元 | P1-09 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/DisplayPreferences.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/DesignSystem/Appearance/WindowAppearanceAdapter.swift`、`App/Commands/CommandMenu.swift` | 默认跟随系统，系统外观切换时窗口即时变化；手动选深色后不再跟随（11/12 页）。限制：系统外观实时切换待 WI-4 单元与用户真机步骤；手动浅/深与重开保持待 @1x 自测；@2x 未验。 |
 | PREF-02 | 减少动态效果 | Absent | 无 | P1-09 | — | 打开系统“减少动态效果”，工具显隐和面板切换没有动画 |
 | PREF-03 | 显示设置 | Absent | 无 | P3-11 | — | 15 页：点底部右侧“显示”按钮弹出面板，调缩略图大小、显示文件名、填充裁剪 / 完整显示、外观、始终显示大图工具，立即生效，退出重开仍保留 |
-| PREF-04 | 偏好在窗口间同步 | Absent | 无 | P1-09、P4-01 | — | 开两个窗口，在一个里改主题、Filmstrip 显隐或工具常驻，另一个窗口即时同步（ADR-002） |
+| PREF-04 | 偏好在窗口间同步 | Partial | 单元 | P1-09、P4-01 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Preferences/UserDefaultsDisplayPreferencesStore.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/DesignSystem/Appearance/WindowAppearanceAdapter.swift` | 开两个窗口，在一个里改主题、Filmstrip 显隐或工具常驻，另一个窗口即时同步（ADR-002）。限制：两窗口同步仅单元证明；App 目前只开一个窗口（P4-01）；Filmstrip 尚不存在（P2-06）。 |
 
 ### 文件夹浏览
 

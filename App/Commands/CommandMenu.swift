@@ -78,6 +78,20 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         always.target = self
         always.identifier = NSUserInterfaceItemIdentifier("chrome.always-show-tools")
         always.setAccessibilityIdentifier("chrome.always-show-tools.menu")
+        let appearanceMenu = NSMenu(title: String(localized: "Appearance"))
+        appearanceMenu.delegate = self
+        let appearanceItem = NSMenuItem(title: String(localized: "Appearance"), action: nil, keyEquivalent: "")
+        appearanceItem.submenu = appearanceMenu
+        appearanceItem.setAccessibilityIdentifier("prefs.appearance.menu")
+        view.addItem(appearanceItem)
+        let appearances: [(DisplayAppearance, String)] = [(.system, String(localized: "System")),
+            (.light, String(localized: "Light")), (.dark, String(localized: "Dark"))]
+        for (appearance, title) in appearances {
+            let item = appearanceMenu.addItem(withTitle: title, action: #selector(selectAppearance(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = appearance.rawValue
+            item.setAccessibilityIdentifier("prefs.appearance.\(appearance.rawValue).menu")
+        }
         view.addItem(.separator())
         let fullScreen = view.addItem(withTitle: String(localized: "Enter Full Screen"),
             action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
@@ -124,7 +138,16 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         value.alwaysShowTools.toggle()
         preferencesStore.value = value
     }
+    @objc private func selectAppearance(_ item: NSMenuItem) {
+        guard let raw = item.representedObject as? String, let appearance = DisplayAppearance(rawValue: raw) else { return }
+        preferencesStore.value.appearance = appearance
+    }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(selectAppearance(_:)),
+           let raw = item.representedObject as? String, let appearance = DisplayAppearance(rawValue: raw) {
+            item.state = preferencesStore.value.appearance == appearance ? .on : .off
+            return true
+        }
         if item.identifier?.rawValue == "chrome.always-show-tools" {
             item.state = preferencesStore.value.alwaysShowTools ? .on : .off
             return true

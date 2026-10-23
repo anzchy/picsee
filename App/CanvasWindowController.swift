@@ -31,6 +31,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var inspectorHost: NSHostingView<InspectorPlaceholder>!
     var onOpenRequest: (() -> Void)?
     var menuTracking: () -> Bool = { false }
+    var appearanceAdapter: WindowAppearanceAdapter?
+
+    override func showWindow(_ sender: Any?) {
+        if let window { appearanceAdapter?.register(window) }
+        super.showWindow(sender)
+    }
 
     init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore, accessServices: Task<AccessServices, Error>) {
         self.pipeline = pipeline
