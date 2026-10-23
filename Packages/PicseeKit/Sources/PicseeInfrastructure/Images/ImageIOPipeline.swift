@@ -71,9 +71,22 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
         self.executor = executor
         admission = DecodeAdmission(configuration: configuration, executor: executor, decoder: RevisionReportingDecoder(decoder: decoder))
     }
-    public func pin(_ key: RenderKey, image: DecodedImage) async { await cache.pin(key, image: image) }
-    public func unpin(_ key: RenderKey) async { await cache.unpin(key) }
-    public func memoryPressure(_ level: MemoryPressureLevel) async { await cache.pressure(level) }
+    private func snapshotContext() async -> ResourceSnapshotContext? {
+        guard let cacheTrace else { return nil }
+        return ResourceSnapshotContext(tracer: cacheTrace, activity: await admission.activity())
+    }
+    public func pin(_ key: RenderKey, image: DecodedImage) async {
+        let context = await snapshotContext()
+        await cache.pin(key, image: image, context: context)
+    }
+    public func unpin(_ key: RenderKey) async {
+        let context = await snapshotContext()
+        await cache.unpin(key, context: context)
+    }
+    public func memoryPressure(_ level: MemoryPressureLevel) async {
+        let context = await snapshotContext()
+        await cache.pressure(level, context: context)
+    }
     private func header(_ request: ImageDecodeRequest) async throws -> ImageSourceHeader {
         guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else {
             throw ImageLoadError(.sourceChanged, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision)
@@ -126,8 +139,8 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
         guard await cache.permits(request.priority) else {
             throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision)
         }
-        let cached = await cache.lookup(key)
-        cacheTrace?.lookup(isPreview: key.isPreview, hit: cached.image != nil)
+        let lookupContext = await snapshotContext()
+        let cached = await cache.lookup(key, context: lookupContext)
         if let image = cached.image {
             if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
             return image
@@ -138,14 +151,16 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
         do {
             let image = try await admission.image(admittedRequest, key: key, cost: cost,
                 heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
-            let retained = await cache.finish(cached, image: image)
+            let context = await snapshotContext()
+            let retained = await cache.finish(cached, image: image, context: context)
             try Task.checkCancellation()
             if retained == nil, image.itemID == key.itemID, image.revision == key.revision {
                 throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: image.revision)
             }
             return retained ?? image
         } catch {
-            _ = await cache.finish(cached, image: nil)
+            let context = await snapshotContext()
+            _ = await cache.finish(cached, image: nil, context: context)
             throw loadFailure(error, request: admittedRequest, revision: header.revision, unreadableKind: .corruptImage)
         }
     }

@@ -9,7 +9,8 @@ import PicseeMacUI
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let imagePipeline = ImageIOPipeline()
+    private let imagePipeline = ImageIOPipeline(cacheTrace: UntestedNativeResourceSnapshotTrace())
+    private lazy var memoryPressure = UntestedNativeMemoryPressureForwarder(pipeline: imagePipeline)
     private let displayPreferences = InMemoryDisplayPreferencesStore()
     private var commandMenu: CommandMenu?
     private var windowController: CanvasWindowController?
@@ -32,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let sha = Bundle.main.object(forInfoDictionaryKey: "PicseeGitSHA") as? String ?? "unknown"
         logger.notice("Picsee launch git=\(sha, privacy: .public)")
+        _ = memoryPressure
 
         commandMenu = CommandMenu(preferencesStore: displayPreferences) { [weak self] in
             self?.viewer().route(.open, from: .menu)
