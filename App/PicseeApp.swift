@@ -9,6 +9,7 @@ import PicseeMacUI
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let imagePipeline = ImageIOPipeline()
     private let displayPreferences = InMemoryDisplayPreferencesStore()
     private var commandMenu: CommandMenu?
     private var windowController: CanvasWindowController?
@@ -48,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func viewer() -> CanvasWindowController {
         if let windowController { return windowController }
-        let controller = CanvasWindowController(pipeline: ImageIOPipeline(), preferencesStore: displayPreferences, accessServices: accessServices)
+        let controller = CanvasWindowController(pipeline: imagePipeline, preferencesStore: displayPreferences, accessServices: accessServices)
         controller.onOpenRequest = { [weak self] in
             let panel = NSOpenPanel()
             panel.allowedContentTypes = [.image, .folder]

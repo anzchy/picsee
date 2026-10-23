@@ -12,23 +12,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let filesystemLogger = Logger(subsystem: "io.github.anzchy.picsee", category: "filesystem")
     private let pipeline: any ImagePipeline
     private var fileURL: URL?
-    private var generation = UUID()
+    private var generation: UUID { session.imageLoader.generation }
     private let accessIntent = AccessIntent()
-    private var desiredMaximum = 0
-    private var decodeProgress = CanvasDecodeProgress()
-    private var decoding = false
-    private var decodeTask: Task<Void, Never>?
-    private let binding = UUID()
-    private var currentKey: RenderKey?
 
     let session: ViewerSession
     private let inspector: InspectorModel
     private let router = CommandRouter()
     private let accessServices: Task<AccessServices, Error>
-    private var imageSource: AccessImageSource?
-    private var sourceGeneration: UUID?
-    private var currentAccessRequest: AccessRequest?
-    private var openTask: Task<Void, Never>?
     private var navigationTask: Task<Void, Never>?
     var onRecentsChanged: (([RecentFolder]) -> Void)?
     var canNavigate: Bool { fileURL != nil && window?.attachedSheet == nil }
@@ -39,7 +29,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore, accessServices: Task<AccessServices, Error>) {
         self.pipeline = pipeline
         self.accessServices = accessServices
-        session = ViewerSession(preferencesStore: preferencesStore)
+        session = ViewerSession(preferencesStore: preferencesStore, imageLoader: ViewerImageLoader(trace: NativeFirstPreviewTrace()))
         canvas = CanvasInputBridge(frame: .zero, session: session)
         inspector = InspectorModel(session: session)
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
@@ -51,6 +41,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         window.center()
         super.init(window: window)
         session.host = self
+        session.imageLoader.host = self
         window.delegate = self
         let content = NSView(frame: window.contentView!.bounds)
         content.wantsLayer = true
@@ -95,8 +86,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         }
         canvas.onCommand = { [weak self] id in self?.route(id, from: .key) ?? false }
         canvas.onResolutionNeeded = { [weak self] maximum in
-            self?.desiredMaximum = maximum
-            self?.decodeIfNeeded()
+            self?.session.requireImageResolution(maximum)
         }
     }
 
@@ -110,131 +100,31 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let operation = accessIntent.begin()
         refreshRecents()
         filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
-        decodeTask?.cancel()
-        decodeTask = nil
-        decoding = false
-        generation = UUID()
         fileURL = url
-        currentKey = nil
-        decodeProgress = CanvasDecodeProgress()
+        navigationTask?.cancel()
         let scale = window?.backingScaleFactor ?? 1
-        desiredMaximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
-        canvas.beginOpening()
+        let maximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
+        session.openImage(url, maximumPixelSize: maximum) { [accessServices, pipeline] in
+            let services = try await operation.wait { try await accessServices.value }
+            let request: AccessRequest
+            if let accessRequest { request = accessRequest }
+            else {
+                let root = try await operation.wait { await services.files.rootCovering(url) }
+                request = root.map { .root($0, file: url) } ?? .fileGrant(url)
+            }
+            try operation.check()
+            return try await AccessImageSource.open(request, access: services.files, pipeline: pipeline)
+        }
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(canvas)
-        openTask?.cancel()
-        navigationTask?.cancel()
-        let openingGeneration = generation
-        openTask = Task { [self] in
-            do {
-                let services = try await operation.wait { try await accessServices.value }
-                let request: AccessRequest
-                if let accessRequest { request = accessRequest }
-                else {
-                    let root = try await operation.wait { await services.files.rootCovering(url) }
-                    request = root.map { .root($0, file: url) } ?? .fileGrant(url)
-                }
-                try operation.check()
-                let source = try await AccessImageSource.open(request, access: services.files, pipeline: pipeline)
-                guard operation.isCurrent, generation == openingGeneration else { await source.close(); return }
-                let old = imageSource
-                imageSource = source; sourceGeneration = openingGeneration; currentAccessRequest = request
-                try await operation.wait { await old?.close() }
-                decodeIfNeeded()
-            } catch {
-                if generation == openingGeneration, operation.isCurrent {
-                    let old = imageSource; imageSource = nil
-                    await old?.close()
-                    guard operation.isCurrent, generation == openingGeneration else { return }
-                    canvas.showFailure()
-                    showAccessError(error)
-                }
-            }
-        }
     }
 
     func windowWillClose(_ notification: Notification) {
         accessIntent.invalidate()
-        decodeTask?.cancel()
-        decodeTask = nil
-        decoding = false
-        generation = UUID()
-        currentKey = nil
+        session.closeImage()
         fileURL = nil
-        openTask?.cancel(); navigationTask?.cancel()
-        let source = imageSource; imageSource = nil; sourceGeneration = nil
-        Task { await source?.close() }
-    }
-
-    private func decodeIfNeeded() {
-        guard !decoding, sourceGeneration == generation, let source = imageSource, let maximum = decodeProgress.nextMaximum(desired: desiredMaximum) else { return }
-        decoding = true
-        let token = PresentationToken(binding: binding, generation: generation)
-        let isPreview = !decodeProgress.previewCompleted
-        decodeTask = Task { [self] in
-            do {
-                let (request, image) = try await source.image(maximumPixelSize: maximum, isPreview: isPreview)
-                guard token.generation == generation else { return }
-                currentKey = request.renderKey
-                try Task.checkCancellation()
-                if let key = request.renderKey, let expectedKey = currentKey, let revision = image.revision {
-                    let expected = RenderKey(itemID: expectedKey.itemID, revision: revision, maximumPixelSize: maximum, isPreview: isPreview,
-                        frameIndex: expectedKey.frameIndex, policy: expectedKey.policy,
-                        decoderVersion: expectedKey.decoderVersion, purpose: expectedKey.purpose)
-                    let current = PresentationToken(binding: binding, generation: generation)
-                    if current.accepts(key: key, expected: expected, token: token) {
-                        try Task.checkCancellation()
-                        guard token == PresentationToken(binding: binding, generation: generation) else { return }
-                        decodeProgress.completed(image, isPreview: isPreview)
-                        canvas.install(image)
-                    } else if token == current {
-                        if key.itemID == expectedKey.itemID, key.revision != revision,
-                           decodeProgress.restartForRevision(request: token, current: current) {
-                            currentKey = nil
-                            canvas.beginOpening()
-                        } else {
-                            canvas.showFailure(); desiredMaximum = 0
-                        }
-                    }
-                }
-            } catch {
-                let current = PresentationToken(binding: binding, generation: generation)
-                if token == current && !Task.isCancelled {
-                    // This controller supplies valid URLs and positive sizes. invalidRequest
-                    // here means the prepared render identity no longer matches the file.
-                    if (error as? ImageLoadError)?.kind == .sourceChanged,
-                       decodeProgress.restartForRevision(request: token, current: current) {
-                        currentKey = nil
-                        canvas.beginOpening()
-                        do { try await renewImageSource(token: token) }
-                        catch {
-                            if token.generation == generation, !Task.isCancelled {
-                                canvas.showFailure(); desiredMaximum = 0
-                            }
-                        }
-                    } else {
-                        canvas.showFailure(); desiredMaximum = 0
-                        if error is FileAccessError { showAccessError(error) }
-                    }
-                }
-            }
-            if token.generation == generation {
-                decoding = false
-                decodeTask = nil
-                decodeIfNeeded()
-            }
-        }
-    }
-
-    private func renewImageSource(token: PresentationToken) async throws {
-        let operation = accessIntent.current
-        guard let request = currentAccessRequest else { throw FileAccessError.startFailed }
-        let services = try await operation.wait { try await accessServices.value }
-        let source = try await AccessImageSource.open(request, access: services.files, pipeline: pipeline)
-        guard token.generation == generation, operation.isCurrent else { await source.close(); return }
-        let old = imageSource; imageSource = source
-        try await operation.wait { await old?.close() }
+        navigationTask?.cancel()
     }
 
     func refreshRecents() {
@@ -409,5 +299,41 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     func windowDidUpdate(_ notification: Notification) {
         if inspector.hasImage != canvas.hasImage { inspector.hasImage = canvas.hasImage }
+    }
+}
+
+// The package owns generation, identity, tier and lease decisions; these are native effects.
+extension CanvasWindowController: ViewerImageHost {
+    func beginImageOpening() {
+        window?.title = "Picsee"
+        canvas.beginOpening()
+    }
+    func installImage(_ image: DecodedImage, fileURL: URL) {
+        canvas.install(image)
+        window?.title = fileURL.lastPathComponent
+    }
+    func imageLoadFailed(_ error: any Error) {
+        canvas.showFailure()
+        window?.title = "Picsee"
+        if error is FileAccessError { showAccessError(error) }
+    }
+}
+
+/// Untested os adapter. Lifecycle balancing is covered at the Application tracing port.
+@MainActor private final class NativeFirstPreviewTrace: FirstPreviewTracing {
+    private let log = OSLog(subsystem: "io.github.anzchy.picsee", category: "render")
+    private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "render")
+    private var ids: [UUID: OSSignpostID] = [:]
+    func begin(_ id: UUID, fileURL: URL) {
+        let signpost = OSSignpostID(log: log)
+        ids[id] = signpost
+        os_signpost(.begin, log: log, name: "FirstPreview", signpostID: signpost,
+                    "file=%{private}s", fileURL.lastPathComponent)
+    }
+    func end(_ id: UUID, outcome: FirstPreviewOutcome) {
+        guard let signpost = ids.removeValue(forKey: id) else { return }
+        os_signpost(.end, log: log, name: "FirstPreview", signpostID: signpost,
+                    "outcome=%{public}s", outcome.rawValue)
+        logger.notice("FirstPreview outcome=\(outcome.rawValue, privacy: .public) open=\(id.uuidString, privacy: .private)")
     }
 }
