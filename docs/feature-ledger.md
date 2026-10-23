@@ -330,7 +330,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..35efc86，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：OPEN-01、OPEN-05 只改「限制：」（@1x 普通启动空态；截断/损坏/非图片说明与 Retry），仍 `Partial`/`单元`，验收不变；冷启动、加载中与取消、@2x 未验。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..040ff26） |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..4f8af50，runs 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD 与 …-coldstart）：OPEN-01、OPEN-05 只改「限制：」（@1x 普通与冷启动空态，冷启动经用户批准挪开并还原两份存储文件、哈希核对；截断/损坏/非图片说明与 Retry），仍 `Partial`/`单元`，验收不变；加载中与取消、@2x 未验。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..040ff26） |
 | 查看与画布 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`CanvasView` 只移除旧的加载/失败文字，缩放命令在加载与失败时禁用；VIEW-01…09 不变。VIEW-10：复跑（fa2703f..91dce4f）已补「空态与取消后 ←/→ 禁用」限制，与 `ViewerSession.isEnabled` 一致。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：Tab 环先经状态按钮再到底部工具，工具文件名改随加载身份；CHROME-01…05 验收与限制仍成立，不变。上次：#60 真机复验（validation/issue60-device-mini，cfef98f..2dc72ff，run 20261023-205349-issue60-CHROME-03） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：状态界面无新增动画；PREF-02 不变。上次：P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4） |
@@ -340,11 +340,11 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
 | 授权与文件访问 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：取消加载不再弹访问错误，重试复用原授权请求；ACCESS-01/ACCESS-05 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`；CACHE-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..35efc86，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：记录 @1x 通过空态/失败态命令启用与标准 App/File/Window 菜单，但 CMD-01 限制仍写「P1-07 状态命令启用与标准菜单仅单元」，已提给 owner。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..91dce4f） |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..4f8af50，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：CMD-01 只改「限制：」为 P1-07 状态命令启用与标准菜单 @1x 通过，与记录第 2、4 行一致，仍 `Partial`/`单元`，验收不变；怎么确认约 173 字，超出约 150 字（此前已如此）。CMD-02 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..91dce4f） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`，解码器与格式集合未改；FMT-01 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..35efc86，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：记录 @1x 通过空态 Tab/Shift-Tab/Esc，但 A11Y-02 限制仍写 Tab 经状态按钮「仅单元」，已提给 owner；A11Y-04 只有构建产物检查、中文界面未验，限制仍成立。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..91dce4f） |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..4f8af50，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：A11Y-02 只改「限制：」为空态状态按钮 Tab/Esc @1x 通过、失败态焦点环未验，与记录第 3 行一致，仍 `Partial`/`单元`，验收不变；A11Y-04 只有构建产物检查、中文界面未验，限制仍成立。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..91dce4f） |
 | 分发 | 2026-10-23 | doc-gardener | P1-10 真机记录（validation/p1-10-device-mini，3996845..08c5ecf，run 20261023-212346-P1-10-DIST-06）：DIST-06 只改「限制：」（@1x Dock 与访达列表/图标视图通过），仍 `Partial`/`无`，验收不变；⌘Tab、浅色 Dock、@2x 未验。DIST-01…05 不变。上次：App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2） |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
