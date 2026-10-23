@@ -267,7 +267,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <div class="table-wrap"><table><thead><tr><th scope="col">区域</th><th scope="col">最近审查</th><th scope="col">审查人</th><th scope="col">备注</th></tr></thead><tbody>
 <tr><td>打开与输入</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>App/PicseeApp.swift</code> 换成 UserDefaults 偏好存储并接外观适配器与 Reduce Motion 源，<code>CommandMenu</code> 只在 View 菜单加 Appearance 子菜单，工具组只透传 MotionPolicy；打开入口未改，OPEN-02/OPEN-03 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
 <tr><td>查看与画布</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>CanvasWindowController</code> 在 showWindow 时登记外观并给 Inspector/工具包 MotionPolicy，<code>CommandMenu</code> 只加 Appearance 子菜单；缩放、全屏与翻图路径未改，VIEW-05/VIEW-10 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
-<tr><td>C 沉浸界面</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：CHROME-04 只改「限制：」（重开保持，单元，<code>preferencesPersistenceRelaunchAndCommittedObserverValues</code>），状态与验收不变；提议在哪补 <code>UserDefaultsDisplayPreferencesStore.swift</code>。显隐本身无动画，CHROME-01…03、05 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
+<tr><td>C 沉浸界面</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：CHROME-04 只改「限制：」（重开保持，单元，<code>preferencesPersistenceRelaunchAndCommittedObserverValues</code>），状态与验收不变；在哪已补 <code>UserDefaultsDisplayPreferencesStore.swift</code>（60a51e2，复跑 736fa1a..60a51e2）。显隐本身无动画，CHROME-01…03、05 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
 <tr><td>外观与显示偏好</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：PREF-01/02/04 由 <code>Absent</code> 升到 <code>Partial</code>/<code>单元</code>，只追加「限制：」，验收原文未改；无真机记录（PREF-01 限制提到 @1x 自测，不算验证）。新增 <code>DisplayPreferences.appearance</code> 键与 Appearance 子菜单均落在 PREF-01。PREF-03 不变。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）</td></tr>
 <tr><td>文件夹浏览</td><td>2026-10-21</td><td>建账</td><td>同上</td></tr>
 <tr><td>Filmstrip</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>filmstripExpanded</code> 现随 <code>displayPreferences.v1</code> 持久化，仍无 Filmstrip UI；FILM-01 保持 <code>Absent</code>。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5）</td></tr>
@@ -293,7 +293,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>106 项能力</span><span>·</span><span>Shipped 0 · Partial 28 · Stub 1 · Absent 77 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 3138eb74bc73 · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 8014c5637f05 · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>
