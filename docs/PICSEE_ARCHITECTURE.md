@@ -79,7 +79,7 @@ flowchart TD
 | `PicseeApplication` | 窗口 Session、应用用例、状态协调；依赖 Core | 不创建 NSWindow，不执行阻塞文件 I/O |
 | `PicseeInfrastructure` | ImageIO、FileAccess、FolderBrowser、CacheStore、事件监听、持久化；依赖 Core | 不知道窗口、cell 或 SwiftUI Binding |
 
-P0-03 首个实验切片（#7）的画布偏离已在 P1-03（#37）结束：可复用绘制与输入在 `Packages/PicseeKit/Sources/PicseeMacUI/Canvas/CanvasView.swift`，Session 持有缩放模式，纯坐标规则在 PicseeCore。画布通过离屏 AppKit 绘制与公开输入入口测试，纳入 package 的 100% 行/函数覆盖率门槛；`App/CanvasInputBridge.swift` 仅提取无法可靠合成的捏合事件字段。窗口与全屏交接仍在 `App/CanvasWindowController.swift`，原生接线不由 package 覆盖率证明。P0-09（#10/#11）纯值命令目录在 Core，Application 的 CommandRouter 现以每窗口 ViewerSession 为目标，由 Session 决定命令启用、选择/预览、chrome 与 Inspector/焦点状态，App 仅实现宿主效果；规则与测试见[开发计划 §1.4 状态表](./PICSEE_DEVELOPMENT_PLAN.md#viewersession-状态表p0-0911)。画布已在 P1-03 迁入 PicseeMacUI，缩放模式由 Session 持有。P0-05/06（#9）已用共享准入 actor 和一条有界 OperationQueue 替换串行执行器；窗口取消自己的订阅，运行中的 File Grant 保留到解码真实返回。初始 ≤512px 预览之后请求视口档，放大时才请求源尺寸；这些 App 接线仍属未单元测试的适配器。
+P0-03 首个实验切片（#7）的画布偏离已在 P1-03（#37）结束：可复用绘制与输入在 `Packages/PicseeKit/Sources/PicseeMacUI/Canvas/CanvasView.swift`，Session 持有缩放模式，纯坐标规则在 PicseeCore。画布通过离屏 AppKit 绘制与公开输入入口测试，纳入 package 的 100% 行/函数覆盖率门槛；`App/CanvasInputBridge.swift` 仅提取无法可靠合成的捏合事件字段。窗口与全屏交接仍在 `App/CanvasWindowController.swift`，原生接线不由 package 覆盖率证明。P0-09（#10/#11）纯值命令目录在 Core，Application 的 CommandRouter 现以每窗口 ViewerSession 为目标，由 Session 决定命令启用、选择/预览、chrome 与 Inspector/焦点状态，App 仅实现宿主效果；规则与测试见[开发计划 §1.4 状态表](./PICSEE_DEVELOPMENT_PLAN.md#viewersession-状态表p0-0911)。画布已在 P1-03 迁入 PicseeMacUI，缩放模式由 Session 持有。P0-05/06（#9）已用共享准入 actor 和一条有界 OperationQueue 替换串行执行器；窗口取消自己的订阅，运行中的 File Grant 保留到解码真实返回。P1-04/P1-05（#41）的渐进加载编排由 PicseeApplication 的 `ViewerImageLoader` 持有并经 Session 测试：初始 ≤512px 预览之后请求首个非预览视口档（即使边长相同），放大时才请求更高细节；App 仅提供源获取与原生呈现接线，原生接线仍不由 package 单元测试证明。
 
 Application 通过 Core 中的小型协议调用 Infrastructure；App 是组合根，不建立通用 DI 框架。 原生设计资源与可复用视觉按[组件与原生映射](../design/picsee-ui-system/native/README.md)收敛到现有UI target内的DesignSystem逻辑分组，供SwiftUI/AppKit共享；不新增第六个production target。SwiftUI 页面位于 App/UI，必要的可复用桥接位于 MacUI。测试可使用假服务，真实 I/O 集成测试另行覆盖。
 
@@ -192,7 +192,7 @@ FileAccess 管理引用计数的 `AccessLease`。先 resolve bookmark，处理 s
 - 使用 Swift Task / async-await 表达请求生命周期；actor 保护缓存索引、去重表与调度状态；`MainActor` 只处理呈现。
 - ImageIO、RAW 和大文件同步工作放入专用有界 OperationQueue。**把函数标为 async，或放进普通 actor，不等于它不会阻塞 UI/协作线程。**
 - 包装 Operation 的 continuation 必须只完成一次：排队前取消、等待中取消、执行中取消与正常完成均需处理。
-- P0-05 头部读取在同一有界队列执行（无像素分配），取得尺寸与修订后才进入准入 actor；待处理的像素解码留在 actor，拿齐许可与源 RGBA8 预约才提交。解码器在自身 ImageIO source 上再次核对预约上限，防止准入后文件变大绕过预算。头部准备操作不占像素预约，不能把这个预算解释为整个进程 RSS 上限。
+- P0-05 头部读取在同一有界队列执行（无像素分配），取得尺寸与修订后才进入准入 actor；待处理的像素解码留在 actor，拿齐许可与按头部位深、分量、alpha/浮点标记估算的请求输出字节预约才提交（8 位输出至少 4 字节/像素，并保守计行对齐与方向）。解码器在自身 ImageIO source 上再次核对请求输出预约上限，防止准入后文件变化绕过预算。ImageIO 对不支持 DCT 缩放的格式仍可能暂时解码完整源图，此瞬时开销不在请求输出预约内，仅由 >12 MP 源图重任务 lane 的并发上限约束。头部准备操作不占像素预约，不能把这个预算解释为整个进程 RSS 上限。
 - 同步系统解码未必能中途停止。Operation 的取消只表示“不再需要”；运行中的解码仍占用工作槽和内存预约直到真实返回，然后丢弃过期结果。
 - 共享请求按 RenderKey 去重。每个消费者持有独立订阅；一个窗口取消只减少引用，所有消费者取消才标记底层任务不再需要。清理同 key 的旧任务时还必须匹配 taskID，避免删除刚创建的新任务。
 - 升级优先级提升共享任务的有效优先级；不为同 key 再发起一份高优先级解码。
