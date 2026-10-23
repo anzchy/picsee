@@ -32,15 +32,21 @@ import PicseeMacUI
     init(window: NSWindow, overlay: ViewerChromeOverlay, timer: ChromeTimerAdapter) {
         self.window = window; self.overlay = overlay; self.timer = timer
         super.init()
+        startTracking()
+        NotificationCenter.default.addObserver(self, selector: #selector(stop), name: NSWindow.willCloseNotification, object: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(start), name: NSWindow.didBecomeKeyNotification, object: window)
+    }
+    required init?(coder: NSCoder) { nil }
+    private func startTracking() {
+        guard monitor == nil, let window, let overlay else { return }
         let area = NSTrackingArea(rect: .zero, options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect], owner: self)
         overlay.addTrackingArea(area); tracking = area
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .rightMouseDragged, .otherMouseDragged]) { [weak self] event in
             if event.window === self?.window { self?.mouseMoved(with: event) }
             return event
         }
-        NotificationCenter.default.addObserver(self, selector: #selector(stop), name: NSWindow.willCloseNotification, object: window)
     }
-    required init?(coder: NSCoder) { nil }
+    @objc private func start(_ notification: Notification) { startTracking() }
     override func mouseMoved(with event: NSEvent) {
         if let overlay { overlay.pointerMoved(overlay.convert(event.locationInWindow, from: nil)) }
     }
@@ -50,6 +56,5 @@ import PicseeMacUI
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         if let tracking { overlay?.removeTrackingArea(tracking); self.tracking = nil }
         timer.replace(deadline: nil, action: {})
-        NotificationCenter.default.removeObserver(self)
     }
 }
