@@ -41,3 +41,24 @@ import PicseeInfrastructure
     if started { adapter.stop(result.url) }
     #expect(throws: (any Error).self) { try adapter.resolve(Data("broken".utf8)) }
 }
+
+@Test func issue73SystemScopeReadabilityReflectsRealFiles() async throws {
+    let tree = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tree) }
+    let file = tree.appendingPathComponent("readable.png"), missing = tree.appendingPathComponent("missing.png")
+    let bytes = Data([0, 1, 2, 255])
+    try bytes.write(to: file)
+    let scope = SystemSecurityScope()
+    #expect(scope.isReadable(file))
+    #expect(!scope.isReadable(missing))
+    let access = try FileAccess(scope: scope, bookmarks: scope,
+        store: BookmarkStore(url: tree.appendingPathComponent("roots.json")), buildSHA: "issue73-system")
+    let readback = try await access.withLease(.fileGrant(file)) { lease in
+        #expect(lease.url == file && lease.rootID == nil)
+        return try Data(contentsOf: lease.url)
+    }
+    #expect(readback == bytes)
+    #expect(try Data(contentsOf: file) == bytes)
+    #expect(await access.records().isEmpty)
+}

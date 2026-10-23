@@ -48,6 +48,7 @@ private final class InputReplacementScope: SecurityScope, @unchecked Sendable {
     private var starts = 0
     private var stops = 0
     private var drained: CheckedContinuation<Void, Never>?
+    func isReadable(_ url: URL) -> Bool { false }
     func start(_ url: URL) -> Bool { lock.withLock { starts += 1 }; return true }
     func stop(_ url: URL) {
         let waiter: CheckedContinuation<Void, Never>? = lock.withLock {
@@ -81,6 +82,7 @@ private final class InputReplacementScope: SecurityScope, @unchecked Sendable {
     var prompts: [URL] = []
     var navigation: [NavigationDirection] = []
     var hasImage = false
+    var failures: [String] = []
     var canNavigate = true
     init(access: FileAccess, root: AccessRootID?) {
         self.access = access; self.root = root
@@ -96,7 +98,7 @@ private final class InputReplacementScope: SecurityScope, @unchecked Sendable {
     func promptForInputFolder(_ folder: URL) { prompts.append(folder) }
     func beginImageOpening() { hasImage = false }
     func installImage(_ image: DecodedImage, fileURL: URL) { hasImage = true; images.append(image) }
-    func imageLoadFailed(_ error: any Error) { hasImage = false }
+    func imageLoadFailed(_ error: any Error) { hasImage = false; failures.append(String(describing: error)) }
     func navigate(_ direction: NavigationDirection) { navigation.append(direction) }
     func performCanvas(_ command: CommandID, from entry: CommandEntry) { }
     func performCanvasZoom(_ command: CommandID, from entry: CommandEntry) -> Double? { nil }
@@ -195,4 +197,63 @@ private final class InputReplacementScope: SecurityScope, @unchecked Sendable {
     }, throws: loadError(.corruptImage))
     #expect(scope.counts == [1, 1])
     #expect(try Data(contentsOf: file) == complete.dropLast(12))
+}
+
+@Test @MainActor func issue73ReadableDropSessionOpensEmptyThenReplacesAndRejectsZIP() async throws {
+    let tree = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tree) }
+    let a = tree.appendingPathComponent("fresh-A.png"), b = tree.appendingPathComponent("fresh-B.png")
+    let zip = tree.appendingPathComponent("unsupported-container.zip")
+    try FileManager.default.copyItem(at: fixture("alpha-gradient.png"), to: a)
+    try FileManager.default.copyItem(at: fixture("portrait-2x3.png"), to: b)
+    try FileManager.default.copyItem(at: fixture("unsupported-container.zip"), to: zip)
+    let originalA = try Data(contentsOf: a), originalB = try Data(contentsOf: b)
+    let scope = Issue73Scope()
+    for file in [a, b, zip] { scope.configure(file, start: false, readable: true) }
+    let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(),
+        store: BookmarkStore(url: tree.appendingPathComponent("roots.json")), buildSHA: "issue73-session")
+    let host = InputReplacementHost(access: access, root: nil), intent = AccessIntent()
+    let admission = ViewerInputAdmission(access: access, pipeline: host.pipeline,
+        maximumPixelSize: 640, rootCovering: { await access.rootCovering($0) })
+    #expect(host.session.imageLoader.presented == nil)
+    await host.session.openInput([a], operation: intent.begin(), admission: admission, host: host)
+    await host.session.imageLoader.loadTask?.value
+    #expect(host.session.imageStatus == .showing)
+    #expect(host.hasImage && host.failures.isEmpty && host.notices.isEmpty)
+    let first = try #require(host.session.imageLoader.presented?.key)
+    let firstImage = try #require(host.images.last)
+    let firstPixels = try #require(firstImage.image.dataProvider?.data) as Data
+    #expect(firstImage.sourcePixelSize == CGSize(width: 256, height: 128))
+    #expect(firstImage.itemID == first.itemID)
+    #expect(host.retry?.accessRequest == .fileGrant(a))
+    await host.session.openInput([b], operation: intent.begin(), admission: admission, host: host)
+    await host.session.imageLoader.loadTask?.value
+    let second = try #require(host.session.imageLoader.presented?.key)
+    let secondImage = try #require(host.images.last)
+    let secondPixels = try #require(secondImage.image.dataProvider?.data) as Data
+    #expect(host.session.imageStatus == .showing)
+    #expect(host.hasImage && host.failures.isEmpty && host.notices.isEmpty)
+    #expect(second.itemID != first.itemID)
+    #expect(secondImage.itemID == second.itemID)
+    #expect(secondImage.sourcePixelSize == CGSize(width: 400, height: 600))
+    #expect(secondPixels != firstPixels)
+    #expect(host.retry?.accessRequest == .fileGrant(b))
+    let countBeforeZIP = host.images.count
+    await host.session.openInput([zip], operation: intent.begin(), admission: admission, host: host)
+    await host.session.imageLoader.loadTask?.value
+    #expect(host.notices == [.rejected])
+    #expect(host.session.imageLoader.presented?.key == second)
+    #expect(host.images.count == countBeforeZIP)
+    #expect(host.images.last?.itemID == secondImage.itemID)
+    #expect(host.session.imageStatus == .showing && host.hasImage)
+    #expect(host.failures.isEmpty && host.prompts.isEmpty)
+    #expect(host.session.filePreviewSet == nil)
+    host.session.closeImage()
+    #expect(host.session.imageLoader.presented == nil)
+    #expect(await access.records().isEmpty)
+    #expect(try Data(contentsOf: a) == originalA && Data(contentsOf: b) == originalB)
+    #expect(scope.counts(a)[0] > 0 && scope.counts(a)[1] == 0)
+    #expect(scope.counts(b)[0] > 0 && scope.counts(b)[1] == 0)
+    #expect(scope.counts(zip) == [0, 0])
 }

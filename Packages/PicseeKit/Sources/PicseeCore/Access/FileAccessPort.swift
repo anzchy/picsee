@@ -21,6 +21,8 @@ public struct AccessLease: Hashable, Sendable {
 public protocol SecurityScope: Sendable {
     func start(_ url: URL) -> Bool
     func stop(_ url: URL)
+    /// A point-in-time check of access already permitted by the sandbox.
+    func isReadable(_ url: URL) -> Bool
 }
 
 public protocol AccessLeasing: Sendable {
