@@ -59,7 +59,7 @@ public final class ChromeToolView: NSView {
     }
     var commandTooltip: String {
         let label = command == .open ? "Open…" : command == .fit ? "Fit window" : command == .actualPixels ? "Actual Pixels" : ChromeToolFace.symbol(command).label
-        let hint = command == .previous ? "←" : command == .next ? "→" : command.shortcutHint ?? ""
+        let hint = command == .previous ? "←" : command == .next ? "→" : command.usesCommand ? "⌘" + command.defaultKey.uppercased() : command.defaultKey
         return String(localized: String.LocalizationValue(label)) + " (\(hint))"
     }
     public override var acceptsFirstResponder: Bool { !isHiddenOrHasHiddenAncestor && session?.isEnabled(command) == true }
@@ -118,7 +118,7 @@ public final class ChromeToolView: NSView {
         setAccessibilityEnabled(session?.isEnabled(command) == true)
         if id == .actualPixels, let session {
             setAccessibilityValue(ScaleIndicator(actualPixels: session.zoomMode == .actualPixels,
-                customZoom: face?.rootView.customZoom, action: {}).label)
+                customZoom: face?.rootView.customZoom, action: activate).label)
         }
     }
 }
