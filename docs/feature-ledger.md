@@ -337,11 +337,11 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
 | 授权与文件访问 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..3419561）：ACCESS-01/02/05 Absent→Partial/单元已随改，验收未改；新 entitlement `com.apple.security.files.bookmarks.app-scope` 记在 ACCESS-02；ADR-008 仍为 proposed；无真机记录。上次：建账 |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CACHE-01 待验项与内存压力用户步骤，无结果；CACHE-01 保持 `Absent`。上次：建账 |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..3419561）：previous/next 改为已实现，CMD-01 限制已随改但超 150 字（提议精简）；CMD-02 的字段裸键真机记录早于 ← 有实际动作，提议补限制。上次：P1 素材与记录骨架（6f36f45..45fa1f8）CMD-01/02 不变 |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..c537e90）：previous/next 改为已实现，CMD-01 限制已精简（保留全部命令 ID）；CMD-02 限制已注明字段裸键真机记录早于 ← 有动作、打开目录后字段内 ← 未验（c537e90）；状态不变。上次：P1 素材与记录骨架（6f36f45..45fa1f8）CMD-01/02 不变 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..3419561）：`App/CanvasWindowController.swift` 解码改经 `AccessImageSource` 租约，ImageIOPipeline 未改；FMT-01 不改行，其 @1x 真机记录早于此改动。上次：P0-09 Session（dcfe3f8..bef71d5）FMT-01 不受影响 |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..3419561）：Inspector 占位面板新增 Previous/Next 按钮，有图时进入 Tab 顺序；A11Y-02 未随改，限制仍写“目录待 #8”，提议更新。上次：P1 素材与记录骨架（6f36f45..45fa1f8）A11Y-02 不变 |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..c537e90）：Inspector 占位面板新增 Previous/Next 按钮，有图时进入 Tab 顺序；A11Y-02 限制已改为 ⌘O 选目录与新按钮 Tab 顺序真机未验（c537e90）；状态不变。上次：P1 素材与记录骨架（6f36f45..45fa1f8）A11Y-02 不变 |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
