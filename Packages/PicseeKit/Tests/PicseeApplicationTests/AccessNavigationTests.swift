@@ -38,3 +38,21 @@ import PicseeApplication
     #expect(CommandID.menuCommands.contains(.next) && CommandID.menuCommands.contains(.previous))
     #expect(CommandID.next.shortcutHint != nil && CommandID.previous.shortcutHint != nil)
 }
+
+@Test func accessNavigationMatchesCanonicalFileRepresentations() throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    let first = base.appendingPathComponent("a space.jpg")
+    let second = base.appendingPathComponent("b.jpg")
+    try Data().write(to: first)
+    let alias = base.appendingPathComponent("alias.jpg")
+    try fm.createSymbolicLink(at: alias, withDestinationURL: first)
+    let navigation = FolderNavigation(images: [first, second])
+    #expect(navigation.step(from: alias, direction: .next, covered: true) == .move(second))
+    let directoryHint = URL(fileURLWithPath: first.path, isDirectory: true)
+    #expect(navigation.step(from: directoryHint, direction: .next, covered: true) == .move(second))
+    let escaped = try #require(URL(string: first.absoluteString.replacingOccurrences(of: "a%20", with: "%61%20")))
+    #expect(navigation.step(from: escaped, direction: .next, covered: true) == .move(second))
+}

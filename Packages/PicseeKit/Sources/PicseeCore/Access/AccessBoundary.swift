@@ -13,7 +13,7 @@ public enum AccessBoundary {
         return components.starts(with: boundary)
     }
     public static func fileGrant(_ grant: URL, covers file: URL) -> Bool {
-        grant.isFileURL && file.isFileURL && canonical(grant) == canonical(file)
+        grant.isFileURL && file.isFileURL && canonical(grant).pathComponents == canonical(file).pathComponents
     }
     private static func canonical(_ url: URL) -> URL {
         url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
