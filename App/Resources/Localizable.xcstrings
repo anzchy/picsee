@@ -1546,6 +1546,40 @@
         }
       }
     },
+    "Open One Folder at a Time": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open One Folder at a Time"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请一次打开一个文件夹"
+          }
+        }
+      }
+    },
+    "Drop or open a single folder to continue.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drop or open a single folder to continue."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请拖入或打开单个文件夹以继续。"
+          }
+        }
+      }
+    },
     "None of These Files Can Be Opened": {
       "extractionState": "manual",
       "localizations": {

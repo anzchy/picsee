@@ -2,7 +2,7 @@ import Foundation
 import PicseeCore
 import os
 
-public enum ViewerInputNotice: Equatable, Sendable { case unsupported(String), rejected }
+public enum ViewerInputNotice: Equatable, Sendable { case unsupported(String), rejected, multipleFolders }
 @MainActor public protocol ViewerInputHost: AnyObject {
     func openInputImage(_ url: URL, accessRequest: AccessRequest?)
     func showInputNotice(_ notice: ViewerInputNotice)
@@ -60,7 +60,9 @@ extension ViewerSession {
             if case .open(let request) = result { endFilePreviewSet(); host.openInputImage(url, accessRequest: request) }
             else if result == .unsupported { host.showInputNotice(.unsupported(url.lastPathComponent)) }
         } else if case .folder(let folder) = input { host.promptForInputFolder(folder) }
-        else if case .rejected = input { host.showInputNotice(.rejected) }
+        else if case .rejected(let files) = input {
+            host.showInputNotice(files.filter(\.hasDirectoryPath).count > 1 ? .multipleFolders : .rejected)
+        }
     }
 }
 

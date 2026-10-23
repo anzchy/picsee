@@ -304,6 +304,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         case .rejected:
             alert.messageText = String(localized: "None of These Files Can Be Opened")
             alert.informativeText = String(localized: "None of the dropped or opened files is a supported image.")
+        case .multipleFolders:
+            alert.messageText = String(localized: "Open One Folder at a Time")
+            alert.informativeText = String(localized: "Drop or open a single folder to continue.")
         }
         alert.addButton(withTitle: String(localized: "OK"))
         alert.beginSheetModal(for: window)
