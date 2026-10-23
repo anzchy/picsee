@@ -112,3 +112,51 @@ private struct DisappearingResourceReader: FileIdentityResourceReading {
         #expect(failure.revision == revision)
     }
 }
+
+private struct RemovingAfterDecode: ImageDecoding {
+    func decode(_ request: ImageDecodeRequest) throws -> DecodedImage {
+        let decoded = try ImageIODecoder().decode(request)
+        try FileManager.default.removeItem(at: request.fileURL)
+        return decoded
+    }
+}
+
+@Test func loadErrorsRealMissingSourceKeepsPreparedContext() async throws {
+    for afterDecode in [false, true] {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let pipeline = ImageIOPipeline(decoder: RemovingAfterDecode())
+        let request = try await pipeline.request(for: url, maximumPixelSize: 128)
+        if !afterDecode { try FileManager.default.removeItem(at: url) }
+        do { _ = try await pipeline.image(for: request); Issue.record("Expected missing source failure") }
+        catch {
+            let receivedTypedFailure = error is ImageLoadError
+            #expect(receivedTypedFailure)
+            guard let failure = error as? ImageLoadError else { continue }
+            #expect(failure.kind == .sourceChanged)
+            #expect(failure.itemID == request.renderKey?.itemID)
+            #expect(failure.revision == request.renderKey?.revision)
+        }
+    }
+}
+
+private struct ResourceReadingFailure: ItemIdentityResolving {
+    let failure: NSError
+    func identity(for fileURL: URL) async throws -> ItemID { throw failure }
+}
+
+@Test func loadErrorsPreserveFoundationPermissionErrors() async throws {
+    for failure in [NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError),
+                    NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))] {
+        for atIdentity in [true, false] {
+            let pipeline = atIdentity
+                ? ImageIOPipeline(identityResolver: ResourceReadingFailure(failure: failure))
+                : ImageIOPipeline(decoder: LoadFailureDecoder(failure: failure))
+            do {
+                _ = try await pipeline.image(for: ImageDecodeRequest(fileURL: fixture("orientation-1.tiff"), maximumPixelSize: 128))
+                Issue.record("Expected access failure")
+            } catch { #expect((error as NSError) == failure) }
+        }
+    }
+}
