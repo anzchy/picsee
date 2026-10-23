@@ -29,4 +29,4 @@ app-scope bookmark 由本应用重启后恢复用户授予的范围。File Grant
 
 ## Bookmark after rebuild
 
-**unverified**。按 [open-and-grant 真机步骤](../../.claude/skills/macos-device-test/features/open-and-grant.md) 运行：build A 授权并退出；较晚 SHA 的签名 build B 启动，打开 File → Open Recent 中的文件夹，记录是否询问授权及 launch 日志的 outcome、creating/current 两个 SHA。delegator 从 `docs/validation/P0.md` 填写结论；实现者的 unsigned 测试和同 bundle 重启都不能证明签名变化后的恢复。
+**已验证（2026-10-23，Mac mini，见 `docs/validation/P0.md` P0-04/P0-09 第 13 项）**：构建 A（`da64b08`）授权的目录 bookmark 在较晚 SHA 的签名构建 B（`c09c7f0`，CDHash 不同，同团队 GRT84NAK4T）中 `outcome=resolved`，经 File → Open Recent 直接浏览，不再询问授权；实现者冒烟构建 `a1a15ac` 创建的 bookmark 同样解析。未验：不同签名团队、Release/公证构建、系统升级后的解析。
