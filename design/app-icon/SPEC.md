@@ -1,5 +1,7 @@
 # picsee app icon — shared brief for the three option designers
 
+Historical design brief: option 2 “Lens” was chosen on 2026-10-23.
+
 Review artefacts only: nothing here goes into the App bundle or a commit until the user picks an option.
 
 ## The product
