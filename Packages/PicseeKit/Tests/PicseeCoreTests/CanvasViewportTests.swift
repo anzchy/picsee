@@ -42,3 +42,27 @@ import PicseeCore
     offset.viewportChanged(source: source, from: old, to: old, backingScale: 2, mode: .actualPixels)
     #expect(offset.origin == CGPoint(x: 32, y: 0))
 }
+
+@Test func canvasViewportRetinaRoundTripsEachMode() {
+    let source = CGSize(width: 1600, height: 800)
+    let old = CGSize(width: 432, height: 232)
+    let cases: [(CanvasZoomMode, Double, CGPoint, Double, CGPoint, Double, CGPoint)] = [
+        (.fit, 0.5, .init(x: 16, y: 16), 1, .init(x: 16, y: 16), 0.25, .init(x: 16, y: 16)),
+        (.actualPixels, 1, .init(x: -184, y: -84), 1, .init(x: 16, y: 16), 1, .init(x: -284, y: -134)),
+        (.custom(2), 2, .init(x: -584, y: -284), 2, .init(x: -384, y: -184), 2, .init(x: -684, y: -334))
+    ]
+    for (mode, zoom, origin, growZoom, growOrigin, shrinkZoom, shrinkOrigin) in cases {
+        let initial = CanvasTransform(backingScale: 2, zoom: zoom, origin: origin)
+        var value = initial
+        value.viewportChanged(source: source, from: old, to: .init(width: 832, height: 432), backingScale: 2, mode: mode)
+        #expect(value.zoom == growZoom && value.origin == growOrigin)
+        value = initial
+        value.viewportChanged(source: source, from: old, to: .init(width: 232, height: 132), backingScale: 2, mode: mode)
+        #expect(value.zoom == shrinkZoom && value.origin == shrinkOrigin)
+        value = initial
+        value.viewportChanged(source: source, from: old, to: .init(width: 1632, height: 832), backingScale: 2, mode: mode)
+        value.viewportChanged(source: source, from: .init(width: 1632, height: 832), to: old, backingScale: 2, mode: mode)
+        #expect(value.zoom == zoom)
+        #expect(abs(value.origin.x - origin.x) <= 0.25 && abs(value.origin.y - origin.y) <= 0.25)
+    }
+}
