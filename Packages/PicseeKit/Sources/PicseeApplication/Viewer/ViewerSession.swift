@@ -36,6 +36,14 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public var currentItemID: ItemID? {
         mode == .viewing ? previewSet?.currentItemID : selection.currentItemID
     }
+    public weak var chromeHost: (any ViewerChromeHost)? { didSet { synchronizeChrome() } }
+    private var pointerAtTop = false
+    public var trafficLightsVisible: Bool { !chrome.isHidden || pointerAtTop }
+    public func pointerMoved(in region: ChromePointerRegion) {
+        pointerAtTop = region == .top
+        if region == .bottom || (!chrome.isHidden && region != .outside) { activity() }
+        else { synchronizeChrome() }
+    }
     private var chromeScheduler: (any ViewerChromeScheduling)?
     private var scheduledChromeDeadline: Double?
     private var chromeWakeupConsumed = false
@@ -45,6 +53,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         synchronizeChrome()
     }
     private func synchronizeChrome() {
+        chromeHost?.applyChrome(toolsVisible: !chrome.isHidden, trafficLightsVisible: trafficLightsVisible)
         guard let chromeScheduler else { return }
         let deadline = nextHideDeadline
         guard chromeWakeupConsumed || deadline != scheduledChromeDeadline else { return }
@@ -108,7 +117,16 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     }
     public func tab(reverse: Bool) {
         activity()
-        inspectorFocus.tab(reverse: reverse)
+        if let chromeHost {
+            let focus = inspectorFocus.focus
+            if focus == .canvas || focus == .tools || reverse {
+                if chromeHost.focusChromeTool(reverse: reverse, entering: focus != .tools) {
+                    inspectorFocus.updateFocus(.tools)
+                } else {
+                    inspectorFocus.updateFocus(focus == .tools && !reverse && inspectorFocus.isVisible ? .textInput : .canvas)
+                }
+            } else { inspectorFocus.escape() }
+        } else { inspectorFocus.tab(reverse: reverse) }
         syncFocusLock()
         host?.applyFocus(inspectorFocus.focus)
     }

@@ -54,6 +54,23 @@ public final class ChromeToolView: NSView {
     public override func hitTest(_ point: NSPoint) -> NSView? {
         !isHiddenOrHasHiddenAncestor && frame.contains(point) ? self : nil
     }
+    public override func becomeFirstResponder() -> Bool {
+        guard acceptsFirstResponder else { return false }
+        session?.updateFocus(.tools); needsDisplay = true
+        return true
+    }
+    public override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
+    public override var focusRingMaskBounds: NSRect { bounds }
+    public override func drawFocusRingMask() { bounds.fill() }
+    public override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 48: session?.tab(reverse: event.modifierFlags.contains(.shift))
+        case 49: activate()
+        case 53:
+            if let session { CommandRouter().route(.escape, from: .key, to: session) }
+        default: break
+        }
+    }
     public func activate() {
         face?.rootView.activate()
     }
@@ -64,6 +81,7 @@ public final class ChromeToolView: NSView {
 }
 
 public final class ViewerChromeOverlay: NSView {
+    private var session: ViewerSession?
     public private(set) var tools: [ChromeToolView] = []
     public private(set) var groups: [NSView] = []
     public private(set) var filename: String?
@@ -71,6 +89,7 @@ public final class ViewerChromeOverlay: NSView {
     private let fileLabel = NSTextField(labelWithString: "")
     public convenience init(frame: NSRect, session: ViewerSession) {
         self.init(frame: frame)
+        self.session = session
         let commands: [[CommandID]] = [[.open, .inspector], [.previous, .next], [.zoomOut, .actualPixels, .zoomIn]]
         let frames = [NSRect(x: 16, y: 16, width: 80, height: 40),
             NSRect(x: bounds.midX - 130, y: 16, width: 260, height: 40),
@@ -93,6 +112,23 @@ public final class ViewerChromeOverlay: NSView {
         fileLabel.font = DesignMetrics.font("uiSmall")
         groups[1].addSubview(fileLabel)
         refresh()
+    }
+    public static let edgeBandHeight: CGFloat = 32
+    public func pointerMoved(_ point: NSPoint) {
+        let region: ChromePointerRegion = !bounds.contains(point) ? .outside : point.y < Self.edgeBandHeight ? .bottom : point.y >= bounds.height - Self.edgeBandHeight ? .top : .canvas
+        session?.pointerMoved(in: region)
+        for tool in tools { tool.toolTip = tool.command.shortcutHint }
+    }
+    public func focusTool(reverse: Bool, entering: Bool) -> Bool {
+        let enabled = tools.filter(\.acceptsFirstResponder)
+        let target: ChromeToolView?
+        if entering { target = reverse ? enabled.last : enabled.first }
+        else if let index = enabled.firstIndex(where: { $0 === window?.firstResponder }) {
+            let next = index + (reverse ? -1 : 1)
+            target = enabled.indices.contains(next) ? enabled[next] : nil
+        } else { target = nil }
+        guard let target else { return false }
+        return window?.makeFirstResponder(target) == true
     }
     private weak var canvas: NSView?
     public override func hitTest(_ point: NSPoint) -> NSView? {
