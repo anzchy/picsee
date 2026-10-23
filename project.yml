@@ -39,6 +39,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/Resources/Picsee.entitlements
         # Git metadata lives outside a linked worktree; only this target's build script is unsandboxed.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     postBuildScripts:
       - name: Stamp build Git SHA
         basedOnDependencyAnalysis: false
