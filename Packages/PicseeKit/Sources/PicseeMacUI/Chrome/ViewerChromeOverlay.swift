@@ -188,13 +188,6 @@ public final class ViewerChromeOverlay: NSView {
         return window?.makeFirstResponder(target) == true
     }
     private weak var canvas: NSView?
-    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard event.type == .keyDown,
-              event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
-              event.charactersIgnoringModifiers?.lowercased() == "w", let window else { return false }
-        window.performClose(nil)
-        return true
-    }
     public override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         for group in groups.reversed() where !group.isHidden && group.frame.contains(local) {

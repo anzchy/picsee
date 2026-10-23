@@ -1,6 +1,7 @@
 import AppKit
 import PicseeCore
 import PicseeApplication
+import PicseeMacUI
 
 extension CommandID {
     var menuTitle: String {
@@ -72,6 +73,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             item.target = self
             (id == .open ? file : view).addItem(item)
         }
+        ChromeWindowCommands.addClose(to: file)
         let always = view.addItem(withTitle: String(localized: "Always Show Tools"), action: #selector(toggleAlwaysShowTools(_:)), keyEquivalent: "")
         always.target = self
         always.identifier = NSUserInterfaceItemIdentifier("chrome.always-show-tools")
