@@ -15,6 +15,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
 
 /// One state owner per window. It never creates a native window.
 @MainActor @Observable public final class ViewerSession: DisplayPreferencesObserver {
+    public let imageLoader: ViewerImageLoader
     private let preferencesStore: any DisplayPreferencesStore
     private let clock: any ViewerClock
     public weak var host: (any ViewerSessionHost)?
@@ -38,7 +39,8 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public var nextHideDeadline: Double? { chrome.nextHideDeadline }
     public init(preferencesStore: any DisplayPreferencesStore = InMemoryDisplayPreferencesStore(),
                 clock: any ViewerClock = MonotonicViewerClock(), hideDelay: Double = 2.5,
-                host: (any ViewerSessionHost)? = nil) {
+                host: (any ViewerSessionHost)? = nil, imageLoader: ViewerImageLoader = ViewerImageLoader()) {
+        self.imageLoader = imageLoader
         self.preferencesStore = preferencesStore
         self.clock = clock
         self.host = host
