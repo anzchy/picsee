@@ -1613,6 +1613,23 @@
           }
         }
       }
+    },
+    "You can also drop images or folders here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can also drop images or folders here."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "也可以拖入图片或文件夹"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

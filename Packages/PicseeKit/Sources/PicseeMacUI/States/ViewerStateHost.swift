@@ -9,14 +9,34 @@ private struct StateText: View {
     let isLoading: Bool
     let isFailure: Bool
     let isNotice: Bool
+    private struct DropHint: NSViewRepresentable {
+        let line: String
+        func makeNSView(context: Context) -> NSTextField {
+            let field = NSTextField(labelWithString: line)
+            field.font = DesignMetrics.font("uiSmall")
+            field.textColor = DesignColor.textSecondary.nsColor
+            field.alignment = .center
+            field.setAccessibilityIdentifier("state.drop-hint")
+            field.setAccessibilityRole(.staticText)
+            return field
+        }
+        func updateNSView(_ field: NSTextField, context: Context) {
+            field.stringValue = line
+            field.setAccessibilityLabel(line)
+        }
+    }
     var body: some View {
         VStack(spacing: 12) {
             if isLoading { IndeterminateProgressRow(label: lines[0]) }
             else {
                 ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                    Text(line).font(Font(DesignMetrics.font(isNotice ? "uiSmall" : index == 0 ? "title" : "ui")))
-                        .foregroundStyle(isFailure && index == 2 ? DesignColor.errorText.color :
-                            index == 0 ? DesignColor.textPrimary.color : DesignColor.textSecondary.color)
+                    if !isFailure && index == 2 {
+                        DropHint(line: line).fixedSize().offset(y: 80)
+                    } else {
+                        Text(line).font(Font(DesignMetrics.font(isNotice ? "uiSmall" : index == 0 ? "title" : "ui")))
+                            .foregroundStyle(isFailure && index == 2 ? DesignColor.errorText.color :
+                                index == 0 ? DesignColor.textPrimary.color : DesignColor.textSecondary.color)
+                    }
                 }
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -82,7 +102,8 @@ public final class ViewerStateHost: NSView {
         switch status {
         case .empty:
             textLines = [String(localized: "Open a folder to start browsing"),
-                         String(localized: "Images stay on your Mac. Browse by folder.")]
+                         String(localized: "Images stay on your Mac. Browse by folder."),
+                         String(localized: "You can also drop images or folders here.")]
             actions = [(String(localized: "Choose Folder…"), "state.open")]
         case .loading(let name):
             showsProgress = true
