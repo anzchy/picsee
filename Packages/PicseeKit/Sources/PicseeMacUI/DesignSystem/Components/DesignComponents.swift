@@ -8,7 +8,7 @@ public extension EnvironmentValues {
     }
 }
 
-/// Shared button chrome; forced samples ignore all native interaction input.
+/// Components default to live input; preview samples explicitly opt into forced state.
 struct DesignCommandStyle: ButtonStyle {
     let kind: ComponentKind; let state: ComponentState; let theme: DesignTheme; let input: ComponentInput
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -22,7 +22,7 @@ struct DesignCommandStyle: ButtonStyle {
     }
 }
 public struct IconCommandButton: View {
-    public init(symbol: DesignSymbol, state: ComponentState, theme: DesignTheme, input: ComponentInput = .forced, action: @escaping () -> Void) {
+    public init(symbol: DesignSymbol, state: ComponentState, theme: DesignTheme, input: ComponentInput = .live, action: @escaping () -> Void) {
         self.symbol = symbol; self.state = state; self.theme = theme; self.input = input; self.action = action
     }
     func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: current, action: action) }
@@ -57,7 +57,7 @@ public struct ShortcutHint: View {
     }
 }
 public struct FolderNavigationRow: View {
-    public init(nodeID: String, name: String, count: Int?, expanded: Bool, state: ComponentState, theme: DesignTheme, input: ComponentInput = .forced, onSelect: @escaping () -> Void, onExpand: @escaping () -> Void) {
+    public init(nodeID: String, name: String, count: Int?, expanded: Bool, state: ComponentState, theme: DesignTheme, input: ComponentInput = .live, onSelect: @escaping () -> Void, onExpand: @escaping () -> Void) {
         self.nodeID = nodeID; self.name = name; self.count = count; self.expanded = expanded; self.state = state; self.theme = theme; self.input = input; self.onSelect = onSelect; self.onExpand = onExpand
     }
     func select() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: onSelect) }
@@ -97,7 +97,7 @@ public struct FolderNavigationRow: View {
     }
 }
 public struct ThumbnailSelectionFrame: View {
-    public init(filename: String, state: ComponentState, theme: DesignTheme, input: ComponentInput = .forced, action: @escaping () -> Void) {
+    public init(filename: String, state: ComponentState, theme: DesignTheme, input: ComponentInput = .live, action: @escaping () -> Void) {
         self.filename = filename; self.state = state; self.theme = theme; self.input = input; self.action = action
     }
     func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: action) }
@@ -116,7 +116,7 @@ public struct ThumbnailSelectionFrame: View {
     }
 }
 public struct SearchFilterField: View {
-    public init(query: Binding<String>, resultCount: Int, state: ComponentState, theme: DesignTheme, input: ComponentInput = .forced, clear: @escaping () -> Void) {
+    public init(query: Binding<String>, resultCount: Int, state: ComponentState, theme: DesignTheme, input: ComponentInput = .live, clear: @escaping () -> Void) {
         self._query = query; self.resultCount = resultCount; self.state = state; self.theme = theme; self.input = input; self.clear = clear
     }
     func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: clear) }
@@ -135,7 +135,7 @@ public struct SearchFilterField: View {
     }
 }
 public struct ScaleIndicator: View {
-    public init(actualPixels: Bool, input: ComponentInput = .forced, action: @escaping () -> Void) {
+    public init(actualPixels: Bool, input: ComponentInput = .live, action: @escaping () -> Void) {
         self.actualPixels = actualPixels; self.input = input; self.action = action
     }
     func activate() { guard input == .live else { return }; action() }
@@ -148,7 +148,7 @@ public struct IndeterminateProgressRow: View {
     public var body: some View { HStack { ProgressView().controlSize(.small); Text(label) } }
 }
 public struct ImageErrorRow: View {
-    public init(message: String, state: ComponentState, input: ComponentInput = .forced, retry: @escaping () -> Void) {
+    public init(message: String, state: ComponentState, input: ComponentInput = .live, retry: @escaping () -> Void) {
         self.message = message; self.state = state; self.input = input; self.retry = retry
     }
     func activate() { guard input == .live else { return }; ComponentResolver.activate(.click, state: state, action: retry) }

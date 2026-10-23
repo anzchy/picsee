@@ -58,27 +58,27 @@ struct DesignPreviewPage: View {
                 Text("Icon command button")
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(states, id: \.0) { title, state in
-                        VStack { IconCommandButton(symbol: .sidebar, state: state, theme: theme) { activations += 1 }; Text(title).font(.system(size: 12)).frame(width: 55) }
+                        VStack { IconCommandButton(symbol: .sidebar, state: state, theme: theme, input: .forced) { activations += 1 }; Text(title).font(.system(size: 12)).frame(width: 55) }
                     }
                 }
                 Text("Folder navigation · selection and disclosure are independent")
                 ForEach(states, id: \.0) { title, state in
                     VStack(alignment: .leading, spacing: 2) {
-                        FolderNavigationRow(nodeID: title, name: "日本 · 山海之间 · 很长的文件夹名称用于检查截断与完整名称访问", count: 12, expanded: expanded, state: state, theme: theme, onSelect: { activations += 1 }, onExpand: { expanded.toggle() })
+                        FolderNavigationRow(nodeID: title, name: "日本 · 山海之间 · 很长的文件夹名称用于检查截断与完整名称访问", count: 12, expanded: expanded, state: state, theme: theme, input: .forced, onSelect: { activations += 1 }, onExpand: { expanded.toggle() })
                         Text(title).font(.system(size: 12)).foregroundStyle(DesignColor.textSecondary.color)
                     }
                 }
                 Text("Thumbnail selection")
                 HStack { ForEach([false, true], id: \.self) { selected in
-                    VStack { ThumbnailSelectionFrame(filename: "DSC_0341_very_long_preview_filename.jpg", state: selected ? .selected : [], theme: theme) { activations += 1 }; Text(selected ? "Selected" : "Unselected") }
+                    VStack { ThumbnailSelectionFrame(filename: "DSC_0341_very_long_preview_filename.jpg", state: selected ? .selected : [], theme: theme, input: .forced) { activations += 1 }; Text(selected ? "Selected" : "Unselected") }
                 } }
                 Text("Search · active filter, zero results, clear action")
-                SearchFilterField(query: $query, resultCount: 0, state: .keyboardFocused, theme: theme) { query = "" }
-                HStack { ScaleIndicator(actualPixels: false) { activations += 1 }; ScaleIndicator(actualPixels: true) { activations += 1 } }
+                SearchFilterField(query: $query, resultCount: 0, state: .keyboardFocused, theme: theme, input: .forced) { query = "" }
+                HStack { ScaleIndicator(actualPixels: false, input: .forced) { activations += 1 }; ScaleIndicator(actualPixels: true, input: .forced) { activations += 1 } }
                 Text("Scale · fit / actual pixels")
                 IndeterminateProgressRow(label: "Reading folder…")
                 Text("Indeterminate · no total available").foregroundStyle(DesignColor.textSecondary.color)
-                ImageErrorRow(message: "Can't read this image", state: []) { activations += 1 }
+                ImageErrorRow(message: "Can't read this image", state: [], input: .forced) { activations += 1 }
                 HStack { ImageStatusCount(count: 12); ShortcutHint(text: "Space"); Text("Quick Look · preview hint") }
                 Text("Live · hover, press and Tab · \(activations) activations")
                 HStack { ForEach([DesignSymbol.previous, .next, .info], id: \.self) { role in
