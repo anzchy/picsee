@@ -7,6 +7,7 @@ struct AccessServices: Sendable {
     let files: FileAccess
     let recent: RecentFolderStore
     let lister = SiblingLister()
+    let browser = FolderBrowser()
     init(buildSHA: String) throws {
         let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                  appropriateFor: nil, create: true).appendingPathComponent("Picsee")

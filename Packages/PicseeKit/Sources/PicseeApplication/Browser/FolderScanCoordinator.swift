@@ -9,6 +9,11 @@ import PicseeCore
     public private(set) var isReadingFolder = false
     public private(set) var failure: (any Error)?
     public private(set) var inputURL: URL?
+    public internal(set) var currentItemID: ItemID?
+    public internal(set) var currentURL: URL?
+    public weak var host: (any FolderScanHost)?
+    var pendingDirection: NavigationDirection?
+    var automaticPresentationAllowed: (@MainActor () -> Bool)?
     private let access: any AccessLeasing
     private let scanner: any FolderScanning
     private var scanTask: Task<Void, any Error>?
@@ -16,27 +21,34 @@ import PicseeCore
     public init(access: any AccessLeasing, scanner: any FolderScanning) {
         self.access = access; self.scanner = scanner
     }
-    @discardableResult public func begin(folder: URL, rootID: AccessRootID, input: URL? = nil) -> Task<Void, any Error> {
+    @discardableResult public func begin(folder: URL, rootID: AccessRootID, input: URL? = nil,
+        pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool = { true }) -> Task<Void, any Error> {
         end()
         generation &+= 1
         let token = generation
         activeGeneration = token
         inputURL = input
+        currentURL = input
+        pendingDirection = pending
+        automaticPresentationAllowed = canPresent
         isReadingFolder = input == nil
         let task = Task { [self] in
             do {
-                try await Self.scanLeased(folder: folder, rootID: rootID, generation: token,
-                    access: access, scanner: scanner, ready: { [self] version in
+                try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: input,
+                    access: access, scanner: scanner, ready: { [self] version, itemID in
                         guard activeGeneration == token else { return }
                         snapshot = FolderSnapshot(version: version, entries: [], isComplete: false)
+                        currentItemID = itemID
                     }, emit: { [self] batch in
                         guard activeGeneration == token, let snapshot else { return }
                         self.snapshot = snapshot.appending(batch, isComplete: false)
+                        advancePending()
                     })
                 try Task.checkCancellation()
                 guard activeGeneration == token else { return }
                 activeGeneration = nil
                 snapshot = snapshot?.appending([], isComplete: true)
+                pendingDirection = nil
                 isReadingFolder = false
                 scanTask = nil
             } catch {
@@ -44,7 +56,10 @@ import PicseeCore
                 activeGeneration = nil
                 isReadingFolder = false
                 scanTask = nil
-                if error is CancellationError { snapshot = nil; inputURL = nil; return }
+                if error is CancellationError {
+                    snapshot = nil; inputURL = nil; currentItemID = nil; currentURL = nil; pendingDirection = nil
+                    return
+                }
                 failure = error
                 throw error
             }
@@ -59,19 +74,25 @@ import PicseeCore
         scanTask = nil
         snapshot = nil
         inputURL = nil
+        currentItemID = nil
+        currentURL = nil
+        pendingDirection = nil
+        automaticPresentationAllowed = nil
         isReadingFolder = false
         failure = nil
     }
     /// Explicitly nonisolated: path canonicalization and scanning begin only inside the acquired lease.
-    private nonisolated static func scanLeased(folder: URL, rootID: AccessRootID, generation: UInt64,
+    private nonisolated static func scanLeased(folder: URL, rootID: AccessRootID, generation: UInt64, input: URL?,
         access: any AccessLeasing, scanner: any FolderScanning,
-        ready: @MainActor @Sendable (SnapshotVersion) -> Void,
+        ready: @MainActor @Sendable (SnapshotVersion, ItemID?) -> Void,
         emit: @MainActor @Sendable ([FolderEntry]) -> Void) async throws {
         try await access.withLease(.root(rootID, file: folder)) { lease in
             let version = SnapshotVersion(rootID: rootID, folder: folder, generation: generation)
-            await ready(version)
+            let root = ItemIdentityRoot(id: rootID, url: lease.url)
+            let itemID = input.flatMap { AccessBoundary.contains($0, in: lease.url) ? FolderEntry(url: $0, root: root).itemID : nil }
+            await ready(version, itemID)
             try Task.checkCancellation()
-            try await scanner.scan(in: folder, root: ItemIdentityRoot(id: rootID, url: lease.url)) { batch in
+            try await scanner.scan(in: folder, root: root) { batch in
                 await emit(batch)
             }
         }
