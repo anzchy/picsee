@@ -144,3 +144,75 @@ func p201LeaseRebindFailedStaleRepairKeepsOldTokenReleasable(kind: String) async
     #expect(scope.counts(f.old) == [2, 2, 0])
     #expect(scope.balanced)
 }
+
+@Test(arguments: [false, true])
+func p201LeaseRebindReturnToHeldURLPublishesLatestRoot(stale: Bool) async throws {
+    let f = try ReconnectFixture(); defer { f.remove() }
+    let scope = ReconnectScope(); let codec = FakeBookmarks()
+    let access = try FileAccess(scope: scope, bookmarks: codec, store: f.store, buildSHA: "A")
+    let id = try await access.grant(folder: f.old)
+    let a = try await access.acquire(.root(id, file: f.old))
+    codec.relocated = f.chosen; codec.stale = true
+    let b = try await access.acquire(.root(id, file: f.chosen))
+    #expect(await access.rootURL(id) == f.chosen)
+    #expect(codec.count == 2)
+    codec.relocated = f.old; codec.stale = stale
+    let c = try await access.acquire(.root(id, file: f.old))
+    #expect(a.url == f.old && b.url == f.chosen && c.url == f.old)
+    #expect(await access.rootURL(id) == f.old)
+    #expect(scope.counts(f.old) == [2, 1, 0])
+    #expect(scope.counts(f.chosen) == [1, 0, 0])
+    #expect(codec.count == (stale ? 3 : 2))
+    #expect(try f.store.load().first?.bookmark == Data((stale ? f.old.path : f.chosen.path).utf8))
+    await #expect(throws: FileAccessError.outsideRoot) { try await access.acquire(.root(id, file: f.chosen)) }
+    if stale {
+        await access.release(a)
+        #expect(scope.counts(f.old) == [2, 1, 0])
+        await access.release(b)
+        #expect(scope.counts(f.chosen) == [1, 1, 0])
+        #expect(scope.counts(f.old) == [2, 1, 0])
+        await access.release(c)
+        #expect(Array(scope.stops.suffix(2)) == [f.chosen, f.old])
+    } else {
+        await access.release(c)
+        #expect(scope.counts(f.old) == [2, 1, 0])
+        await access.release(a)
+        #expect(scope.counts(f.old) == [2, 2, 0])
+        #expect(scope.counts(f.chosen) == [1, 0, 0])
+        await access.release(b)
+        #expect(Array(scope.stops.suffix(2)) == [f.old, f.chosen])
+    }
+    for lease in [a, b, c] { await access.release(lease) }
+    #expect(scope.counts(f.old) == [2, 2, 0])
+    #expect(scope.counts(f.chosen) == [1, 1, 0])
+    #expect(scope.balanced)
+}
+
+@Test func p201LeaseRebindReturnRefreshFailureKeepsBothHeldSessions() async throws {
+    let f = try ReconnectFixture(); defer { f.remove() }
+    let scope = ReconnectScope(); let codec = FakeBookmarks()
+    let access = try FileAccess(scope: scope, bookmarks: codec, store: f.store, buildSHA: "A")
+    let id = try await access.grant(folder: f.old)
+    let a = try await access.acquire(.root(id, file: f.old))
+    codec.relocated = f.chosen; codec.stale = true
+    let b = try await access.acquire(.root(id, file: f.chosen))
+    let bytes = try Data(contentsOf: f.store.url)
+    let records = await access.records()
+    codec.relocated = f.old; codec.creationFails = true
+    await #expect(throws: FileAccessError.needsReconnection(id)) { try await access.acquire(.root(id, file: f.old)) }
+    #expect(try Data(contentsOf: f.store.url) == bytes)
+    #expect(await access.records() == records)
+    #expect(await access.rootURL(id) == nil)
+    #expect(codec.count == 2)
+    #expect(scope.counts(f.old) == [2, 1, 0])
+    #expect(scope.counts(f.chosen) == [1, 0, 0])
+    await access.release(a)
+    #expect(scope.counts(f.old) == [2, 2, 0])
+    #expect(scope.counts(f.chosen) == [1, 0, 0])
+    await access.release(b)
+    await access.release(a); await access.release(b)
+    #expect(scope.counts(f.old) == [2, 2, 0])
+    #expect(scope.counts(f.chosen) == [1, 1, 0])
+    #expect(Array(scope.stops.suffix(2)) == [f.old, f.chosen])
+    #expect(scope.balanced)
+}
