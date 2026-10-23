@@ -151,10 +151,12 @@ stops the run with that line as the reason.
 scripts/device/doctor.sh "$RUN_DIR" --expected-sha "$(git rev-parse --short HEAD)"
 ```
 
-The helper prints exactly one `PASS <check>` or `FAIL <check> — <why>` line for each check below, saves the
-output atomically as `doctor.txt`, and exits non-zero if any fail. Collection errors become FAIL on the
-affected checks; all twelve lines replace the previous report even when a bundle, plist or record is
-missing or malformed. The twelve verdicts reach stdout before the report write. If storage fails, an
+The helper prints exactly one verdict line for each check below: `PASS <check>` (with documented
+check-specific detail) or `FAIL <check> — <why>`. In particular, a passing window check prints
+`PASS window — title=<name>`. It saves the output atomically as `doctor.txt` and exits non-zero if any fail.
+Collection errors become FAIL on the affected checks; all twelve lines replace the previous report even
+when a bundle, plist or record is missing or malformed. The twelve verdicts reach stdout before the report
+write. If storage fails, an
 additional `FAIL report-write` line names the failure, the exit is non-zero, and an old report is moved to
 `doctor.stale.txt` (or removed). If storage prevents both, the diagnostic explicitly marks the old
 `doctor.txt` STALE/UNUSABLE. `doctor-input.json` keeps the observations.
@@ -169,7 +171,7 @@ additional `FAIL report-write` line names the failure, the exit is non-zero, and
 | `process-bundle` | recorded PID, executable and process birth all match the live process; the record is active |
 | `fresh-sources` | every build input matches the committed inventory and recorded hashes; none is newer than the bundle Info.plist |
 | `single-instance` | the recorded PID is the only running process named Picsee |
-| `window` | one snapshot of `properties of every window`, addressed by PID, contains one window titled `Picsee`; untitled windows become empty titles, and `0 windows` is distinct from an AX error |
+| `window` | one snapshot of `properties of every window`, addressed by PID, contains exactly one window titled `Picsee` or the basename of a file recorded in `fixtures.sha256.json`; untitled windows become empty titles, and `0 windows` is distinct from an AX error |
 | `launch-log` | this PID's unified log since `start.txt` contains `Picsee launch git=<expected SHA>`, unredacted |
 | `machine` | model, chip, memory, macOS and main-display backing scale match `build.json`; check these against the brief too |
 | `fixtures` | no fixtures for a skeleton run, or all fixture files match the run's `fixtures.sha256.json` |
@@ -318,9 +320,8 @@ Every run produces one row per criterion and entry point, keyed by ledger row ID
 - **Menu-bar utilities** may own menu-bar coordinates and block clicks there. Don't request access to them;
   use the keyboard shortcut for the command, or record NOT VERIFIED.
 - **Escape and other keys:** in mdpro (a WebView) the computer-use `key escape` arrived only as a key-up.
-  Whether a native `keyDown` reaches Picsee through the tool is **unverified**. The first run with an Esc
-  criterion checks it against the log and records the result in `features/README.md`. If it fails, plan Esc
-  as a user step.
+  In Picsee, native Esc sent through `kc.sh "$RUN_DIR" 53` worked in the P1-08 device run (rows 5 and 9).
+  Keep the direct computer-use `key escape` path distinct and unverified; use the proven key-code helper.
 - **Input method:** switch to ABC before key checks; an IME can swallow keys.
 
 ## 14. Proving this skill (do once, then after big changes)
@@ -347,8 +348,9 @@ on the Mac mini, at main `8a007b3`. Signed `build.sh` → `launch.sh` → `docto
 proof; see `docs/validation/P0.md` §P0-03 @1x. `size.sh` and `kc.sh` were not
 exercised on the mini.
 
-Still **NOT VERIFIED**: a full Mac mini §14 proof, XCUITest, native Escape, bookmark restore, and the other
-future feature checks. The keyboard helper and fixture-hash runs were exercised by the mini feature run.
+Still **NOT VERIFIED**: a full Mac mini §14 proof, XCUITest, direct computer-use `key escape`, bookmark restore,
+and the other future feature checks. Native Esc through `kc.sh 53`, the keyboard helper, and fixture-hash runs
+were exercised by mini feature runs.
 Historically, direct SSH signing on the mini failed with `errSecInternalComponent`; the MacBook therefore also
 requires its desktop-started tmux session. No performance measurements.
 

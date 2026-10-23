@@ -46,8 +46,9 @@ events are a disclosed substitute for a real mouse and do not verify real hover.
   `viewer.canvas`. On a standalone-image canvas, Esc keeps the same window and file title and does not show a grid.
 - **Narrow-width overlap.** Set widths 640, 480 and 300 points with `size.sh`. From the saved AX-tree variable,
   compute every visible tool's frame from its AX position and AX size. Assert that no pair of rectangles intersects
-  and every rectangle stays inside the window frame; record the line count at each width. At 640 points, AXPress
-  the centre of Next and confirm Next—not Zoom Out—runs.
+  and every rectangle stays inside the window frame; record the line count at each width. At 640 points, post a
+  disclosed synthetic click (`CGEvent`, like the record's `click.sh`) at the centre of Next's AX frame and confirm
+  Next—not Zoom Out—runs. With no folder grant, the ACCESS-01 prompt appears; dismiss it with its Cancel button.
 - **Interaction locks.** Focus a tool and wait at least four seconds; it stays visible. For the menu lock, find the
   View menu-bar item in the saved AX tree and invoke its `AXPress` action, confirm the menu is selected/open, wait
   at least four seconds, close it with Esc key code `53`, and confirm hiding resumes after about 2.5 seconds. Repeat
@@ -65,8 +66,10 @@ events are a disclosed substitute for a real mouse and do not verify real hover.
   values); named keys must use the `kc.sh` codes above.
 - A synthetic `mouseMoved` event proves the app's event path, not real-mouse hover. Keep real hover NOT VERIFIED.
 - AX menu checkmarks may lag one refresh; re-read the tree after the action instead of trusting the old variable.
+- Clicking Next without a folder grant opens the expected ACCESS-01 prompt; dismiss it with the prompt's Cancel
+  button before continuing the recipe.
 - Known Still-open from the P1-08 run: immediately after a pointer click on a tool, a following canvas key can
-  remain with the native control (`CommandWindow.preserveResponder`) instead of returning to the canvas. Record
-  that path as FAIL until it is fixed; do not generalize the passing keyboard-focus path to it.
+  remain with the native control instead of returning to the canvas. Record that path as FAIL until it is fixed;
+  do not generalize the passing keyboard-focus path to it.
 - `CHROME-01` VoiceOver speech, `CHROME-03` dragging/Filmstrip, `CHROME-04` relaunch persistence, `CHROME-05`
   grid-origin return, real hover and @2x remain NOT VERIFIED unless a later run exercises them directly.
