@@ -327,21 +327,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/Commands/CommandMenu.swift` 只在 View 菜单加全屏项，File › Open… 与 ⌘O 未变；OPEN-02 不受影响。上次：P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6） |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..1a380ad）：VIEW-01…06 随改，VIEW-01 Stub→Partial、VIEW-04/05 Absent→Partial，均为单元、验收未改；VIEW-07 路径随 `App/CanvasView.swift` 迁入 PicseeMacUI 改写，绘制与背景色值未变；VIEW-08 由所有者在 1a380ad 补画布路径和限制（@1x 记录早于重装与视口变化时的细节重请求），状态与验收未改。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
-| C 沉浸界面 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CHROME-01…05 待验项，无结果；保持 `Absent`。上次：P0-09 Session（dcfe3f8..bef71d5）CHROME-01…05 保持 `Absent` |
-| 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 PREF-01/02/04 待验项，无结果；状态不变。上次：P0-09 Session（dcfe3f8..bef71d5）新增两键暂不入行（PR 描述裁定），待 P1-08/P1-09 命名 |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 P1-07/P1-09 归入依据，OPEN-01…05 仍无结果；状态不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：canvas-pixels.md 补 VIEW-01/04/05 的 @1x 步骤，P1.md 的 VIEW 行仍无结果；只是步骤，无证据，状态与验收不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..1a380ad） |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 注明 CHROME-04 持久化部分按开发计划 P1-09 文本归入（计划列 P1-08、P3-11），无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
+| 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
 | 授权与文件访问 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/CanvasWindowController.swift` 只改画布构造、打开代次闭包、全屏行为与视口同步，授权提示、租约与释放未改；ACCESS-01/05 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
-| 缓存与资源 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CACHE-01 待验项与内存压力用户步骤，无结果；CACHE-01 保持 `Absent`。上次：建账 |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：View 菜单新增 ⌃⌘F「Enter Full Screen」（`NSWindow.toggleFullScreen`，非 CommandID），归 VIEW-05；ViewerSession 只加缩放意图；CMD-01/02 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
+| 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 注明 CMD-01 按开发计划 P1-07 文本归入（计划列 P0-09）；keyboard-commands.md 补面板可见时 Esc 回画布一步、参考运行改称 delegator 运行；无新证据，CMD-01/02 不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/CanvasWindowController.swift` 改动不涉及解码与格式；FMT-01 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：画布迁入 PicseeMacUI 时焦点、Tab 与辅助功能标签原样保留；新增「进入全屏/退出全屏」中英文字符串；A11Y-02 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 注明 A11Y-02 按开发计划 P1-07 文本归入（计划列 P0-09、P6-04），A11Y-04 仍无结果；状态不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
