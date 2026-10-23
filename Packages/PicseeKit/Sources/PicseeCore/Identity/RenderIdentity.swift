@@ -1,9 +1,12 @@
 import Foundation
 
 public struct FileRevision: Hashable, Sendable {
+    /// Resource bytes distinguish atomic replacement even if size and timestamp were preserved.
+    public let resourceIdentifier: String?
     public let byteCount: Int
     public let modificationDate: Date?
-    public init(byteCount: Int, modificationDate: Date?) {
+    public init(byteCount: Int, modificationDate: Date?, resourceIdentifier: String? = nil) {
+        self.resourceIdentifier = resourceIdentifier
         self.byteCount = byteCount
         self.modificationDate = modificationDate
     }
@@ -17,7 +20,7 @@ public struct RenderKey: Hashable, Sendable {
     public let decoderVersion: Int
     public let purpose: RenderPurpose
     /// Versioned UTF-8 cache-key text. P3-03 hashes this with SHA-256 for disk filenames.
-    /// Field order: item, bytes, date bits (reference epoch), frame, edge, preview, policy, decoder, purpose.
+    /// Field order: item, bytes, date bits (reference epoch), frame, edge, preview, policy, decoder, purpose, resource bytes (Base64 or none).
     public var stableEncoding: String {
         let date = revision.modificationDate.map {
             let seconds = $0.timeIntervalSinceReferenceDate
@@ -26,7 +29,8 @@ public struct RenderKey: Hashable, Sendable {
         } ?? "none"
         return ["rk1", itemID.stableEncoding, String(revision.byteCount), date, String(frameIndex),
                 String(maximumPixelSize), isPreview ? "1" : "0", policy.rawValue,
-                String(decoderVersion), purpose.rawValue].joined(separator: "|")
+                String(decoderVersion), purpose.rawValue,
+                revision.resourceIdentifier.map { Data($0.utf8).base64EncodedString() } ?? "none"].joined(separator: "|")
     }
     public let itemID: ItemID
     public let revision: FileRevision

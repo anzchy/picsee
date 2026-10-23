@@ -52,26 +52,30 @@ public struct ImageIODecoder: ImageDecoding {
 
 public final class ImageIOPipeline: ImagePipeline, Sendable {
     private let configuration: DecodeConfiguration
+    private let identityResolver: any ItemIdentityResolving
     private let executor: OperationDecodeExecutor
     private let admission: DecodeAdmission
-    public init(decoder: any ImageDecoding = ImageIODecoder(), configuration: DecodeConfiguration = DecodeConfiguration()) {
+    public init(decoder: any ImageDecoding = ImageIODecoder(), configuration: DecodeConfiguration = DecodeConfiguration(),
+                identityResolver: any ItemIdentityResolving = FileItemIdentityResolver()) {
         self.configuration = configuration
+        self.identityResolver = identityResolver
         let executor = OperationDecodeExecutor(workers: configuration.workers)
         self.executor = executor
         admission = DecodeAdmission(configuration: configuration, executor: executor, decoder: RevisionReportingDecoder(decoder: decoder))
     }
     private func header(_ request: ImageDecodeRequest) async throws -> ImageSourceHeader {
+        guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else {
+            throw ImageLoadError(.sourceChanged, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision)
+        }
+        let item = try await identityResolver.identity(for: request.fileURL)
         let budget = configuration.budget
         return try await withCheckedThrowingContinuation { continuation in
             executor.submit {
                 continuation.resume(with: Result {
-                    do { return try ImageSourceHeader.read(request, budget: budget) }
+                    do { return try ImageSourceHeader.read(request, budget: budget, itemID: item) }
                     catch {
-                        let attributes = try? FileManager.default.attributesOfItem(atPath: request.fileURL.path)
-                        let revision = (attributes?[.size] as? NSNumber).map {
-                            FileRevision(byteCount: $0.intValue, modificationDate: attributes?[.modificationDate] as? Date)
-                        }
-                        throw loadFailure(error, request: request, revision: revision,
+                        let revision = try? FileRevisionReader.read(request.fileURL)
+                        throw loadFailure(error, request: request, revision: revision, itemID: request.renderKey?.itemID ?? item,
                                           unreadableKind: error as? ImageDecodeError == .unreadableImage
                                             ? imageFailureKind(request.fileURL) : .corruptImage)
                     }
@@ -82,13 +86,13 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
     public func request(for fileURL: URL, maximumPixelSize: Int) async throws -> ImageDecodeRequest {
         if Task.isCancelled { throw ImageLoadError(.cancelled) }
         let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize))
-        let key = await admission.key(for: fileURL, revision: header.revision, maximumPixelSize: maximumPixelSize)
+        let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: maximumPixelSize)
         return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, renderKey: key)
     }
     public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
         if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision) }
         let header = try await header(request)
-        let key = await admission.key(for: request.fileURL, revision: header.revision, maximumPixelSize: request.maximumPixelSize, isPreview: request.isPreview)
+        let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: request.maximumPixelSize, isPreview: request.isPreview)
         // An explicit request revision must still match at the last predecode check.
         if let requested = request.renderKey, requested != key {
             throw ImageLoadError(.sourceChanged, itemID: requested.itemID, revision: header.revision)
@@ -108,11 +112,9 @@ private struct RevisionReportingDecoder: ImageDecoding {
     let decoder: any ImageDecoding
     func decode(_ request: ImageDecodeRequest) throws -> DecodedImage {
         let decoded = try decoder.decode(request)
-        let attributes = try FileManager.default.attributesOfItem(atPath: request.fileURL.path)
-        guard let size = attributes[.size] as? NSNumber else { throw ImageDecodeError.unreadableImage }
         return DecodedImage(image: decoded.image, sourcePixelSize: decoded.sourcePixelSize,
-            formatIdentifier: decoded.formatIdentifier,
-            revision: FileRevision(byteCount: size.intValue, modificationDate: attributes[.modificationDate] as? Date))
+            formatIdentifier: decoded.formatIdentifier, revision: try FileRevisionReader.read(request.fileURL),
+            itemID: request.renderKey?.itemID)
     }
 }
 
@@ -134,7 +136,7 @@ private func imageFailureKind(_ url: URL) -> ImageLoadError.Kind {
     return .unsupportedFormat
 }
 
-private func loadFailure(_ error: Error, request: ImageDecodeRequest, revision: FileRevision?,
+private func loadFailure(_ error: Error, request: ImageDecodeRequest, revision: FileRevision?, itemID: ItemID? = nil,
                          unreadableKind: ImageLoadError.Kind) -> Error {
     let kind: ImageLoadError.Kind
     switch error {
@@ -144,5 +146,5 @@ private func loadFailure(_ error: Error, request: ImageDecodeRequest, revision: 
     case is CancellationError: kind = .cancelled
     default: return error // Includes FileAccess errors; never reinterpret permission failures.
     }
-    return ImageLoadError(kind, itemID: request.renderKey?.itemID, revision: revision ?? request.renderKey?.revision)
+    return ImageLoadError(kind, itemID: itemID ?? request.renderKey?.itemID, revision: revision ?? request.renderKey?.revision)
 }

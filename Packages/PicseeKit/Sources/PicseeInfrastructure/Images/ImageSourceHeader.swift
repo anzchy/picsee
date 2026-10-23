@@ -3,6 +3,7 @@ import ImageIO
 import PicseeCore
 
 struct ImageSourceHeader: Sendable {
+    let itemID: ItemID
     let width: Int
     let height: Int
     let revision: FileRevision
@@ -22,7 +23,7 @@ struct ImageSourceHeader: Sendable {
         }
         throw ImageDecodeError.unreadableImage
     }
-    static func read(_ request: ImageDecodeRequest, budget: Int) throws -> ImageSourceHeader {
+    static func read(_ request: ImageDecodeRequest, budget: Int, itemID: ItemID) throws -> ImageSourceHeader {
         guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else { throw ImageDecodeError.invalidRequest }
         // A header-only PNG may be too incomplete for ImageIO properties. Inspect
         // its fixed IHDR fields first, without reading the payload or allocating pixels.
@@ -43,10 +44,7 @@ struct ImageSourceHeader: Sendable {
               let height = properties[kCGImagePropertyPixelHeight] as? Int else { throw ImageDecodeError.unreadableImage }
         _ = try DecodeBudget.sourceCost(width: width, height: height, budget: budget)
         guard CGImageSourceGetStatus(source) == .statusComplete else { throw ImageDecodeError.unreadableImage }
-        let attributes = try FileManager.default.attributesOfItem(atPath: request.fileURL.path)
-        guard let size = attributes[.size] as? NSNumber else { throw ImageDecodeError.unreadableImage }
-        return ImageSourceHeader(width: width, height: height,
-            revision: FileRevision(byteCount: size.intValue,
-                                   modificationDate: attributes[.modificationDate] as? Date))
+        return ImageSourceHeader(itemID: itemID, width: width, height: height,
+                                 revision: try FileRevisionReader.read(request.fileURL))
     }
 }

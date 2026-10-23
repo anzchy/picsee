@@ -15,7 +15,9 @@ public struct URLIdentityResourceReader: FileIdentityResourceReading {
     public init() { }
     public func identity(for fileURL: URL) throws -> FileResourceIdentity? {
         // Both keys are available on macOS 14. Encode bytes, never the runtime resource object's description.
-        let values = try fileURL.resourceValues(forKeys: [.volumeUUIDStringKey, .fileResourceIdentifierKey])
+        var fresh = fileURL
+        fresh.removeAllCachedResourceValues()
+        let values = try fresh.resourceValues(forKeys: [.volumeUUIDStringKey, .fileResourceIdentifierKey])
         guard let volume = values.volumeUUIDString, let identifier = values.fileResourceIdentifier as? Data else { return nil }
         return FileResourceIdentity(volumeUUID: volume, fileIdentifier: identifier.base64EncodedString())
     }
