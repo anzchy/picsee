@@ -1,0 +1,30 @@
+import CoreGraphics
+import Testing
+import PicseeCore
+
+@Test func canvasFitLandscapePortraitAndDisplayedOrientation() {
+    // Each tuple is independently worked in view points: source, viewport, scale, zoom, origin.
+    let cases: [(CGSize, CGSize, Double, Double, CGPoint)] = [
+        (.init(width: 800, height: 400), .init(width: 432, height: 232), 1, 0.5, .init(x: 16, y: 16)),
+        (.init(width: 800, height: 400), .init(width: 232, height: 432), 1, 0.25, .init(x: 16, y: 166)),
+        (.init(width: 400, height: 800), .init(width: 432, height: 232), 1, 0.25, .init(x: 166, y: 16)),
+        (.init(width: 400, height: 800), .init(width: 232, height: 432), 1, 0.5, .init(x: 16, y: 16)),
+        (.init(width: 800, height: 400), .init(width: 432, height: 232), 2, 1, .init(x: 16, y: 16)),
+        (.init(width: 800, height: 400), .init(width: 232, height: 432), 2, 0.5, .init(x: 16, y: 166)),
+        (.init(width: 400, height: 800), .init(width: 432, height: 232), 2, 0.5, .init(x: 166, y: 16)),
+        (.init(width: 400, height: 800), .init(width: 232, height: 432), 2, 1, .init(x: 16, y: 16)),
+        (.init(width: 80, height: 40), .init(width: 432, height: 232), 1, 1, .init(x: 176, y: 96)),
+        (.init(width: 80, height: 40), .init(width: 432, height: 232), 2, 1, .init(x: 196, y: 106))
+    ]
+    for (source, viewport, scale, zoom, origin) in cases {
+        let fit = CanvasTransform.fitted(source: source, viewport: viewport, backingScale: scale)
+        #expect(fit.zoom == zoom)
+        #expect(fit.origin == origin)
+    }
+    // EXIF 5–8: decoder delivers 400×800 displayed size, not the 800×400 stored size.
+    for _ in 5...8 {
+        let fit = CanvasTransform.fitted(source: .init(width: 400, height: 800),
+            viewport: .init(width: 432, height: 232), backingScale: 1)
+        #expect(fit.origin == CGPoint(x: 166, y: 16))
+    }
+}
