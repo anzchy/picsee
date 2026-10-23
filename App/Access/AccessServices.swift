@@ -27,6 +27,7 @@ struct AccessServices: Sendable {
     }
     // Untested native composition; FileAccess and Recent persistence are package-tested.
     func rootURL(_ id: AccessRootID) async -> URL? { await files.rootURL(id) }
+    func probeRootURL(_ id: AccessRootID) async throws -> URL { try await files.probeRootURL(id) }
     func reconnect(_ id: AccessRootID, folder: URL) async throws -> (rootID: AccessRootID, url: URL) {
         let targetID: AccessRootID
         let url: URL

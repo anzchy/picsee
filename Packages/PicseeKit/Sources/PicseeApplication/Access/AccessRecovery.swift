@@ -18,6 +18,8 @@ public enum AccessRecovery {
         switch currentURL {
         case .success(.some(let url)): .browse(url)
         case .success(.none): .reconnect(rootID: recent.rootID, lastKnownFolder: recent.url, displayName: recent.displayName)
+        case .failure(let error) where error as? FileAccessError == .needsReconnection(recent.rootID):
+            .reconnect(rootID: recent.rootID, lastKnownFolder: recent.url, displayName: recent.displayName)
         case .failure: .error
         }
     }
