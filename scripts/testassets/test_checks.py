@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from unittest import mock
 import urllib.request
+import zlib
 
 import check
 import determinism
@@ -199,6 +200,100 @@ class Checks(unittest.TestCase):
         records[next(iter(records))] = "0" * 64
         with self.assertRaisesRegex(ValueError, "committed manifest"):
             determinism.compare_manifest(records, self.manifest)
+
+    def test_p1_fixture_contract(self):
+        specs = {spec["path"]: spec for spec in generate.small_specs()}
+        expected = {
+            "synthetic/landscape-3x2.png": {
+                "kind": "framed",
+                "width": 600,
+                "height": 400,
+                "label": "LANDSCAPE",
+            },
+            "synthetic/portrait-2x3.png": {
+                "kind": "framed",
+                "width": 400,
+                "height": 600,
+                "label": "PORTRAIT",
+            },
+            "synthetic/pan-grid-4096x3072.png": {
+                "kind": "grid",
+                "width": 4096,
+                "height": 3072,
+                "spacing": 512,
+            },
+            "synthetic/not-an-image.jpg": {
+                "kind": "not-image",
+                "width": None,
+                "height": None,
+            },
+            "synthetic/unsupported-container.zip": {
+                "kind": "unsupported-container",
+                "width": None,
+                "height": None,
+                "container": "ZIP",
+            },
+            "synthetic/gradient-16bit.png": {
+                "kind": "gradient-16bit",
+                "width": 256,
+                "height": 128,
+                "bit_depth": 16,
+            },
+        }
+        for path, parameters in expected.items():
+            self.assertEqual(
+                {key: value for key, value in specs[path].items() if key != "path"},
+                parameters,
+            )
+            self.assertEqual(generate.render(specs[path]), generate.render(specs[path]))
+
+        landscape = generate.render(specs["synthetic/landscape-3x2.png"])
+        portrait = generate.render(specs["synthetic/portrait-2x3.png"])
+        self.assertEqual(self.png_ihdr(landscape), (600, 400, 8, 0))
+        self.assertEqual(self.png_ihdr(portrait), (400, 600, 8, 0))
+        for data, width, height in [(landscape, 600, 400), (portrait, 400, 600)]:
+            pixels = self.png_grayscale_pixels(data, width, height, 1)
+            self.assertEqual(pixels[8 * width + 8], 0, "labelled frame has a border")
+            centre = (height // 2) * width + width // 2
+            self.assertEqual(pixels[centre], 0, "framed fixture has a centre mark")
+
+        invalid_jpeg = generate.render(specs["synthetic/not-an-image.jpg"])
+        self.assertTrue(invalid_jpeg.startswith(b"PICSEE text fixture"))
+        self.assertFalse(invalid_jpeg.startswith(b"\xff\xd8\xff"))
+        unsupported = generate.render(specs["synthetic/unsupported-container.zip"])
+        self.assertTrue(unsupported.startswith(b"PK\x03\x04"))
+        self.assertTrue(unsupported.endswith(b"PK\x05\x06" + unsupported[-18:]))
+
+        gradient = generate.render(specs["synthetic/gradient-16bit.png"])
+        self.assertEqual(self.png_ihdr(gradient), (256, 128, 16, 0))
+        samples = self.png_grayscale_pixels(gradient, 256, 128, 2)
+        self.assertEqual(samples[:4], b"\x00\x00\x01\x01")
+        self.assertEqual(samples[510:512], b"\xff\xff")
+
+    @staticmethod
+    def png_ihdr(data):
+        return (*__import__("struct").unpack(">II", data[16:24]), data[24], data[25])
+
+    @staticmethod
+    def png_grayscale_pixels(data, width, height, bytes_per_sample):
+        offset = 8
+        compressed = bytearray()
+        while offset < len(data):
+            length = int.from_bytes(data[offset : offset + 4], "big")
+            kind = data[offset + 4 : offset + 8]
+            payload = data[offset + 8 : offset + 8 + length]
+            if kind == b"IDAT":
+                compressed.extend(payload)
+            offset += 12 + length
+        raw = zlib.decompress(compressed)
+        row_size = width * bytes_per_sample
+        rows = []
+        for y in range(height):
+            start = y * (row_size + 1)
+            if raw[start] != 0:
+                raise AssertionError("fixture must use PNG filter 0")
+            rows.append(raw[start + 1 : start + 1 + row_size])
+        return b"".join(rows)
 
     @unittest.skipUnless(sys.platform == "darwin", "requires macOS ImageIO")
     def test_native_without_external_honest_summary(self):
