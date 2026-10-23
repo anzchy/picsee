@@ -327,21 +327,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`App/PicseeApp.swift` 只注入共享的内存 DisplayPreferences store，File › Open…/⌘O 仍恒可用、经 Session 发 requestOpen；OPEN-02/03 不受影响。上次：P0-08（86950cc..f9c2ef6）无影响；P0-09 真机运行（88a76ef..24bd082）与 P0.md 第 12–14 项一致 |
-| 查看与画布 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`App/CanvasWindowController.swift` 只改命令/焦点接线，fit/1/±仍以 hasImage 启用并交回画布，解码未动；VIEW-08 不受影响。上次：P0-05/06 真机运行（aeb4138..66e752d），VIEW-06/07/08 只改限制，验收未改 |
-| C 沉浸界面 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：ViewerChromeState（约 2.5 秒期限、交互锁、常驻）与 Preview Set 来源恢复只在 Application 与单元测试中，App 不启动调度、无工具条；CHROME-01…05 保持 `Absent`（提交声明无用户可见变化）。上次：建账 |
-| 外观与显示偏好 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：新增 `DisplayPreferences` 键 `alwaysShowTools`、`filmstripExpanded`（内存 store，无 UI、无持久化）；PR 描述以「无用户可见变化」裁定两键暂不入行，待 P1-08（CHROME-04）、P1-09（PREF-04）移出 `Absent` 时命名；PREF-03/04 保持 `Absent`。上次：PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：只加 tier① 素材（含 `not-an-image.jpg`、`unsupported-container.zip`）与 `docs/validation/P1.md` 骨架，无 App 代码、无 verdict；OPEN-01…05 不受影响。上次：P0-09 Session（dcfe3f8..bef71d5）OPEN-02/03 不受影响 |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：VIEW-01 横/竖图、VIEW-04 4096×3072 平移网格只是测试素材，P1.md 无结果；VIEW-01/04 状态不变。上次：P0-09 Session（dcfe3f8..bef71d5）VIEW-08 不受影响 |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CHROME-01…05 待验项，无结果；保持 `Absent`。上次：P0-09 Session（dcfe3f8..bef71d5）CHROME-01…05 保持 `Absent` |
+| 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 PREF-01/02/04 待验项，无结果；状态不变。上次：P0-09 Session（dcfe3f8..bef71d5）新增两键暂不入行（PR 描述裁定），待 P1-08/P1-09 命名 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
 | 授权与文件访问 | 2026-10-21 | 建账 | 同上 |
-| 缓存与资源 | 2026-10-21 | 建账 | 同上 |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：CommandRouter 移到 `PicseeApplication/Viewer/` 并以 ViewerSession 为目标，命令目录与菜单项未变；CMD-01/02 在哪已随改；#29 修复无本范围内真机记录，限制仍写失败。上次：P0-08（86950cc..f9c2ef6）无影响；P0-09 真机运行（88a76ef..24bd082）与 P0.md 第 1–9 项一致 |
+| 缓存与资源 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CACHE-01 待验项与内存压力用户步骤，无结果；CACHE-01 保持 `Absent`。上次：建账 |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：`keyboard-commands.md` 只改 Focus Canvas 与菜单 Esc 的重放步骤（#29），未附运行记录；CMD-01/02 限制仍写失败，状态不变。上次：P0-09 Session（dcfe3f8..bef71d5）在哪已随改 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`App/CanvasWindowController.swift` 未改解码路径；FMT-01 不受影响。上次：P0-05/06 真机运行（aeb4138..66e752d），FMT-01 只改限制，验收未改 |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：InspectorFocus 移到 `PicseeApplication/Viewer/`，焦点经 Session；#29 修复（忽略字段释放时的瞬时窗口 responder）无本范围内真机记录，A11Y-02 限制仍写失败。上次：P0-05/06（54d9510..9b45af9）无影响；P0-09 真机运行与 P0.md 第 5、6、10、11、15 项一致 |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：Focus Canvas 重放步骤已改、无运行记录，A11Y-02 限制仍写 #29 失败；P1.md 只列 A11Y-04 待验项。上次：P0-09 Session（dcfe3f8..bef71d5）InspectorFocus 移位，限制仍写失败 |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
