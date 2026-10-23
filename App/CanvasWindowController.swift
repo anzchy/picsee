@@ -223,10 +223,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let current = generation
         navigationTask = Task { [self] in
             do {
-                let originatingTask = navigationTask
+                let authority = FolderScanPresentationAuthority(access: operation, input: inputIntent.current, originatingTask: navigationTask)
                 let services = try await operation.wait { try await accessServices.value }
                 try await folderScanner(services).begin(folder: folder, rootID: rootID,
-                    canPresent: { operation.isCurrent && originatingTask?.isCancelled != true }).value
+                    canPresent: { authority.isCurrent }).value
             } catch {
                 if operation.isCurrent, generation == current {
                     if error as? FileAccessError == .corruptStore { showAccessError(error) }
@@ -243,14 +243,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let current = generation
         navigationTask = Task { [self] in
             do {
-                let originatingTask = navigationTask
+                let authority = FolderScanPresentationAuthority(access: operation, input: inputIntent.current, originatingTask: navigationTask)
                 let services = try await operation.wait { try await accessServices.value }
                 let root = try await operation.wait { await services.files.rootCovering(file) }
                 try operation.check()
                 guard generation == current else { return }
                 if let root {
                     try await folderScanner(services).begin(folder: file.deletingLastPathComponent(), rootID: root,
-                        input: file, pending: direction, canPresent: { operation.isCurrent && originatingTask?.isCancelled != true }).value
+                        input: file, pending: direction, canPresent: { authority.isCurrent }).value
                 } else { promptForFolder(file.deletingLastPathComponent(), currentImage: file, direction: direction) }
             } catch {
                 if operation.isCurrent, generation == current {
@@ -274,14 +274,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     refreshRecents()
                     guard operation.isCurrent, generation == current else { return }
                     if let currentImage {
-                        let originatingTask = navigationTask
+                        let authority = FolderScanPresentationAuthority(access: operation, input: inputIntent.current, originatingTask: navigationTask)
                         let contains: Bool
                         do {
                             contains = try await operation.wait { try await services.files.withLease(.root(id, file: currentImage)) { _ in true } }
                         } catch FileAccessError.outsideRoot { contains = false }
                         if contains {
                             try await folderScanner(services).begin(folder: currentImage.deletingLastPathComponent(), rootID: id,
-                                input: currentImage, pending: direction, canPresent: { operation.isCurrent && originatingTask?.isCancelled != true }).value
+                                input: currentImage, pending: direction, canPresent: { authority.isCurrent }).value
                         } else {
                             promptForFolder(folder, currentImage: currentImage, direction: direction, mismatch: true)
                         }
@@ -480,10 +480,10 @@ extension CanvasWindowController: ViewerInputHost {
         let operation = accessIntent.current
         navigationTask = Task { [self] in
             do {
+                let authority = FolderScanPresentationAuthority(access: operation, input: inputIntent.current, originatingTask: navigationTask)
                 let services = try await operation.wait { try await accessServices.value }
-                let originatingTask = navigationTask
                 try await folderScanner(services).begin(folder: url.deletingLastPathComponent(), rootID: rootID,
-                    input: url, canPresent: { operation.isCurrent && originatingTask?.isCancelled != true }).value
+                    input: url, canPresent: { authority.isCurrent }).value
             } catch { if operation.isCurrent { showAccessError(error) } }
         }
     }
@@ -504,13 +504,14 @@ extension CanvasWindowController: FolderScanHost {
         open(url, accessRequest: .root(rootID, file: url))
     }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws {
-        let originatingTask = navigationTask
         let operation = accessIntent.current
+        let authority = FolderScanPresentationAuthority(access: operation, input: inputIntent.current, originatingTask: navigationTask)
         let services = try await operation.wait { try await accessServices.value }
-        guard originatingTask?.isCancelled != true else { throw CancellationError() }
+        guard authority.isCurrent else { throw CancellationError() }
         try await operation.wait {
             try await services.recent.add(RecentFolder(rootID: rootID, url: folder, displayName: folder.lastPathComponent))
         }
+        guard authority.isCurrent else { throw CancellationError() }
         refreshRecents()
     }
     func showEmptyFolder() { showAccessMessage(String(localized: "No Images in This Folder")) }
