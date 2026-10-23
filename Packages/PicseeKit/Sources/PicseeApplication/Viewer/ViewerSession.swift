@@ -5,6 +5,7 @@ import PicseeCore
 @MainActor public protocol ViewerSessionHost: AnyObject {
     var hasImage: Bool { get }
     func performCanvas(_ command: CommandID, from entry: CommandEntry)
+    func performCanvasZoom(_ command: CommandID, from entry: CommandEntry) -> Double?
     func requestOpen()
     func applyFocus(_ focus: FocusContext)
     func showInspector(_ visible: Bool)
@@ -17,6 +18,9 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     private let preferencesStore: any DisplayPreferencesStore
     private let clock: any ViewerClock
     public weak var host: (any ViewerSessionHost)?
+    public private(set) var zoomMode: ViewerZoomMode = .fit
+    public func beginCanvasImage() { zoomMode = .fit }
+    public func reportCanvasZoom(_ value: Double) { zoomMode = .custom(value) }
     public var searchTerm = ""
     public var displayPreferences: DisplayPreferences { preferencesStore.value }
     public private(set) var selection = BrowserSelection()
@@ -139,7 +143,12 @@ public enum ViewerMode: Sendable { case browsing, viewing }
                 (host as? any ViewerSessionNavigationHost)?.navigate(command == .next ? .next : .previous)
             }
         } else {
-            host?.performCanvas(command, from: entry)
+            if command == .fit { zoomMode = .fit }
+            if command == .actualPixels { zoomMode = .actualPixels }
+            let finalZoom = host?.performCanvasZoom(command, from: entry)
+            if (command == .zoomIn || command == .zoomOut), let finalZoom {
+                reportCanvasZoom(finalZoom)
+            }
         }
     }
 }
