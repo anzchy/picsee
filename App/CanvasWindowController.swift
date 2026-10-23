@@ -163,6 +163,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         endInput()
+        session.endFolderScan()
         accessIntent.invalidate()
         session.closeImage()
         fileURL = nil
@@ -250,16 +251,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             do {
                 let services = try await operation.wait { try await accessServices.value }
                 let root = try await operation.wait { await services.files.rootCovering(file) }
-                let images: [URL]
-                if let root { images = try await operation.wait { try await services.images(in: file.deletingLastPathComponent(), rootID: root) } }
-                else { images = [] }
                 try operation.check()
                 guard generation == current else { return }
-                switch FolderNavigation(images: images).step(from: file, direction: direction, covered: root != nil) {
-                case .needsGrant(let folder): promptForFolder(folder, currentImage: file, direction: direction)
-                case .move(let next): if let root { open(next, accessRequest: .root(root, file: next)) }
-                case .end: break
-                }
+                if let root {
+                    try await folderScanner(services).begin(folder: file.deletingLastPathComponent(), rootID: root,
+                        input: file, pending: direction, canPresent: { operation.isCurrent }).value
+                } else { promptForFolder(file.deletingLastPathComponent(), currentImage: file, direction: direction) }
             } catch {
                 if operation.isCurrent, generation == current {
                     if error is FileAccessError { promptForFolder(file.deletingLastPathComponent(), currentImage: file, direction: direction) }
@@ -287,10 +284,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                             contains = try await operation.wait { try await services.files.withLease(.root(id, file: currentImage)) { _ in true } }
                         } catch FileAccessError.outsideRoot { contains = false }
                         if contains {
-                            let images = try await operation.wait { try await services.images(in: currentImage.deletingLastPathComponent(), rootID: id) }
-                            if case .move(let next) = FolderNavigation(images: images).step(from: currentImage, direction: direction, covered: true) {
-                                open(next, accessRequest: .root(id, file: next))
-                            }
+                            try await folderScanner(services).begin(folder: currentImage.deletingLastPathComponent(), rootID: id,
+                                input: currentImage, pending: direction, canPresent: { operation.isCurrent }).value
                         } else {
                             promptForFolder(folder, currentImage: currentImage, direction: direction, mismatch: true)
                         }
@@ -482,7 +477,33 @@ extension CanvasWindowController: ViewerInputHost {
         }
     }
     private func endInput() { inputIntent.invalidate(); session.endFilePreviewSet() }
-    func openInputImage(_ url: URL, accessRequest: AccessRequest?) { open(url, accessRequest: accessRequest) }
+    func openInputImage(_ url: URL, accessRequest: AccessRequest?) {
+        session.endFolderScan()
+        open(url, accessRequest: accessRequest)
+        guard case .root(let rootID, _)? = accessRequest else { return }
+        let operation = accessIntent.current
+        navigationTask = Task { [self] in
+            do {
+                let services = try await operation.wait { try await accessServices.value }
+                try await folderScanner(services).begin(folder: url.deletingLastPathComponent(), rootID: rootID,
+                    input: url, canPresent: { operation.isCurrent }).value
+            } catch { if operation.isCurrent { showAccessError(error) } }
+        }
+    }
     func showInputNotice(_ notice: ViewerInputNotice) { showInputMessage(notice) }
     func promptForInputFolder(_ folder: URL) { promptForFolder(folder, currentImage: nil, direction: .next) }
+}
+
+// Untested native scan effects; snapshot navigation policy is covered in PicseeApplication.
+extension CanvasWindowController: FolderScanHost {
+    private func folderScanner(_ services: AccessServices) -> FolderScanCoordinator {
+        if let scan = session.folderScan { return scan }
+        let scan = FolderScanCoordinator(access: services.files, scanner: services.browser)
+        scan.host = self
+        session.folderScan = scan
+        return scan
+    }
+    func openFolderImage(_ url: URL, rootID: AccessRootID) {
+        open(url, accessRequest: .root(rootID, file: url))
+    }
 }

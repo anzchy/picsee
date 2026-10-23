@@ -27,6 +27,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public private(set) var selection = BrowserSelection()
     public private(set) var previewSet: PreviewSet?
     public internal(set) var filePreviewSet: FilePreviewSet?
+    public var folderScan: FolderScanCoordinator?
     let inputNavigationIntent = AccessIntent()
     public private(set) var mode: ViewerMode = .viewing
     public private(set) var scrollAnchor: ItemID?
@@ -162,8 +163,13 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         case .previous, .next:
             if let filePreviewSet { filePreviewSet.canMove(forward: command == .next) }
             else {
-                mode == .viewing && (host?.hasImage == true || imageStatus != .empty)
-                    && (previewSet != nil || (host as? any ViewerSessionNavigationHost)?.canNavigate == true)
+                if mode == .viewing, previewSet == nil, folderScan?.isReadingFolder == true { false }
+                else if mode == .viewing, previewSet == nil,
+                        let enabled = folderScan?.canMove(command == .next ? .next : .previous, currentURL: imageLoader.fileURL) { enabled }
+                else {
+                    mode == .viewing && (host?.hasImage == true || imageStatus != .empty)
+                        && (previewSet != nil || (host as? any ViewerSessionNavigationHost)?.canNavigate == true)
+                }
             }
         case .search: false
         }
@@ -197,6 +203,8 @@ public enum ViewerMode: Sendable { case browsing, viewing }
                 moveInputFile(forward: command == .next)
             } else if previewSet != nil {
                 previewSet?.move(forward: command == .next)
+            } else if mode == .viewing,
+                      folderScan?.move(command == .next ? .next : .previous, currentURL: imageLoader.fileURL) == true {
             } else {
                 (host as? any ViewerSessionNavigationHost)?.navigate(command == .next ? .next : .previous)
             }
