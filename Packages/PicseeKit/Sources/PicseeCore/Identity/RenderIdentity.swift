@@ -6,7 +6,7 @@ public struct FileRevision: Hashable, Sendable {
     public let byteCount: Int
     public let modificationDate: Date?
     public init(byteCount: Int, modificationDate: Date?, resourceIdentifier: String? = nil) {
-        self.resourceIdentifier = resourceIdentifier
+        self.resourceIdentifier = resourceIdentifier?.precomposedStringWithCanonicalMapping
         self.byteCount = byteCount
         self.modificationDate = modificationDate
     }
