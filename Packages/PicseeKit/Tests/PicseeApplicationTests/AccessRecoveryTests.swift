@@ -83,3 +83,26 @@ func p201RecoveryServiceErrorRoutesActualFailureWithoutGrant(error: FileAccessEr
     #expect(host.lastError as? FileAccessError == error)
     #expect(host.history == [.browsing(id, folder), .error])
 }
+
+private struct RecoveryProbeError: Error, Equatable { let code: Int }
+
+@MainActor @Test func p201Fix1RecoveryOnlyMatchingRootFailureReconnects() {
+    let id = AccessRootID(); let other = AccessRootID()
+    let folder = URL(fileURLWithPath: "/fixtures/holiday", isDirectory: true)
+    let recent = RecentFolder(rootID: id, url: folder, displayName: "Holiday")
+    let host = RecoveryHost()
+    let expected = AccessRecoveryDecision.reconnect(rootID: id, lastKnownFolder: folder, displayName: "Holiday")
+    #expect(AccessRecovery.decision(for: recent, currentURL: .failure(FileAccessError.needsReconnection(id))) == expected)
+    #expect(AccessRecovery.openRecent(recent, currentURL: .failure(FileAccessError.needsReconnection(id)), host: host) == expected)
+    #expect(host.history == [.reconnecting(id, folder, "Holiday")])
+    #expect(host.lastError == nil)
+    let otherFailure = FileAccessError.needsReconnection(other)
+    #expect(AccessRecovery.openRecent(recent, currentURL: .failure(otherFailure), host: host) == .error)
+    #expect(host.lastError as? FileAccessError == otherFailure)
+    #expect(AccessRecovery.openRecent(recent, currentURL: .failure(FileAccessError.outsideRoot), host: host) == .error)
+    #expect(host.lastError as? FileAccessError == .outsideRoot)
+    let unrelated = RecoveryProbeError(code: 17)
+    #expect(AccessRecovery.openRecent(recent, currentURL: .failure(unrelated), host: host) == .error)
+    #expect(host.lastError as? RecoveryProbeError == unrelated)
+    #expect(host.history == [.reconnecting(id, folder, "Holiday"), .error, .error, .error])
+}

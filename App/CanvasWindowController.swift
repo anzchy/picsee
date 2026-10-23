@@ -190,7 +190,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         navigationTask = Task { [self] in
             do {
                 let services = try await operation.wait { try await accessServices.value }
-                let currentURL = try await operation.wait { await services.rootURL(folder.rootID) }
+                let currentURL = try await operation.wait { try await services.probeRootURL(folder.rootID) }
                 AccessRecovery.openRecent(folder, currentURL: .success(currentURL), host: self)
             } catch {
                 if operation.isCurrent { AccessRecovery.openRecent(folder, currentURL: .failure(error), host: self) }

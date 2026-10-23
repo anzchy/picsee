@@ -82,6 +82,20 @@ public actor FileAccess: AccessLeasing {
     public func launchOutcomes() -> [AccessRootID: String] { outcomes }
     /// Published location only; Recent queries never create or refresh authority.
     public func rootURL(_ id: AccessRootID) -> URL? { roots[id] }
+    /// A point-in-time access check for Recent, balanced before any UI decision.
+    public func probeRootURL(_ id: AccessRootID) throws -> URL {
+        guard let record = saved.first(where: { $0.id == id }), roots[id] != nil else {
+            throw FileAccessError.needsReconnection(id)
+        }
+        let current: URL
+        do { current = try bookmarks.resolve(record.bookmark).url }
+        catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
+        // A cached path may be obsolete after a move. Probe the resolved root itself;
+        // acquire still validates scope and refreshes stale bookmarks as usual.
+        let lease = try acquire(.root(id, file: current))
+        release(lease)
+        return lease.url
+    }
     /// Only an explicit system-panel selection may replace a persisted root.
     public func reconnect(_ id: AccessRootID, folder: URL) throws -> URL {
         let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "access")
@@ -95,7 +109,7 @@ public actor FileAccess: AccessLeasing {
                 throw FileAccessError.invalidFolder
             }
             phase = "collision"
-            if let other = try matchingRoot(canonical(folder), excluding: id) {
+            if let other = matchingRoot(canonical(folder), excluding: id) {
                 throw FileAccessError.alreadyGranted(other)
             }
             phase = "bookmark"
@@ -120,7 +134,7 @@ public actor FileAccess: AccessLeasing {
         url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
     }
     /// Canonicalizing another root may inspect metadata: hold its own scope too.
-    private func matchingRoot(_ folder: URL, excluding id: AccessRootID? = nil) throws -> AccessRootID? {
+    private func matchingRoot(_ folder: URL, excluding id: AccessRootID? = nil) -> AccessRootID? {
         for record in saved where record.id != id {
             guard let url = roots[record.id] else { continue }
             if url.standardizedFileURL.pathComponents == folder.pathComponents { return record.id }
@@ -158,7 +172,7 @@ public actor FileAccess: AccessLeasing {
                 throw FileAccessError.invalidFolder
             }
             phase = "match"
-            if let held = try matchingRoot(canonical(folder)) { id = held; existing = true }
+            if let held = matchingRoot(canonical(folder)) { id = held; existing = true }
             phase = "bookmark"
             let bookmark = try bookmarks.create(for: folder)
             var replacement = saved
