@@ -53,7 +53,15 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             main.addItem(item)
             return menu
         }
-        submenu("Picsee").addItem(withTitle: String(localized: "Quit Picsee"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let app = submenu("Picsee")
+        app.addItem(withTitle: String(localized: "About Picsee"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(.separator())
+        app.addItem(withTitle: String(localized: "Hide Picsee"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = app.addItem(withTitle: String(localized: "Hide Others"), action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.option, .command]
+        app.addItem(withTitle: String(localized: "Show All"), action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        app.addItem(.separator())
+        app.addItem(withTitle: String(localized: "Quit Picsee"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let file = submenu(String(localized: "File"))
         let edit = submenu(String(localized: "Edit"))
         edit.addItem(withTitle: String(localized: "Undo"), action: NSSelectorFromString("undo:"), keyEquivalent: "z")
@@ -73,7 +81,6 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             item.target = self
             (id == .open ? file : view).addItem(item)
         }
-        ChromeWindowCommands.addClose(to: file)
         let always = view.addItem(withTitle: String(localized: "Always Show Tools"), action: #selector(toggleAlwaysShowTools(_:)), keyEquivalent: "")
         always.target = self
         always.identifier = NSUserInterfaceItemIdentifier("chrome.always-show-tools")
@@ -102,8 +109,11 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         recentFolders.delegate = self
         file.addItem(recentItem)
         setRecentFolders([], onOpen: { _ in })
+        ChromeWindowCommands.addClose(to: file)
         let windows = submenu(String(localized: "Window"))
         windows.addItem(withTitle: String(localized: "Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windows.addItem(withTitle: String(localized: "Zoom"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windows.addItem(withTitle: String(localized: "Bring All to Front"), action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
         #if DEBUG
         let preview = windows.addItem(withTitle: String(localized: "Component Preview"), action: #selector(DesignPreviewLauncher.openPreview(_:)), keyEquivalent: "")
         preview.target = DesignPreviewLauncher.shared
