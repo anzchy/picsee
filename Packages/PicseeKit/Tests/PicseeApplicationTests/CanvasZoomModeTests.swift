@@ -51,3 +51,18 @@ import PicseeApplication
     #expect(!router.route(.zoomIn, from: .key, to: first))
     #expect(first.zoomMode == .fit)
 }
+
+@Test @MainActor func canvasTwoLiveSessionsKeepIndependentZoom() {
+    let firstHost = CanvasZoomHost(), secondHost = CanvasZoomHost()
+    let first = ViewerSession(host: firstHost), second = ViewerSession(host: secondHost)
+    let router = CommandRouter()
+    firstHost.finalZoom = 4
+    secondHost.finalZoom = 0.125
+    router.route(.zoomIn, from: .key, to: first)
+    router.route(.zoomOut, from: .menu, to: second)
+    #expect(first.zoomMode == .custom(4))
+    #expect(second.zoomMode == .custom(0.125))
+    router.route(.actualPixels, from: .button, to: first)
+    #expect(first.zoomMode == .actualPixels)
+    #expect(second.zoomMode == .custom(0.125))
+}
