@@ -39,7 +39,7 @@ public actor FileAccess: AccessLeasing {
     private var roots: [AccessRootID: URL] = [:]
     private var outcomes: [AccessRootID: String] = [:]
     private struct Active { let session: ScopeSession; var tokens: Set<UUID> }
-    private enum SessionKey: Hashable { case root(AccessRootID), file(URL) }
+    private enum SessionKey: Hashable { case root(AccessRootID, URL), file(URL) }
     private var active: [SessionKey: Active] = [:]
     private var requests: [UUID: SessionKey] = [:]
 
@@ -185,16 +185,15 @@ public actor FileAccess: AccessLeasing {
             guard let record = saved.first(where: { $0.id == id }), roots[id] != nil else {
                 throw FileAccessError.needsReconnection(id)
             }
-            key = .root(id); rootID = id
-            if let entry = active[key] { url = entry.session.url }
-            else {
-                do {
-                    let resolution = try bookmarks.resolve(record.bookmark)
-                    url = resolution.url
-                    if resolution.stale { staleRecord = record }
-                }
-                catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
+            rootID = id
+            do {
+                // Resolution may follow a move even while older leases are held.
+                let resolution = try bookmarks.resolve(record.bookmark)
+                key = .root(id, resolution.url)
+                url = active[key]?.session.url ?? resolution.url
+                if resolution.stale { staleRecord = record }
             }
+            catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
             if active[key] != nil, !boundary(file, url) { throw FileAccessError.outsideRoot }
         case .fileGrant(let file):
             key = .file(file.standardizedFileURL); url = file; rootID = nil
