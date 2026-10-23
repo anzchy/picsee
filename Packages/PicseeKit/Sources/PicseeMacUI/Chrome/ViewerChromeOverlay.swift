@@ -100,6 +100,10 @@ public final class ChromeToolView: NSView {
     func refresh() {
         if let session { face?.rootView = ChromeToolFace(session: session, id: id) }
         setAccessibilityEnabled(session?.isEnabled(command) == true)
+        if id == .actualPixels, let session {
+            setAccessibilityValue(ScaleIndicator(actualPixels: session.zoomMode == .actualPixels,
+                customZoom: face?.rootView.customZoom, action: {}).label)
+        }
     }
 }
 
@@ -130,6 +134,8 @@ public final class ViewerChromeOverlay: NSView {
             }
         }
         fileLabel.frame = NSRect(x: 44, y: 11, width: 172, height: 18)
+        fileLabel.setAccessibilityElement(true); fileLabel.setAccessibilityRole(.staticText)
+        fileLabel.setAccessibilityIdentifier("chrome.filename")
         fileLabel.lineBreakMode = .byTruncatingMiddle
         fileLabel.font = DesignMetrics.font("uiSmall")
         groups[1].addSubview(fileLabel)
@@ -187,8 +193,11 @@ public final class ViewerChromeOverlay: NSView {
     }
     public func setToolsVisible(_ visible: Bool) {
         for view in groups + tools { view.isHidden = !visible }
-        setAccessibilityChildren(visible ? tools : [])
+        updateAccessibilityChildren(visible: visible)
         if let canvas { linkKeyViews(to: canvas) }
+    }
+    private func updateAccessibilityChildren(visible: Bool) {
+        setAccessibilityChildren(visible ? tools + (filename == nil ? [] : [fileLabel]) : [])
     }
     public func linkKeyViews(to canvas: NSView) {
         self.canvas = canvas
@@ -199,7 +208,9 @@ public final class ViewerChromeOverlay: NSView {
     public func refresh(filename: String? = nil, position: String? = nil) {
         self.filename = filename; self.position = position
         fileLabel.stringValue = [filename, position].compactMap { $0 }.joined(separator: " · ")
+        fileLabel.setAccessibilityValue(filename ?? "")
         for tool in tools { tool.refresh() }
+        updateAccessibilityChildren(visible: groups.first?.isHidden == false)
         if let canvas { linkKeyViews(to: canvas) }
     }
 }
