@@ -75,6 +75,9 @@ import PicseeApplication
 @Test @MainActor func canvasViewFitDragResizeAndWindowGuard() throws {
     let (canvas, window, host) = canvasHost()
     defer { window.close(); withExtendedLifetime(host) {} }
+    let retryGeneration = UUID()
+    canvas.openingGeneration = { retryGeneration }
+    canvas.beginOpening()
     let router = CommandRouter()
     var requests: [Int] = []
     canvas.onResolutionNeeded = { requests.append($0) }
@@ -106,7 +109,6 @@ import PicseeApplication
     canvas.magnify(by: log(1000), at: .init(x: 216, y: 116))
     #expect(canvas.session.zoomMode == .custom(64))
     let before = try canvasRedBounds(canvas)
-    canvas.openingChangesItem = { false }
     canvas.beginOpening()
     #expect(!canvas.hasImage)
     canvas.install(try canvasImage(.init(width: 80, height: 40)))
@@ -255,4 +257,61 @@ import PicseeApplication
     let inside = try #require(rep.colorAt(x: 70, y: 70))
     #expect(outside.greenComponent > 0.9 && outside.redComponent < 0.1)
     #expect(inside.redComponent > 0.9 && inside.greenComponent < 0.1)
+}
+
+@Test @MainActor func canvasViewOpeningGenerationRetriesAndSourceDetail() throws {
+    let (canvas, window, host) = canvasHost()
+    defer { window.close(); withExtendedLifetime(host) {} }
+    // One path, two explicit opens. Revision retries reuse the explicit open's generation.
+    var generation = UUID()
+    canvas.openingGeneration = { generation }
+    let router = CommandRouter()
+    let small = try canvasImage(.init(width: 80, height: 40))
+    canvas.beginOpening()
+    canvas.install(small)
+    canvas.magnify(by: log(2), at: .init(x: 216, y: 116))
+    canvas.mouseDown(with: try canvasMouse(canvas, .leftMouseDown, .init(x: 216, y: 116)))
+    canvas.mouseDragged(with: try canvasMouse(canvas, .leftMouseDragged, .init(x: 236, y: 126)))
+    canvas.mouseUp(with: try canvasMouse(canvas, .leftMouseUp, .init(x: 236, y: 126)))
+    let panned = try canvasRedBounds(canvas)
+    canvas.beginOpening() // Revision retry, same generation and displayed dimensions.
+    canvas.install(small)
+    #expect(canvas.session.zoomMode == .custom(2))
+    #expect(try canvasRedBounds(canvas) == panned)
+    generation = UUID() // Explicit open of the same file path.
+    canvas.beginOpening()
+    canvas.install(small)
+    #expect(canvas.session.zoomMode == .fit)
+    let fitted = window.backingScaleFactor == 1 ? CGRect(x: 176, y: 96, width: 80, height: 40)
+                                               : CGRect(x: 196, y: 106, width: 40, height: 20)
+    #expect(try canvasRedBounds(canvas) == fitted)
+
+    let large = try canvasImage(.init(width: 4000, height: 2000))
+    canvas.install(large)
+    #expect(router.route(.actualPixels, from: .key, to: canvas.session))
+    var requested: [Int] = []
+    canvas.onResolutionNeeded = { requested.append($0) }
+    canvas.beginOpening()
+    canvas.install(large) // A viewport-sized decode still describes the larger source.
+    #expect(canvas.session.zoomMode == .actualPixels)
+    #expect(requested == [4000])
+    requested.removeAll()
+    canvas.install(large) // Detail upgrade retains placement and reports its requirement too.
+    #expect(requested == [4000])
+    #expect(router.route(.zoomIn, from: .button, to: canvas.session))
+    requested.removeAll()
+    canvas.beginOpening()
+    canvas.install(large)
+    #expect(canvas.session.zoomMode == .custom(1.25))
+    #expect(requested == [4000])
+}
+
+@Test @MainActor func canvasViewFitsDecodedDisplayedPortrait() throws {
+    let (canvas, window, host) = canvasHost()
+    defer { window.close(); withExtendedLifetime(host) {} }
+    // EXIF 5–8 swap the stored 800×400 size. The pipeline supplies displayed 400×800.
+    let decoded = try canvasImage(.init(width: 400, height: 800))
+    canvas.install(decoded)
+    #expect(canvas.session.zoomMode == .fit)
+    #expect(try canvasRedBounds(canvas) == CGRect(x: 166, y: 16, width: 100, height: 200))
 }

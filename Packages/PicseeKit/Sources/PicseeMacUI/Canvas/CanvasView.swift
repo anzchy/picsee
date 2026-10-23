@@ -6,8 +6,9 @@ import PicseeApplication
 @MainActor
 open class CanvasView: NSView {
     public let session: ViewerSession
-    /// The host distinguishes a new input from a retry of the same item. No file access occurs here.
-    public var openingChangesItem: (() -> Bool)?
+    /// Explicit opens mint a generation; revision retries reuse it. No file access occurs here.
+    public var openingGeneration: (() -> UUID)?
+    private var previousOpeningGeneration: UUID?
     private var transform = CanvasTransform(backingScale: 1)
     private var image: NSImage?
     private var sourceSize = CGSize.zero
@@ -36,10 +37,12 @@ open class CanvasView: NSView {
     public func beginOpening() {
         image = nil
         dragPoint = nil
-        if openingChangesItem?() ?? true {
+        let generation = openingGeneration?() ?? UUID()
+        if generation != previousOpeningGeneration {
             sourceSize = .zero
             session.beginCanvasImage()
         }
+        previousOpeningGeneration = generation
         message = String(localized: "canvas.opening", defaultValue: "Opening image…")
         needsDisplay = true
     }
@@ -60,6 +63,8 @@ open class CanvasView: NSView {
         if changedSize {
             session.beginCanvasImage()
             fit()
+        } else {
+            requestDetail()
         }
         previousViewport = bounds.size
         needsDisplay = true

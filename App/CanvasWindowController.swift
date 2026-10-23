@@ -87,13 +87,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             return self.inspectorHost.bounds.contains(
                 self.inspectorHost.convert(window.mouseLocationOutsideOfEventStream, from: nil))
         }
-        // A same-path revision retry hides stale pixels but preserves placement at the same source size.
-        var openingURL: URL?
-        canvas.openingChangesItem = { [weak self] in
-            let next = self?.fileURL
-            defer { openingURL = next }
-            return next != openingURL
-        }
+        // Explicit opens change generation; revision retries within a decode retain it.
+        canvas.openingGeneration = { [weak self] in self?.generation ?? UUID() }
         canvas.onCanvasFocus = { [weak self] in self?.session.updateFocus(.canvas) }
         canvas.onTab = { [weak self] reverse in
             self?.session.tab(reverse: reverse)
