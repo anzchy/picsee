@@ -129,6 +129,11 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
         return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, renderKey: key, identityRoot: identityRoot)
     }
     public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
+        try await cache.withObservation(itemID: request.renderKey?.itemID) { observation in
+            try await self.image(for: request, observation: observation)
+        }
+    }
+    private func image(for request: ImageDecodeRequest, observation: UUID) async throws -> DecodedImage {
         if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision) }
         let header = try await header(request)
         let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: request.maximumPixelSize, isPreview: request.isPreview)
@@ -140,7 +145,8 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
             throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision)
         }
         let lookupContext = await snapshotContext()
-        let cached = await cache.lookup(key, context: lookupContext)
+        let cached = await cache.lookup(key, observation: observation, context: lookupContext)
+        if cached.sourceChanged { throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: key.revision) }
         if let image = cached.image {
             if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
             return image
