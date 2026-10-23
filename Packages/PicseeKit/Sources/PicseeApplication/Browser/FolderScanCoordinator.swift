@@ -42,15 +42,26 @@ import PicseeCore
                     }, emit: { [self] batch in
                         guard activeGeneration == token, let snapshot else { return }
                         self.snapshot = snapshot.appending(batch, isComplete: false)
+                        if isReadingFolder, let first = self.snapshot?.entries.first,
+                           automaticPresentationAllowed?() != false {
+                            isReadingFolder = false
+                            currentItemID = first.itemID; currentURL = first.url
+                            try await host?.rememberFolder(folder, rootID: rootID)
+                            guard activeGeneration == token, automaticPresentationAllowed?() != false,
+                                  !Task.isCancelled else { return }
+                            host?.openFolderImage(first.url, rootID: rootID)
+                        }
                         advancePending()
                     })
                 try Task.checkCancellation()
                 guard activeGeneration == token else { return }
+                let showEmpty = input == nil && snapshot?.entries.isEmpty == true && automaticPresentationAllowed?() != false
                 activeGeneration = nil
                 snapshot = snapshot?.appending([], isComplete: true)
                 pendingDirection = nil
                 isReadingFolder = false
                 scanTask = nil
+                if showEmpty { host?.showEmptyFolder() }
             } catch {
                 guard activeGeneration == token else { return }
                 activeGeneration = nil
@@ -85,7 +96,7 @@ import PicseeCore
     private nonisolated static func scanLeased(folder: URL, rootID: AccessRootID, generation: UInt64, input: URL?,
         access: any AccessLeasing, scanner: any FolderScanning,
         ready: @MainActor @Sendable (SnapshotVersion, ItemID?) -> Void,
-        emit: @MainActor @Sendable ([FolderEntry]) -> Void) async throws {
+        emit: @MainActor @Sendable ([FolderEntry]) async throws -> Void) async throws {
         try await access.withLease(.root(rootID, file: folder)) { lease in
             let version = SnapshotVersion(rootID: rootID, folder: folder, generation: generation)
             let root = ItemIdentityRoot(id: rootID, url: lease.url)
@@ -93,7 +104,7 @@ import PicseeCore
             await ready(version, itemID)
             try Task.checkCancellation()
             try await scanner.scan(in: folder, root: root) { batch in
-                await emit(batch)
+                try await emit(batch)
             }
         }
     }

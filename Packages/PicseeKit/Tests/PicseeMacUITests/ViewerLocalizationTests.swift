@@ -39,7 +39,8 @@ private let statesLocalizationKeys = [
     "None of These Files Can Be Opened", "None of the dropped or opened files is a supported image.",
     "You can also drop images or folders here.",
     "Open One Folder at a Time", "Drop or open a single folder to continue.",
-    "No Recent Folders", "canvas.image"
+    "No Recent Folders", "canvas.image",
+    "Reading Folder…", "Looking for images to browse. Please wait.", "Cancel Reading"
 ]
 
 @Test func statesLocalizationUsedKeysAreBilingual() throws {

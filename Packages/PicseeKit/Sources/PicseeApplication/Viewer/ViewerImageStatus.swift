@@ -7,7 +7,7 @@ public enum ViewerImageFailure: Equatable, Sendable {
 
 /// The single presentation state consumed by native state surfaces.
 public enum ViewerImageStatus: Equatable, Sendable {
-    case empty, loading(String), showing, detailLimited, failed(ViewerImageFailure, String)
+    case empty, loading(String), readingFolder, showing, detailLimited, failed(ViewerImageFailure, String)
 
     public init(phase: ViewerImagePhase, fileName: String, failure: (any Error)?) {
         switch phase {
@@ -40,12 +40,13 @@ extension ViewerSession {
     var imageCommandsAvailable: Bool {
         guard host?.hasImage == true else { return false }
         switch imageStatus {
-        case .loading, .failed: return false
+        case .loading, .readingFolder, .failed: return false
         default: return true
         }
     }
     public var imageStatus: ViewerImageStatus {
-        ViewerImageStatus(phase: imageLoader.phase,
+        if folderScan?.isReadingFolder == true { return .readingFolder }
+        return ViewerImageStatus(phase: imageLoader.phase,
             fileName: imageLoader.fileURL?.lastPathComponent ?? "", failure: imageLoader.failure)
     }
 }
