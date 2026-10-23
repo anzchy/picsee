@@ -61,7 +61,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         session.host = self
         session.imageLoader.host = self
         window.delegate = self
-        let content = NSView(frame: window.contentView!.bounds)
+        let content = ViewerDropView(frame: window.contentView!.bounds,
+            acceptsDrop: { [weak window] in window?.attachedSheet == nil },
+            onDrop: { [weak self] in self?.openInput($0) })
         content.wantsLayer = true
         canvas.frame = content.bounds
         canvas.autoresizingMask = [.width, .height]
