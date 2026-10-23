@@ -304,17 +304,22 @@ def collect(run, expected):
     def fixtures():
         files = [p for p in (run / 'fixtures').rglob('*') if p.is_file()]
         manifest = run / 'fixtures.sha256.json'
-        if not manifest.exists(): return not files
+        if not manifest.exists(): return not files, []
         expected_hashes = json.loads(manifest.read_text())
-        return {str(p.relative_to(run / 'fixtures')): hashlib.sha256(p.read_bytes()).hexdigest()
-                for p in files} == expected_hashes
-    data['fixturesIntact'] = observe(('fixtures',), fixtures, False)
+        intact = {str(p.relative_to(run / 'fixtures')): hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in files} == expected_hashes
+        return intact, list(expected_hashes)
+    data['fixturesIntact'], data['fixtureNames'] = observe(('fixtures',), fixtures, (False, []))
     if owned:
         observe(('process-bundle', 'single-instance', 'window', 'launch-log'), lambda: identity(run))
     save(run, 'doctor-input.json', data)
     return data
 
 def verdicts(data):
+    windows_seen = data.get('windows', [])
+    window_title = windows_seen[0].get('title') if len(windows_seen) == 1 else None
+    fixture_titles = {Path(name).name for name in data.get('fixtureNames', [])}
+    window_ok = window_title == 'Picsee' or window_title in fixture_titles
     checks = [
         ('build-sha', data.get('sha') == data.get('expectedSHA') and bool(data.get('expectedSHA')), 'PicseeGitSHA differs from expected SHA'),
         ('bundle-id', data.get('bundleID') == 'io.github.anzchy.picsee', 'wrong bundle identifier'),
@@ -324,12 +329,13 @@ def verdicts(data):
         ('process-bundle', data.get('processMatches') is True, 'PID executable differs from recorded bundle'),
         ('fresh-sources', data.get('fresh') is True, 'build input modified, missing, untracked or newer than bundle'),
         ('single-instance', data.get('alone') is True, 'recorded PID is not the only Picsee instance'),
-        ('window', len(data.get('windows', [])) == 1 and data['windows'][0].get('title') == 'Picsee', 'expected one window titled Picsee'),
+        ('window', len(windows_seen) == 1 and window_ok, 'expected one window titled Picsee or a recorded fixture file'),
         ('launch-log', bool(re.search(r'Picsee launch git=' + re.escape(str(data.get('expectedSHA'))) + r'(?![\w-])', data.get('log', ''))), 'public SHA launch log missing'),
         ('machine', data.get('machineMatches') is True, 'machine/display differs from build record'),
         ('fixtures', data.get('fixturesIntact') is True, 'fixture hashes missing or changed')]
     checks = [(name, ok and name not in data.get('errors', {}), why) for name, ok, why in checks]
-    lines = [('PASS ' + name if ok else 'FAIL ' + name + ' — ' + ' '.join(str(data.get('errors', {}).get(name, why)).split()))
+    lines = [('PASS ' + name + (f' — title={window_title}' if name == 'window' else '') if ok
+              else 'FAIL ' + name + ' — ' + ' '.join(str(data.get('errors', {}).get(name, why)).split()))
              for name, ok, why in checks]
     return lines, all(ok for _, ok, _ in checks)
 

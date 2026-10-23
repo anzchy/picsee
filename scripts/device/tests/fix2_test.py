@@ -39,7 +39,9 @@ class RoundTwo(unittest.TestCase):
                 result = d.main()
         lines = output.getvalue().splitlines()
         self.assertEqual(result, 1)
-        self.assertEqual(lines[:12], ['PASS ' + check for check in d.CHECKS])
+        expected = ['PASS ' + check for check in d.CHECKS]
+        expected[d.CHECKS.index('window')] = 'PASS window — title=Picsee'
+        self.assertEqual(lines[:12], expected)
         self.assertEqual(len(lines), 13)
         self.assertEqual(observed_line_counts, [12])
         self.assertTrue(lines[12].startswith('FAIL report-write — '))
