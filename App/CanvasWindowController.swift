@@ -289,7 +289,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func navigate(_ direction: NavigationDirection) {
         guard let file = fileURL else { return }
-        let operation = accessIntent.begin()
+        let operation = accessIntent.navigation()
         navigationTask?.cancel()
         let current = generation
         navigationTask = Task { [self] in

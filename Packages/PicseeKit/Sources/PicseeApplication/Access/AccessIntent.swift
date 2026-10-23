@@ -6,6 +6,8 @@ import Foundation
     public init() {}
     public var current: AccessOperation { AccessOperation(owner: self, token: token) }
     public func begin() -> AccessOperation { token = UUID(); return current }
+    /// Listing or a grant prompt is speculative until a destination is opened.
+    public func navigation() -> AccessOperation { current }
     public func invalidate() { token = UUID() }
 }
 
