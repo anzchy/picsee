@@ -215,7 +215,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CACHE-01 | 内存占用有上限 | Partial | 单元 | P1-06、P3-06 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageMemoryCache.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/MemoryPressurePolicy.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePresentationPinning.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageLoader.swift` | 连续浏览 S2 三轮，内存不持续增长；两个窗口共用同一个上限（数据见 `docs/validation/P3.md`）。限制：仅内存缓存，按成本有界、应用级单实例、授权后才查找（单元）；旧修订晚返回拒绝交付（单元）；当前图固定仅单元；内存压力仅单元证明（真机需 sudo 用户步骤）；无磁盘缓存（P3-03）；无预取（P2）；S2 三轮与两窗口共享上限的数据待 P3（`docs/validation/P3.md`）。 |
+| CACHE-01 | 内存占用有上限 | Partial | 单元 | P1-06、P3-06 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageMemoryCache.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/MemoryPressurePolicy.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ResourceSnapshotTracing.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePresentationPinning.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageLoader.swift` | 连续浏览 S2 三轮，内存不持续增长；两个窗口共用同一个上限（数据见 `docs/validation/P3.md`）。限制：仅内存缓存，按成本有界、应用级单实例、授权后才查找（单元）；无磁盘缓存（P3-03）；无预取（P2）；内存压力仅单元证明（真机需 sudo 用户步骤）；S2 三轮与两窗口共享上限的数据待 P3（`docs/validation/P3.md`）。 |
 | CACHE-02 | 缩略图磁盘缓存 | Absent | 无 | P3-03、P3-04 | — | 第二次打开同一目录，网格明显更快出图；手动删掉缓存目录后自动重建，原图不受影响 |
 | CACHE-03 | 清理缓存 | Absent | 无 | P3-05、P3-07 | — | 设置里显示缓存占用，点清理后占用归零，正在进行的旧任务不会把缓存重新写回 |
 | CACHE-04 | 本地诊断面板 | Absent | 无 | P3-07 | — | 打开诊断面板，看到本地的解码数、队列长度、缓存命中；不上传任何数据 |
