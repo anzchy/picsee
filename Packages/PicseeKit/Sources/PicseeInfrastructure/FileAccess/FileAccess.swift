@@ -80,6 +80,8 @@ public actor FileAccess: AccessLeasing {
     }
     public func records() -> [AccessRootRecord] { saved }
     public func launchOutcomes() -> [AccessRootID: String] { outcomes }
+    /// Published location only; Recent queries never create or refresh authority.
+    public func rootURL(_ id: AccessRootID) -> URL? { roots[id] }
     /// Only an explicit system-panel selection may replace a persisted root.
     public func reconnect(_ id: AccessRootID, folder: URL) throws -> URL {
         let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "access")
