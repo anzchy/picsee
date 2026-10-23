@@ -79,7 +79,7 @@ import PicseeApplication
     #expect(!router.route(.next, from: .menu, to: session))
     #expect(!router.route(.previous, from: .button, to: session))
     target.canNavigate = true
-    let first = ItemID(rawValue: UUID()); let second = ItemID(rawValue: UUID())
+    let first = ItemID.ephemeral(UUID()); let second = ItemID.ephemeral(UUID())
     session.beginBrowsing(items: [first, second], sourceVersion: .init(1), scrollAnchor: first)
     session.select(first)
     #expect(!router.route(.next, from: .key, to: session))

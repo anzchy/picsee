@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import PicseeCore
 
-private let encodingItem = ItemID(rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
+private let encodingItem = ItemID.ephemeral(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
 
 @Test func renderKeyGoldenEncodings() {
     let missing = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42, modificationDate: nil), maximumPixelSize: 512)
@@ -20,7 +20,7 @@ private let encodingItem = ItemID(rawValue: UUID(uuidString: "00000000-0000-0000
                   decoderVersion: version, purpose: purpose)
     }
     let original = key()
-    for changed in [key(item: ItemID(rawValue: UUID())), key(bytes: 43),
+    for changed in [key(item: ItemID.ephemeral(UUID())), key(bytes: 43),
                     key(date: Date(timeIntervalSinceReferenceDate: 1)), key(frame: 1), key(edge: 513),
                     key(preview: true), key(policy: .unorientedSDR), key(version: 2), key(purpose: .thumbnail)] {
         #expect(changed != original)

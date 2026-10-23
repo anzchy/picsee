@@ -4,7 +4,7 @@ import PicseeCore
 import PicseeApplication
 
 func sessionItems(_ count: Int = 5) -> [ItemID] {
-    (0..<count).map { _ in ItemID(rawValue: UUID()) }
+    (0..<count).map { _ in ItemID.ephemeral(UUID()) }
 }
 
 @Test func browserSelectionModifiersAndReconciliation() {

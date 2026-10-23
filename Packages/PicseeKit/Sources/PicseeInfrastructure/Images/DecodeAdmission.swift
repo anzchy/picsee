@@ -79,7 +79,7 @@ public actor DecodeAdmission {
     private var identities: [URL: ItemID] = [:]
     public func key(for url: URL, revision: FileRevision, maximumPixelSize: Int, isPreview: Bool = false) -> RenderKey {
         let path = url.standardizedFileURL
-        let item = identities[path] ?? ItemID(rawValue: UUID())
+        let item = identities[path] ?? ItemID.ephemeral(UUID())
         identities[path] = item
         return RenderKey(itemID: item, revision: revision, maximumPixelSize: maximumPixelSize, isPreview: isPreview)
     }
