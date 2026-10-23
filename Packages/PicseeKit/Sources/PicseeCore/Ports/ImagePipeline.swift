@@ -4,6 +4,7 @@ import Foundation
 public enum DecodePriority: Int, Sendable { case prefetch, visible, current }
 
 public struct ImageDecodeRequest: Sendable {
+    public let identityRoot: ItemIdentityRoot?
     public let isPreview: Bool
     /// Pixel allocation ceiling for this admitted decode, rechecked against its own header.
     public let sourceByteBudget: Int?
@@ -13,7 +14,8 @@ public struct ImageDecodeRequest: Sendable {
     /// Longest edge in pixels; callers convert viewport points using backing scale.
     public let maximumPixelSize: Int
 
-    public init(fileURL: URL, maximumPixelSize: Int, renderKey: RenderKey? = nil, priority: DecodePriority = .current, sourceByteBudget: Int? = nil, isPreview: Bool = false) {
+    public init(fileURL: URL, maximumPixelSize: Int, renderKey: RenderKey? = nil, priority: DecodePriority = .current, sourceByteBudget: Int? = nil, isPreview: Bool = false, identityRoot: ItemIdentityRoot? = nil) {
+        self.identityRoot = identityRoot
         self.isPreview = isPreview
         self.sourceByteBudget = sourceByteBudget
         // The render identity includes the mode because embedded previews and image-derived pixels differ.
@@ -45,5 +47,13 @@ public struct DecodedImage: Sendable {
 /// Request boundary: admission/cancellation policy can replace the first executor.
 public protocol ImagePipeline: Sendable {
     func request(for fileURL: URL, maximumPixelSize: Int) async throws -> ImageDecodeRequest
+    func request(for fileURL: URL, maximumPixelSize: Int, identityRoot: ItemIdentityRoot?) async throws -> ImageDecodeRequest
     func image(for request: ImageDecodeRequest) async throws -> DecodedImage
+}
+
+// Existing non-scoped pipelines remain source compatible.
+extension ImagePipeline {
+    public func request(for fileURL: URL, maximumPixelSize: Int, identityRoot: ItemIdentityRoot?) async throws -> ImageDecodeRequest {
+        try await request(for: fileURL, maximumPixelSize: maximumPixelSize)
+    }
 }

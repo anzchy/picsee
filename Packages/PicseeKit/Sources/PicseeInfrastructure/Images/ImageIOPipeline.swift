@@ -52,6 +52,7 @@ public struct ImageIODecoder: ImageDecoding {
 
 public final class ImageIOPipeline: ImagePipeline, Sendable {
     private let configuration: DecodeConfiguration
+    private let rootResolvers = RootIdentityResolvers()
     private let identityResolver: any ItemIdentityResolving
     private let executor: OperationDecodeExecutor
     private let admission: DecodeAdmission
@@ -68,7 +69,12 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
             throw ImageLoadError(.sourceChanged, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision)
         }
         let item: ItemID
-        do { item = try await identityResolver.identity(for: request.fileURL) }
+        do {
+            let resolver: any ItemIdentityResolving
+            if let root = request.identityRoot { resolver = await rootResolvers.resolver(for: root) }
+            else { resolver = identityResolver }
+            item = try await resolver.identity(for: request.fileURL)
+        }
         catch { throw loadFailure(error, request: request, revision: request.renderKey?.revision, unreadableKind: .corruptImage) }
         let budget = configuration.budget
         return try await withCheckedThrowingContinuation { continuation in
@@ -91,10 +97,13 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         }
     }
     public func request(for fileURL: URL, maximumPixelSize: Int) async throws -> ImageDecodeRequest {
+        try await request(for: fileURL, maximumPixelSize: maximumPixelSize, identityRoot: nil)
+    }
+    public func request(for fileURL: URL, maximumPixelSize: Int, identityRoot: ItemIdentityRoot?) async throws -> ImageDecodeRequest {
         if Task.isCancelled { throw ImageLoadError(.cancelled) }
-        let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize))
+        let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, identityRoot: identityRoot))
         let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: maximumPixelSize)
-        return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, renderKey: key)
+        return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, renderKey: key, identityRoot: identityRoot)
     }
     public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
         if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision) }
@@ -106,7 +115,7 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         }
         let cost = try DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget)
         let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
-            renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview)
+            renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview, identityRoot: request.identityRoot)
         do {
             return try await admission.image(admittedRequest, key: key, cost: cost,
                 heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)

@@ -27,11 +27,12 @@ public actor AccessImageSource {
         switch request { case .fileGrant(let url), .root(_, let url): file = url }
         let pipeline = pipeline
         do {
-            let result = try await access.withLease(request) { _ in
-                let prepared = try await pipeline.request(for: file, maximumPixelSize: maximumPixelSize)
+            let result = try await access.withLease(request) { lease in
+                let root = lease.rootID.map { ItemIdentityRoot(id: $0, url: lease.url) }
+                let prepared = try await pipeline.request(for: file, maximumPixelSize: maximumPixelSize, identityRoot: root)
                 try Task.checkCancellation()
                 let request = ImageDecodeRequest(fileURL: file, maximumPixelSize: maximumPixelSize,
-                                                 renderKey: prepared.renderKey, isPreview: isPreview)
+                                                 renderKey: prepared.renderKey, isPreview: isPreview, identityRoot: root)
                 let image = try await pipeline.image(for: request)
                 try Task.checkCancellation()
                 return (request, image)
