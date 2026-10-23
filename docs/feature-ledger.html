@@ -274,7 +274,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <tr><td>网格、选择与菜单</td><td>2026-10-23</td><td>doc-gardener</td><td>P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 <code>Absent</code>。上次：建账</td></tr>
 <tr><td>信息与元数据</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（<code>inspector.item-name</code>，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 <code>Absent</code>。上次：P0-09（#10，749697a..7054a5d）</td></tr>
 <tr><td>授权与文件访问</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：ViewerImageLoader 的 retire/失败路径只加 unpin，关闭与续租未改；缓存查找在授权头校验之后；ACCESS-01/ACCESS-05 不变。上次：Low 批次 7（chore/followups-7，20501b8..a76629d）</td></tr>
-<tr><td>缓存与资源</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-06 内存缓存复跑（#48，p1/p1-06-memory-cache，51b3525..977989f）：本范围把 CACHE-01 由 <code>Absent</code> 改为 <code>Partial</code>/<code>单元</code>，验收原文未改，只追加「限制：」；无真机记录。上轮两项提出已处理：「怎么确认」缩到约 130 字，「在哪」补 <code>App/PicseeApp.swift</code>、<code>App/UntestedResourceAdapters.swift</code>。<code>ResourceSnapshot</code> 只是 signpost，CACHE-04 仍 <code>Absent</code>。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）</td></tr>
+<tr><td>缓存与资源</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-06 真机记录（#48，validation/p1-06-device-mini，d86c947..058cf88）：只改 CACHE-01 的「限制：」并链接 P1.md 运行 <code>20261023-174434-P1-06-CACHE-01</code>；状态仍 <code>Partial</code>、验证仍 <code>单元</code>，验收原文未改；记录有 <code>Validated-by</code> trailer、仅改 <code>docs/</code>；运行日志与记录一致（两档 hit、快照字节、rss unknown）。注：「怎么确认」约 155 字（含链接），在上限边缘。<code>ResourceSnapshot</code> 只是 signpost，CACHE-04 仍 <code>Absent</code>。上次：P1-06 内存缓存复跑（#48，p1/p1-06-memory-cache，51b3525..977989f）</td></tr>
 <tr><td>命令与键盘</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：<code>App/CanvasWindowController.swift</code> 只多传一个构造参数，命令与菜单未改；CMD-01 不变。上次：Low 批次 7（chore/followups-7，20501b8..a76629d）</td></tr>
 <tr><td>窗口与桌面工具</td><td>2026-10-22</td><td>doc-gardener</td><td>P7-09 去掉自动更新，WIN-07 不受影响</td></tr>
 <tr><td>编辑与导出</td><td>2026-10-22</td><td>doc-gardener</td><td>EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变</td></tr>
@@ -293,7 +293,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>106 项能力</span><span>·</span><span>Shipped 0 · Partial 25 · Stub 1 · Absent 80 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 3ef1f16bb37d · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 b57dfac6da73 · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>
