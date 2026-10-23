@@ -20,15 +20,18 @@ After quitting and relaunching use File → Open Recent. Close the window after 
 ## Driving it with computer use
 
 Preconditions: doctor passes; a new fixture folder `$RUN_DIR/fixtures/grant/` contains three manifest-verified
-synthetic images. No existing Access Root covers it. Do not delete the sandbox container. Only the delegator's
-independent run drives the powerbox; the implementor smoke stops after Cancel.
+synthetic images. No existing Access Root covers it. Do not delete the sandbox container. Independent validation belongs to the delegator. Fix round 1 also authorizes implementor smoke to choose a
+non-containing fixture folder in the powerbox and verify the mismatch sheet and scope-start result.
 
 1. Open the first image through `open -a` with the recorded bundle path. Capture `ACCESS-01-file.png`.
 2. Press →. The sheet titled **Browsing Needs Folder Access** names the parent folder and has **Grant Folder…**
    and **Cancel**. Capture `ACCESS-01-arrow-prompt.png`. Cancel; capture the unchanged image. Repeat with ←.
 3. Choose Grant Folder…. The directories-only panel is titled **Grant Folder Access**, starts in the parent,
    and has **Grant Folder** as its confirmation button. Select the parent. → advances in Finder order.
-   A different folder is still saved in Recent, but **Folder Does Not Contain This Image** reports the mismatch.
+   A different fixture folder is still saved in Recent, but **Folder Does Not Contain This Image** reports the
+   mismatch after the system panel ends. Capture the sheet and unchanged image; cancel it. Record
+   `AccessGrant kind=panelFolder scopeStarted=true|false` from `access` logs for this NSOpenPanel path,
+   rather than inferring scope success from a Finder `open -a` File Grant.
 4. Use View → Previous Image / Next Image and the Inspector buttons. Ends stop, without wrapping. Text input
    keeps arrow keys. ⌘O → folder opens its first image; cancelling either panel changes nothing.
 5. Quit (⌘Q), relaunch the same absolute bundle, doctor, choose File → Open Recent → fixture folder.

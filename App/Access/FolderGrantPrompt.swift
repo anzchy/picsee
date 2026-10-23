@@ -18,7 +18,11 @@ import AppKit
             panel.allowsMultipleSelection = false
             panel.directoryURL = folder
             panel.beginSheetModal(for: window) { response in
-                if response == .OK, let url = panel.url { selected(url) }
+                guard response == .OK, let url = panel.url else { return }
+                // Completion can run while the panel is still attached. Let AppKit
+                // finish ending it before the caller can present a mismatch sheet.
+                panel.orderOut(nil)
+                DispatchQueue.main.async { selected(url) }
             }
         }
     }
