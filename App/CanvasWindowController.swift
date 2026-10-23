@@ -183,9 +183,19 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func openRecent(_ folder: RecentFolder) {
         endInput()
+        let operation = accessIntent.begin()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
-        openFolder(folder.url, rootID: folder.rootID)
+        navigationTask?.cancel()
+        navigationTask = Task { [self] in
+            do {
+                let services = try await operation.wait { try await accessServices.value }
+                let currentURL = try await operation.wait { await services.rootURL(folder.rootID) }
+                AccessRecovery.openRecent(folder, currentURL: .success(currentURL), host: self)
+            } catch {
+                if operation.isCurrent { AccessRecovery.openRecent(folder, currentURL: .failure(error), host: self) }
+            }
+        }
     }
 
     func openGrantedFolder(_ folder: URL) {
@@ -405,6 +415,34 @@ extension CanvasWindowController: ViewerImageHost {
         stateHost.refresh()
         if cancelled { return }
         if error is FileAccessError { showAccessError(error) }
+    }
+}
+
+// Untested native recovery forwarding; the Application owns decision/host routing.
+extension CanvasWindowController: AccessRecoveryHost {
+    func browseRecoveredFolder(_ url: URL, rootID: AccessRootID) { openFolder(url, rootID: rootID) }
+    func showAccessRecoveryError(_ error: any Error) { showAccessError(error) }
+    func requestFolderReconnection(rootID: AccessRootID, lastKnownFolder: URL, displayName: String) {
+        guard let window, window.attachedSheet == nil else { return }
+        let operation = accessIntent.current
+        ReconnectPrompt.request(displayName: displayName, lastKnownFolder: lastKnownFolder,
+                                window: window, isCurrent: { operation.isCurrent }) { [weak self] selection in
+            guard let self, operation.isCurrent else { return }
+            switch selection {
+            case .anotherFolder(let url): openGrantedFolder(url)
+            case .reconnect(let url):
+                navigationTask?.cancel()
+                navigationTask = Task { [self] in
+                    do {
+                        let services = try await operation.wait { try await accessServices.value }
+                        let target = try await operation.wait { try await services.reconnect(rootID, folder: url) }
+                        refreshRecents()
+                        try operation.check()
+                        openFolder(target.url, rootID: target.rootID)
+                    } catch { if operation.isCurrent { showAccessError(error) } }
+                }
+            }
+        }
     }
 }
 

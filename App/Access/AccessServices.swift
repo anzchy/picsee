@@ -25,4 +25,17 @@ struct AccessServices: Sendable {
             try await lister.images(in: folder, root: lease.url)
         }
     }
+    // Untested native composition; FileAccess and Recent persistence are package-tested.
+    func rootURL(_ id: AccessRootID) async -> URL? { await files.rootURL(id) }
+    func reconnect(_ id: AccessRootID, folder: URL) async throws -> (rootID: AccessRootID, url: URL) {
+        let targetID: AccessRootID
+        let url: URL
+        do { url = try await files.reconnect(id, folder: folder); targetID = id }
+        catch FileAccessError.alreadyGranted(let other) {
+            guard let held = await files.rootURL(other) else { throw FileAccessError.needsReconnection(other) }
+            targetID = other; url = held
+        }
+        try await recent.add(RecentFolder(rootID: targetID, url: url, displayName: url.lastPathComponent))
+        return (targetID, url)
+    }
 }
