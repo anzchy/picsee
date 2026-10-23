@@ -37,7 +37,7 @@ public struct ImageIODecoder: ImageDecoding {
             throw ImageDecodeError.unreadableImage
         }
         _ = try DecodeBudget.sourceCost(width: width, height: height,
-            budget: request.sourceByteBudget ?? DecodeConfiguration().budget)
+            budget: request.sourceByteBudget ?? DecodeConfiguration().budget, bytesPerPixel: ImageSourceHeader.pixelBytes(properties))
         var thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         if thumbnail == nil {
             options[kCGImageSourceCreateThumbnailFromImageAlways] = true
@@ -113,7 +113,7 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         if let requested = request.renderKey, requested != key {
             throw ImageLoadError(.sourceChanged, itemID: requested.itemID, revision: header.revision)
         }
-        let cost = try DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget)
+        let cost = try DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget, bytesPerPixel: header.bytesPerPixel)
         let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
             renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview, identityRoot: request.identityRoot)
         do {
