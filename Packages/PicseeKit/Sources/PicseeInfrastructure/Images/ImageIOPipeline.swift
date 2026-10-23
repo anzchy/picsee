@@ -36,8 +36,8 @@ public struct ImageIODecoder: ImageDecoding {
               let height = properties[kCGImagePropertyPixelHeight] as? Int else {
             throw ImageDecodeError.unreadableImage
         }
-        _ = try DecodeBudget.sourceCost(width: width, height: height,
-            budget: request.sourceByteBudget ?? DecodeConfiguration().budget, bytesPerPixel: ImageSourceHeader.pixelBytes(properties))
+        _ = try DecodeBudget.outputCost(width: width, height: height, maximumPixelSize: request.maximumPixelSize,
+            bytesPerPixel: ImageSourceHeader.pixelBytes(properties), budget: request.sourceByteBudget ?? DecodeConfiguration().budget)
         var thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         if thumbnail == nil {
             options[kCGImageSourceCreateThumbnailFromImageAlways] = true
@@ -113,7 +113,7 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         if let requested = request.renderKey, requested != key {
             throw ImageLoadError(.sourceChanged, itemID: requested.itemID, revision: header.revision)
         }
-        let cost = try DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget, bytesPerPixel: header.bytesPerPixel)
+        let cost = try DecodeBudget.outputCost(width: header.width, height: header.height, maximumPixelSize: request.maximumPixelSize, bytesPerPixel: header.bytesPerPixel, budget: configuration.budget)
         let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
             renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview, identityRoot: request.identityRoot)
         do {
