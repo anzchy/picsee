@@ -24,7 +24,7 @@ import PicseeCore
         return try await pipeline.image(for: tinyRequest)
     }
     do { _ = try await task.value; Issue.record("pre-cancelled pipeline succeeded") }
-    catch { #expect(error is CancellationError) }
+    catch { #expect((error as? ImageLoadError)?.kind == .cancelled) }
 }
 
 @Test(.timeLimit(.minutes(1))) func taskCancellationResumesOnceAfterBlockingDecoderReturns() async throws {
@@ -73,9 +73,9 @@ private struct FailingDecoder: ImageDecoding {
     #expect(try await pipeline.image(for: a).image.width == 128)
     let key = try #require(a.renderKey)
     let changed = RenderKey(itemID: key.itemID, revision: FileRevision(byteCount: 0, modificationDate: nil), maximumPixelSize: 128)
-    await #expect(throws: ImageDecodeError.invalidRequest) {
+    await #expect(performing: {
         try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 128, renderKey: changed))
-    }
+    }, throws: loadError(.sourceChanged))
     // These errors must also be typed at the synchronous decoder boundary.
     #expect(throws: ImageDecodeError.invalidRequest) { try ImageIODecoder().decode(ImageDecodeRequest(fileURL: file, maximumPixelSize: 0)) }
     #expect(throws: ImageDecodeError.unreadableImage) { try ImageIODecoder().decode(ImageDecodeRequest(fileURL: fixture("corrupt.png"), maximumPixelSize: 1)) }

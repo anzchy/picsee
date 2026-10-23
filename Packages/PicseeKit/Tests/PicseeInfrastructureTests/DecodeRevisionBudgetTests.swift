@@ -16,9 +16,9 @@ private struct ReplacingDecoder: ImageDecoding {
     defer { try? FileManager.default.removeItem(at: file) }
     try Data(contentsOf: fixture("alpha-gradient.png")).write(to: file)
     let pipeline = ImageIOPipeline(decoder: ReplacingDecoder())
-    await #expect(throws: ImageDecodeError.budgetExceeded) {
+    await #expect(performing: {
         try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 128))
-    }
+    }, throws: loadError(.resourceLimit))
 }
 
 private struct RevisionChangingDecoder: ImageDecoding {
