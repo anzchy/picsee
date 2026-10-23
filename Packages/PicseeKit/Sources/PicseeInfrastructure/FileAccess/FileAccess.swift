@@ -121,7 +121,8 @@ public actor FileAccess: AccessLeasing {
     private func matchingRoot(_ folder: URL, excluding id: AccessRootID? = nil) throws -> AccessRootID? {
         for record in saved where record.id != id {
             guard let url = roots[record.id] else { continue }
-            let session = try ScopeSession(scope: scope, url: url, rootID: record.id)
+            if url.standardizedFileURL.pathComponents == folder.pathComponents { return record.id }
+            guard let session = try? ScopeSession(scope: scope, url: url, rootID: record.id) else { continue }
             defer { session.stop() }
             if canonical(url).pathComponents == folder.pathComponents { return record.id }
         }
@@ -140,26 +141,39 @@ public actor FileAccess: AccessLeasing {
     }
     /// Only the composition root's successful system panel invokes this operation.
     public func grant(folder: URL) throws -> AccessRootID {
-        let id = AccessRootID()
-        let session: ScopeSession
+        let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "access")
+        var id = AccessRootID()
+        var existing = false
+        var started = false
+        var phase = "scope"
         do {
-            session = try ScopeSession(scope: scope, url: folder, rootID: id)
-            Logger(subsystem: "io.github.anzchy.picsee", category: "access").notice("AccessGrant kind=panelFolder scopeStarted=true root=\(id.rawValue.uuidString, privacy: .public)")
+            let session = try ScopeSession(scope: scope, url: folder, rootID: id)
+            started = true
+            defer { session.stop() }
+            phase = "directory"
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+                throw FileAccessError.invalidFolder
+            }
+            phase = "match"
+            if let held = try matchingRoot(canonical(folder)) { id = held; existing = true }
+            phase = "bookmark"
+            let bookmark = try bookmarks.create(for: folder)
+            var replacement = saved
+            if let index = replacement.firstIndex(where: { $0.id == id }) { replacement[index].bookmark = bookmark }
+            else {
+                replacement.append(AccessRootRecord(id: id, bookmark: bookmark, displayName: folder.lastPathComponent,
+                    creatingBuildSHA: buildSHA, createdAt: Date()))
+            }
+            phase = "store"
+            try store.save(replacement)
+            saved = replacement; roots[id] = folder
+            logger.notice("AccessGrant kind=panelFolder scopeStarted=true root=\(id.rawValue.uuidString, privacy: .public) existing=\(existing, privacy: .public) outcome=granted path=\(folder.path, privacy: .private)")
+            return id
         } catch {
-            Logger(subsystem: "io.github.anzchy.picsee", category: "access").notice("AccessGrant kind=panelFolder scopeStarted=false")
+            logger.notice("AccessGrant kind=panelFolder scopeStarted=\(started, privacy: .public) root=\(id.rawValue.uuidString, privacy: .public) existing=\(existing, privacy: .public) outcome=failed error=\(phase, privacy: .public) path=\(folder.path, privacy: .private)")
             throw error
         }
-        defer { session.stop() }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            throw FileAccessError.invalidFolder
-        }
-        let bookmark = try bookmarks.create(for: folder)
-        let record = AccessRootRecord(id: id, bookmark: bookmark, displayName: folder.lastPathComponent,
-                                      creatingBuildSHA: buildSHA, createdAt: Date())
-        try store.save(saved + [record])
-        saved.append(record); roots[id] = folder
-        return id
     }
     public func acquire(_ request: AccessRequest) throws -> AccessLease {
         let key: SessionKey

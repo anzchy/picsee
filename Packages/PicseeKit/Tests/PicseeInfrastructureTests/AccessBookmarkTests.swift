@@ -119,7 +119,11 @@ final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     let restored = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: store, buildSHA: "B")
     codec.fails = true
     let otherID = try await restored.grant(folder: base)
-    #expect(otherID != id)
+    #expect(otherID == id)
+    let different = base.appendingPathComponent("different", isDirectory: true)
+    try fm.createDirectory(at: different, withIntermediateDirectories: true)
+    let differentID = try await restored.grant(folder: different)
+    #expect(differentID != id)
 }
 
 @Test func accessRejectsNonFolderAndLaterBookmarkResolutionFailure() async throws {
