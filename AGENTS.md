@@ -107,7 +107,7 @@ receipt lane 和两个 discovery probe 均走 `scripts/heavy-lock.sh`；其他�
 
 ## 必须遵守的规则
 
-- **测试先行。** 行为改动先写会失败的测试，再写实现。Claude Code 用 `/tdd-guardian:workflow`；Codex 用 `$picsee-tdd-workflow`（P0-01 后建立）。测试框架还没有时，说明这一点，不要跳过。
+- **测试先行。** 行为改动先写会失败的测试，再写实现。Claude Code 用 `/tdd-guardian:workflow`；Codex 按上方「命令」中的 receipt 流程执行，用同一个 `PICSEE_SWIFT_FILTER` 依次 record → implement → verify；`$picsee-tdd-workflow` skill 尚不存在。测试框架还没有时，说明这一点，不要跳过。
 - **sandbox 不关。** 不添加 Full Disk Access 依赖，不用 entitlement 绕过授权。遇到冲突，记录复现步骤，写 ADR，问用户。
 - **研究资料不进 App。** App target 不打包 REA、npm、`evidence/`、HTML/CSS 或 Stitch 产物。
 - **不入库的内容**：`.gitignore` 里列出的大体积反汇编和字符串转储（其中含第三方 API key）、`.stitch/` 工作区、本地工具状态。不要用 `git add -A` 把它们带进来，只暂存你能逐个说出名字的路径。
