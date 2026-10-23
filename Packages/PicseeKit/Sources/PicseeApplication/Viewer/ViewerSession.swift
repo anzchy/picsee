@@ -150,10 +150,10 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public func advanceChrome() { chrome.advance(to: clock.now); synchronizeChrome() }
     public func isEnabled(_ command: CommandID) -> Bool {
         switch command {
-        case .fit, .actualPixels, .zoomIn, .zoomOut: host?.hasImage == true
+        case .fit, .actualPixels, .zoomIn, .zoomOut: imageCommandsAvailable
         case .escape: inspectorFocus.focus != .canvas || previewSet != nil
         case .open: true
-        case .inspector: inspectorFocus.isVisible || host?.hasImage == true
+        case .inspector: inspectorFocus.isVisible || imageCommandsAvailable
         case .preview, .enter: mode == .browsing && !orderedItemIDs.isEmpty
         case .previous, .next:
             mode == .viewing && (previewSet != nil || ((host as? any ViewerSessionNavigationHost)?.canNavigate == true

@@ -30,6 +30,13 @@ public enum ViewerImageStatus: Equatable, Sendable {
 }
 
 extension ViewerSession {
+    var imageCommandsAvailable: Bool {
+        guard host?.hasImage == true else { return false }
+        switch imageStatus {
+        case .loading, .failed: return false
+        default: return true
+        }
+    }
     public var imageStatus: ViewerImageStatus {
         ViewerImageStatus(phase: imageLoader.phase,
             fileName: imageLoader.fileURL?.lastPathComponent ?? "", failure: imageLoader.failure)
