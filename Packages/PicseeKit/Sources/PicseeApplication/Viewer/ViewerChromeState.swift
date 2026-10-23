@@ -10,7 +10,7 @@ import Foundation
 }
 
 public enum ChromeLockReason: CaseIterable, Hashable, Sendable {
-    case menu, inspector, filmstrip, keyboardFocus
+    case menu, inspector, filmstrip, keyboardFocus, pointerHover, pointerPress
 }
 
 public enum ChromeVisibility: Equatable, Sendable {

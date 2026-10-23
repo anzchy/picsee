@@ -37,6 +37,10 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         mode == .viewing ? previewSet?.currentItemID : selection.currentItemID
     }
     public weak var chromeHost: (any ViewerChromeHost)? { didSet { synchronizeChrome() } }
+    public func setChromeInteraction(_ reason: ChromeLockReason, active: Bool) {
+        chrome.setLock(reason, active: active, at: clock.now)
+        synchronizeChrome()
+    }
     private var pointerAtTop = false
     public var trafficLightsVisible: Bool { !chrome.isHidden || pointerAtTop }
     public func pointerMoved(in region: ChromePointerRegion) {

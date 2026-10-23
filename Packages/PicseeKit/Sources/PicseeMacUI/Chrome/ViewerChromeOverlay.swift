@@ -54,6 +54,19 @@ public final class ChromeToolView: NSView {
     public override func hitTest(_ point: NSPoint) -> NSView? {
         !isHiddenOrHasHiddenAncestor && frame.contains(point) ? self : nil
     }
+    private var pressed = false
+    public override var mouseDownCanMoveWindow: Bool { false }
+    public override func mouseDown(with event: NSEvent) {
+        guard acceptsFirstResponder else { return }
+        pressed = true
+        session?.setChromeInteraction(.pointerPress, active: true)
+    }
+    public override func mouseUp(with event: NSEvent) {
+        guard pressed else { return }
+        pressed = false
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { activate() }
+        session?.setChromeInteraction(.pointerPress, active: false)
+    }
     public override func becomeFirstResponder() -> Bool {
         guard acceptsFirstResponder else { return false }
         session?.updateFocus(.tools); needsDisplay = true
@@ -117,6 +130,7 @@ public final class ViewerChromeOverlay: NSView {
     public func pointerMoved(_ point: NSPoint) {
         let region: ChromePointerRegion = !bounds.contains(point) ? .outside : point.y < Self.edgeBandHeight ? .bottom : point.y >= bounds.height - Self.edgeBandHeight ? .top : .canvas
         session?.pointerMoved(in: region)
+        session?.setChromeInteraction(.pointerHover, active: groups.contains { !$0.isHidden && $0.frame.contains(point) })
         for tool in tools { tool.toolTip = tool.command.shortcutHint }
     }
     public func focusTool(reverse: Bool, entering: Bool) -> Bool {
