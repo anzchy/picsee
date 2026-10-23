@@ -329,21 +329,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：OPEN-02 已改「限制：」并加 `ViewerChromeOverlay.swift`，状态与验证 `无` 不变，验收原文未改。上次：P1-08 沉浸工具（db028d8..0927a6a），提出 OPEN-02「无打开按钮」已过时 |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：VIEW-01/VIEW-10 只追加「限制：」写明底部工具入口与全尺寸内容窗口真机未验，状态与验收不变。上次：P1-08 沉浸工具（db028d8..0927a6a），提出 VIEW-01/VIEW-10 真机记录早于改动 |
-| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：CHROME-01/02/04「限制：」已缩短（124/107/96 字），细节移到 P1.md P1-08 节的单元证据说明，非真机记录；File › Close 移到 CMD-01。CHROME-01…05 仍 `Partial`/`单元`，验收原文未改。上次：P1-08 沉浸工具（db028d8..0927a6a） |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮只改 CMD-01/A11Y-02 与审查表，OPEN-02 不变（`Partial`/`无`，验收原文未改）。上次：P1-08 复审（db028d8..2a67114），OPEN-02「限制：」已更新 |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮无源码改动，VIEW-01/VIEW-10 不变（`Partial`/`单元`，验收原文未改）。上次：P1-08 复审（db028d8..2a67114），只追加「限制：」 |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：CHROME-01…05 仍 `Partial`/`单元`，验收原文未改（只在原句后加句号与「限制：」），无真机记录，`build.mjs --check` 通过。上次：P1-08 复审（db028d8..2a67114），File › Close 移到 CMD-01 |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：本次只改账簿与 P1.md，ACCESS-01/05 不受影响。上次：P1-08 沉浸工具（db028d8..0927a6a），chrome 接线未改打开/授权/释放路径 |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮只改账簿，ACCESS-01/05 不受影响。上次：P1-08 复审（db028d8..2a67114） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：CMD-01 已加底部工具按钮与 File › Close（⌘W）仅单元证明的限制；「怎么确认」现约 188 字，超出约 150 字，且「在哪」未列 `ChromeWindowCommands.swift`、`ViewerChromeOverlay.swift`，已提交给 owner。上次：P1-08 沉浸工具（db028d8..0927a6a） |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：CMD-01「怎么确认」缩到约 149 字，「在哪」加 `ChromeWindowCommands.swift`、`ViewerChromeOverlay.swift`；新限制「菜单/按键/占位按钮 @1x 真机一致」与 P0.md P0-09 节结论一致；状态与验收不变。上次：P1-08 复审（db028d8..2a67114），提出 CMD-01 超长与在哪缺路径 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`DecodeBudget`/`ImageSourceHeader` 改为按位深估算请求输出预约，`ImageIOPipeline` 只加预约复核与根作用域身份，方向、透明与格式解码未改；FMT-01 只改「在哪」，状态与验收不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：A11Y-02 已加 Tab 经底部工具待复验的限制，状态与验收不变；「怎么确认」现约 169 字，超出约 150 字，已提交给 owner。上次：P1-08 沉浸工具（db028d8..0927a6a），提出 P0 Tab 顺序记录已过时 |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：A11Y-02「怎么确认」缩到约 126 字，原「上一张/下一张按钮的 Tab 顺序未验」并入「P1-08 后 Tab 经底部工具，待复验」（这两个按钮现在就在底部工具里）；状态与验收不变。上次：P1-08 复审（db028d8..2a67114），提出 A11Y-02 超长 |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
