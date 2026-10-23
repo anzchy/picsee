@@ -330,21 +330,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..0e61c04）：Open Recent 改为先探测根租约再浏览当前 URL 或进重连面板；OPEN-06 只改「限制：」，仍 `Partial`/`单元`，验收不变；实现者冒烟无 `docs/validation/` 记录，失败根面板未验。`CanvasWindowController` 其余改动只在 Recent/重连路径，OPEN-01/04/05 不变。上次：#73 复验真机记录（docs/issue73-device-mini，875cf65..0eedd81） |
-| 查看与画布 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..0e61c04）：`CanvasWindowController` 只改 Open Recent 与重连转发，画布、缩放、全屏未改；VIEW-05 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
-| C 沉浸界面 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..0e61c04）：重连为 NSAlert/NSOpenPanel sheet，不改 chrome 显隐与命中；CHROME-01…03 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
+| 打开与输入 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738）：Open Recent 改为先探测根租约再浏览当前 URL 或进重连面板；OPEN-06 只改「限制：」与在哪（加 `CanvasWindowController.swift`、`AccessRecovery.swift`），仍 `Partial`/`单元`，验收不变；未链记录的实现者冒烟句已删，失败根面板未验。`CanvasWindowController` 其余改动只在 Recent/重连路径，OPEN-01/04/05 不变。上次：#73 复验真机记录（docs/issue73-device-mini，875cf65..0eedd81） |
+| 查看与画布 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738）：`CanvasWindowController` 只改 Open Recent 与重连转发，画布、缩放、全屏未改；VIEW-05 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
+| C 沉浸界面 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738）：重连为 NSAlert/NSOpenPanel sheet，不改 chrome 显隐与命中；CHROME-01…03 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
 | 外观与显示偏好 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：工具显隐与面板切换未改；PREF-02 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..0e61c04）：ACCESS-03 `Absent`→`Stub`→`Partial`/`单元`，验收逐提交未改；ACCESS-02 只改「限制：」。发现：ACCESS-03「怎么确认」约 218 字、5 句超长；ACCESS-02 删掉了 entitlement 名 `com.apple.security.files.bookmarks.app-scope`（文件仍声明，账簿已无任何行写它）；实现者冒烟证据只在 handoff，range 内无 `docs/validation/` 记录；ACCESS-05 约 238 字超长仍待 owner。会话键改为 (rootID, URL)，ACCESS-05 真机记录早于此改动，行未超出单元声称。上次：P2-01 实现者自述（gpt-imple-1）；#73 复验（875cf65..0eedd81） |
+| 授权与文件访问 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738）：ACCESS-03 `Absent`→`Partial`/`单元`，验收逐提交未改；「限制：」写明真机四种目录变化均 stale、最近项直接浏览不提示，验收是否成立待 owner 决定。ACCESS-02 只改「限制：」，已重新写出 `com.apple.security.files.bookmarks.app-scope`；未链记录的实现者冒烟句已删。ACCESS-05「怎么确认」约 238 字超长，PR 说明记为既有问题；会话键改为 (rootID, URL)，真机关窗释放记录早于此改动，行未超出单元声称。上次：P2-01 实现者自述（gpt-imple-1）；#73 复验（875cf65..0eedd81） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`；CACHE-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
-| 命令与键盘 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..0e61c04）：未改命令 ID、菜单或快捷键；CMD-01/02 不变（CMD-01「怎么确认」约 173 字，略超）。上次：P1-02 真机记录（#70，060ac0e..dfc68ff） |
+| 命令与键盘 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738）：未改命令 ID、菜单或快捷键；CMD-01/02 不变（CMD-01「怎么确认」约 173 字，略超）。上次：P1-02 真机记录（#70，060ac0e..dfc68ff） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`，解码器与格式集合未改；FMT-01 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
-| 可访问性与本地化 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..0e61c04）：新增 5 条重连 sheet/面板字符串，均有 en、zh-Hans，目录测试覆盖（AccessRecoveryCatalogTests）；A11Y-02/A11Y-04 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
+| 可访问性与本地化 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738）：新增 5 条重连 sheet/面板字符串，均有 en、zh-Hans，目录测试覆盖（AccessRecoveryCatalogTests）；A11Y-02/A11Y-04 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
 | 分发 | 2026-10-23 | doc-gardener | P1-10 真机记录（validation/p1-10-device-mini，3996845..08c5ecf，run 20261023-212346-P1-10-DIST-06）：DIST-06 只改「限制：」（@1x Dock 与访达列表/图标视图通过），仍 `Partial`/`无`，验收不变；⌘Tab、浅色 Dock、@2x 未验。DIST-01…05 不变。上次：App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2） |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
