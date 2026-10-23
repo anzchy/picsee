@@ -330,9 +330,9 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 打开与输入 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`App/PicseeApp.swift` 只注入共享的内存 DisplayPreferences store，File › Open…/⌘O 仍恒可用、经 Session 发 requestOpen；OPEN-02/03 不受影响。上次：P0-08（86950cc..f9c2ef6）无影响；P0-09 真机运行（88a76ef..24bd082）与 P0.md 第 12–14 项一致 |
 | 查看与画布 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`App/CanvasWindowController.swift` 只改命令/焦点接线，fit/1/±仍以 hasImage 启用并交回画布，解码未动；VIEW-08 不受影响。上次：P0-05/06 真机运行（aeb4138..66e752d），VIEW-06/07/08 只改限制，验收未改 |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：ViewerChromeState（约 2.5 秒期限、交互锁、常驻）与 Preview Set 来源恢复只在 Application 与单元测试中，App 不启动调度、无工具条；CHROME-01…05 保持 `Absent`（提交声明无用户可见变化）。上次：建账 |
-| 外观与显示偏好 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：新增 `DisplayPreferences` 键 `alwaysShowTools`、`filmstripExpanded`（内存 store，无 UI、无持久化），尚未出现在任何行，已提议；PREF-03/04 保持 `Absent`。上次：PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
+| 外观与显示偏好 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：新增 `DisplayPreferences` 键 `alwaysShowTools`、`filmstripExpanded`（内存 store，无 UI、无持久化）；PR 描述以「无用户可见变化」裁定两键暂不入行，待 P1-08（CHROME-04）、P1-09（PREF-04）移出 `Absent` 时命名；PREF-03/04 保持 `Absent`。上次：PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
-| Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`，键名归属已提议。上次：建账 |
+| Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
 | 授权与文件访问 | 2026-10-21 | 建账 | 同上 |
