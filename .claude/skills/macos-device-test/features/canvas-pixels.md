@@ -1,10 +1,13 @@
-# Actual pixels and anchored zoom
+# Canvas fit, actual pixels, zoom, pan and full screen
 
 At actual pixels, one image pixel maps to one physical (backing) pixel on whatever display the window is on,
 and zooming in or out keeps the image pixel under the cursor under the cursor.
 
 ## Sub-features
 
+- `VIEW-01` centred fit for landscape and portrait images, including resizing.
+- `VIEW-04` bounded image dragging and restoring fit.
+- `VIEW-05` full screen keeps the image and zoom mode (fit refits).
 - `VIEW-02` actual pixels 1:1 on a @2x display, and still 1:1 after dragging the window from a @2x display
   to a @1x display. Pressing `1` directly on the mini's @1x display is additional evidence, not a replacement
   for the drag entry point.
@@ -12,6 +15,9 @@ and zooming in or out keeps the image pixel under the cursor under the cursor.
 
 ## How to get to it (user POV)
 
+- Open landscape and portrait images, then resize the window; press `0`, View › Fit or Inspector Fit.
+- Zoom in and drag the image; press `0` to restore its centred fit.
+- Enter and exit full screen with ⌃⌘F, View › Enter/Exit Full Screen, and the green window button.
 - Press `1` for actual pixels.
 - Press `+` / `−` to zoom around the cursor.
 - Pinch on the trackpad to zoom around the cursor.
@@ -44,6 +50,16 @@ Preconditions:
   the cell under the cursor carries the same label.
 - **Zoom with pinch.** Repeat the previous step with a trackpad pinch. This is a user step (computer use can't
   pinch); if the user isn't available, record VIEW-03 pinch as NOT VERIFIED.
+- **Fit and resize (VIEW-01).** Open the coordinate grid, then a portrait copy. For each, shrink and grow
+  the window: the whole image remains centred with a 16 pt margin, never enlarged above 1× backing pixels.
+  Exercise `0`, View › Fit and Inspector Fit separately. Capture each image before and after resizing.
+- **Pan and restore (VIEW-04).** On the grid, press `+` three times, then drag far right/down and far left/up.
+  The image cannot leave a blank gap along an axis where it is larger than the viewport. Where smaller, it
+  stays completely inside. Capture each bound. Press `0`: the original centred fit returns.
+- **Full screen (VIEW-05).** For fit, actual pixels (`1`) and a custom zoom (`+`), enter and leave full screen
+  with ⌃⌘F. Repeat via View › Enter/Exit Full Screen and the green button. The image and mode remain: fit
+  refits; actual pixels stays crisp at 1:1; custom keeps its scale and centre image point subject to the pan
+  bound. Capture before, during and after each round trip. Confirm the View menu title changes.
 - **Proof.** Zoomed screenshots `VIEW-02-1key-2x.png`, `VIEW-02-1key-1x.png`,
   `VIEW-02-drag-2x-to-1x.png`, and `VIEW-03-keys-step<n>.png` for each step. A NOT VERIFIED entry has no
   invented screenshot; name its blocker in the verdict table.
