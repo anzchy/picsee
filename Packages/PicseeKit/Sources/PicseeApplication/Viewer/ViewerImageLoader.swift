@@ -22,6 +22,7 @@ public struct PresentedImage: Sendable {
     private var source: AccessImageSource?
     var loadTask: Task<Void, Never>?
     public init() { }
+    private var revisionRetryUsed = false
     private var desiredMaximum = 0
     private var progress = CanvasDecodeProgress()
     private var loading = false
@@ -30,7 +31,7 @@ public struct PresentedImage: Sendable {
     public func open(_ fileURL: URL, maximumPixelSize: Int, opener: @escaping Opener) {
         retire()
         generation = UUID()
-        loading = false
+        loading = false; revisionRetryUsed = false
         phase = .opening; presented = nil; failure = nil; preparedKey = nil
         source = nil
         self.fileURL = fileURL; self.opener = opener
@@ -45,6 +46,7 @@ public struct PresentedImage: Sendable {
         loadTask = Task { await load(fileURL, opener: opener, token: token) }
     }
     private func load(_ fileURL: URL, opener: Opener, token: PresentationToken) async {
+        while true {
         do {
             let source: AccessImageSource
             if let existing = self.source { source = existing }
@@ -68,10 +70,22 @@ public struct PresentedImage: Sendable {
                 phase = .refining
             }
             phase = .settled
+            break
         } catch {
             guard token.generation == generation else { return }
+            if (error as? ImageLoadError)?.kind == .sourceChanged, !revisionRetryUsed {
+                revisionRetryUsed = true
+                preparedKey = nil; presented = nil; progress = CanvasDecodeProgress()
+                host?.beginImageOpening()
+                let old = source; source = nil
+                await old?.close()
+                guard token.generation == generation else { return }
+                continue
+            }
             failure = error; phase = .failed
             host?.imageLoadFailed(error)
+            break
+        }
         }
         if token.generation == generation { loading = false }
     }
