@@ -27,12 +27,12 @@ private actor AcceptancePipeline: ImagePipeline {
     session.openImage(file, maximumPixelSize: 512) { try await AccessImageSource.open(.fileGrant(file), access: access, pipeline: pipeline) }
     await session.imageLoader.loadTask?.value
     if mode == .valid {
-        #expect(host.names == ["accept.png"])
+        #expect(host.names == ["accept.png", "accept.png"])
         let key = session.imageLoader.presented?.key
         #expect(key?.frameIndex == 3 && key?.policy == .unorientedSDR)
         #expect(key?.decoderVersion == 7 && key?.purpose == .thumbnail)
         #expect(key?.revision.resourceIdentifier == "revision")
-        #expect(key?.isPreview == true)
+        #expect(key?.isPreview == false)
         #expect(trace.ends.map(\.1) == [.success])
     } else {
         #expect(host.images.isEmpty)
@@ -74,7 +74,7 @@ private actor LoadOpenGate {
     }
     await gate.release(); await old?.value
     if close { #expect(host.names.isEmpty); #expect(session.imageLoader.phase == .idle) }
-    else { #expect(host.names == ["B"]); #expect(session.imageLoader.presented?.name == "B") }
+    else { #expect(host.names == ["B", "B"]); #expect(session.imageLoader.presented?.name == "B") }
     #expect(await access.acquired.count == 1)
     #expect(await access.released.count == 1)
 }

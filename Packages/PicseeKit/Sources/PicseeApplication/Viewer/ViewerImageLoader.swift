@@ -63,7 +63,7 @@ public struct PresentedImage: Sendable {
                     self.source = source
                 }
                 while let maximum = progress.nextMaximum(desired: desiredMaximum),
-                      !progress.previewCompleted || maximum > max(progress.completedMaximum, deliveredDetailMaximum) {
+                      !progress.previewCompleted || deliveredDetailMaximum == 0 || maximum > max(progress.completedMaximum, deliveredDetailMaximum) {
                     let preview = !progress.previewCompleted
                     let (request, image) = try await source.image(maximumPixelSize: maximum, isPreview: preview)
                     guard token == PresentationToken(binding: binding, generation: generation) else { return }
@@ -118,7 +118,7 @@ public struct PresentedImage: Sendable {
     public func requireResolution(_ maximum: Int) {
         guard phase != .idle, phase != .failed, phase != .detailLimited else { return }
         desiredMaximum = max(1, maximum)
-        guard progress.previewCompleted, desiredMaximum > max(progress.completedMaximum, deliveredDetailMaximum) else { return }
+        guard progress.previewCompleted, deliveredDetailMaximum == 0 || desiredMaximum > max(progress.completedMaximum, deliveredDetailMaximum) else { return }
         phase = .refining
         if !loading { schedule() }
     }

@@ -54,7 +54,7 @@ actor LoadPipeline: ImagePipeline {
         try await AccessImageSource.open(.fileGrant(url), access: access, pipeline: pipeline)
     }
     await session.imageLoader.loadTask?.value
-    #expect(host.names == ["A.png"])
+    #expect(host.names == ["A.png", "A.png"])
     #expect(host.openings == 1)
     #expect(session.imageLoader.phase == .settled)
     #expect(session.imageLoader.presented?.key.itemID == pipeline.item)

@@ -14,6 +14,7 @@ actor GenerationPipeline: ImagePipeline {
                 revision: FileRevision(byteCount: 1, modificationDate: nil), maximumPixelSize: maximumPixelSize))
     }
     func image(for request: ImageDecodeRequest) async -> DecodedImage {
+        if !request.isPreview { return loadImage(request.renderKey!, source: 512) }
         let name = request.fileURL.lastPathComponent
         let image = await withCheckedContinuation {
             pending[name] = (request, $0)
@@ -48,11 +49,11 @@ actor GenerationPipeline: ImagePipeline {
     let c = generationOpen("C", session: session, pipeline: pipeline, access: access)
     await pipeline.entered("C")
     await pipeline.release("C"); await c?.value
-    #expect(host.names == ["C"])
+    #expect(host.names == ["C", "C"])
     #expect(session.imageLoader.presented?.name == "C")
     await pipeline.release("B"); await b?.value
     await pipeline.release("A"); await a?.value
-    #expect(host.names == ["C"])
+    #expect(host.names == ["C", "C"])
     #expect(session.imageLoader.phase == .settled)
     #expect(session.imageLoader.presented?.name == "C")
     #expect(await pipeline.cancelled == ["A", "B"])
