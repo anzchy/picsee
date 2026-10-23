@@ -79,10 +79,19 @@ final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     #expect(try store.load().isEmpty)
     #expect(codec.count == 0)
     try Data("broken JSON".utf8).write(to: store.url)
-    #expect(throws: FileAccessError.corruptStore) {
-        try FileAccess(scope: scope, bookmarks: codec, store: store, buildSHA: "C")
-    }
+    let recovered = try FileAccess(scope: scope, bookmarks: codec, store: store, buildSHA: "C")
+    #expect(await recovered.storeCorrupt)
+    #expect(await recovered.records().isEmpty)
+    let fileLease = try await recovered.acquire(.fileGrant(file))
+    await recovered.release(fileLease)
+    let id = try await recovered.grant(folder: base)
+    let rootLease = try await recovered.acquire(.root(id, file: file))
+    await recovered.release(rootLease)
     #expect(try Data(contentsOf: store.url) == Data("broken JSON".utf8))
+    let relaunched = try FileAccess(scope: scope, bookmarks: codec, store: store, buildSHA: "D")
+    #expect(await relaunched.storeCorrupt)
+    #expect(await relaunched.rootCovering(file) == id)
+    #expect(scope.counts[0] == scope.counts[1])
 }
 
 @Test func accessAcquireRefreshesNewlyStaleBookmarkAndRejectsLostRoot() async throws {

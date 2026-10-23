@@ -28,6 +28,7 @@ public actor FileAccess: AccessLeasing {
     private let bookmarks: any BookmarkCoding
     private let store: BookmarkStore
     private let buildSHA: String
+    public let storeCorrupt: Bool
     private var saved: [AccessRootRecord]
     private var roots: [AccessRootID: URL] = [:]
     private var outcomes: [AccessRootID: String] = [:]
@@ -36,8 +37,17 @@ public actor FileAccess: AccessLeasing {
     private var requests: [UUID: AccessRequest] = [:]
 
     public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String) throws {
-        self.scope = scope; self.bookmarks = bookmarks; self.store = store; self.buildSHA = buildSHA
-        saved = try store.load()
+        self.scope = scope; self.bookmarks = bookmarks; self.buildSHA = buildSHA
+        do {
+            saved = try store.load()
+            self.store = store; storeCorrupt = false
+        } catch {
+            // Preserve the damaged evidence; subsequent grants persist separately.
+            let recovery = BookmarkStore(url: store.url.appendingPathExtension("recovered"))
+            saved = (try? recovery.load()) ?? []
+            self.store = recovery; storeCorrupt = true
+            Logger(subsystem: "io.github.anzchy.picsee", category: "access").error("AccessStore kind=storeCorrupt")
+        }
         let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "access")
         for index in saved.indices {
             let record = saved[index]
@@ -49,7 +59,7 @@ public actor FileAccess: AccessLeasing {
                     defer { session.stop() }
                     var refreshed = saved
                     refreshed[index].bookmark = try bookmarks.create(for: resolution.url)
-                    try store.save(refreshed)
+                    try self.store.save(refreshed)
                     saved = refreshed
                     outcome = "stale"
                 } else { outcome = "resolved" }
