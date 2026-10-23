@@ -153,7 +153,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| FOLDER-01 | 边扫描边浏览 | Partial | 单元 | P2-02 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FolderBrowser/`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/`、`Packages/PicseeKit/Sources/PicseeCore/Models/`、`App/CanvasWindowController.swift` | 打开 S2（5000 项）：首批出现前显示 24 页读取状态，可取消；首批出现后即可翻图，扫描在后台继续（时间见 `docs/validation/P2.md`）。限制：Access Root 图片入口已接入后台扫描与快照翻图；文件夹打开读取页及首批接线待 WI-5；仅单层目录（S2 为嵌套目录，需 P2-04 递归）；扫描中顺序为临时；真机未验。 |
+| FOLDER-01 | 边扫描边浏览 | Partial | 单元 | P2-02 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FolderBrowser/`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/`、`Packages/PicseeKit/Sources/PicseeCore/Models/`、`Packages/PicseeKit/Sources/PicseeMacUI/States/ViewerStateHost.swift`、`App/CanvasWindowController.swift` | 打开 S2（5000 项）：首批出现前显示 24 页读取状态，可取消；首批出现后即可翻图，扫描在后台继续（时间见 `docs/validation/P2.md`）。限制：仅单层目录（S2 为嵌套目录，需 P2-04 递归）；扫描中顺序为临时；读取页之后无扫描中状态与取消入口（P2-09）；真机未验。 |
 | FOLDER-02 | 排序 | Absent | 无 | P2-03 | — | 按名称自然排序（img2 排在 img10 前）、修改日期、类型、大小，升降序都能切换 |
 | FOLDER-03 | 扩展名过滤 | Absent | 无 | P2-03 | — | 只勾选 PNG，列表与翻图都只剩 PNG；取消过滤后恢复，当前图合理保留 |
 | FOLDER-04 | 子目录递归 | Absent | 无 | P2-04 | — | 打开递归，嵌套目录的图片出现；含循环符号链接的目录扫描能结束，不重复列出 |
@@ -334,7 +334,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 查看与画布 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738）：`CanvasWindowController` 只改 Open Recent 与重连转发，画布、缩放、全屏未改；VIEW-05 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
 | C 沉浸界面 | 2026-10-24 | doc-gardener | P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738）：重连为 NSAlert/NSOpenPanel sheet，不改 chrome 显隐与命中；CHROME-01…03 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
 | 外观与显示偏好 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：工具显隐与面板切换未改；PREF-02 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d） |
-| 文件夹浏览 | 2026-10-24 | gpt-imple-2 | P2-02（#78）Access Root 图片后台扫描与快照翻图（单元）；仅单层，读取页及目录首批接线待 WI-5，真机未验。 |
+| 文件夹浏览 | 2026-10-24 | gpt-imple-2 | P2-02（#78）分批扫描、快照翻图、读取页与取消恢复（单元）；仅单层、顺序临时、首批后状态待 P2-09，真机未验。 |
 | Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |

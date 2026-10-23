@@ -3,6 +3,8 @@ import PicseeCore
 
 @MainActor public protocol FolderScanHost: AnyObject {
     func openFolderImage(_ url: URL, rootID: AccessRootID)
+    func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws
+    func showEmptyFolder()
 }
 
 extension FolderScanCoordinator {

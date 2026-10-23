@@ -11,6 +11,8 @@ import PicseeCore
     var onOpen: (() -> Void)?
     var hasImage = true
     var canNavigate = true
+    func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { }
+    func showEmptyFolder() { }
     func openFolderImage(_ url: URL, rootID: AccessRootID) {
         visible = url; opens.append((url, rootID)); onOpen?()
     }

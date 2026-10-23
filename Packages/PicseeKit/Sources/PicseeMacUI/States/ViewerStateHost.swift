@@ -109,6 +109,31 @@ public final class ViewerStateHost: NSView {
             showsProgress = true
             textLines = [String(format: String(localized: "Opening %@…"), name)]
             actions = [(String(localized: "Cancel"), "state.cancel")]
+        case .readingFolder:
+            showsProgress = true
+            textLines = [String(localized: "Reading Folder…"),
+                String(localized: "Looking for images to browse. Please wait.")]
+            let center = max(160, bounds.midY)
+            let progress = NSHostingView(rootView: IndeterminateProgressRow(label: textLines[0]))
+            progress.frame = NSRect(x: 16, y: center, width: max(0, bounds.width - 32), height: 80)
+            progress.autoresizingMask = [.width, .minYMargin, .maxYMargin]
+            progress.setAccessibilityIdentifier("state.folder-title")
+            progress.setAccessibilityElement(true); progress.setAccessibilityLabel(textLines[0])
+            let subtitle = NSTextField(labelWithString: textLines[1])
+            subtitle.font = DesignMetrics.font("ui"); subtitle.textColor = DesignColor.textSecondary.nsColor
+            subtitle.alignment = .center
+            subtitle.frame = NSRect(x: 16, y: center + 2, width: max(0, bounds.width - 32), height: 24)
+            subtitle.autoresizingMask = [.width, .minYMargin, .maxYMargin]
+            subtitle.setAccessibilityIdentifier("state.folder-subtitle")
+            let cancel = ViewerStateButton(title: String(localized: "Cancel Reading"), target: self, action: #selector(activate(_:)))
+            cancel.session = session; cancel.bezelStyle = .rounded; cancel.focusRingType = .exterior
+            cancel.identifier = NSUserInterfaceItemIdentifier("state.cancel-folder")
+            cancel.setAccessibilityIdentifier("state.cancel-folder")
+            cancel.frame = NSRect(x: (bounds.width - 180) / 2, y: center - 44, width: 180, height: 32)
+            cancel.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
+            [progress, subtitle, cancel].forEach { addSubview($0) }
+            buttons = [cancel]; setAccessibilityChildren([progress, subtitle, cancel])
+            return
         case .failed(let kind, let name):
             failure = true
             textLines = [String(localized: "Unable to read this image"), name,
@@ -145,6 +170,7 @@ public final class ViewerStateHost: NSView {
               buttons.contains(where: { $0 === sender }), let session else { return }
         switch sender.identifier?.rawValue {
         case "state.cancel": session.cancelImageOpening(); refresh()
+        case "state.cancel-folder": session.cancelFolderReading(); refresh()
         case "state.retry": onRetry?()
         case "state.next": CommandRouter().route(.next, from: .button, to: session)
         default: CommandRouter().route(.open, from: .button, to: session)
