@@ -141,7 +141,6 @@ public final class ViewerChromeOverlay: NSView {
         for index in 0..<3 {
             let group = NSView(frame: frames[index])
             group.wantsLayer = true; group.layer?.cornerRadius = DesignMetrics.radii["popover"]!
-            group.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
             addSubview(group); groups.append(group)
             for (offset, command) in commands[index].enumerated() {
                 let tool = ChromeToolView(frame: NSRect(x: positions[index][offset], y: 6,
@@ -156,7 +155,17 @@ public final class ViewerChromeOverlay: NSView {
         fileLabel.font = DesignMetrics.font("uiSmall")
         groups[1].addSubview(fileLabel)
         arrangeGroups()
+        updateGroupColors()
         refresh()
+    }
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateGroupColors()
+    }
+    private func updateGroupColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            for group in groups { group.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor }
+        }
     }
     public override func resizeSubviews(withOldSize oldSize: NSSize) {
         super.resizeSubviews(withOldSize: oldSize)
