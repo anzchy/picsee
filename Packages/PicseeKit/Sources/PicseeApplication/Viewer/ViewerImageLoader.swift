@@ -33,7 +33,7 @@ public struct PresentedImage: Sendable {
     private var desiredMaximum = 0
     private var progress = CanvasDecodeProgress()
     private var loading = false
-    private var fileURL: URL?
+    public private(set) var fileURL: URL?
     private var opener: Opener?
     public func open(_ fileURL: URL, maximumPixelSize: Int, opener: @escaping Opener) {
         finishFirstPreview(.cancelled)
