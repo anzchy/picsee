@@ -329,9 +329,9 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`App/PicseeApp.swift` 换成 UserDefaults 偏好存储并接外观适配器与 Reduce Motion 源，`CommandMenu` 只在 View 菜单加 Appearance 子菜单，工具组只透传 MotionPolicy；打开入口未改，OPEN-02/OPEN-03 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`CanvasWindowController` 在 showWindow 时登记外观并给 Inspector/工具包 MotionPolicy，`CommandMenu` 只加 Appearance 子菜单；缩放、全屏与翻图路径未改，VIEW-05/VIEW-10 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
-| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4）：CHROME-04 只改「限制：」（重开保持 @1x 真机，开启与关闭都经 plist 第二视图和下一次启动确认），仍 `Partial`/`单元`，验收不变；CHROME-01…03、05 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..60a51e2） |
+| 打开与输入 | 2026-10-23 | doc-gardener | #60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：`ViewerChromeOverlay` 只调换 mouseUp 里 Session 焦点与原生 responder 的先后，Open… 按钮的激活未改；OPEN-02 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
+| 查看与画布 | 2026-10-23 | doc-gardener | #60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：`ViewerChromeOverlay` 只改点击后焦点交还画布的顺序，翻图按钮与缩放路径未改；VIEW-10、VIEW-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | #60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：CHROME-03 只改「限制：」（焦点顺序已修正，真机待复验），仍 `Partial`/`单元`，验收不变；Tab 进入的工具焦点锁与空闲计时未改，CHROME-01/02/05 不变。上次：P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4）：PREF-01 只改「限制：」，仍 `Partial`/`单元`；f458eb4 已按记录收窄为浅/深即时切换与深色重开保持，浅色重开未验，与记录一致。PREF-02/04 记录为 NOT VERIFIED，行未改；PREF-03 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
@@ -339,11 +339,11 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
 | 授权与文件访问 | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`CanvasWindowController` 只加外观登记与 MotionPolicy 参数，授权、关闭与续租未改；ACCESS-01/ACCESS-05 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`App/PicseeApp.swift` 只换偏好存储并加外观/动效依赖，缓存与内存压力接线未改；CACHE-01 不变。上次：P1-06 真机记录（#48，validation/p1-06-device-mini，d86c947..058cf88） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`CommandMenu` 加 View › Appearance 子菜单（System/Light/Dark，无快捷键、无 CommandID），属 PREF-01；命令路由未改，CMD-01/CMD-02 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
+| 命令与键盘 | 2026-10-23 | doc-gardener | #60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：点击工具后的下一个按键回到画布，命令路由与按键映射未改；CMD-01 限制（工具组按钮仅合成点击）仍成立，CMD-02 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：`ImageIOPipeline` 只在准入解码前后加缓存查找与回填，解码器、方向、透明与格式集合未改；FMT-01、VIEW-06/07 不变。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083） |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`Localizable.xcstrings` 加 Appearance/System/Light/Dark 字串，A11Y-04 仍 `Absent`；焦点路径未改，A11Y-02 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | #60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：只改指针点击后的焦点交还；Tab/Space 进入的工具焦点保持，A11Y-02 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 

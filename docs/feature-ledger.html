@@ -265,9 +265,9 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <p>某项能力在某个环境下行为不同，在本节加一行：<code>| &lt;ID&gt; | &lt;环境&gt; | &lt;状态&gt; | &lt;差异与 validation 链接&gt; |</code>。</p>
 <h2 id="part-3-区域审查">Part 3 — 区域审查</h2>
 <div class="table-wrap"><table><thead><tr><th scope="col">区域</th><th scope="col">最近审查</th><th scope="col">审查人</th><th scope="col">备注</th></tr></thead><tbody>
-<tr><td>打开与输入</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>App/PicseeApp.swift</code> 换成 UserDefaults 偏好存储并接外观适配器与 Reduce Motion 源，<code>CommandMenu</code> 只在 View 菜单加 Appearance 子菜单，工具组只透传 MotionPolicy；打开入口未改，OPEN-02/OPEN-03 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
-<tr><td>查看与画布</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>CanvasWindowController</code> 在 showWindow 时登记外观并给 Inspector/工具包 MotionPolicy，<code>CommandMenu</code> 只加 Appearance 子菜单；缩放、全屏与翻图路径未改，VIEW-05/VIEW-10 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
-<tr><td>C 沉浸界面</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4）：CHROME-04 只改「限制：」（重开保持 @1x 真机，开启与关闭都经 plist 第二视图和下一次启动确认），仍 <code>Partial</code>/<code>单元</code>，验收不变；CHROME-01…03、05 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..60a51e2）</td></tr>
+<tr><td>打开与输入</td><td>2026-10-23</td><td>doc-gardener</td><td>#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：<code>ViewerChromeOverlay</code> 只调换 mouseUp 里 Session 焦点与原生 responder 的先后，Open… 按钮的激活未改；OPEN-02 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）</td></tr>
+<tr><td>查看与画布</td><td>2026-10-23</td><td>doc-gardener</td><td>#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：<code>ViewerChromeOverlay</code> 只改点击后焦点交还画布的顺序，翻图按钮与缩放路径未改；VIEW-10、VIEW-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）</td></tr>
+<tr><td>C 沉浸界面</td><td>2026-10-23</td><td>doc-gardener</td><td>#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：CHROME-03 只改「限制：」（焦点顺序已修正，真机待复验），仍 <code>Partial</code>/<code>单元</code>，验收不变；Tab 进入的工具焦点锁与空闲计时未改，CHROME-01/02/05 不变。上次：P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4）</td></tr>
 <tr><td>外观与显示偏好</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4）：PREF-01 只改「限制：」，仍 <code>Partial</code>/<code>单元</code>；f458eb4 已按记录收窄为浅/深即时切换与深色重开保持，浅色重开未验，与记录一致。PREF-02/04 记录为 NOT VERIFIED，行未改；PREF-03 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）</td></tr>
 <tr><td>文件夹浏览</td><td>2026-10-21</td><td>建账</td><td>同上</td></tr>
 <tr><td>Filmstrip</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>filmstripExpanded</code> 现随 <code>displayPreferences.v1</code> 持久化，仍无 Filmstrip UI；FILM-01 保持 <code>Absent</code>。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5）</td></tr>
@@ -275,11 +275,11 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <tr><td>信息与元数据</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（<code>inspector.item-name</code>，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 <code>Absent</code>。上次：P0-09（#10，749697a..7054a5d）</td></tr>
 <tr><td>授权与文件访问</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>CanvasWindowController</code> 只加外观登记与 MotionPolicy 参数，授权、关闭与续租未改；ACCESS-01/ACCESS-05 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
 <tr><td>缓存与资源</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>App/PicseeApp.swift</code> 只换偏好存储并加外观/动效依赖，缓存与内存压力接线未改；CACHE-01 不变。上次：P1-06 真机记录（#48，validation/p1-06-device-mini，d86c947..058cf88）</td></tr>
-<tr><td>命令与键盘</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>CommandMenu</code> 加 View › Appearance 子菜单（System/Light/Dark，无快捷键、无 CommandID），属 PREF-01；命令路由未改，CMD-01/CMD-02 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
+<tr><td>命令与键盘</td><td>2026-10-23</td><td>doc-gardener</td><td>#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：点击工具后的下一个按键回到画布，命令路由与按键映射未改；CMD-01 限制（工具组按钮仅合成点击）仍成立，CMD-02 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）</td></tr>
 <tr><td>窗口与桌面工具</td><td>2026-10-22</td><td>doc-gardener</td><td>P7-09 去掉自动更新，WIN-07 不受影响</td></tr>
 <tr><td>编辑与导出</td><td>2026-10-22</td><td>doc-gardener</td><td>EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变</td></tr>
 <tr><td>格式</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：<code>ImageIOPipeline</code> 只在准入解码前后加缓存查找与回填，解码器、方向、透明与格式集合未改；FMT-01、VIEW-06/07 不变。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）</td></tr>
-<tr><td>可访问性与本地化</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>Localizable.xcstrings</code> 加 Appearance/System/Light/Dark 字串，A11Y-04 仍 <code>Absent</code>；焦点路径未改，A11Y-02 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
+<tr><td>可访问性与本地化</td><td>2026-10-23</td><td>doc-gardener</td><td>#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：只改指针点击后的焦点交还；Tab/Space 进入的工具焦点保持，A11Y-02 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）</td></tr>
 <tr><td>分发</td><td>2026-10-22</td><td>doc-gardener</td><td>DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变</td></tr>
 <tr><td>增强</td><td>2026-10-21</td><td>建账</td><td>同上</td></tr>
 </tbody></table></div>
@@ -293,7 +293,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>106 项能力</span><span>·</span><span>Shipped 0 · Partial 28 · Stub 1 · Absent 77 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 1f662ff406d5 · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 e1232dec28c1 · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>
