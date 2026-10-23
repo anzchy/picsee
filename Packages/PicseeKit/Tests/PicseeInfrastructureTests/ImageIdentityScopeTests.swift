@@ -67,7 +67,7 @@ private struct ScopePipelineProbe: ImagePipeline {
     let a = ViewerSession(), b = ViewerSession(), grant = ViewerSession()
     a.openImage(file, maximumPixelSize: 512) { try await AccessImageSource.open(.root(root.id, file: file), access: access, pipeline: probe) }
     await a.imageLoader.loadTask?.value
-    #expect(await access.events == ["acquire", "acquire", "request", "image", "release"])
+    #expect(await access.events == ["acquire", "acquire", "request", "image", "release", "acquire", "request", "image", "release"])
     b.openImage(file, maximumPixelSize: 512) { try await AccessImageSource.open(.root(root.id, file: file), access: access, pipeline: probe) }
     await b.imageLoader.loadTask?.value
     #expect(a.imageLoader.presented?.key.itemID == .rootRelative(rootID: root.id, relativePath: "alpha-gradient.png"))
@@ -80,7 +80,7 @@ private struct ScopePipelineProbe: ImagePipeline {
     a.closeImage(); b.closeImage(); grant.closeImage()
     await access.waitUntilReleased()
     let acquired = await access.acquired, released = await access.released
-    #expect(acquired.count == 6 && released.count == 6)
+    #expect(acquired.count == 9 && released.count == 9)
     for lease in acquired { #expect(released.filter { $0 == lease }.count == 1) }
 }
 @Test func identityScopeRenameAssociationIsSharedAndRootLocationsCanChange() async throws {

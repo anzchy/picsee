@@ -31,12 +31,12 @@ actor LoadRevisionPipeline: ImagePipeline {
     #expect(session.imageLoader.generation == generation)
     #expect(session.imageLoader.phase == .settled)
     #expect(host.openings == 2)
-    #expect(host.images.count == 1)
+    #expect(host.images.count == 2)
     #expect(host.images.first?.revision?.byteCount == 101)
     session.openImage(file, maximumPixelSize: 512, opener: opener)
     #expect(session.imageLoader.generation != generation)
     await session.imageLoader.loadTask?.value
-    #expect(host.images.count == 2)
+    #expect(host.images.count == 4)
 }
 @MainActor @Test func loadRevisionSecondChangeFailsWithTypedContext() async {
     let session = ViewerSession(), host = LoadHost(), access = LoadLeases(), pipeline = LoadRevisionPipeline(changes: 2)

@@ -27,16 +27,16 @@ private actor DedupPipeline: ImagePipeline {
     let admission: DecodeAdmission
     let key = RenderKey(itemID: .ephemeral(UUID()), revision: FileRevision(byteCount: 1, modificationDate: nil), maximumPixelSize: 1, isPreview: true)
     var entered = 0, cancelled = 0
-    private var entrants: CheckedContinuation<Void, Never>?
+    private var entrants: (Int, CheckedContinuation<Void, Never>)?
     private var cancellations: (Int, CheckedContinuation<Void, Never>)?
     init(_ admission: DecodeAdmission) { self.admission = admission }
     func request(for fileURL: URL, maximumPixelSize: Int) -> ImageDecodeRequest {
         ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: 1, renderKey: key, isPreview: true)
     }
     func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
-        let subscription = await admission.subscribe(request, key: key, cost: 4, heavy: false, priority: .current)
+        let subscription = await admission.subscribe(request, key: request.renderKey!, cost: 4, heavy: false, priority: .current)
         entered += 1
-        if entered == 2 { entrants?.resume(); entrants = nil }
+        if let (target, waiter) = entrants, entered >= target { entrants = nil; waiter.resume() }
         return try await withTaskCancellationHandler {
             let image = try await subscription.value()
             try Task.checkCancellation()
@@ -45,9 +45,9 @@ private actor DedupPipeline: ImagePipeline {
             Task { await subscription.cancel(); await self.didCancel() }
         }
     }
-    func bothEntered() async {
-        if entered == 2 { return }
-        await withCheckedContinuation { entrants = $0 }
+    func waitEntered(_ count: Int) async {
+        if entered >= count { return }
+        await withCheckedContinuation { entrants = (count, $0) }
     }
     private func didCancel() {
         cancelled += 1
@@ -75,7 +75,7 @@ private actor DedupPipeline: ImagePipeline {
     a.openImage(file, maximumPixelSize: 1, opener: opener)
     b.openImage(file, maximumPixelSize: 1, opener: opener)
     let at = a.imageLoader.loadTask, bt = b.imageLoader.loadTask
-    await pipeline.bothEntered()
+    await pipeline.waitEntered(2)
     #expect(executor.count == 1)
     if cancelCount > 0 {
         a.closeImage()
@@ -88,10 +88,15 @@ private actor DedupPipeline: ImagePipeline {
         if b.imageLoader.phase == .idle { await pipeline.waitCancelled(2) }
     }
     executor.runFirst()
+    if cancelCount < 2 {
+        await pipeline.waitEntered(cancelCount == 0 ? 4 : 3)
+        #expect(executor.count == 1)
+        executor.runFirst()
+    }
     await at?.value; await bt?.value
     switch cancelCount {
-    case 0: #expect(ah.names == ["same"]); #expect(bh.names == ["same"]); #expect(decoder.count == 1)
-    case 1: #expect(ah.names.isEmpty); #expect(bh.names == ["same"]); #expect(decoder.count == 1)
+    case 0: #expect(ah.names == ["same", "same"]); #expect(bh.names == ["same", "same"]); #expect(decoder.count == 2)
+    case 1: #expect(ah.names.isEmpty); #expect(bh.names == ["same", "same"]); #expect(decoder.count == 2)
     default: #expect(ah.names.isEmpty); #expect(bh.names.isEmpty); #expect(decoder.count == 0)
     }
     #expect(await admission.activity().reservedBytes == 0)
