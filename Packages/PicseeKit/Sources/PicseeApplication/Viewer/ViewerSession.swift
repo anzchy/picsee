@@ -156,8 +156,8 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         case .inspector: inspectorFocus.isVisible || imageCommandsAvailable
         case .preview, .enter: mode == .browsing && !orderedItemIDs.isEmpty
         case .previous, .next:
-            mode == .viewing && (previewSet != nil || ((host as? any ViewerSessionNavigationHost)?.canNavigate == true
-                && (host?.hasImage == true || imageStatus != .empty)))
+            mode == .viewing && (host?.hasImage == true || imageStatus != .empty)
+                && (previewSet != nil || (host as? any ViewerSessionNavigationHost)?.canNavigate == true)
         case .search: false
         }
     }
