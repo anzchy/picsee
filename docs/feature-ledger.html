@@ -266,7 +266,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <p>某项能力在某个环境下行为不同，在本节加一行：<code>| &lt;ID&gt; | &lt;环境&gt; | &lt;状态&gt; | &lt;差异与 validation 链接&gt; |</code>。</p>
 <h2 id="part-3-区域审查">Part 3 — 区域审查</h2>
 <div class="table-wrap"><table><thead><tr><th scope="col">区域</th><th scope="col">最近审查</th><th scope="col">审查人</th><th scope="col">备注</th></tr></thead><tbody>
-<tr><td>打开与输入</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..35efc86，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：OPEN-01、OPEN-05 只改「限制：」（@1x 普通启动空态；截断/损坏/非图片说明与 Retry），仍 <code>Partial</code>/<code>单元</code>，验收不变；冷启动、加载中与取消、@2x 未验。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..040ff26）</td></tr>
+<tr><td>打开与输入</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..4f8af50，runs 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD 与 …-coldstart）：OPEN-01、OPEN-05 只改「限制：」（@1x 普通与冷启动空态，冷启动经用户批准挪开并还原两份存储文件、哈希核对；截断/损坏/非图片说明与 Retry），仍 <code>Partial</code>/<code>单元</code>，验收不变；加载中与取消、@2x 未验。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..040ff26）</td></tr>
 <tr><td>查看与画布</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：<code>CanvasView</code> 只移除旧的加载/失败文字，缩放命令在加载与失败时禁用；VIEW-01…09 不变。VIEW-10：复跑（fa2703f..91dce4f）已补「空态与取消后 ←/→ 禁用」限制，与 <code>ViewerSession.isEnabled</code> 一致。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）</td></tr>
 <tr><td>C 沉浸界面</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：Tab 环先经状态按钮再到底部工具，工具文件名改随加载身份；CHROME-01…05 验收与限制仍成立，不变。上次：#60 真机复验（validation/issue60-device-mini，cfef98f..2dc72ff，run 20261023-205349-issue60-CHROME-03）</td></tr>
 <tr><td>外观与显示偏好</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：状态界面无新增动画；PREF-02 不变。上次：P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4）</td></tr>
@@ -276,11 +276,11 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <tr><td>信息与元数据</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（<code>inspector.item-name</code>，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 <code>Absent</code>。上次：P0-09（#10，749697a..7054a5d）</td></tr>
 <tr><td>授权与文件访问</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：取消加载不再弹访问错误，重试复用原授权请求；ACCESS-01/ACCESS-05 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）</td></tr>
 <tr><td>缓存与资源</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：<code>ViewerImageLoader</code> 只公开 <code>fileURL</code>；CACHE-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）</td></tr>
-<tr><td>命令与键盘</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..35efc86，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：记录 @1x 通过空态/失败态命令启用与标准 App/File/Window 菜单，但 CMD-01 限制仍写「P1-07 状态命令启用与标准菜单仅单元」，已提给 owner。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..91dce4f）</td></tr>
+<tr><td>命令与键盘</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..4f8af50，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：CMD-01 只改「限制：」为 P1-07 状态命令启用与标准菜单 @1x 通过，与记录第 2、4 行一致，仍 <code>Partial</code>/<code>单元</code>，验收不变；怎么确认约 173 字，超出约 150 字（此前已如此）。CMD-02 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..91dce4f）</td></tr>
 <tr><td>窗口与桌面工具</td><td>2026-10-22</td><td>doc-gardener</td><td>P7-09 去掉自动更新，WIN-07 不受影响</td></tr>
 <tr><td>编辑与导出</td><td>2026-10-22</td><td>doc-gardener</td><td>EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变</td></tr>
 <tr><td>格式</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：<code>ViewerImageLoader</code> 只公开 <code>fileURL</code>，解码器与格式集合未改；FMT-01 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）</td></tr>
-<tr><td>可访问性与本地化</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..35efc86，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：记录 @1x 通过空态 Tab/Shift-Tab/Esc，但 A11Y-02 限制仍写 Tab 经状态按钮「仅单元」，已提给 owner；A11Y-04 只有构建产物检查、中文界面未验，限制仍成立。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..91dce4f）</td></tr>
+<tr><td>可访问性与本地化</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..4f8af50，run 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD）：A11Y-02 只改「限制：」为空态状态按钮 Tab/Esc @1x 通过、失败态焦点环未验，与记录第 3 行一致，仍 <code>Partial</code>/<code>单元</code>，验收不变；A11Y-04 只有构建产物检查、中文界面未验，限制仍成立。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..91dce4f）</td></tr>
 <tr><td>分发</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-10 真机记录（validation/p1-10-device-mini，3996845..08c5ecf，run 20261023-212346-P1-10-DIST-06）：DIST-06 只改「限制：」（@1x Dock 与访达列表/图标视图通过），仍 <code>Partial</code>/<code>无</code>，验收不变；⌘Tab、浅色 Dock、@2x 未验。DIST-01…05 不变。上次：App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2）</td></tr>
 <tr><td>增强</td><td>2026-10-21</td><td>建账</td><td>同上</td></tr>
 </tbody></table></div>
@@ -294,7 +294,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>107 项能力</span><span>·</span><span>Shipped 0 · Partial 32 · Stub 1 · Absent 74 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 0c39702dd0e7 · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 50562a891cdd · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>
