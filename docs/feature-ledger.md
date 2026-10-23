@@ -330,7 +330,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-24 | doc-gardener | #73 拖入文件授权修复（fix/drop-file-grant，5e75f7e..a670a1e）：start 失败但 sandbox 可读的 File Grant 现可租约，仅单元证明；OPEN-04 只改「限制：」为“曾真机失败（#73），修复待真机复验”，仍 `Partial`/`单元`，验收不变，约 141 字。OPEN-01…03 不变。上次：P1-02 真机记录（#70，docs/p1-02-device-mini，060ac0e..0f0be5b） |
+| 打开与输入 | 2026-10-24 | doc-gardener | #73 复验真机记录（docs/issue73-device-mini，875cf65..0eedd81，run 20261024-041103-issue73-OPEN-04-drag）：OPEN-04 只改「限制：」为 @1x 合成 CGEvent 拖入通过（未打开过的图片、ZIP、文件夹/多文件夹提示、多图成集合），真实鼠标未验、无拖入高亮；仍 `Partial`/`单元`（合成输入、记录者非真机测试角色，不升 `真机`），验收不变。记录 #7 的拖入集合属 OPEN-04，OPEN-01…03 不变。上次：#73 拖入文件授权修复（fix/drop-file-grant，5e75f7e..a670a1e） |
 | 查看与画布 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：←/→ 在多文件集合内按集合翻页，输入探测以加载代次丢弃过期结果；画布与缩放未改，VIEW-01…09 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d） |
 | C 沉浸界面 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：多文件集合时 Esc 禁用（无来源），与 CHROME-05「单独打开不出现网格」一致；窗口内容视图换成拖入视图，不改 chrome 命中；CHROME-01…05 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d） |
 | 外观与显示偏好 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：工具显隐与面板切换未改；PREF-02 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d） |
@@ -338,7 +338,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-24 | doc-gardener | #73 拖入文件授权修复（fix/drop-file-grant，5e75f7e..a670a1e）：仅 File Grant 在 start=false 且可读时建立租约，Access Root 与目录授权仍须 start 成功，ACCESS-01/02 不变；释放日志新增公开 `scopeStarted=`，`remaining=0 outcome=released` 不变，ACCESS-05 状态不变，但其「怎么确认」约 234 字超长（待 owner 精简）。上次：P1-02 真机记录（#70，060ac0e..dfc68ff） |
+| 授权与文件访问 | 2026-10-24 | doc-gardener | #73 复验真机记录（docs/issue73-device-mini，875cf65..0eedd81）：拖入文件夹出现「Browsing Needs Folder Access」、取消后不变，属 OPEN-04 拖入入口；ACCESS-01 验收（→/← 提示）未涉及，不变。POSIX 无读权限拖入显示访问失败页与「Folder Access Failed」（单文件标题不准，WI-2 延后），仅记录。ACCESS-05「怎么确认」约 234 字超长仍待 owner。上次：#73 拖入文件授权修复（fix/drop-file-grant，5e75f7e..a670a1e） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`；CACHE-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
 | 命令与键盘 | 2026-10-24 | doc-gardener | P1-02 真机记录（#70，060ac0e..dfc68ff，run 20261024-025857-P1-02-OPEN-01-04）：集合两端 View › Next/Previous 启用与 Esc 无变化 @1x 通过，属 OPEN-03 集合行为；CMD-02 验收（输入框与菜单优先）未涉及，不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
