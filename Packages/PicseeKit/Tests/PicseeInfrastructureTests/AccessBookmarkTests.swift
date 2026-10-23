@@ -165,3 +165,24 @@ final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     await access.release(second)
     #expect(scope.counts == [2, 2])
 }
+
+@Test func accessIncompatiblePrimaryAndCorruptRecoveryStillAllowFileGrants() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    let store = BookmarkStore(url: base.appendingPathComponent("roots.json"))
+    let incompatible = Data("{\"version\":999}".utf8)
+    let corruptRecovery = Data("broken recovery".utf8)
+    try incompatible.write(to: store.url)
+    try corruptRecovery.write(to: store.url.appendingPathExtension("recovered"))
+    let scope = CountingScope()
+    let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: store, buildSHA: "A")
+    #expect(await access.storeCorrupt)
+    #expect(await access.records().isEmpty)
+    let lease = try await access.acquire(.fileGrant(base.appendingPathComponent("a.jpg")))
+    await access.release(lease)
+    #expect(scope.counts == [1, 1])
+    #expect(try Data(contentsOf: store.url) == incompatible)
+    #expect(try Data(contentsOf: store.url.appendingPathExtension("recovered")) == corruptRecovery)
+}
