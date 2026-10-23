@@ -328,7 +328,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
 | 打开与输入 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 P1-07/P1-09 归入依据，OPEN-01…05 仍无结果；状态不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：canvas-pixels.md 补 VIEW-01/04/05 的 @1x 步骤，P1.md 的 VIEW 行仍无结果；只是步骤，无证据，状态与验收不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..1a380ad） |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-03 真机记录（docs/p1-03-device-mini，1a08ba5..8644e0b）：P1.md 运行 `20261023-114600-VIEW-01-04-05-mini`（Validated-by picsee-delegator，单独提交）给 VIEW-01/04/05 @1x pass；同范围只改三行「限制：」，状态 `Partial`、验证 `单元` 与验收不变，显示行缺 @2x 不能升 `真机`；VIEW-02/03/06 只引用 P0 记录。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 注明 CHROME-04 持久化部分按开发计划 P1-09 文本归入（计划列 P1-08、P3-11），无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
