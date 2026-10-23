@@ -29,6 +29,14 @@ public final class ViewerStateHost: NSView {
     public private(set) var textLines: [String] = []
     public private(set) var showsProgress = false
     public var onRetry: (() -> Void)?
+    private weak var keyCanvas: NSView?
+    private weak var keyChrome: ViewerChromeOverlay?
+    private var displayedStatus: ViewerImageStatus?
+    private var displayedNextEnabled = false
+    public func linkKeyViews(to canvas: NSView, chrome: ViewerChromeOverlay) {
+        keyCanvas = canvas; keyChrome = chrome
+        ViewerStateFocus.link(canvas: canvas, state: self, chrome: chrome)
+    }
     private var session: ViewerSession?
     private var tracking = false
 
@@ -49,6 +57,16 @@ public final class ViewerStateHost: NSView {
         } else { display(session.imageStatus, nextEnabled: session.isEnabled(.next)) }
     }
     public func display(_ status: ViewerImageStatus, nextEnabled: Bool = false) {
+        guard displayedStatus != status || displayedNextEnabled != nextEnabled else { return }
+        displayedStatus = status; displayedNextEnabled = nextEnabled
+        if let focused = window?.firstResponder as? NSView,
+           buttons.contains(where: { focused === $0 || focused.isDescendant(of: $0) }), let keyCanvas {
+            session?.updateFocus(.canvas)
+            window?.makeFirstResponder(keyCanvas)
+        }
+        defer {
+            if let keyCanvas, let keyChrome { ViewerStateFocus.link(canvas: keyCanvas, state: self, chrome: keyChrome) }
+        }
         subviews.forEach { $0.removeFromSuperview() }
         buttons = []; textLines = []; showsProgress = false
         var actions: [(String, String)] = []
@@ -82,7 +100,8 @@ public final class ViewerStateHost: NSView {
         let width: CGFloat = actions.count > 1 ? 80 : 180
         let total = CGFloat(actions.count) * width + CGFloat(max(0, actions.count - 1)) * 12
         for (index, action) in actions.enumerated() {
-            let button = NSButton(title: action.0, target: self, action: #selector(activate(_:)))
+            let button = ViewerStateButton(title: action.0, target: self, action: #selector(activate(_:)))
+            button.session = session
             button.bezelStyle = .rounded; button.focusRingType = .exterior
             button.identifier = NSUserInterfaceItemIdentifier(action.1)
             button.setAccessibilityIdentifier(action.1)
