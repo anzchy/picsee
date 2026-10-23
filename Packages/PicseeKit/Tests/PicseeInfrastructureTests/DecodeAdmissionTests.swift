@@ -19,7 +19,7 @@ struct TinyDecoder: ImageDecoding {
     }
 }
 func decodeKey(_ number: Int) -> RenderKey {
-    RenderKey(itemID: ItemID(rawValue: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", number))!),
+    RenderKey(itemID: ItemID.ephemeral(UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", number))!),
               revision: FileRevision(byteCount: 1, modificationDate: nil), maximumPixelSize: 1)
 }
 let tinyRequest = ImageDecodeRequest(fileURL: URL(fileURLWithPath: "/unused"), maximumPixelSize: 1)

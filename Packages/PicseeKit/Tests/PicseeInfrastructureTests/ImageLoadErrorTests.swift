@@ -22,7 +22,7 @@ import PicseeInfrastructure
 }
 
 @Test func loadErrorsCarryKnownIdentityAndRevision() async throws {
-    let item = ItemID(rawValue: UUID())
+    let item = ItemID.ephemeral(UUID())
     let revision = FileRevision(byteCount: 123, modificationDate: nil)
     let key = RenderKey(itemID: item, revision: revision, maximumPixelSize: 128)
     do {
