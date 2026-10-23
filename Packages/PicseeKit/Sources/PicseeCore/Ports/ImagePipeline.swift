@@ -18,7 +18,8 @@ public struct ImageDecodeRequest: Sendable {
         self.sourceByteBudget = sourceByteBudget
         // The render identity includes the mode because embedded previews and image-derived pixels differ.
         self.renderKey = renderKey.map { RenderKey(itemID: $0.itemID, revision: $0.revision,
-            maximumPixelSize: $0.maximumPixelSize, isPreview: isPreview) }
+            maximumPixelSize: $0.maximumPixelSize, isPreview: isPreview, frameIndex: $0.frameIndex,
+            policy: $0.policy, decoderVersion: $0.decoderVersion, purpose: $0.purpose) }
         self.priority = priority
         self.fileURL = fileURL
         self.maximumPixelSize = maximumPixelSize

@@ -171,7 +171,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 currentKey = request.renderKey
                 try Task.checkCancellation()
                 if let key = request.renderKey, let expectedKey = currentKey, let revision = image.revision {
-                    let expected = RenderKey(itemID: expectedKey.itemID, revision: revision, maximumPixelSize: maximum)
+                    let expected = RenderKey(itemID: expectedKey.itemID, revision: revision, maximumPixelSize: maximum, isPreview: isPreview,
+                        frameIndex: expectedKey.frameIndex, policy: expectedKey.policy,
+                        decoderVersion: expectedKey.decoderVersion, purpose: expectedKey.purpose)
                     let current = PresentationToken(binding: binding, generation: generation)
                     if current.accepts(key: key, expected: expected, token: token) {
                         try Task.checkCancellation()
