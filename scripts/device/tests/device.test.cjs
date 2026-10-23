@@ -28,12 +28,23 @@ test('cleanup refuses executable outside recorded bundle',async()=>{
  try{await new Promise(r=>setTimeout(r,100));const run=path.join(scratch,'cleanup-wrong');record(run,child.pid,path.join(scratch,'Wrong.app'));const r=call('cleanup',[run]);assert.equal(r.status,1,r.error?.message);assert.match(r.stdout,/FAIL cleanup.*outside recorded bundle/);assert.doesNotThrow(()=>process.kill(child.pid,0));}finally{child.kill();}
 });
 const checks=['build-sha','bundle-id','signature-team','signature-valid','sandbox','process-bundle','fresh-sources','single-instance','window','launch-log','machine','fixtures'];
-function fixture(){return {expectedSHA:'abc1234',sha:'abc1234',bundleID:'io.github.anzchy.picsee',team:'GRT84NAK4T',signatureValid:true,sandbox:true,processMatches:true,fresh:true,alone:true,windows:[{title:'Picsee'}],log:'Picsee launch git=abc1234',machineMatches:true,fixturesIntact:true};}
+function fixture(){return {expectedSHA:'abc1234',sha:'abc1234',bundleID:'io.github.anzchy.picsee',team:'GRT84NAK4T',signatureValid:true,sandbox:true,processMatches:true,fresh:true,alone:true,windows:[{title:'Picsee'}],fixtureNames:['orientation-1.tiff','nested/alpha-gradient.png'],log:'Picsee launch git=abc1234',machineMatches:true,fixturesIntact:true};}
 function doctor(input,name){const file=path.join(scratch,name+'.json');fs.writeFileSync(file,JSON.stringify(input));return call('doctor',['--fixture',file]);}
-test('doctor emits exactly one PASS line per check',()=>{const r=doctor(fixture(),'pass');assert.equal(r.status,0,r.error?.message);assert.deepEqual(r.stdout.trim().split('\n'),checks.map(c=>'PASS '+c));});
+test('doctor emits exactly one PASS line per check and identifies the empty window title',()=>{const r=doctor(fixture(),'pass');assert.equal(r.status,0,r.error?.message);assert.deepEqual(r.stdout.trim().split('\n'),checks.map(c=>c==='window'?'PASS window — title=Picsee':'PASS '+c));});
+test('doctor accepts exactly one window titled as a fixture file and identifies it',()=>{
+ const f=fixture();f.windows=[{title:'alpha-gradient.png'}];const r=doctor(f,'fixture-window');
+ assert.equal(r.status,0,r.stdout+r.stderr);
+ assert.match(r.stdout,/^PASS window — title=alpha-gradient\.png$/m);
+});
+test('doctor rejects an unrecorded file title and keeps zero windows distinct',()=>{
+ const unknown=fixture();unknown.windows=[{title:'personal-photo.jpg'}];const unknownResult=doctor(unknown,'unknown-window');
+ assert.equal(unknownResult.status,1);assert.match(unknownResult.stdout,/^FAIL window — expected one window titled Picsee or a recorded fixture file$/m);
+ const zero=fixture();zero.windows=[];zero.errors={window:'0 windows'};const zeroResult=doctor(zero,'zero-window');
+ assert.equal(zeroResult.status,1);assert.match(zeroResult.stdout,/^FAIL window — 0 windows$/m);
+});
 test('doctor emits one result per check and fails on each individual defect',()=>{
  for(const [key,value] of Object.entries({sha:'old',bundleID:'wrong',team:'wrong',signatureValid:false,sandbox:false,processMatches:false,fresh:false,alone:false,windows:[],log:'<private>',machineMatches:false,fixturesIntact:false})){
- const f=fixture();f[key]=value;const r=doctor(f,'fail-'+key);assert.equal(r.status,1,key+': '+r.error?.message);const lines=r.stdout.trim().split('\n');assert.equal(lines.length,checks.length);for(let i=0;i<checks.length;i++)assert.match(lines[i],new RegExp('^(PASS '+checks[i]+'$|FAIL '+checks[i]+' — .+)'));assert.equal(lines.filter(l=>l.startsWith('FAIL')).length,1,key);
+ const f=fixture();f[key]=value;const r=doctor(f,'fail-'+key);assert.equal(r.status,1,key+': '+r.error?.message);const lines=r.stdout.trim().split('\n');assert.equal(lines.length,checks.length);for(let i=0;i<checks.length;i++)assert.match(lines[i],new RegExp('^(PASS '+checks[i]+'(?: — .+)?$|FAIL '+checks[i]+' — .+)'));assert.equal(lines.filter(l=>l.startsWith('FAIL')).length,1,key);
  }
 });
 test('window lookup uses PID even with identical or misleading owner names',()=>{
@@ -64,6 +75,12 @@ test('screenshot validation rejects a black image and accepts visible window pix
 test('doctor keeps permission errors on one verdict line',()=>{
  const f=fixture();f.windows=[];f.errors={window:'permission denied\nsecond diagnostic line'};
  const r=doctor(f,'multiline');assert.equal(r.status,1);assert.equal(r.stdout.trim().split('\n').length,checks.length);
+});
+
+test('key helper rejects named or multi-character keys before touching a run',()=>{
+ const r=call('key',['/does/not/exist','tab']);
+ assert.equal(r.status,1);
+ assert.match(r.stderr,/key\.sh accepts one printable character; use kc\.sh with a key code for named keys/);
 });
 
 test('fix-round-1 offline behavioral regressions',()=>{

@@ -7,6 +7,8 @@ if len(sys.argv) < 4 or (sys.argv[1] == 'size' and len(sys.argv) != 5):
     sys.exit('usage: key.sh|kc.sh RUN_DIR KEY [modifiers] | size.sh RUN_DIR W H')
 try:
     action, directory, *args = sys.argv[1:]
+    if action == 'key' and args and (len(args[0]) != 1 or not args[0].isprintable()):
+        sys.exit('key.sh accepts one printable character; use kc.sh with a key code for named keys')
     pid, bundle = identity(run_dir(directory))
     if not inside(executable(pid), bundle):
         sys.exit('FAIL input — PID executable outside recorded bundle')
