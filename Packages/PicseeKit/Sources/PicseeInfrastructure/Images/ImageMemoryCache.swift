@@ -31,10 +31,26 @@ public actor ImageMemoryCache {
     }
     private let capacity: Int
     private var limit: Int
+    private var pressurePolicy: MemoryPressurePolicy
     // Oldest first; keys use complete session value equality, without an encoding or digest.
     private var entries: [Entry] = []
     private var pending: [UUID: RenderKey] = [:]
-    public init(capacity: Int) { precondition(capacity >= 0); self.capacity = capacity; limit = capacity }
+    public init(capacity: Int, pressureRecoveryDelay: TimeInterval = 5,
+                pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        precondition(capacity >= 0); self.capacity = capacity; limit = capacity
+        pressurePolicy = MemoryPressurePolicy(recoveryDelay: pressureRecoveryDelay, clock: pressureClock)
+    }
+    func pressure(_ level: MemoryPressureLevel) {
+        let previous = pressurePolicy.level
+        pressurePolicy.update(level)
+        guard previous != pressurePolicy.level else { return }
+        switch level {
+        case .normal: trim(to: capacity)
+        case .warning: trim(to: capacity / 2)
+        case .critical: trim(to: 0)
+        }
+    }
+    func permits(_ priority: DecodePriority) -> Bool { pressurePolicy.permits(priority) }
     func image(for key: RenderKey) -> DecodedImage? {
         guard let index = entries.firstIndex(where: { $0.key == key }) else { return nil }
         let entry = entries.remove(at: index)

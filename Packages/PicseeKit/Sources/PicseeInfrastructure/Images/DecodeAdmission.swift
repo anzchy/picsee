@@ -7,12 +7,15 @@ public struct DecodeConfiguration: Sendable {
     public let heavy: Int
     public let budget: Int
     public let cacheCapacity: Int
+    public let pressureRecoveryDelay: TimeInterval
     public init(workers: Int = 3, visible: Int = 2, heavy: Int = 1,
                 budget: Int = min(512 * 1024 * 1024, Int(Double(ProcessInfo.processInfo.physicalMemory) * 0.08)),
-                cacheCapacity: Int? = nil) {
+                cacheCapacity: Int? = nil, pressureRecoveryDelay: TimeInterval = 5) {
         precondition(workers > 0 && visible >= 0 && heavy > 0 && budget > 0)
         precondition(cacheCapacity == nil || cacheCapacity! >= 0)
         self.cacheCapacity = cacheCapacity ?? budget / 4
+        precondition(pressureRecoveryDelay.isFinite && pressureRecoveryDelay >= 0)
+        self.pressureRecoveryDelay = pressureRecoveryDelay
         self.workers = workers; self.visible = visible; self.heavy = heavy; self.budget = budget
     }
 }

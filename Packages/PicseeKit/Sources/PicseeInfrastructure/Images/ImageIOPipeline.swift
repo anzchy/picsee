@@ -60,9 +60,11 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
     private let cacheTrace: (any ResourceSnapshotTracing)?
     public init(decoder: any ImageDecoding = ImageIODecoder(), configuration: DecodeConfiguration = DecodeConfiguration(),
                 identityResolver: any ItemIdentityResolving = FileItemIdentityResolver(),
-                cache: ImageMemoryCache? = nil, cacheTrace: (any ResourceSnapshotTracing)? = nil) {
+                cache: ImageMemoryCache? = nil, cacheTrace: (any ResourceSnapshotTracing)? = nil,
+                pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.configuration = configuration
-        self.cache = cache ?? ImageMemoryCache(capacity: configuration.cacheCapacity)
+        self.cache = cache ?? ImageMemoryCache(capacity: configuration.cacheCapacity,
+            pressureRecoveryDelay: configuration.pressureRecoveryDelay, pressureClock: pressureClock)
         self.cacheTrace = cacheTrace
         self.identityResolver = identityResolver
         let executor = OperationDecodeExecutor(workers: configuration.workers)
@@ -71,6 +73,7 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
     }
     public func pin(_ key: RenderKey, image: DecodedImage) async { await cache.pin(key, image: image) }
     public func unpin(_ key: RenderKey) async { await cache.unpin(key) }
+    public func memoryPressure(_ level: MemoryPressureLevel) async { await cache.pressure(level) }
     private func header(_ request: ImageDecodeRequest) async throws -> ImageSourceHeader {
         guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else {
             throw ImageLoadError(.sourceChanged, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision)
@@ -119,6 +122,9 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
         // An explicit request revision must still match at the last predecode check.
         if let requested = request.renderKey, requested != key {
             throw ImageLoadError(.sourceChanged, itemID: requested.itemID, revision: header.revision)
+        }
+        guard await cache.permits(request.priority) else {
+            throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision)
         }
         let cached = await cache.lookup(key)
         cacheTrace?.lookup(isPreview: key.isPreview, hit: cached.image != nil)
