@@ -33,8 +33,9 @@ public actor FileAccess: AccessLeasing {
     private var roots: [AccessRootID: URL] = [:]
     private var outcomes: [AccessRootID: String] = [:]
     private struct Active { let session: ScopeSession; var tokens: Set<UUID> }
-    private var active: [AccessRequest: Active] = [:]
-    private var requests: [UUID: AccessRequest] = [:]
+    private enum SessionKey: Hashable { case root(AccessRootID), file(URL) }
+    private var active: [SessionKey: Active] = [:]
+    private var requests: [UUID: SessionKey] = [:]
 
     public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String) throws {
         self.scope = scope; self.bookmarks = bookmarks; self.buildSHA = buildSHA
@@ -91,17 +92,17 @@ public actor FileAccess: AccessLeasing {
         return id
     }
     public func acquire(_ request: AccessRequest) throws -> AccessLease {
-        let key: AccessRequest
+        let key: SessionKey
         let url: URL
         let rootID: AccessRootID?
         var staleRecord: AccessRootRecord?
         switch request {
         case .root(let id, let file):
-            guard let record = saved.first(where: { $0.id == id }), let root = roots[id] else {
+            guard let record = saved.first(where: { $0.id == id }), roots[id] != nil else {
                 throw FileAccessError.needsReconnection(id)
             }
-            key = .root(id, file: root); rootID = id
-            if active[key] != nil { url = root }
+            key = .root(id); rootID = id
+            if let entry = active[key] { url = entry.session.url }
             else {
                 do {
                     let resolution = try bookmarks.resolve(record.bookmark)
@@ -112,7 +113,7 @@ public actor FileAccess: AccessLeasing {
             }
             if active[key] != nil, !AccessBoundary.contains(file, in: url) { throw FileAccessError.outsideRoot }
         case .fileGrant(let file):
-            key = .fileGrant(file.standardizedFileURL); url = file; rootID = nil
+            key = .file(file.standardizedFileURL); url = file; rootID = nil
         }
         let lease = AccessLease(url: url, rootID: rootID)
         if var entry = active[key] {
@@ -135,6 +136,7 @@ public actor FileAccess: AccessLeasing {
                     throw FileAccessError.needsReconnection(record.id)
                 }
             }
+            if let rootID { roots[rootID] = url }
             active[key] = Active(session: session, tokens: [lease.token])
         }
         requests[lease.token] = key

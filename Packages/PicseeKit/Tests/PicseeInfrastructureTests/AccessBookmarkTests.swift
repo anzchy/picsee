@@ -5,6 +5,7 @@ import PicseeCore
 
 final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     private let lock = NSLock()
+    var relocated: URL?
     var stale = false
     var fails = false
     var creationFails = false
@@ -20,7 +21,7 @@ final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     func resolve(_ data: Data) throws -> ResolvedBookmark {
         try lock.withLock {
             if fails { throw FileAccessError.corruptStore }
-            return ResolvedBookmark(url: URL(fileURLWithPath: String(decoding: data, as: UTF8.self)), stale: stale)
+            return ResolvedBookmark(url: relocated ?? URL(fileURLWithPath: String(decoding: data, as: UTF8.self)), stale: stale)
         }
     }
 }
@@ -137,4 +138,30 @@ final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     await #expect(throws: FileAccessError.needsReconnection(id)) { try await access.acquire(.root(id, file: file)) }
     #expect(await access.rootCovering(file) == nil)
     #expect(scope.counts[0] == scope.counts[1])
+}
+
+@Test func accessRelocatedRootSharesResolvedScopeAcrossConcurrentLeases() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    let original = base.appendingPathComponent("original")
+    let moved = base.appendingPathComponent("moved")
+    try fm.createDirectory(at: original, withIntermediateDirectories: true)
+    let codec = FakeBookmarks(); let scope = CountingScope()
+    let access = try FileAccess(scope: scope, bookmarks: codec,
+        store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "A")
+    let id = try await access.grant(folder: original)
+    try fm.moveItem(at: original, to: moved)
+    codec.relocated = moved
+    let first = try await access.acquire(.root(id, file: moved.appendingPathComponent("a.jpg")))
+    // The first window is still holding its lease when the second window arrives.
+    let second = try await access.acquire(.root(id, file: moved.appendingPathComponent("b.jpg")))
+    #expect(first.url == moved && second.url == moved)
+    #expect(scope.counts == [2, 1])
+    #expect(await access.rootCovering(moved.appendingPathComponent("c.jpg")) == id)
+    #expect(await access.rootCovering(original.appendingPathComponent("c.jpg")) == nil)
+    await access.release(first)
+    #expect(scope.counts == [2, 1])
+    await access.release(second)
+    #expect(scope.counts == [2, 2])
 }
