@@ -66,3 +66,31 @@ import PicseeCore
         #expect(abs(value.origin.x - origin.x) <= 0.25 && abs(value.origin.y - origin.y) <= 0.25)
     }
 }
+
+@Test func canvasActualPixelOddResizeDoesNotAccumulateDrift() {
+    let source = CGSize(width: 800, height: 400)
+    let base = CGSize(width: 432, height: 232)
+    for initialScale: Double in [1, 2] {
+        let initialOrigin = initialScale == 1 ? CGPoint(x: -184, y: -84) : CGPoint(x: 16, y: 16)
+        var value = CanvasTransform(backingScale: initialScale, origin: initialOrigin)
+        for _ in 0..<12 {
+            var previous = base
+            for (size, scale): (CGSize, Double) in [
+                (.init(width: 433, height: 233), initialScale),
+                (.init(width: 434, height: 234), 2),
+                (.init(width: 435, height: 235), 1),
+                (.init(width: 434, height: 234), 2),
+                (.init(width: 433, height: 233), initialScale),
+                (base, initialScale)
+            ] {
+                value.viewportChanged(source: source, from: previous, to: size,
+                                      backingScale: scale, mode: .actualPixels)
+                #expect(value.origin.x * scale == (value.origin.x * scale).rounded())
+                #expect(value.origin.y * scale == (value.origin.y * scale).rounded())
+                previous = size
+            }
+            #expect(value.viewToImage(.init(x: 216, y: 116)) == CGPoint(x: 400, y: 200))
+            #expect(value.origin == initialOrigin)
+        }
+    }
+}

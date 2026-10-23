@@ -6,6 +6,8 @@ public struct CanvasTransform: Sendable {
     public private(set) var backingScale: Double
     public private(set) var zoom: Double
     public private(set) var origin: CGPoint
+    // Viewport updates retain placement before projecting it onto the backing grid.
+    private var viewportOrigin: CGPoint?
     public static let zoomLimits = (1.0 / 64.0)...64.0
 
     public init(backingScale: Double, zoom: Double = 1, origin: CGPoint = .zero) {
@@ -57,6 +59,7 @@ public struct CanvasTransform: Sendable {
     }
 
     public mutating func bound(source: CGSize, viewport: CGSize, snap: Bool = false) {
+        viewportOrigin = nil
         func bounded(_ value: Double, image: Double, view: Double) -> Double {
             let extent = view - image * zoom / backingScale
             var low = min(0, extent), high = max(0, extent)
@@ -85,18 +88,23 @@ public struct CanvasTransform: Sendable {
             self = Self.fitted(source: source, viewport: new, backingScale: backingScale)
             return
         }
+        origin = viewportOrigin ?? origin
         let oldCentre = CGPoint(x: old.width / 2, y: old.height / 2)
         setBackingScale(backingScale, about: oldCentre)
         if case .custom(let value) = mode {
             zoom(to: value, about: oldCentre)
         } else {
-            actualPixels(about: oldCentre)
+            zoom(to: 1, about: oldCentre)
         }
         pan(by: CGPoint(x: (new.width - old.width) / 2, y: (new.height - old.height) / 2),
-            source: source, viewport: new, snap: mode == .actualPixels)
+            source: source, viewport: new)
+        let placement = origin
+        if mode == .actualPixels { bound(source: source, viewport: new, snap: true) }
+        viewportOrigin = placement
     }
 
     private mutating func pin(_ pixel: CGPoint, to anchor: CGPoint) {
+        viewportOrigin = nil
         let ratio = CGFloat(zoom / backingScale)
         origin = CGPoint(x: anchor.x - pixel.x * ratio, y: anchor.y - pixel.y * ratio)
     }
