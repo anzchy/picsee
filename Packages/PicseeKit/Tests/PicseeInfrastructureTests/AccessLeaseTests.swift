@@ -114,3 +114,41 @@ private final class LinkChangingScope: SecurityScope, @unchecked Sendable {
     }
     #expect(scope.balanced)
 }
+
+private final class ScopeSensitiveBoundary: SecurityScope, @unchecked Sendable {
+    private let lock = NSLock()
+    private var live = 0
+    private var checks = 0
+    private var unscoped = 0
+    var allowsStart = true
+    func start(_ url: URL) -> Bool {
+        lock.withLock { if allowsStart { live += 1 }; return allowsStart }
+    }
+    func stop(_ url: URL) { lock.withLock { live -= 1 } }
+    func contains(_ file: URL, _ root: URL) -> Bool {
+        lock.withLock {
+            checks += 1
+            if live == 0 { unscoped += 1; return false }
+            return AccessBoundary.contains(file, in: root)
+        }
+    }
+    var observations: [Int] { lock.withLock { [live, checks, unscoped] } }
+}
+
+@Test func accessDiscoversRootsOnlyAfterScopedBoundaryConfirmation() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    let scope = ScopeSensitiveBoundary()
+    let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(),
+        store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "A",
+        boundary: { scope.contains($0, $1) })
+    let id = try await access.grant(folder: base)
+    #expect(await access.rootCovering(base.appendingPathComponent("a.jpg")) == id)
+    #expect(await access.rootCovering(base.deletingLastPathComponent()) == nil)
+    #expect(scope.observations == [0, 2, 0])
+    scope.allowsStart = false
+    #expect(await access.rootCovering(base.appendingPathComponent("a.jpg")) == nil)
+    #expect(scope.observations == [0, 2, 0])
+}
