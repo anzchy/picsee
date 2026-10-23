@@ -331,15 +331,15 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 |---|---|---|---|
 | 打开与输入 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮只改 CMD-01/A11Y-02 与审查表，OPEN-02 不变（`Partial`/`无`，验收原文未改）。上次：P1-08 复审（db028d8..2a67114），OPEN-02「限制：」已更新 |
 | 查看与画布 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮无源码改动，VIEW-01/VIEW-10 不变（`Partial`/`单元`，验收原文未改）。上次：P1-08 复审（db028d8..2a67114），只追加「限制：」 |
-| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-08 真机记录复审（#42，validation/p1-08-device-mini，0e1d1d1..93861af）：CHROME-01 恢复「隐藏时 Tab 与命中排除仅单元」，更谨慎；CHROME-01…05 仍 `Partial`/`单元`，验收原文未改，限制与 P1.md 运行 `20261023-163840-P1-08-CHROME-01-05-CMD-01` 一致。上次：P1-08 真机记录（0e1d1d1..3cb894e） |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | Low 批次 7（chore/followups-7，20501b8..a76629d）：只新增真机步骤 `features/chrome-show-hide.md` 与 doctor/key.sh 工具改动，无 App 源码与验证记录改动；CHROME-01…05 仍 `Partial`/`单元`，验收原文未改。注：P1-08 真机记录早于该步骤，下次复验按此步骤做。上次：P1-08 真机记录复审（#42，0e1d1d1..93861af） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮只改账簿，ACCESS-01/05 不受影响。上次：P1-08 复审（db028d8..2a67114） |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | Low 批次 7（chore/followups-7，20501b8..a76629d）：chrome 步骤只把 ACCESS-01 提示作为预期干扰写明取消方法；ACCESS-01 不变。上次：P1-08 复审（#42，db028d8..1060f3c） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-08 真机记录复审（#42，validation/p1-08-device-mini，0e1d1d1..93861af）：CMD-01「限制：」合并为「菜单/按键/占位按钮与 File › Close、⌘W @1x 真机一致」，「怎么确认」约 148 字，回到上限内；状态与验收不变。上次：P1-08 真机记录（0e1d1d1..3cb894e），提出 CMD-01 超长 |
+| 命令与键盘 | 2026-10-23 | doc-gardener | Low 批次 7（chore/followups-7，20501b8..a76629d）：chrome 步骤只引用 CMD-01 的 File › Close/⌘W，key.sh 拒绝命名键仅为测试工具；CMD-01 不变。上次：P1-08 真机记录复审（#42，0e1d1d1..93861af） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`DecodeBudget`/`ImageSourceHeader` 改为按位深估算请求输出预约，`ImageIOPipeline` 只加预约复核与根作用域身份，方向、透明与格式解码未改；FMT-01 只改「在哪」，状态与验收不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
