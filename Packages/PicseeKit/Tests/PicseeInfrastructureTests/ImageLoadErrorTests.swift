@@ -88,3 +88,27 @@ private struct LoadFailureDecoder: ImageDecoding {
         try await access.image(for: ImageDecodeRequest(fileURL: fixture("orientation-1.tiff"), maximumPixelSize: 128))
     }
 }
+
+private struct DisappearingResourceReader: FileIdentityResourceReading {
+    func identity(for fileURL: URL) throws -> FileResourceIdentity? {
+        try FileManager.default.removeItem(at: fileURL)
+        return FileResourceIdentity(volumeUUID: "VOL", fileIdentifier: "42")
+    }
+}
+
+@Test func loadErrorsSourceDisappearingAfterIdentityKeepsKnownContext() async throws {
+    let tree = try IdentityTree(); defer { tree.remove() }
+    let item = ItemID.rootRelative(rootID: tree.id, relativePath: "b.png")
+    let revision = FileRevision(byteCount: 5, modificationDate: nil)
+    let key = RenderKey(itemID: item, revision: revision, maximumPixelSize: 128)
+    let pipeline = ImageIOPipeline(identityResolver: FileItemIdentityResolver(root: tree.scope, reader: DisappearingResourceReader()))
+    do {
+        _ = try await pipeline.image(for: ImageDecodeRequest(fileURL: tree.file, maximumPixelSize: 128, renderKey: key))
+        Issue.record("Expected disappeared source")
+    } catch {
+        let failure = try #require(error as? ImageLoadError)
+        #expect(failure.kind == .sourceChanged)
+        #expect(failure.itemID == item)
+        #expect(failure.revision == revision)
+    }
+}

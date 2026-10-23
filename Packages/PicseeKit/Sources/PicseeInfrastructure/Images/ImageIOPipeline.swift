@@ -75,8 +75,10 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
                     do { return try ImageSourceHeader.read(request, budget: budget, itemID: item) }
                     catch {
                         let revision = try? FileRevisionReader.read(request.fileURL)
-                        throw loadFailure(error, request: request, revision: revision, itemID: request.renderKey?.itemID ?? item,
-                                          unreadableKind: error as? ImageDecodeError == .unreadableImage
+                        let disappeared = request.renderKey != nil && revision == nil && error as? ImageDecodeError == .unreadableImage
+                        let failure: any Error = disappeared ? ImageDecodeError.invalidRequest : error
+                        throw loadFailure(failure, request: request, revision: revision, itemID: request.renderKey?.itemID ?? item,
+                                          unreadableKind: failure as? ImageDecodeError == .unreadableImage
                                             ? imageFailureKind(request.fileURL) : .corruptImage)
                     }
                 })
