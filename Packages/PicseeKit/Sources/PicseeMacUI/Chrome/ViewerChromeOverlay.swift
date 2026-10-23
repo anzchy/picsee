@@ -87,8 +87,8 @@ public final class ChromeToolView: NSView {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { activate() }
         session?.setChromeInteraction(.pointerPress, active: false)
         if window?.firstResponder === self, let pointerCanvas {
-            window?.makeFirstResponder(pointerCanvas)
             session?.updateFocus(.canvas)
+            window?.makeFirstResponder(pointerCanvas)
         }
     }
     public override func becomeFirstResponder() -> Bool {

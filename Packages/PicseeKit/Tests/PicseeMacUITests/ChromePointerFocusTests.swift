@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import Testing
 import PicseeApplication
 @testable import PicseeMacUI
@@ -6,6 +7,11 @@ import PicseeApplication
 // Offscreen test application has no activation lifecycle; model the key-window query only.
 @MainActor final class ChromeDispatchWindow: NSPanel {
     override var isKeyWindow: Bool { true }
+    var preserveResponder: ((NSResponder?) -> Bool)?
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        if preserveResponder?(responder) == true { return false }
+        return super.makeFirstResponder(responder)
+    }
 }
 
 @MainActor func chromePointerEvent(_ type: NSEvent.EventType, tool: NSView, number: Int) throws -> NSEvent {
@@ -28,22 +34,59 @@ import PicseeApplication
     let overlay = ViewerChromeOverlay(frame: content.bounds, session: session)
     content.addSubview(canvas); content.addSubview(overlay); window.contentView = content
     host.canvas = canvas; host.overlay = overlay; session.chromeHost = host
+    // Mirror CanvasWindowController's production veto, which a plain NSPanel misses.
+    window.preserveResponder = { responder in
+        responder === canvas && session.inspectorFocus.focus != .canvas
+    }
+    canvas.onCommand = { CommandRouter().route($0, from: .key, to: session) }
+    canvas.onTab = { session.tab(reverse: $0) }
     overlay.linkKeyViews(to: canvas)
     defer { window.close() }
     window.makeKeyAndOrderFront(nil)
     for tool in overlay.tools.suffix(3) {
         session.activity(); window.makeFirstResponder(canvas)
+        session.reportCanvasZoom(2)
+        let visual = try #require(tool.subviews.first as? NSHostingView<ChromeToolFace>)
         let event = try chromePointerEvent(.leftMouseDown, tool: tool, number: 1)
         window.sendEvent(event)
         #expect(session.chrome.locks.contains(.pointerPress))
         window.sendEvent(try chromePointerEvent(.leftMouseUp, tool: tool, number: 2))
         #expect(window.firstResponder === canvas)
+        #expect(session.inspectorFocus.focus == .canvas)
         #expect(!session.chrome.locks.contains(.keyboardFocus))
-        clock.now += 2.5; session.advanceChrome()
+        #expect(!session.chrome.locks.contains(.pointerPress))
+        #expect(!visual.rootView.state.contains(.keyboardFocused))
+        #expect(!visual.rootView.state.contains(.pressed))
+        #expect(session.zoomMode != .fit)
+        window.sendEvent(try chromeKey(29, "0"))
+        #expect(session.zoomMode == .fit)
+        let deadline = try #require(session.nextHideDeadline)
+        clock.now = deadline - 0.001; session.advanceChrome()
+        #expect(session.chrome.visibility == .visible)
+        #expect(!tool.isHiddenOrHasHiddenAncestor)
+        clock.now = deadline; session.advanceChrome()
         #expect(session.chrome.visibility == .hidden)
+        #expect(tool.isHiddenOrHasHiddenAncestor)
     }
-    session.tab(reverse: true)
+    window.sendEvent(try chromeKey(48, "\t", shift: true))
     #expect(window.firstResponder === overlay.tools.last)
+    window.sendEvent(try chromeKey(48, "\t", shift: true))
+    let keyboardTool = overlay.tools[5]
+    let visual = try #require(keyboardTool.subviews.first as? NSHostingView<ChromeToolFace>)
+    #expect(window.firstResponder === keyboardTool)
+    session.reportCanvasZoom(2)
+    keyboardTool.mouseUp(with: try chromePointerEvent(.leftMouseUp, tool: keyboardTool, number: 3))
+    #expect(window.firstResponder === keyboardTool)
+    #expect(session.zoomMode == .custom(2))
+    #expect(session.chrome.locks.contains(.keyboardFocus))
+    #expect(visual.rootView.state.contains(.keyboardFocused))
+    window.sendEvent(try chromeKey(49, " "))
+    #expect(session.zoomMode == .actualPixels)
+    #expect(window.firstResponder === keyboardTool)
+    #expect(session.inspectorFocus.focus == .tools)
+    #expect(visual.rootView.state.contains(.keyboardFocused))
     clock.now += 100; session.advanceChrome()
     #expect(session.chrome.visibility == .locked([.keyboardFocus]))
+    #expect(window.firstResponder === keyboardTool)
+    #expect(!keyboardTool.isHiddenOrHasHiddenAncestor)
 }
