@@ -6,9 +6,13 @@ public struct DecodeConfiguration: Sendable {
     public let visible: Int
     public let heavy: Int
     public let budget: Int
+    public let cacheCapacity: Int
     public init(workers: Int = 3, visible: Int = 2, heavy: Int = 1,
-                budget: Int = min(512 * 1024 * 1024, Int(Double(ProcessInfo.processInfo.physicalMemory) * 0.08))) {
+                budget: Int = min(512 * 1024 * 1024, Int(Double(ProcessInfo.processInfo.physicalMemory) * 0.08)),
+                cacheCapacity: Int? = nil) {
         precondition(workers > 0 && visible >= 0 && heavy > 0 && budget > 0)
+        precondition(cacheCapacity == nil || cacheCapacity! >= 0)
+        self.cacheCapacity = cacheCapacity ?? budget / 4
         self.workers = workers; self.visible = visible; self.heavy = heavy; self.budget = budget
     }
 }
