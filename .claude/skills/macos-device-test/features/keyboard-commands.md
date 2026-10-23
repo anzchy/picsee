@@ -37,12 +37,13 @@ Preconditions: ABC input; System Settings › Keyboard › Keyboard navigation o
   Test Edit → Cut/Copy/Paste/Select All and their shortcuts. Press Shift-Tab from the field: canvas focus returns.
 - **Focus Canvas from the panel.** Show Inspector, Tab into `inspector.focus-test`, then choose View → Focus
   Canvas once. Read the AX focused element immediately: expect role `AXImage` and identifier `viewer.canvas`.
-  Esc on canvas does nothing. There is no dedicated Esc button.
+  Focus the field again with no menu open and send Esc once: focus returns to the canvas while the panel stays
+  visible. Esc on canvas does nothing. There is no dedicated Esc button.
 - **Menu-open Esc precedence.** Focus `inspector.focus-test`, use `AXPress` on the View menu-bar item, and
   confirm its `AXSelected` value is `true`. Send Esc once: only the menu closes and the field remains the AX
-  focused element. Send Esc again: focus returns to the canvas (`AXImage` / `viewer.canvas`). Preserve the
-  evidence under run `20261023-082840-CMD-02-menu-esc-session`. No Space/arrows/Enter/⌘F menu items or
-  shortcut hints should exist.
+  focused element. Send Esc again: focus returns to the canvas (`AXImage` / `viewer.canvas`). Reference
+  evidence: delegator run `20261023-082840-CMD-02-menu-esc-session`; new runs use their own `RUN_ID`.
+  No Space/arrows/Enter/⌘F menu items or shortcut hints should exist.
 - **Disabled.** With no image loaded, menu zoom items and panel zoom buttons are disabled; image keys do nothing.
 - **Focus.** Without the mouse, ⌘O chooses an image, ⌘I shows the panel, Tab enters it, Tab traverses controls,
   Shift-Tab from any panel control returns straight to the canvas, Esc returns to canvas. Confirm visible rings. Open another image with field focus and
