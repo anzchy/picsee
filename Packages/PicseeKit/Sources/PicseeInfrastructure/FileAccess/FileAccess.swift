@@ -89,7 +89,14 @@ public actor FileAccess: AccessLeasing {
     /// Only the composition root's successful system panel invokes this operation.
     public func grant(folder: URL) throws -> AccessRootID {
         let id = AccessRootID()
-        let session = try ScopeSession(scope: scope, url: folder, rootID: id)
+        let session: ScopeSession
+        do {
+            session = try ScopeSession(scope: scope, url: folder, rootID: id)
+            Logger(subsystem: "io.github.anzchy.picsee", category: "access").notice("AccessGrant kind=panelFolder scopeStarted=true root=\(id.rawValue.uuidString, privacy: .public)")
+        } catch {
+            Logger(subsystem: "io.github.anzchy.picsee", category: "access").notice("AccessGrant kind=panelFolder scopeStarted=false")
+            throw error
+        }
         defer { session.stop() }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {

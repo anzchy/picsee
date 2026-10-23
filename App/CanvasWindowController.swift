@@ -13,6 +13,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let pipeline: any ImagePipeline
     private var fileURL: URL?
     private var generation = UUID()
+    private let accessIntent = AccessIntent()
     private var desiredMaximum = 0
     private var decodeProgress = CanvasDecodeProgress()
     private var decoding = false
@@ -99,6 +100,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { nil }
 
     func open(_ url: URL, accessRequest: AccessRequest? = nil) {
+        let operation = accessIntent.begin()
+        refreshRecents()
         filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
         decodeTask?.cancel()
         decodeTask = nil
@@ -118,21 +121,25 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let openingGeneration = generation
         openTask = Task { [self] in
             do {
-                let services = try await accessServices.value
+                let services = try await operation.wait { try await accessServices.value }
                 let request: AccessRequest
                 if let accessRequest { request = accessRequest }
-                else if let root = await services.files.rootCovering(url) { request = .root(root, file: url) }
-                else { request = .fileGrant(url) }
+                else {
+                    let root = try await operation.wait { await services.files.rootCovering(url) }
+                    request = root.map { .root($0, file: url) } ?? .fileGrant(url)
+                }
+                try operation.check()
                 let source = try await AccessImageSource.open(request, access: services.files, pipeline: pipeline)
-                guard !Task.isCancelled, generation == openingGeneration else { await source.close(); return }
+                guard operation.isCurrent, generation == openingGeneration else { await source.close(); return }
                 let old = imageSource
                 imageSource = source; sourceGeneration = openingGeneration; currentAccessRequest = request
-                await old?.close()
+                try await operation.wait { await old?.close() }
                 decodeIfNeeded()
             } catch {
-                if generation == openingGeneration, !Task.isCancelled {
+                if generation == openingGeneration, operation.isCurrent {
                     let old = imageSource; imageSource = nil
                     await old?.close()
+                    guard operation.isCurrent, generation == openingGeneration else { return }
                     canvas.showFailure()
                     showAccessError(error)
                 }
@@ -141,6 +148,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        accessIntent.invalidate()
         decodeTask?.cancel()
         decodeTask = nil
         decoding = false
@@ -191,7 +199,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                         currentKey = nil
                         canvas.beginOpening()
                         do { try await renewImageSource(token: token) }
-                        catch { canvas.showFailure(); desiredMaximum = 0 }
+                        catch {
+                            if token.generation == generation, !Task.isCancelled {
+                                canvas.showFailure(); desiredMaximum = 0
+                            }
+                        }
                     } else {
                         canvas.showFailure(); desiredMaximum = 0
                         if error is FileAccessError { showAccessError(error) }
@@ -207,21 +219,24 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func renewImageSource(token: PresentationToken) async throws {
+        let operation = accessIntent.current
         guard let request = currentAccessRequest else { throw FileAccessError.startFailed }
-        let services = try await accessServices.value
+        let services = try await operation.wait { try await accessServices.value }
         let source = try await AccessImageSource.open(request, access: services.files, pipeline: pipeline)
-        guard token.generation == generation, !Task.isCancelled else { await source.close(); return }
+        guard token.generation == generation, operation.isCurrent else { await source.close(); return }
         let old = imageSource; imageSource = source
-        await old?.close()
+        try await operation.wait { await old?.close() }
     }
 
     func refreshRecents() {
+        let operation = accessIntent.current
         Task { [weak self] in
             guard let self else { return }
             do {
-                let services = try await accessServices.value
-                onRecentsChanged?(try await services.recent.load())
-            } catch { showAccessError(error) }
+                let services = try await operation.wait { try await accessServices.value }
+                let folders = try await operation.wait { try await services.recent.load() }
+                onRecentsChanged?(folders)
+            } catch { if operation.isCurrent { showAccessError(error) } }
         }
     }
 
@@ -232,36 +247,40 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func openGrantedFolder(_ folder: URL) {
+        let operation = accessIntent.begin()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         navigationTask?.cancel()
         navigationTask = Task { [self] in
             do {
-                let services = try await accessServices.value
-                let id = try await services.grant(folder)
+                let services = try await operation.wait { try await accessServices.value }
+                let id = try await operation.wait { try await services.grant(folder) }
                 refreshRecents()
-                try Task.checkCancellation()
+                try operation.check()
                 openFolder(folder, rootID: id)
-            } catch { if !Task.isCancelled { showAccessError(error) } }
+            } catch { if operation.isCurrent { showAccessError(error) } }
         }
     }
 
     private func openFolder(_ folder: URL, rootID: AccessRootID) {
+        let operation = accessIntent.begin()
+        refreshRecents()
         navigationTask?.cancel()
         let current = generation
         navigationTask = Task { [self] in
             do {
-                let services = try await accessServices.value
-                let images = try await services.images(in: folder, rootID: rootID)
-                try Task.checkCancellation()
-                guard generation == current else { return }
-                if let first = FolderNavigation(images: images).images.first {
+                let services = try await operation.wait { try await accessServices.value }
+                let first = try await operation.firstImage(list: {
+                    try await services.images(in: folder, rootID: rootID)
+                }, remember: {
                     try await services.recent.add(RecentFolder(rootID: rootID, url: folder, displayName: folder.lastPathComponent))
+                })
+                if let first {
                     refreshRecents()
                     open(first, accessRequest: .root(rootID, file: first))
                 } else { showAccessMessage(String(localized: "No Images in This Folder")) }
             } catch {
-                if !Task.isCancelled, generation == current {
+                if operation.isCurrent, generation == current {
                     if error as? FileAccessError == .corruptStore { showAccessError(error) }
                     else { promptForFolder(folder, currentImage: nil, direction: .next) }
                 }
@@ -271,16 +290,17 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private func navigate(_ direction: NavigationDirection) {
         guard let file = fileURL else { return }
+        let operation = accessIntent.begin()
         navigationTask?.cancel()
         let current = generation
         navigationTask = Task { [self] in
             do {
-                let services = try await accessServices.value
-                let root = await services.files.rootCovering(file)
+                let services = try await operation.wait { try await accessServices.value }
+                let root = try await operation.wait { await services.files.rootCovering(file) }
                 let images: [URL]
-                if let root { images = try await services.images(in: file.deletingLastPathComponent(), rootID: root) }
+                if let root { images = try await operation.wait { try await services.images(in: file.deletingLastPathComponent(), rootID: root) } }
                 else { images = [] }
-                try Task.checkCancellation()
+                try operation.check()
                 guard generation == current else { return }
                 switch FolderNavigation(images: images).step(from: file, direction: direction, covered: root != nil) {
                 case .needsGrant(let folder): promptForFolder(folder, currentImage: file, direction: direction)
@@ -288,7 +308,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 case .end: break
                 }
             } catch {
-                if !Task.isCancelled, generation == current {
+                if operation.isCurrent, generation == current {
                     if error is FileAccessError { promptForFolder(file.deletingLastPathComponent(), currentImage: file, direction: direction) }
                     else { showAccessError(error) }
                 }
@@ -299,21 +319,22 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private func promptForFolder(_ folder: URL, currentImage: URL?, direction: NavigationDirection, mismatch: Bool = false) {
         guard let window, window.attachedSheet == nil else { return }
         let current = generation
+        let operation = accessIntent.current
         FolderGrantPrompt.request(folder: folder, window: window, mismatch: mismatch) { [weak self] chosen in
-            guard let self else { return }
+            guard let self, operation.isCurrent else { return }
             self.navigationTask = Task { [self] in
                 do {
-                    let services = try await accessServices.value
-                    let id = try await services.grant(chosen)
+                    let services = try await operation.wait { try await accessServices.value }
+                    let id = try await operation.wait { try await services.grant(chosen) }
                     refreshRecents()
-                    guard !Task.isCancelled, generation == current else { return }
+                    guard operation.isCurrent, generation == current else { return }
                     if let currentImage {
                         let contains: Bool
                         do {
-                            contains = try await services.files.withLease(.root(id, file: currentImage)) { _ in true }
+                            contains = try await operation.wait { try await services.files.withLease(.root(id, file: currentImage)) { _ in true } }
                         } catch FileAccessError.outsideRoot { contains = false }
                         if contains {
-                            let images = try await services.images(in: currentImage.deletingLastPathComponent(), rootID: id)
+                            let images = try await operation.wait { try await services.images(in: currentImage.deletingLastPathComponent(), rootID: id) }
                             if case .move(let next) = FolderNavigation(images: images).step(from: currentImage, direction: direction, covered: true) {
                                 open(next, accessRequest: .root(id, file: next))
                             }
@@ -321,7 +342,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                             promptForFolder(folder, currentImage: currentImage, direction: direction, mismatch: true)
                         }
                     } else { openFolder(chosen, rootID: id) }
-                } catch { if !Task.isCancelled { showAccessError(error) } }
+                } catch { if operation.isCurrent { showAccessError(error) } }
             }
         }
     }
