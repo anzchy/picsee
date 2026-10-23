@@ -52,8 +52,10 @@ extension ViewerSession {
             host.openInputImage(files[0], accessRequest: nil)
         } else if case .single(let url) = input {
             logInputExclusions(urls)
+            let navigation = inputNavigationIntent.current
+            let generation = imageLoader.generation
             let result = await admission.probe(url, operation: operation)
-            guard operation.isCurrent else { return }
+            guard operation.isCurrent, navigation.isCurrent, imageLoader.generation == generation else { return }
             if case .open(let request) = result { endFilePreviewSet(); host.openInputImage(url, accessRequest: request) }
             else if result == .unsupported { host.showInputNotice(.unsupported(url.lastPathComponent)) }
         } else if case .folder(let folder) = input { host.promptForInputFolder(folder) }
