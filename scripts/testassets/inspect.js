@@ -4,6 +4,11 @@ function run(argv) {
   ObjC.import('ImageIO');
   ObjC.import('CoreGraphics');
   var source = $.CGImageSourceCreateWithURL($.NSURL.fileURLWithPath(argv[0]), null);
+  if (argv[1] === 'rejected') {
+    if (source && Number($.CGImageSourceGetCount(source)) !== 0)
+      throw Error('ImageIO unexpectedly decoded non-image source');
+    return JSON.stringify({rejected:true});
+  }
   if (argv[1] === 'truncated') {
     // Only this known tiny fixture enters bounded decode; never the oversize header.
     var partial = source ? $.CGImageSourceCreateThumbnailAtIndex(source, 0,
@@ -15,7 +20,7 @@ function run(argv) {
   }
   if (!source) throw Error('ImageIO cannot read source');
   var p = ObjC.deepUnwrap(ObjC.castRefToObject($.CGImageSourceCopyPropertiesAtIndex(source, 0, null)));
-  var result = {width:p.PixelWidth, height:p.PixelHeight, orientation:p.Orientation || 1,
+  var result = {width:p.PixelWidth, height:p.PixelHeight, depth:p.Depth, orientation:p.Orientation || 1,
     hasExif:!!p['{Exif}'], hasAlpha:!!p.HasAlpha};
   if (argv[1] === 'oriented-pixels') {
     var options = $({kCGImageSourceCreateThumbnailFromImageAlways:true,

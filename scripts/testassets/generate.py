@@ -7,7 +7,7 @@ from pathlib import Path
 import struct
 import zlib
 
-VERSION = 1
+VERSION = 2
 # A deliberately tiny, fixed 5x7 bitmap alphabet, authored for these fixtures.
 FONT = {
     "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
@@ -26,6 +26,13 @@ FONT = {
     "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
     "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
     "R": ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+    "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    "N": ["10001", "11001", "11001", "10101", "10011", "10011", "10001"],
+    "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
 }
 
 
@@ -51,7 +58,7 @@ def chunk(kind, payload):
     )
 
 
-def png(width, height, rows, rgba=False):
+def png(width, height, rows, rgba=False, bit_depth=8):
     encoder = zlib.compressobj(9, zlib.DEFLATED, 15, strategy=zlib.Z_FIXED)
     compressed = bytearray()
     for row in rows:
@@ -61,7 +68,9 @@ def png(width, height, rows, rgba=False):
         b"\x89PNG\r\n\x1a\n"
         + chunk(
             b"IHDR",
-            struct.pack(">IIBBBBB", width, height, 8, 6 if rgba else 0, 0, 0, 0),
+            struct.pack(
+                ">IIBBBBB", width, height, bit_depth, 6 if rgba else 0, 0, 0, 0
+            ),
         )
         + chunk(b"IDAT", compressed)
         + chunk(b"IEND", b"")
@@ -82,6 +91,72 @@ def grid(width, height, spacing):
     return png(
         width, height, (pixels[y * width : (y + 1) * width] for y in range(height))
     )
+
+
+def framed(width, height, label):
+    pixels = bytearray([245]) * (width * height)
+    inset = 8
+    for y in range(inset, height - inset):
+        for x in range(inset, inset + 4):
+            pixels[y * width + x] = 0
+            pixels[y * width + width - 1 - x] = 0
+    for y in range(inset, inset + 4):
+        for x in range(inset, width - inset):
+            pixels[y * width + x] = 0
+            pixels[(height - 1 - y) * width + x] = 0
+    text(pixels, width, 24, 24, label, 3)
+    cx, cy = width // 2, height // 2
+    for delta in range(-18, 19):
+        pixels[cy * width + cx + delta] = 0
+        pixels[(cy + delta) * width + cx] = 0
+    text(pixels, width, cx - 54, cy + 26, "CENTER", 3)
+    return png(
+        width, height, (pixels[y * width : (y + 1) * width] for y in range(height))
+    )
+
+
+def zip_container():
+    name = b"README.txt"
+    payload = b"Picsee unsupported non-image ZIP container fixture.\n"
+    checksum = zlib.crc32(payload) & 0xFFFFFFFF
+    local = struct.pack(
+        "<IHHHHHIIIHH",
+        0x04034B50,
+        20,
+        0,
+        0,
+        0,
+        0,
+        checksum,
+        len(payload),
+        len(payload),
+        len(name),
+        0,
+    ) + name + payload
+    central = struct.pack(
+        "<IHHHHHHIIIHHHHHII",
+        0x02014B50,
+        20,
+        20,
+        0,
+        0,
+        0,
+        0,
+        checksum,
+        len(payload),
+        len(payload),
+        len(name),
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ) + name
+    end = struct.pack(
+        "<IHHHHIIH", 0x06054B50, 0, 0, 1, 1, len(central), len(local), 0
+    )
+    return local + central + end
 
 
 def tiff(width, height, pixels, orientation=1, exif=False):
@@ -179,6 +254,27 @@ def small_specs():
             height=960,
             spacing=128,
         ),
+        dict(
+            path="synthetic/landscape-3x2.png",
+            kind="framed",
+            width=600,
+            height=400,
+            label="LANDSCAPE",
+        ),
+        dict(
+            path="synthetic/portrait-2x3.png",
+            kind="framed",
+            width=400,
+            height=600,
+            label="PORTRAIT",
+        ),
+        dict(
+            path="synthetic/pan-grid-4096x3072.png",
+            kind="grid",
+            width=4096,
+            height=3072,
+            spacing=512,
+        ),
     ]
     result += [
         dict(
@@ -194,6 +290,26 @@ def small_specs():
         dict(path="synthetic/alpha-gradient.png", kind="alpha", width=256, height=128),
         dict(path="synthetic/truncated.png", kind="truncated", width=64, height=48),
         dict(path="synthetic/corrupt.png", kind="corrupt", width=None, height=None),
+        dict(
+            path="synthetic/not-an-image.jpg",
+            kind="not-image",
+            width=None,
+            height=None,
+        ),
+        dict(
+            path="synthetic/unsupported-container.zip",
+            kind="unsupported-container",
+            width=None,
+            height=None,
+            container="ZIP",
+        ),
+        dict(
+            path="synthetic/gradient-16bit.png",
+            kind="gradient-16bit",
+            width=256,
+            height=128,
+            bit_depth=16,
+        ),
         dict(
             path="synthetic/oversize-header.png",
             kind="oversize",
@@ -242,6 +358,8 @@ def render(spec):
         )
     if kind == "grid":
         return grid(w, h, spec["spacing"])
+    if kind == "framed":
+        return framed(w, h, spec["label"])
     if kind == "orientation":
         return oriented(spec["orientation"])
     if kind == "alpha":
@@ -253,6 +371,13 @@ def render(spec):
         )
     if kind == "corrupt":
         return b"PICSEE deliberately corrupt image\0not a PNG\n"
+    if kind == "not-image":
+        return b"PICSEE text fixture with a misleading JPEG extension.\n"
+    if kind == "unsupported-container":
+        return zip_container()
+    if kind == "gradient-16bit":
+        row = b"".join(struct.pack(">H", x * 257) for x in range(w))
+        return png(w, h, (row for _ in range(h)), bit_depth=16)
     if kind == "truncated":
         return png(w, h, (bytes([y]) * w for y in range(h)))[:48]
     if kind == "oversize":
