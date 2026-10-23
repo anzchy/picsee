@@ -10,7 +10,7 @@ public struct InspectorFocus: Sendable {
         if !visible { focus = .canvas }
     }
     public mutating func updateFocus(_ context: FocusContext) {
-        if isVisible || context == .canvas { focus = context }
+        if isVisible || context == .canvas || context == .tools { focus = context }
     }
     public mutating func tab(reverse: Bool) {
         if reverse { focus = .canvas }
