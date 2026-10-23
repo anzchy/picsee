@@ -266,7 +266,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <p>某项能力在某个环境下行为不同，在本节加一行：<code>| &lt;ID&gt; | &lt;环境&gt; | &lt;状态&gt; | &lt;差异与 validation 链接&gt; |</code>。</p>
 <h2 id="part-3-区域审查">Part 3 — 区域审查</h2>
 <div class="table-wrap"><table><thead><tr><th scope="col">区域</th><th scope="col">最近审查</th><th scope="col">审查人</th><th scope="col">备注</th></tr></thead><tbody>
-<tr><td>打开与输入</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 真机记录（#70，docs/p1-02-device-mini，060ac0e..0f0be5b，run 20261024-025857-P1-02-OPEN-01-04）：OPEN-01…04 只改「限制：」，状态/验证/验收不变。上轮发现已由 0f0be5b 解决：OPEN-04 只记拖入 ZIP 通过（#13），文件夹与多文件夹拖入未验（提示只经 <code>open -a</code>，#7/#8），拖入未打开过的图片 FAIL（#73）；OPEN-01 拖入提示（#1）、OPEN-02 不支持文件（#10）、OPEN-03 <code>open -a</code> 多文件集合（#4/#5）与记录一致。OPEN-01…04 均在约 150 字内（OPEN-03 约 142）。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..730eca9）</td></tr>
+<tr><td>打开与输入</td><td>2026-10-24</td><td>doc-gardener</td><td>#73 拖入文件授权修复（fix/drop-file-grant，5e75f7e..a670a1e）：start 失败但 sandbox 可读的 File Grant 现可租约，仅单元证明；OPEN-04 只改「限制：」为“曾真机失败（#73），修复待真机复验”，仍 <code>Partial</code>/<code>单元</code>，验收不变，约 141 字。OPEN-01…03 不变。上次：P1-02 真机记录（#70，docs/p1-02-device-mini，060ac0e..0f0be5b）</td></tr>
 <tr><td>查看与画布</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：←/→ 在多文件集合内按集合翻页，输入探测以加载代次丢弃过期结果；画布与缩放未改，VIEW-01…09 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）</td></tr>
 <tr><td>C 沉浸界面</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：多文件集合时 Esc 禁用（无来源），与 CHROME-05「单独打开不出现网格」一致；窗口内容视图换成拖入视图，不改 chrome 命中；CHROME-01…05 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）</td></tr>
 <tr><td>外观与显示偏好</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：工具显隐与面板切换未改；PREF-02 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）</td></tr>
@@ -274,7 +274,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <tr><td>Filmstrip</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：<code>filmstripExpanded</code> 现随 <code>displayPreferences.v1</code> 持久化，仍无 Filmstrip UI；FILM-01 保持 <code>Absent</code>。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5）</td></tr>
 <tr><td>网格、选择与菜单</td><td>2026-10-23</td><td>doc-gardener</td><td>P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 <code>Absent</code>。上次：建账</td></tr>
 <tr><td>信息与元数据</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（<code>inspector.item-name</code>，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 <code>Absent</code>。上次：P0-09（#10，749697a..7054a5d）</td></tr>
-<tr><td>授权与文件访问</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 真机记录（#70，060ac0e..dfc68ff，run 20261024-025857-P1-02-OPEN-01-04）：文件夹输入的授权提示与 → 授权提示 @1x 再现，ACCESS-01 不变；拖入文件的访问失败记在 OPEN-04（#73）。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）</td></tr>
+<tr><td>授权与文件访问</td><td>2026-10-24</td><td>doc-gardener</td><td>#73 拖入文件授权修复（fix/drop-file-grant，5e75f7e..a670a1e）：仅 File Grant 在 start=false 且可读时建立租约，Access Root 与目录授权仍须 start 成功，ACCESS-01/02 不变；释放日志新增公开 <code>scopeStarted=</code>，<code>remaining=0 outcome=released</code> 不变，ACCESS-05 状态不变，但其「怎么确认」约 234 字超长（待 owner 精简）。上次：P1-02 真机记录（#70，060ac0e..dfc68ff）</td></tr>
 <tr><td>缓存与资源</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：<code>ViewerImageLoader</code> 只公开 <code>fileURL</code>；CACHE-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）</td></tr>
 <tr><td>命令与键盘</td><td>2026-10-24</td><td>doc-gardener</td><td>P1-02 真机记录（#70，060ac0e..dfc68ff，run 20261024-025857-P1-02-OPEN-01-04）：集合两端 View › Next/Previous 启用与 Esc 无变化 @1x 通过，属 OPEN-03 集合行为；CMD-02 验收（输入框与菜单优先）未涉及，不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）</td></tr>
 <tr><td>窗口与桌面工具</td><td>2026-10-22</td><td>doc-gardener</td><td>P7-09 去掉自动更新，WIN-07 不受影响</td></tr>
@@ -294,7 +294,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>107 项能力</span><span>·</span><span>Shipped 0 · Partial 34 · Stub 0 · Absent 73 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 0472a96978d0 · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 c4394ac8d968 · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>
