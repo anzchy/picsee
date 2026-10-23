@@ -94,7 +94,8 @@ import PicseeApplication
 @Test @MainActor func sessionChromeLocksAndWindowIsolation() {
     let clock = FakeViewerClock()
     let store = InMemoryDisplayPreferencesStore()
-    let first = ViewerSession(preferencesStore: store, clock: clock)
+    let host = FakeSessionHost()
+    let first = ViewerSession(preferencesStore: store, clock: clock, host: host)
     let second = ViewerSession(preferencesStore: store, clock: clock)
     let router = CommandRouter(implementedCommands: Set(CommandID.allCases))
     let ids = sessionItems()

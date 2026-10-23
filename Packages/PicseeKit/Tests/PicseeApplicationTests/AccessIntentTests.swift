@@ -143,6 +143,13 @@ private enum AccessTestFailure: Error { case expected }
         let host = PendingAccessHost()
         host.covered = covered
         let session = ViewerSession(host: host)
+        let loaderGate = AccessSuspension()
+        session.openImage(host.file, maximumPixelSize: 1) {
+            await loaderGate.suspend()
+            throw ImageLoadError(.cancelled)
+        }
+        await loaderGate.waitUntilEntered()
+        defer { session.closeImage(); Task { await loaderGate.resume() } }
         let operation = host.intent.begin()
         let suspended = AccessSuspension()
         let opening = Task { @MainActor in
@@ -169,6 +176,13 @@ private enum AccessTestFailure: Error { case expected }
     let host = PendingAccessHost()
     host.covered = false
     let session = ViewerSession(host: host)
+    let loaderGate = AccessSuspension()
+    session.openImage(host.file, maximumPixelSize: 1) {
+        await loaderGate.suspend()
+        throw ImageLoadError(.cancelled)
+    }
+    await loaderGate.waitUntilEntered()
+    defer { session.closeImage(); Task { await loaderGate.resume() } }
     let operation = host.intent.begin()
     let suspended = AccessSuspension()
     let access = AccessProbe()
