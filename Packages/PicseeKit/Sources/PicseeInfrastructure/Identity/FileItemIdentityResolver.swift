@@ -50,7 +50,12 @@ public actor FileItemIdentityResolver: ItemIdentityResolving {
         } else if let root {
             let boundary = root.url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
             let relative = path.pathComponents.dropFirst(boundary.pathComponents.count).joined(separator: "/")
-            item = .rootRelative(rootID: root.id, relativePath: relative)
+            let candidate = ItemID.rootRelative(rootID: root.id, relativePath: relative)
+            if entries.values.contains(where: { $0.item == candidate }) {
+                // A renamed live item still owns this token. Reusing its vacated name creates another item.
+                item = resource.map { .resource(volumeUUID: $0.volumeUUID, fileIdentifier: $0.fileIdentifier) }
+                    ?? .ephemeral(UUID())
+            } else { item = candidate }
         } else if let resource {
             // File Grants have no AccessRootID. Available resource bytes identify them for this grant session.
             item = .resource(volumeUUID: resource.volumeUUID, fileIdentifier: resource.fileIdentifier)

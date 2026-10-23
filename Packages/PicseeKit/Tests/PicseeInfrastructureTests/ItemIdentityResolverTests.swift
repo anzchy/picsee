@@ -70,3 +70,43 @@ private struct MissingIdentityReader: FileIdentityResourceReading {
     await #expect(throws: FileAccessError.outsideRoot) { try await resolver.identity(for: escape) }
     await #expect(throws: FileAccessError.outsideRoot) { try await grant.identity(for: URL(string: "https://example.invalid/a")!) }
 }
+
+private final class OptionalIdentityReader: FileIdentityResourceReading, @unchecked Sendable {
+    private let lock = NSLock()
+    private var missing = false
+    func makeUnavailable() { lock.withLock { missing = true } }
+    func identity(for fileURL: URL) throws -> FileResourceIdentity? {
+        if lock.withLock({ missing }) { return nil }
+        return try URLIdentityResourceReader().identity(for: fileURL)
+    }
+}
+
+@Test func itemResolverVacatedNameDoesNotCollideWithRenamedItem() async throws {
+    for missing in [false, true] {
+        let tree = try IdentityTree(); defer { tree.remove() }
+        let reader = OptionalIdentityReader()
+        let resolver = FileItemIdentityResolver(root: tree.scope, reader: reader)
+        let original = try await resolver.identity(for: tree.file)
+        let renamed = tree.root.appendingPathComponent("renamed.png")
+        try FileManager.default.moveItem(at: tree.file, to: renamed)
+        #expect(try await resolver.identity(for: renamed) == original)
+        if missing { reader.makeUnavailable() }
+        try Data("new file".utf8).write(to: tree.file)
+        let new = try await resolver.identity(for: tree.file)
+        #expect(new != original)
+        #expect(try await resolver.identity(for: tree.file) == new)
+        #expect(try await resolver.identity(for: renamed) == original)
+    }
+}
+
+@Test func itemResolverFileGrantsUseResourceBytesWhenAvailable() async throws {
+    let tree = try IdentityTree(); defer { tree.remove() }
+    let first = FileItemIdentityResolver()
+    let item = try await first.identity(for: tree.file)
+    #expect(item.stableEncoding.hasPrefix("id1:res:"))
+    #expect(try await FileItemIdentityResolver().identity(for: tree.file) == item)
+    let renamed = tree.root.appendingPathComponent("renamed.png")
+    try FileManager.default.moveItem(at: tree.file, to: renamed)
+    #expect(try await first.identity(for: renamed) == item)
+    #expect(try await FileItemIdentityResolver().identity(for: renamed) == item)
+}
