@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let imagePipeline = ImageIOPipeline(cacheTrace: UntestedNativeResourceSnapshotTrace())
     private lazy var memoryPressure = UntestedNativeMemoryPressureForwarder(pipeline: imagePipeline)
     private let displayPreferences = UserDefaultsDisplayPreferencesStore(defaults: .standard)
+    private lazy var appearanceAdapter = WindowAppearanceAdapter(preferencesStore: displayPreferences)
     private var commandMenu: CommandMenu?
     private var windowController: CanvasWindowController?
     private lazy var accessServices: Task<AccessServices, Error> = {
@@ -52,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func viewer() -> CanvasWindowController {
         if let windowController { return windowController }
         let controller = CanvasWindowController(pipeline: imagePipeline, preferencesStore: displayPreferences, accessServices: accessServices)
+        controller.appearanceAdapter = appearanceAdapter
         controller.onOpenRequest = { [weak self] in
             let panel = NSOpenPanel()
             panel.allowedContentTypes = [.image, .folder]
