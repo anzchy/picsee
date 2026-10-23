@@ -15,7 +15,7 @@ public struct FilePreviewSet: Sendable {
 }
 
 extension ViewerSession {
-    public func endFilePreviewSet() { filePreviewSet = nil }
+    public func endFilePreviewSet() { inputNavigationIntent.invalidate(); filePreviewSet = nil }
     func moveInputFile(forward: Bool) {
         guard let url = filePreviewSet?.move(forward: forward) else { return }
         (host as? any ViewerInputHost)?.openInputImage(url, accessRequest: nil)

@@ -27,6 +27,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public private(set) var selection = BrowserSelection()
     public private(set) var previewSet: PreviewSet?
     public internal(set) var filePreviewSet: FilePreviewSet?
+    let inputNavigationIntent = AccessIntent()
     public private(set) var mode: ViewerMode = .viewing
     public private(set) var scrollAnchor: ItemID?
     public private(set) var inspectorFocus = InspectorFocus()
@@ -191,6 +192,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
             updateFocus(.canvas)
             host?.applyFocus(.canvas)
         } else if command == .next || command == .previous {
+            inputNavigationIntent.invalidate()
             if filePreviewSet != nil {
                 moveInputFile(forward: command == .next)
             } else if previewSet != nil {
