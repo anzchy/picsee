@@ -50,7 +50,7 @@ public struct ImageIODecoder: ImageDecoding {
     }
 }
 
-public final class ImageIOPipeline: ImagePipeline, Sendable {
+public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sendable {
     private let configuration: DecodeConfiguration
     private let rootResolvers = RootIdentityResolvers()
     private let identityResolver: any ItemIdentityResolving
@@ -69,6 +69,8 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         self.executor = executor
         admission = DecodeAdmission(configuration: configuration, executor: executor, decoder: RevisionReportingDecoder(decoder: decoder))
     }
+    public func pin(_ key: RenderKey, image: DecodedImage) async { await cache.pin(key, image: image) }
+    public func unpin(_ key: RenderKey) async { await cache.unpin(key) }
     private func header(_ request: ImageDecodeRequest) async throws -> ImageSourceHeader {
         guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else {
             throw ImageLoadError(.sourceChanged, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision)

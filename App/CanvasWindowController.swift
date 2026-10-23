@@ -35,7 +35,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore, accessServices: Task<AccessServices, Error>) {
         self.pipeline = pipeline
         self.accessServices = accessServices
-        session = ViewerSession(preferencesStore: preferencesStore, imageLoader: ViewerImageLoader(trace: NativeFirstPreviewTrace()))
+        session = ViewerSession(preferencesStore: preferencesStore, imageLoader: ViewerImageLoader(trace: NativeFirstPreviewTrace(), presentation: pipeline as? any ImagePresentationPinning))
         canvas = CanvasInputBridge(frame: .zero, session: session)
         inspector = InspectorModel(session: session)
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),

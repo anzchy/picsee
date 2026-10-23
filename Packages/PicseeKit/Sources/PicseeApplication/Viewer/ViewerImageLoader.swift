@@ -23,8 +23,11 @@ public struct PresentedImage: Sendable {
     var loadTask: Task<Void, Never>?
     private var firstPreview: UUID?
     private let trace: (any FirstPreviewTracing)?
+    private let presentation: (any ImagePresentationPinning)?
     public convenience init() { self.init(trace: nil) }
-    public init(trace: (any FirstPreviewTracing)?) { self.trace = trace }
+    public init(trace: (any FirstPreviewTracing)?, presentation: (any ImagePresentationPinning)? = nil) {
+        self.trace = trace; self.presentation = presentation
+    }
     private var revisionRetryUsed = false
     private var deliveredDetailMaximum = 0
     private var desiredMaximum = 0
@@ -71,13 +74,26 @@ public struct PresentedImage: Sendable {
                     guard let key = preparedKey, image.itemID == key.itemID, image.revision == key.revision else {
                         throw ImageLoadError(.sourceChanged, itemID: preparedKey?.itemID, revision: image.revision)
                     }
+                    await presentation?.pin(key, image: image)
+                    guard token.generation == generation, !Task.isCancelled else {
+                        await presentation?.unpin(key)
+                        return
+                    }
+                    let previous = presented?.key
                     progress.completed(image, isPreview: preview)
                     if !preview { deliveredDetailMaximum = max(deliveredDetailMaximum, maximum) }
                     presented = PresentedImage(fileURL: fileURL, key: key)
                     host?.installImage(image, fileURL: fileURL)
-                    guard token.generation == generation else { return }
+                    guard token.generation == generation else {
+                        if let previous { await presentation?.unpin(previous) }
+                        return
+                    }
                     finishFirstPreview(.success)
                     phase = .refining
+                    if let previous {
+                        await presentation?.unpin(previous)
+                        guard token.generation == generation else { return }
+                    }
                 }
                 phase = .settled
                 break
@@ -85,6 +101,7 @@ public struct PresentedImage: Sendable {
                 guard token.generation == generation else { return }
                 if (error as? ImageLoadError)?.kind == .sourceChanged, !revisionRetryUsed {
                     revisionRetryUsed = true
+                    releasePresentation()
                     preparedKey = nil; presented = nil; progress = CanvasDecodeProgress(); deliveredDetailMaximum = 0
                     phase = .opening
                     host?.beginImageOpening()
@@ -102,11 +119,13 @@ public struct PresentedImage: Sendable {
                         self.source = replacement
                     } catch {
                         guard token.generation == generation else { return }
+                        releasePresentation()
                         failure = error; presented = nil; phase = .failed
                         host?.imageLoadFailed(error)
                     }
                     break
                 }
+                releasePresentation()
                 failure = error; presented = nil; phase = .failed
                 finishFirstPreview(.failed)
                 host?.imageLoadFailed(error)
@@ -124,8 +143,14 @@ public struct PresentedImage: Sendable {
     }
     private func retire() {
         loadTask?.cancel()
+        releasePresentation()
         let old = source; source = nil
         Task { await old?.close() }
+    }
+    private func releasePresentation() {
+        guard let key = presented?.key, let presentation else { return }
+        presented = nil
+        Task { await presentation.unpin(key) }
     }
     private func finishFirstPreview(_ outcome: FirstPreviewOutcome) {
         guard let id = firstPreview else { return }
