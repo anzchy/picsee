@@ -189,6 +189,9 @@ replace an already-running image. A private or missing SHA never passes.
 - **Stable handles first.** Prefer keyboard shortcuts and accessibility identifiers to coordinates. The
   identifier naming convention is set in P0-01 and listed in `features/README.md`. Coordinates are a last
   resort; they differ between the local @1x mini and the @2x MacBook reached over SSH.
+- **Characters and named keys are different inputs.** `key.sh` accepts exactly one printable character.
+  Send named keys through `kc.sh`: Tab `48`, Esc `53`, Return `36`, Left/Right/Down/Up `123`–`126`, and
+  Space `49`. For example, `key.sh "$RUN_DIR" tab` is invalid; use `kc.sh "$RUN_DIR" 48`.
 - **Probe symmetrically.** Zoom in N steps, then out N steps, at the same cursor point. Navigate forward, then
   back. A directional defect is invisible to a one-way sweep.
 - **Hold still and re-check.** For chrome timing, wait with no input and note when the tools hide; then wake
@@ -365,8 +368,8 @@ scripts/device/launch.sh "$RUN_DIR"
 scripts/device/doctor.sh "$RUN_DIR" --expected-sha "$(git rev-parse --short HEAD)"
 scripts/device/shot.sh "$RUN_DIR" <ledger-id>-<entry-point>-<state>
 scripts/device/size.sh "$RUN_DIR" 800 600       # points, prints the resulting size
-scripts/device/key.sh "$RUN_DIR" o command   # example only; needs an implemented command
-scripts/device/kc.sh "$RUN_DIR" 53           # example only; Escape remains unverified
+scripts/device/key.sh "$RUN_DIR" o command   # exactly one printable character
+scripts/device/kc.sh "$RUN_DIR" 53           # Esc; named keys use key codes
 scripts/device/cleanup.sh "$RUN_DIR"
 node --test scripts/device/tests/device.test.cjs
 ```
