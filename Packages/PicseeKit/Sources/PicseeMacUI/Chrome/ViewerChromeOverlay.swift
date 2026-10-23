@@ -108,6 +108,11 @@ public final class ChromeToolView: NSView {
         activate()
         return true
     }
+    public override func accessibilityValue() -> Any? {
+        guard id == .actualPixels, let face else { return super.accessibilityValue() }
+        return ScaleIndicator(actualPixels: face.rootView.session.zoomMode == .actualPixels,
+            customZoom: face.rootView.customZoom, action: activate).label
+    }
     public func activate() {
         face?.rootView.activate()
     }
@@ -116,10 +121,6 @@ public final class ChromeToolView: NSView {
         if let session { face?.rootView = ChromeToolFace(session: session, id: id,
             interaction: ComponentInput.live.state([], focused: focused, pressed: pressed)) }
         setAccessibilityEnabled(session?.isEnabled(command) == true)
-        if id == .actualPixels, let session {
-            setAccessibilityValue(ScaleIndicator(actualPixels: session.zoomMode == .actualPixels,
-                customZoom: face?.rootView.customZoom, action: activate).label)
-        }
     }
 }
 
