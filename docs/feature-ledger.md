@@ -122,7 +122,7 @@
 | VIEW-04 | 平移与边界 | Partial | 单元 | P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Canvas/CanvasView.swift` | 放大后拖动，图像不会被拖出可见范围；回到适应窗口后位置复原（27 页）；限制：真机未验。 |
 | VIEW-05 | 全屏 | Partial | 单元 | P1-03 | `Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasTransform.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Canvas/CanvasView.swift`、`App/CanvasWindowController.swift`、`App/Commands/CommandMenu.swift` | ⌃⌘F 进入和退出全屏，当前图和缩放状态保持；限制：保持缩放模式（fit 随视口重新适应）；实际像素保留未取整位置意图，避免反复改窗口大小累积漂移；真机未验。 |
 | VIEW-06 | 按 EXIF 方向显示 | Partial | 单元 | P0-05、P1-03 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Canvas/CanvasView.swift` | 打开 S1 素材里八种 Orientation 的样本，全部正向显示；限制：@1x 真机方向 1–8 通过（[P0-05/06 记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；@2x 未验 |
-| VIEW-07 | 透明图 | Partial | 单元 | P0-05 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`App/CanvasView.swift` | 打开透明 PNG，透明区域按背景设置显示，不是黑色；限制：@1x 真机不发黑（[记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；尚无背景设置；@2x 未验 |
+| VIEW-07 | 透明图 | Partial | 单元 | P0-05 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Canvas/CanvasView.swift` | 打开透明 PNG，透明区域按背景设置显示，不是黑色；限制：@1x 真机不发黑（[记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；尚无背景设置；@2x 未验 |
 | VIEW-08 | 大图不卡界面 | Partial | 单元 | P0-05、P1-04 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/DecodeAdmission.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePipeline.swift`、`Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasDecodePolicy.swift`、`App/CanvasWindowController.swift` | 打开 48MP 图：加载期间窗口能拖、菜单能开；先出预览再变清晰；限制：@1x 真机先预览再清晰（日志）、加载中经辅助功能移动窗口可响应（[记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；鼠标拖动与菜单未验；48MP 以 45.4MP 代替；@2x 未验 |
 | VIEW-09 | 快速切图不串图 | Absent | 无 | P1-05 | — | 快速打开 A→B→C，让 A 最后才解码完：画布、标题、Inspector 都只显示 C |
 | VIEW-10 | 上一张 / 下一张 | Partial | 单元 | P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Access/FolderNavigation.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Access/ViewerSessionNavigationHost.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | ←/→ 按目录顺序翻图；到首尾时按设置停止或循环。限制：按键/菜单/按钮 Finder 顺序、首尾停止 @1x 真机通过（[记录](validation/P0.md#p0-04--p0-09授权与-session-真机验收811access-01--access-02--access-05--open-02--open-06--view-10--cmd-02--a11y-02mac-mini)）；无循环设置、筛选或排序（P2-03）。 |
@@ -327,21 +327,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6）：OPEN-02、OPEN-06 只改限制文本，与 P0.md 第 8、10 项一致；状态、验证与验收未改；OPEN-06 的“不保存图片副本”与重连入口仍未真机验。上次：P0-04 授权（e8f6e88..3419561）OPEN-02/06 随改 |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b）：ImageIOPipeline/ImageSourceHeader 加完整性门槛（`statusComplete`、PNG 块检查）、身份解析与 `ImageLoadError`；VIEW-06/07/08 行未改，交 PR 描述逐条声明；其 @1x 真机记录早于此改动；`accepts` 不比较 isPreview，预览流程未变。上次：P0-04/P0-09 真机记录（da64b08..69e56c6）VIEW-10 只改限制 |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/Commands/CommandMenu.swift` 只在 View 菜单加全屏项，File › Open… 与 ⌘O 未变；OPEN-02 不受影响。上次：P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6） |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：VIEW-01…06 随改，VIEW-01 Stub→Partial、VIEW-04/05 Absent→Partial，均为单元、验收未改；VIEW-07 路径随 `App/CanvasView.swift` 迁入 PicseeMacUI 改写，绘制与背景色值未变；VIEW-08 行未改，但保留位置的重装与视口变化现会重报细节需求，其 @1x 记录早于此改动，交所有者。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CHROME-01…05 待验项，无结果；保持 `Absent`。上次：P0-09 Session（dcfe3f8..bef71d5）CHROME-01…05 保持 `Absent` |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 PREF-01/02/04 待验项，无结果；状态不变。上次：P0-09 Session（dcfe3f8..bef71d5）新增两键暂不入行（PR 描述裁定），待 P1-08/P1-09 命名 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b）：`App/CanvasWindowController.swift` 只改 RenderKey 构造与 sourceChanged 判定，授权提示、租约与释放未改；ACCESS-01/05 不受影响；FileAccessError 原样透传。上次：P0-04/P0-09 真机记录（da64b08..69e56c6）ACCESS-01/02/05 只改限制 |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/CanvasWindowController.swift` 只改画布构造、打开代次闭包、全屏行为与视口同步，授权提示、租约与释放未改；ACCESS-01/05 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CACHE-01 待验项与内存压力用户步骤，无结果；CACHE-01 保持 `Absent`。上次：建账 |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b）：`App/CanvasWindowController.swift` 改动不涉及命令路由、菜单或快捷键；CMD-01 不受影响，无新增命令 ID。上次：P0-04/P0-09 真机记录（da64b08..69e56c6）CMD-01/02 只改限制 |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：View 菜单新增 ⌃⌘F「Enter Full Screen」（`NSWindow.toggleFullScreen`，非 CommandID），归 VIEW-05；ViewerSession 只加缩放意图；CMD-01/02 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
-| 格式 | 2026-10-23 | doc-gardener | P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b）：解码与表头对所有格式要求 `statusComplete`，PNG 另查块边界，截断文件改为一致失败；FMT-01 行未改，交 PR 描述声明；其 @1x 真机记录早于此改动。上次：P0-04 授权（e8f6e88..3419561）FMT-01 不改行 |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b）：`App/CanvasWindowController.swift` 改动不涉及焦点或键盘；A11Y-02 不受影响。上次：P0-04/P0-09 真机记录（da64b08..69e56c6）A11Y-02 只改限制 |
+| 格式 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/CanvasWindowController.swift` 改动不涉及解码与格式；FMT-01 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：画布迁入 PicseeMacUI 时焦点、Tab 与辅助功能标签原样保留；新增「进入全屏/退出全屏」中英文字符串；A11Y-02 不受影响。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
