@@ -19,7 +19,11 @@ public struct RenderKey: Hashable, Sendable {
     /// Versioned UTF-8 cache-key text. P3-03 hashes this with SHA-256 for disk filenames.
     /// Field order: item, bytes, date bits (reference epoch), frame, edge, preview, policy, decoder, purpose.
     public var stableEncoding: String {
-        let date = revision.modificationDate.map { String($0.timeIntervalSinceReferenceDate.bitPattern, radix: 16) } ?? "none"
+        let date = revision.modificationDate.map {
+            let seconds = $0.timeIntervalSinceReferenceDate
+            // Date equates signed zero; equal keys must have identical encodings.
+            return String((seconds == 0 ? 0.0 : seconds).bitPattern, radix: 16)
+        } ?? "none"
         return ["rk1", itemID.stableEncoding, String(revision.byteCount), date, String(frameIndex),
                 String(maximumPixelSize), isPreview ? "1" : "0", policy.rawValue,
                 String(decoderVersion), purpose.rawValue].joined(separator: "|")

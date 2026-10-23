@@ -35,3 +35,12 @@ private let encodingItem = ItemID(rawValue: UUID(uuidString: "00000000-0000-0000
     #expect(request.renderKey?.decoderVersion == 2)
     #expect(request.renderKey?.purpose == .thumbnail)
 }
+
+@Test func renderKeyEqualDatesHaveEqualEncoding() {
+    let positive = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42,
+        modificationDate: Date(timeIntervalSinceReferenceDate: 0.0)), maximumPixelSize: 512)
+    let negative = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42,
+        modificationDate: Date(timeIntervalSinceReferenceDate: -0.0)), maximumPixelSize: 512)
+    #expect(positive == negative)
+    #expect(positive.stableEncoding == negative.stableEncoding)
+}
