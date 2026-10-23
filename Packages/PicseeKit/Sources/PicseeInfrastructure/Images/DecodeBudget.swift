@@ -4,7 +4,8 @@ public enum DecodeBudget {
     public static func bytesPerPixel(depth: Int, components: Int, hasAlpha: Bool, isFloat: Bool) -> Int {
         let bits = max(isFloat ? 32 : 1, min(64, depth))
         let channels = components >= 3 ? 4 : max(1, components) + (hasAlpha ? 1 : 0)
-        return max(4, ((bits + 7) / 8) * channels)
+        let bytes = ((bits + 7) / 8) * channels
+        return bits <= 8 ? max(4, bytes) : bytes
     }
 
     public static func sourceCost(width: Int, height: Int, budget: Int, bytesPerPixel: Int = 4) throws -> Int {
