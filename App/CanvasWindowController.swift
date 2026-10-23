@@ -358,14 +358,19 @@ extension CanvasWindowController: ViewerImageHost {
     func beginImageOpening() {
         window?.title = "Picsee"
         canvas.beginOpening()
+        stateHost.refresh()
     }
     func installImage(_ image: DecodedImage, fileURL: URL) {
         canvas.install(image)
         window?.title = fileURL.lastPathComponent
+        stateHost.refresh()
     }
     func imageLoadFailed(_ error: any Error) {
         canvas.showFailure()
         window?.title = "Picsee"
+        let cancelled = session.dismissCancelledImageFailure(error)
+        stateHost.refresh()
+        if cancelled { return }
         if error is FileAccessError { showAccessError(error) }
     }
 }

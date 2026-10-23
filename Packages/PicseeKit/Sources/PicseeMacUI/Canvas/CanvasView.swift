@@ -43,7 +43,7 @@ open class CanvasView: NSView {
             session.beginCanvasImage()
         }
         previousOpeningGeneration = generation
-        message = String(localized: "canvas.opening", defaultValue: "Opening image…")
+        message = nil
         needsDisplay = true
     }
 
@@ -51,7 +51,7 @@ open class CanvasView: NSView {
         dragPoint = nil
         image = nil
         sourceSize = .zero
-        message = String(localized: "canvas.failure", defaultValue: "Unable to read this image. Open another image from Finder.")
+        message = nil
         needsDisplay = true
     }
 
@@ -200,12 +200,6 @@ open class CanvasView: NSView {
             let rectangle = NSRect(x: origin.x, y: origin.y, width: end.x - origin.x, height: end.y - origin.y)
             image.draw(in: rectangle, from: .zero, operation: .sourceOver, fraction: 1,
                        respectFlipped: true, hints: [.interpolation: NSImageInterpolation.none])
-        } else if let message {
-            let text = NSAttributedString(string: message, attributes: [
-                .font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.secondaryLabelColor
-            ])
-            let size = text.size()
-            text.draw(at: CGPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2))
         }
     }
 }
