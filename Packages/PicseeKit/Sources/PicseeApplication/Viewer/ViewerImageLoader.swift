@@ -82,6 +82,20 @@ public struct PresentedImage: Sendable {
                 guard token.generation == generation else { return }
                 continue
             }
+            if (error as? ImageLoadError)?.kind == .resourceLimit, presented != nil {
+                failure = error; phase = .detailLimited
+                // AccessImageSource closes on an error. Renew the display lease without decoding again.
+                do {
+                    let replacement = try await opener()
+                    guard token.generation == generation else { await replacement.close(); return }
+                    self.source = replacement
+                } catch {
+                    guard token.generation == generation else { return }
+                    failure = error; presented = nil; phase = .failed
+                    host?.imageLoadFailed(error)
+                }
+                break
+            }
             failure = error; phase = .failed
             host?.imageLoadFailed(error)
             break
@@ -90,6 +104,7 @@ public struct PresentedImage: Sendable {
         if token.generation == generation { loading = false }
     }
     public func requireResolution(_ maximum: Int) {
+        guard phase != .failed, phase != .detailLimited else { return }
         desiredMaximum = max(1, maximum)
         guard progress.previewCompleted, desiredMaximum > progress.completedMaximum else { return }
         phase = .refining

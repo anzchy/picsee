@@ -43,7 +43,7 @@ struct ImageSourceHeader: Sendable {
            Array(data[12..<16]) == [73, 72, 68, 82] {
             let width = data[16..<20].reduce(0) { ($0 << 8) | Int($1) }
             let height = data[20..<24].reduce(0) { ($0 << 8) | Int($1) }
-            _ = try DecodeBudget.sourceCost(width: width, height: height, budget: budget)
+            _ = try DecodeBudget.sourceCost(width: width, height: height, budget: Int.max)
             try requireCompletePNG(request.fileURL)
         }
         guard let source = CGImageSourceCreateWithURL(request.fileURL as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
@@ -51,7 +51,7 @@ struct ImageSourceHeader: Sendable {
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int else { throw ImageDecodeError.unreadableImage }
         let bytesPerPixel = pixelBytes(properties)
-        _ = try DecodeBudget.sourceCost(width: width, height: height, budget: budget, bytesPerPixel: bytesPerPixel)
+        _ = try DecodeBudget.outputCost(width: width, height: height, maximumPixelSize: request.maximumPixelSize, bytesPerPixel: bytesPerPixel, budget: budget)
         guard CGImageSourceGetStatus(source) == .statusComplete else { throw ImageDecodeError.unreadableImage }
         return ImageSourceHeader(bytesPerPixel: bytesPerPixel, itemID: itemID, width: width, height: height,
                                  revision: try FileRevisionReader.read(request.fileURL))

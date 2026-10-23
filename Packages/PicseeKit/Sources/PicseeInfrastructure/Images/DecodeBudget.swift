@@ -15,6 +15,21 @@ public enum DecodeBudget {
         }
         return bytes
     }
+    /// Bounds ImageIO thumbnail output, including row alignment and either EXIF orientation.
+    public static func outputCost(width: Int, height: Int, maximumPixelSize: Int, bytesPerPixel: Int, budget: Int) throws -> Int {
+        _ = try sourceCost(width: width, height: height, budget: Int.max, bytesPerPixel: bytesPerPixel)
+        guard maximumPixelSize > 0 else { throw ImageDecodeError.budgetExceeded }
+        let scale = min(1, Double(maximumPixelSize) / Double(max(width, height)))
+        let w = max(1, Int(ceil(Double(width) * scale))), h = max(1, Int(ceil(Double(height) * scale)))
+        func aligned(_ width: Int, _ height: Int) throws -> Int {
+            let (row, rowOverflow) = width.multipliedReportingOverflow(by: bytesPerPixel)
+            let (rounded, roundOverflow) = row.addingReportingOverflow(63)
+            let (bytes, overflow) = ((rounded / 64) * 64).multipliedReportingOverflow(by: height)
+            guard !rowOverflow, !roundOverflow, !overflow, bytes <= budget else { throw ImageDecodeError.budgetExceeded }
+            return bytes
+        }
+        return max(try aligned(w, h), try aligned(h, w))
+    }
     public static func isHeavy(width: Int, height: Int) -> Bool {
         // Division avoids multiplying untrusted header dimensions.
         width > 0 && height > 0 && width > 12_000_000 / height
