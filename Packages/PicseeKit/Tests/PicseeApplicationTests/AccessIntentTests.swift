@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import PicseeApplication
+import PicseeCore
 
 /// A listing/store/old-source close that can return only when explicitly released.
 private actor AccessSuspension {
@@ -115,4 +116,80 @@ private enum AccessTestFailure: Error { case expected }
     #expect(first == URL(fileURLWithPath: "/photos/a.jpg"))
     let empty = try await operation.firstImage(list: { [] }, remember: { remembered += 1 })
     #expect(empty == nil && remembered == 1)
+}
+
+/// Uses the native host's operation policy through the real Session dispatch.
+@MainActor private final class PendingAccessHost: ViewerSessionNavigationHost {
+    let intent = AccessIntent()
+    let file = URL(fileURLWithPath: "/photos/only.jpg")
+    var installed: URL?
+    var hasImage: Bool { installed != nil }
+    var canNavigate = true
+    var covered = true
+    var decision: NavigationDecision?
+    func navigate(_ direction: NavigationDirection) {
+        let operation = intent.navigation()
+        guard operation.isCurrent else { return }
+        decision = FolderNavigation(images: [file]).step(from: file, direction: direction, covered: covered)
+    }
+    func performCanvas(_ command: CommandID, from entry: CommandEntry) {}
+    func requestOpen() {}
+    func applyFocus(_ focus: FocusContext) {}
+    func showInspector(_ visible: Bool) {}
+}
+
+@Test @MainActor func accessSessionNoopArrowPreservesSuspendedOpen() async throws {
+    for covered in [true, false] {
+        let host = PendingAccessHost()
+        host.covered = covered
+        let session = ViewerSession(host: host)
+        let operation = host.intent.begin()
+        let suspended = AccessSuspension()
+        let opening = Task { @MainActor in
+            try await operation.wait { await suspended.suspend() }
+            host.installed = host.file
+        }
+        await suspended.waitUntilEntered()
+        #expect(CommandRouter().route(.next, from: .key, to: session))
+        #expect(host.decision == (covered ? .end : .needsGrant(URL(fileURLWithPath: "/photos", isDirectory: false))))
+        // Cancel the prompt, or grant the containing folder and still reach the end.
+        if !covered {
+            host.covered = true
+            #expect(CommandRouter().route(.next, from: .menu, to: session))
+            #expect(host.decision == .end)
+        }
+        await suspended.resume()
+        let result = await opening.result
+        #expect(throws: Never.self) { try result.get() }
+        #expect(host.installed == host.file)
+    }
+}
+
+@Test @MainActor func accessSessionGrantCancelStillInstallsDecodedPendingImage() async throws {
+    let host = PendingAccessHost()
+    host.covered = false
+    let session = ViewerSession(host: host)
+    let operation = host.intent.begin()
+    let suspended = AccessSuspension()
+    let access = AccessProbe()
+    let pipeline = AccessPipelineProbe(access: access)
+    let opening = Task { @MainActor in
+        // Controlled suspension at the access-services boundary, before source acquisition.
+        try await operation.wait { await suspended.suspend() }
+        let source = try await AccessImageSource.open(.fileGrant(host.file), access: access, pipeline: pipeline)
+        guard operation.isCurrent else { await source.close(); return false }
+        let (request, image) = try await source.image(maximumPixelSize: 1)
+        let installed = operation.isCurrent && image.image.width == 1 && image.image.height == 1
+        if installed { host.installed = request.fileURL }
+        await source.close()
+        return installed
+    }
+    await suspended.waitUntilEntered()
+    #expect(CommandRouter().route(.next, from: .button, to: session))
+    #expect(host.decision == .needsGrant(URL(fileURLWithPath: "/photos", isDirectory: false)))
+    // Cancel performs no grant and no new open.
+    await suspended.resume()
+    #expect(try await opening.value)
+    #expect(host.installed == host.file)
+    #expect(await access.count() == 0)
 }
