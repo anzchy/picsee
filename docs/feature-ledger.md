@@ -334,8 +334,8 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
-| 信息与元数据 | 2026-10-23 | picsee-delegator | P1-04/05（#41）Inspector 占位面板只加当前已接受图片的文件名行（属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent` |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：源获取、关闭与续租从 `App/CanvasWindowController.swift` 迁入 `ViewerImageLoader`，`AccessImageSource` 把租约根传入解码请求；ACCESS-05 的 P0 释放记录早于迁移，已提议补「限制：」与位置（待 owner）。ACCESS-01 授权提示与导航未改，不受影响。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
+| 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：源获取、关闭与续租从 `App/CanvasWindowController.swift` 迁入 `ViewerImageLoader`，`AccessImageSource` 把租约根传入解码请求；ACCESS-05 已补 `ViewerImageLoader` 位置与「限制：」（afc18f2，状态 `Partial`、验证 `单元` 与验收不变）。ACCESS-01 授权提示与导航未改，不受影响。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 命令与键盘 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`ViewerSession` 只加 imageLoader 构造参数，控制器移除解码块，命令路由、菜单与 Inspector 切换未改；CMD-01/02 不受影响。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
