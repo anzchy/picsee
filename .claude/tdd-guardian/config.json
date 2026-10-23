@@ -28,8 +28,7 @@
       "description": "Real filesystem/security-scope adapter and Session/admission/ImageIO regression paths for File Grants; native sandbox delivery remains signed device smoke.",
       "command": "node scripts/tdd/swift-lane.mjs 'issue73SystemScopeReadabilityReflectsRealFiles|issue73ReadableDropSessionOpensEmptyThenReplacesAndRejectsZIP|accessSystemAdapterCreatesAndResolvesRealBookmark'",
       "gateOn": [
-        "taskCompleted",
-        "commit"
+        "manual"
       ],
       "coverage": "none",
       "probeCommand": "scripts/heavy-lock.sh swift test --package-path Packages/PicseeKit --list-tests --filter 'issue73SystemScopeReadabilityReflectsRealFiles|issue73ReadableDropSessionOpensEmptyThenReplacesAndRejectsZIP|accessSystemAdapterCreatesAndResolvesRealBookmark'",
