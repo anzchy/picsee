@@ -56,7 +56,8 @@ extension ViewerSession {
             guard operation.isCurrent else { return }
             if case .open(let request) = result { endFilePreviewSet(); host.openInputImage(url, accessRequest: request) }
             else if result == .unsupported { host.showInputNotice(.unsupported(url.lastPathComponent)) }
-        } else if case .rejected = input { host.showInputNotice(.rejected) }
+        } else if case .folder(let folder) = input { host.promptForInputFolder(folder) }
+        else if case .rejected = input { host.showInputNotice(.rejected) }
     }
 }
 

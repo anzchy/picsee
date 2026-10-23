@@ -284,7 +284,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                         } else {
                             promptForFolder(folder, currentImage: currentImage, direction: direction, mismatch: true)
                         }
-                    } else { openFolder(chosen, rootID: id) }
+                    } else { endInput(); openFolder(chosen, rootID: id) }
                 } catch { if operation.isCurrent { showAccessError(error) } }
             }
         }
