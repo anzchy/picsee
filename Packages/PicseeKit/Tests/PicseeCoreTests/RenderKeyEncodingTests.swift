@@ -53,3 +53,13 @@ private let encodingItem = ItemID.ephemeral(UUID(uuidString: "00000000-0000-0000
     #expect(original.stableEncoding != replacement.stableEncoding)
     #expect(replacement.stableEncoding == "rk1|id1:ephemeral:00000000-0000-0000-0000-000000000001|42|none|0|512|0|orientedSDR|1|viewer|ZmlsZTE=")
 }
+
+@Test func renderKeyEquivalentUnicodeTokensEncodeEqually() {
+    let composed = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42, modificationDate: nil,
+        resourceIdentifier: "\u{00E9}"), maximumPixelSize: 512)
+    let decomposed = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42, modificationDate: nil,
+        resourceIdentifier: "e\u{0301}"), maximumPixelSize: 512)
+    #expect(composed == decomposed)
+    #expect(composed.stableEncoding == decomposed.stableEncoding)
+    #expect(composed.stableEncoding == "rk1|id1:ephemeral:00000000-0000-0000-0000-000000000001|42|none|0|512|0|orientedSDR|1|viewer|w6k=")
+}
