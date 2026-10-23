@@ -120,7 +120,6 @@ public final class ViewerChromeOverlay: NSView {
         let positions: [[CGFloat]] = [[8, 42], [8, 222], [8, 42, 168]]
         for index in 0..<3 {
             let group = NSView(frame: frames[index])
-            group.autoresizingMask = index == 0 ? [.maxXMargin, .maxYMargin] : index == 1 ? [.minXMargin, .maxXMargin, .maxYMargin] : [.minXMargin, .maxYMargin]
             group.wantsLayer = true; group.layer?.cornerRadius = DesignMetrics.radii["popover"]!
             group.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
             addSubview(group); groups.append(group)
@@ -134,7 +133,24 @@ public final class ViewerChromeOverlay: NSView {
         fileLabel.lineBreakMode = .byTruncatingMiddle
         fileLabel.font = DesignMetrics.font("uiSmall")
         groups[1].addSubview(fileLabel)
+        arrangeGroups()
         refresh()
+    }
+    public override func resizeSubviews(withOldSize oldSize: NSSize) {
+        super.resizeSubviews(withOldSize: oldSize)
+        arrangeGroups()
+    }
+    private func arrangeGroups() {
+        guard groups.count == 3 else { return }
+        // Keep command hit areas intact; narrow windows wrap groups above one another.
+        let width = min(260, bounds.width - 32)
+        let singleRow = bounds.width >= 610
+        groups[0].frame = NSRect(x: 16, y: bounds.width < 334 ? 112 : 16, width: 80, height: 40)
+        groups[2].frame = NSRect(x: bounds.width - 222, y: 16, width: 206, height: 40)
+        groups[1].frame = NSRect(x: singleRow ? min(bounds.midX - 130, bounds.width - 238 - width) : (bounds.width - width) / 2,
+            y: singleRow ? 16 : 64, width: width, height: 40)
+        tools[3].setFrameOrigin(NSPoint(x: width - 38, y: 6))
+        fileLabel.frame = NSRect(x: 44, y: 11, width: width - 88, height: 18)
     }
     public static let edgeBandHeight: CGFloat = 32
     public func pointerMoved(_ point: NSPoint) {
