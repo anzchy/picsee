@@ -97,14 +97,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport() }
 
     func open(_ url: URL, accessRequest: AccessRequest? = nil) {
-        let operation = accessIntent.begin()
+        _ = accessIntent.begin()
         refreshRecents()
         filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
         fileURL = url
         navigationTask?.cancel()
         let scale = window?.backingScaleFactor ?? 1
         let maximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
-        session.openImage(url, maximumPixelSize: maximum) { [accessServices, pipeline] in
+        session.openImage(url, maximumPixelSize: maximum, opener: ViewerImageLoader.accessOpener(intent: accessIntent) { [accessServices, pipeline] operation in
             let services = try await operation.wait { try await accessServices.value }
             let request: AccessRequest
             if let accessRequest { request = accessRequest }
@@ -114,7 +114,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             }
             try operation.check()
             return try await AccessImageSource.open(request, access: services.files, pipeline: pipeline)
-        }
+        })
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(canvas)
