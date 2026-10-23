@@ -15,6 +15,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var fileURL: URL?
     private var generation: UUID { session.imageLoader.generation }
     private let accessIntent = AccessIntent()
+    private let inputIntent = AccessIntent()
 
     private var chromeOverlay: ViewerChromeOverlay!
     private var stateHost: ViewerStateHost!
@@ -159,6 +160,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        endInput()
         accessIntent.invalidate()
         session.closeImage()
         fileURL = nil
@@ -178,12 +180,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func openRecent(_ folder: RecentFolder) {
+        endInput()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         openFolder(folder.url, rootID: folder.rootID)
     }
 
     func openGrantedFolder(_ folder: URL) {
+        endInput()
         let operation = accessIntent.begin()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
@@ -287,6 +291,20 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private func showAccessError(_ error: Error) {
         filesystemLogger.error("Access operation outcome=failed error=\(String(describing: error), privacy: .private)")
         showAccessMessage(String(localized: "Folder Access Failed"))
+    }
+    private func showInputMessage(_ notice: ViewerInputNotice) {
+        guard let window, window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        switch notice {
+        case .unsupported(let name):
+            alert.messageText = String(localized: "This File Can’t Be Opened")
+            alert.informativeText = String(format: String(localized: "“%@” isn’t a supported image format."), name)
+        case .rejected:
+            alert.messageText = String(localized: "None of These Files Can Be Opened")
+            alert.informativeText = String(localized: "None of the dropped or opened files is a supported image.")
+        }
+        alert.addButton(withTitle: String(localized: "OK"))
+        alert.beginSheetModal(for: window)
     }
     private func showAccessMessage(_ message: String) {
         guard let window, window.attachedSheet == nil else { return }
@@ -402,4 +420,26 @@ extension CanvasWindowController: ViewerImageHost {
                     "outcome=%{public}s", outcome.rawValue)
         logger.notice("FirstPreview outcome=\(outcome.rawValue, privacy: .public) open=\(id.uuidString, privacy: .private)")
     }
+}
+
+// Native input effects; classification and admission belong to the Session.
+extension CanvasWindowController: ViewerInputHost {
+    func openInput(_ urls: [URL]) {
+        let operation = inputIntent.begin()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let services = try await operation.wait { try await accessServices.value }
+                let scale = window?.backingScaleFactor ?? 1
+                let maximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
+                let admission = ViewerInputAdmission(access: services.files, pipeline: pipeline,
+                    maximumPixelSize: maximum, rootCovering: { await services.files.rootCovering($0) })
+                await session.openInput(urls, operation: operation, admission: admission, host: self)
+            } catch { if operation.isCurrent { showAccessError(error) } }
+        }
+    }
+    private func endInput() { inputIntent.invalidate() }
+    func openInputImage(_ url: URL, accessRequest: AccessRequest?) { open(url, accessRequest: accessRequest) }
+    func showInputNotice(_ notice: ViewerInputNotice) { showInputMessage(notice) }
+    func promptForInputFolder(_ folder: URL) { promptForFolder(folder, currentImage: nil, direction: .next) }
 }

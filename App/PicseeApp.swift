@@ -46,8 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let file = urls.first(where: { $0.isFileURL && !$0.hasDirectoryPath }) else { return }
-        viewer().open(file)
+        viewer().openInput(urls)
         application.activate(ignoringOtherApps: true)
     }
 
@@ -62,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.allowsMultipleSelection = false
             if panel.runModal() == .OK, let url = panel.url {
                 if url.hasDirectoryPath { self?.viewer().openGrantedFolder(url) }
-                else { self?.application(NSApp, open: [url]) }
+                else { self?.viewer().openInput([url]) }
             }
         }
         controller.menuTracking = { [weak self] in self?.commandMenu?.isTracking ?? false }
