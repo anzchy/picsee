@@ -22,35 +22,65 @@ public struct PresentedImage: Sendable {
     private var source: AccessImageSource?
     var loadTask: Task<Void, Never>?
     public init() { }
+    private var desiredMaximum = 0
+    private var progress = CanvasDecodeProgress()
+    private var loading = false
+    private var fileURL: URL?
+    private var opener: Opener?
     public func open(_ fileURL: URL, maximumPixelSize: Int, opener: @escaping Opener) {
         generation = UUID()
         phase = .opening; presented = nil; failure = nil; preparedKey = nil
+        source = nil
+        self.fileURL = fileURL; self.opener = opener
+        desiredMaximum = max(1, maximumPixelSize); progress = CanvasDecodeProgress()
         host?.beginImageOpening()
+        schedule()
+    }
+    private func schedule() {
+        guard let fileURL, let opener else { return }
+        loading = true
         let token = PresentationToken(binding: binding, generation: generation)
-        loadTask = Task {
-            do {
-                let source = try await opener()
+        loadTask = Task { await load(fileURL, opener: opener, token: token) }
+    }
+    private func load(_ fileURL: URL, opener: Opener, token: PresentationToken) async {
+        do {
+            let source: AccessImageSource
+            if let existing = self.source { source = existing }
+            else {
+                source = try await opener()
                 guard token.generation == generation else { await source.close(); return }
                 self.source = source
-                let (request, image) = try await source.image(
-                    maximumPixelSize: min(CanvasDecodePolicy.previewMaximumPixelSize, maximumPixelSize), isPreview: true)
+            }
+            while let maximum = progress.nextMaximum(desired: desiredMaximum),
+                  !progress.previewCompleted || maximum > progress.completedMaximum {
+                let preview = !progress.previewCompleted
+                let (request, image) = try await source.image(maximumPixelSize: maximum, isPreview: preview)
                 guard token == PresentationToken(binding: binding, generation: generation) else { return }
                 preparedKey = request.renderKey
                 guard let key = preparedKey, image.itemID == key.itemID, image.revision == key.revision else {
                     throw ImageLoadError(.sourceChanged, itemID: preparedKey?.itemID, revision: image.revision)
                 }
+                progress.completed(image, isPreview: preview)
                 presented = PresentedImage(fileURL: fileURL, key: key)
                 host?.installImage(image, fileURL: fileURL)
-                phase = .settled
-            } catch {
-                guard token.generation == generation else { return }
-                failure = error; phase = .failed
-                host?.imageLoadFailed(error)
+                phase = .refining
             }
+            phase = .settled
+        } catch {
+            guard token.generation == generation else { return }
+            failure = error; phase = .failed
+            host?.imageLoadFailed(error)
         }
+        if token.generation == generation { loading = false }
     }
-    public func requireResolution(_ maximum: Int) { }
+    public func requireResolution(_ maximum: Int) {
+        desiredMaximum = max(1, maximum)
+        guard progress.previewCompleted, desiredMaximum > progress.completedMaximum else { return }
+        phase = .refining
+        if !loading { schedule() }
+    }
     public func close() { }
+
 }
 
 extension ViewerSession {
