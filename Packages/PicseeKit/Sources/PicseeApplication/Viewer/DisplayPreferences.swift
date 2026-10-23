@@ -1,12 +1,27 @@
 import Observation
 
+public enum DisplayAppearance: String, Codable, Sendable {
+    case system, light, dark
+}
+
 /// App-level layout only. Search is deliberately not Codable preference state.
 public struct DisplayPreferences: Codable, Equatable, Sendable {
     public var alwaysShowTools: Bool
     public var filmstripExpanded: Bool
-    public init(alwaysShowTools: Bool = false, filmstripExpanded: Bool = false) {
+    public var appearance: DisplayAppearance
+    public init(alwaysShowTools: Bool = false, filmstripExpanded: Bool = false, appearance: DisplayAppearance = .system) {
         self.alwaysShowTools = alwaysShowTools
         self.filmstripExpanded = filmstripExpanded
+        self.appearance = appearance
+    }
+
+    private enum CodingKeys: String, CodingKey { case alwaysShowTools, filmstripExpanded, appearance }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        alwaysShowTools = try values.decode(Bool.self, forKey: .alwaysShowTools)
+        filmstripExpanded = try values.decode(Bool.self, forKey: .filmstripExpanded)
+        appearance = DisplayAppearance(rawValue: try values.decodeIfPresent(String.self, forKey: .appearance) ?? "") ?? .system
     }
 }
 
