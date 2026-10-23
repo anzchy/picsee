@@ -84,6 +84,7 @@ public struct PresentedImage: Sendable {
                 if (error as? ImageLoadError)?.kind == .sourceChanged, !revisionRetryUsed {
                     revisionRetryUsed = true
                     preparedKey = nil; presented = nil; progress = CanvasDecodeProgress()
+                    phase = .opening
                     host?.beginImageOpening()
                     let old = source; source = nil
                     await old?.close()
