@@ -14,7 +14,7 @@ picsee 是一个 macOS 原生看图应用（Swift 6 + SwiftUI + AppKit，最低 
 - **改变用户可见行为的提交，同时改它的那一行。** 状态只能升到证据支持的程度：`Shipped` 需要真机记录。
 - 状态升级的那次提交，可以追加或修改「限制：」文本，但不得改写「怎么确认」中的验收本身。确需改验收时，单独提交并在提交说明里引用用户原话或 ADR。
 - 不要因为浏览器原型或 mockup 里有某个功能，就认为 picsee 有它。
-- [`docs/feature-ledger.html`](docs/feature-ledger.html) 是它的渲染视图，由账簿生成，不要手改；两者不一致时以 `.md` 为准。
+- [`docs/feature-ledger.html`](docs/feature-ledger.html) 是它的渲染视图，由账簿生成，不要手改；改账簿后运行 `npm run ledger:build`，两者一起提交。`npm run ledger:html-check` 检查是否同步。
 
 ## 每个 PR 都要先跑 doc gardener
 
@@ -27,7 +27,7 @@ picsee 是一个 macOS 原生看图应用（Swift 6 + SwiftUI + AppKit，最低 
 
    | 结果 | 怎么做 |
    |---|---|
-   | `UPDATED` | 检查 `git diff -- docs/feature-ledger.md`，单独提交为 `docs(ledger): garden <base7>..<head7>` |
+   | `UPDATED` | 检查 `git diff -- docs/feature-ledger.md docs/feature-ledger.html`，单独提交为 `docs(ledger): garden <base7>..<head7>` |
    | `NEEDS-OWNER` | 改账簿里被点名的行，或在 PR 描述里逐条写 `无用户可见变化：<ID> <理由>`，然后重跑 gardener |
    | `BLOCK` | 不开 PR。把验收改动拆成单独提交，或补齐真机证据 |
 
@@ -84,7 +84,7 @@ xcodebuild build -scheme Picsee -destination 'platform=macOS' -derivedDataPath .
 open -n .build/dd-signed/Build/Products/Debug/Picsee.app
 ```
 
-`*.xcodeproj` 由 `project.yml` 生成，不入库。`ledger:check` / `ledger:build` 尚未建立；规划见迁移计划 A12。
+`*.xcodeproj` 由 `project.yml` 生成，不入库。账簿 HTML 用 `npm run ledger:build` 生成、用 `npm run ledger:html-check` 检查；五条规则门禁 `ledger:check` 仍按迁移计划 A12 待建。
 
 Swift RED 使用手动 lane `swift-red`，只跑指定测试。先写能编译的失败断言，再记录；`--files` 只选指纹文件，不选择测试。record 和 verify 必须传相同的过滤器（环境变量不会写入 receipt）：
 

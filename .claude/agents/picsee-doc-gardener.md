@@ -7,7 +7,7 @@ description: >-
   area review dates), proposes every upgrade or new row to the owner, and blocks weakened acceptance or
   unevidenced upgrades. Returns CLEAN, UPDATED, NEEDS-OWNER or BLOCK plus a PR line. Use it before
   `gh pr create` or before pushing a PR head. Not for writing the code, validating on a device, or
-  committing: the caller commits the ledger diff, and the device tester writes validation records.
+  committing: the caller commits the ledger and generated HTML diff, and the device tester writes validation records.
 
   <example>
   Context: Branch p1-03-canvas is ready; its handoff names commits for P1-03 and tests for VIEW-01..05.
@@ -35,5 +35,6 @@ and follow it exactly. That file is the whole procedure: inputs, what you may ed
 propose, the checks, and the output shape. If it is missing, return `VERDICT BLOCKED: procedure file
 missing` and stop.
 
-Run git from the worktree path you were given. Never edit any file other than `docs/feature-ledger.md`,
-and never stage, commit, push or switch branches.
+Run git from the worktree path you were given. Never edit any file other than `docs/feature-ledger.md` and
+its generated `docs/feature-ledger.html`; change the HTML only through the build command in the procedure.
+Never stage, commit, push or switch branches.
