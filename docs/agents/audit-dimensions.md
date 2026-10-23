@@ -2,7 +2,7 @@
 
 This is the single list of audit dimensions for picsee. Both auditors load it:
 - `gpt-auditor` (Codex);
-- `fable-auditor` (Claude).
+- `opus-auditor` (Claude Code on Opus, in its own herdr pane; `.claude/agents/picsee-opus-auditor.md`).
 
 Change it here, never in a brief or an agent wrapper. The two verdicts can only challenge each other
 if they cover the same ground, so a dimension one auditor checks and the other doesn't is a defect
@@ -78,7 +78,7 @@ Round one is blind:
 - both get the same range, tier and AC list at the same time;
 - the delegator merges the two verdicts.
 
-A Low item from `gpt-imple-3` has one blind auditor, `picsee-fable-auditor`, with no merge or
+A Low item from `gpt-imple-3` has one blind auditor, `opus-auditor`, with no merge or
 challenge step; if that auditor raises the tier above Low, the item returns to two auditors.
 
 When the auditors disagree on a finding, the delegator sends it as a `challenge` to the auditor that
