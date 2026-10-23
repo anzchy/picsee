@@ -288,6 +288,7 @@ MVP 起就是门槛（见计划 P3「MVP 还需检查」），P6-04 补全全部
 | DIST-03 | 安装包内容干净 | Absent | 无 | P6-07 | — | 检查 `.app` 内容，没有 REA、研究素材、私人照片或开发路径 |
 | DIST-04 | 升级保留数据 | Absent | 无 | P6-08 | — | 用新版本覆盖旧版本，设置、收藏和目录授权都还在 |
 | DIST-05 | 自动更新 | Absent | 无 | P6-08 | — | 有新版本时 App 提示更新，更新后签名校验通过 |
+| DIST-06 | App 图标 | Partial | 无 | P1-10 | `App/Resources/Assets.xcassets/AppIcon.appiconset/`、`project.yml` | 在 Dock、访达（列表与图标视图）和 ⌘Tab 里看到 Lens 图标，浅色/深色下 16–512 pt 都清晰无白边。限制：真机未验；无 Icon Composer `.icon`（Liquid Glass 分层）。 |
 
 ### 增强
 
