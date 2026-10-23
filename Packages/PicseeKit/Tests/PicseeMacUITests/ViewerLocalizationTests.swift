@@ -1,0 +1,74 @@
+import Foundation
+import Testing
+
+private struct CatalogLocalization: Decodable {
+    struct Unit: Decodable { let value: String? }
+    let stringUnit: Unit?
+}
+private struct CatalogRecord: Decodable {
+    let localizations: [String: CatalogLocalization]?
+}
+private struct StatesCatalog: Decodable {
+    let strings: [String: CatalogRecord]
+    func value(_ key: String, _ language: String) -> String? {
+        strings[key]?.localizations?[language]?.stringUnit?.value
+    }
+}
+private func statesCatalog() throws -> StatesCatalog {
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+    let data = try Data(contentsOf: root.appendingPathComponent("App/Resources/Localizable.xcstrings"))
+    return try JSONDecoder().decode(StatesCatalog.self, from: data)
+}
+
+private let statesLocalizationKeys = [
+    "Open a folder to start browsing", "Images stay on your Mac. Browse by folder.",
+    "Choose Folder…", "Opening %@…", "Unable to read this image",
+    "The file may be damaged or its format unreadable.", "This image format is not supported.",
+    "This image exceeds the available resources.", "The file changed again while it was being opened.",
+    "Access to this image is unavailable.", "Showing reduced detail", "Next",
+    "File", "Edit", "View", "Window", "About Picsee", "Hide Picsee", "Hide Others", "Show All",
+    "Quit Picsee", "Undo", "Redo", "Cut", "Copy", "Paste", "Select All", "Minimize", "Zoom",
+    "Bring All to Front", "Fit", "Actual Pixels", "Zoom In", "Zoom Out", "Open…",
+    "Show Inspector", "Hide Inspector", "Focus Canvas", "Inspector Placeholder", "Focus test (not saved)",
+    "Cancel", "Retry", "Close", "Open Recent", "Always Show Tools", "Zoom mode", "Fit window",
+    "Previous Image", "Next Image", "Previous image", "Next image", "Zoom in", "Zoom out",
+    "Show image information", "Open folder", "Enter Full Screen", "Exit Full Screen", "Component Preview",
+    "No Recent Folders", "canvas.image"
+]
+
+@Test func statesLocalizationUsedKeysAreBilingual() throws {
+    let catalog = try statesCatalog()
+    for key in statesLocalizationKeys {
+        #expect(catalog.value(key, "en")?.isEmpty == false, "English translation required for \(key)")
+        #expect(catalog.value(key, "zh-Hans")?.isEmpty == false, "Chinese translation required for \(key)")
+        #expect(catalog.value(key, "zh-Hans") != key, "Chinese must not display the English key: \(key)")
+    }
+}
+
+@Test func statesLocalizationPageWordingAndFilenamePlaceholder() throws {
+    let catalog = try statesCatalog()
+    #expect(catalog.value("Open a folder to start browsing", "zh-Hans") == "打开一个文件夹，开始浏览")
+    #expect(catalog.value("Images stay on your Mac. Browse by folder.", "zh-Hans") == "图片留在本地，按文件夹浏览。")
+    #expect(catalog.value("Choose Folder…", "zh-Hans") == "选择文件夹…")
+    #expect(catalog.value("Unable to read this image", "zh-Hans") == "无法读取这张图片")
+    #expect(catalog.value("The file may be damaged or its format unreadable.", "zh-Hans") == "文件可能已损坏或当前格式不可读取。")
+    #expect(catalog.value("Retry", "zh-Hans") == "重试")
+    #expect(catalog.value("Next", "zh-Hans") == "下一张")
+    #expect(catalog.value("Opening %@…", "en") == "Opening %@…")
+    #expect(catalog.value("Opening %@…", "zh-Hans") == "正在打开 %@…")
+    for language in ["en", "zh-Hans"] {
+        let format = try #require(catalog.value("Opening %@…", language))
+        #expect(format.components(separatedBy: "%@").count - 1 == 1)
+    }
+}
+
+@Test func statesLocalizationAllCatalogEntriesRemainBilingual() throws {
+    let catalog = try statesCatalog()
+    #expect(!catalog.strings.isEmpty)
+    for key in catalog.strings.keys {
+        #expect(catalog.value(key, "en")?.isEmpty == false, "English translation required for \(key)")
+        #expect(catalog.value(key, "zh-Hans")?.isEmpty == false, "Chinese translation required for \(key)")
+    }
+}
