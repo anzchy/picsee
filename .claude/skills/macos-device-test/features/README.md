@@ -29,6 +29,11 @@ real run.
 - Treat every key and menu name in a recipe as literal.
 - Use `key.sh` only for one printable character. Named keys go through `kc.sh`: Tab `48`, Esc `53`, Return
   `36`, Left/Right/Down/Up `123`–`126`, and Space `49`.
+- Drag-in from Finder (OPEN-04): computer-use drags did not arrive. A CGEvent drag did: mouse-moved, then
+  left-down on a Finder list-view row, a 0.4 s hold, small then ~60 `leftMouseDragged` steps, a 0.6 s pause
+  over the target, then left-up, with Finder frontmost (P1-02 run `20261024-025857`). Record it as synthetic
+  input. Drag a file the app has never opened: an earlier `open -a` of the same path gives the process access
+  and hides access defects. Keep the drag source outside `fixtures/`, because Finder writes `.DS_Store` there.
 - Undo what a recipe changes (preferences, granted folders) when the brief asks for a clean machine
   afterwards; never delete evidence.
 
