@@ -1,3 +1,4 @@
+import Foundation
 import PicseeCore
 
 public enum ViewerImageFailure: Equatable, Sendable {
@@ -22,7 +23,13 @@ public enum ViewerImageStatus: Equatable, Sendable {
             case .resourceLimit: kind = .resourceLimit
             case .sourceChanged: kind = .sourceChanged
             case .cancelled: self = .empty; return
-            case nil: kind = .access
+            case nil:
+                let error = failure as NSError?
+                let cocoaPermission = error?.domain == NSCocoaErrorDomain &&
+                    (error?.code == NSFileReadNoPermissionError || error?.code == NSFileWriteNoPermissionError)
+                let posixPermission = error?.domain == NSPOSIXErrorDomain &&
+                    (error?.code == Int(POSIXError.Code.EACCES.rawValue) || error?.code == Int(POSIXError.Code.EPERM.rawValue))
+                kind = failure is FileAccessError || cocoaPermission || posixPermission ? .access : .corruptImage
             }
             self = .failed(kind, fileName)
         }

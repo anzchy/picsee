@@ -3,12 +3,17 @@ import Testing
 import PicseeCore
 @testable import PicseeApplication
 
-private struct StatusExample: Sendable {
+private struct StatusExample: Sendable, CustomStringConvertible, CustomDebugStringConvertible {
     let phase: ViewerImagePhase
     let name: String
     let failure: (any Error)?
     let expected: ViewerImageStatus
+    // Keep NSError system descriptions out of runner diagnostics.
+    var description: String { "\(phase) \(name) → \(expected)" }
+    var debugDescription: String { description }
 }
+
+private struct UntypedStatusError: Error {}
 
 private let statusExamples: [StatusExample] = [
     .init(phase: .idle, name: "A.png", failure: nil, expected: .empty),
@@ -22,6 +27,15 @@ private let statusExamples: [StatusExample] = [
     .init(phase: .failed, name: "B.jpg", failure: ImageLoadError(.resourceLimit), expected: .failed(.resourceLimit, "B.jpg")),
     .init(phase: .failed, name: "A.png", failure: ImageLoadError(.sourceChanged), expected: .failed(.sourceChanged, "A.png")),
     .init(phase: .failed, name: "B.jpg", failure: FileAccessError.startFailed, expected: .failed(.access, "B.jpg")),
+    .init(phase: .failed, name: "B.jpg", failure: UntypedStatusError(), expected: .failed(.corruptImage, "B.jpg")),
+    .init(phase: .failed, name: "B.jpg", failure: nil, expected: .failed(.corruptImage, "B.jpg")),
+    .init(phase: .failed, name: "B.jpg", failure: NSError(domain: "unrelated", code: 13), expected: .failed(.corruptImage, "B.jpg")),
+    .init(phase: .failed, name: "B.jpg", failure: NSError(domain: NSCocoaErrorDomain, code: NSFileReadCorruptFileError), expected: .failed(.corruptImage, "B.jpg")),
+    .init(phase: .failed, name: "B.jpg", failure: NSError(domain: NSPOSIXErrorDomain, code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing image fixture"]), expected: .failed(.corruptImage, "B.jpg")),
+    .init(phase: .failed, name: "A.png", failure: NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError), expected: .failed(.access, "A.png")),
+    .init(phase: .failed, name: "A.png", failure: NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError), expected: .failed(.access, "A.png")),
+    .init(phase: .failed, name: "B.jpg", failure: NSError(domain: NSPOSIXErrorDomain, code: 13), expected: .failed(.access, "B.jpg")),
+    .init(phase: .failed, name: "B.jpg", failure: NSError(domain: NSPOSIXErrorDomain, code: 1), expected: .failed(.access, "B.jpg")),
     .init(phase: .failed, name: "B.jpg", failure: ImageLoadError(.cancelled), expected: .empty)
 ]
 
