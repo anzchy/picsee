@@ -327,21 +327,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P0-08（#12，86950cc..f9c2ef6）只在 `App/Commands/CommandMenu.swift` 的 Window 菜单加 `#if DEBUG` 的 Component Preview 项，无快捷键，不改 File › Open…/⌘O；OPEN-02 不受影响。上次：P0-09 真机运行（88a76ef..24bd082），OPEN-02 与 P0.md 第 12–14 项一致 |
-| 查看与画布 | 2026-10-23 | doc-gardener | P0-05/06 真机运行（#9，aeb4138..66e752d）：VIEW-06/07/08 仍 `Partial`/`单元`，只改限制，验收未改；与 P0.md 第 1、2、4–7 项一致，旧限制（尚无背景设置、45.4MP 代替、菜单未验、仅 @1x）均保留；VIEW-08 已写明辅助功能移动窗口、预览顺序来自日志、鼠标拖动未验；三行限制已链接 P0-05/06 记录。上次：P0-05/P0-06 实现（54d9510..9b45af9），VIEW-06/07/08 升到 `Partial`/`单元`，验收未改 |
-| C 沉浸界面 | 2026-10-21 | 建账 | 同上 |
-| 外观与显示偏好 | 2026-10-22 | doc-gardener | PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
+| 打开与输入 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`App/PicseeApp.swift` 只注入共享的内存 DisplayPreferences store，File › Open…/⌘O 仍恒可用、经 Session 发 requestOpen；OPEN-02/03 不受影响。上次：P0-08（86950cc..f9c2ef6）无影响；P0-09 真机运行（88a76ef..24bd082）与 P0.md 第 12–14 项一致 |
+| 查看与画布 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`App/CanvasWindowController.swift` 只改命令/焦点接线，fit/1/±仍以 hasImage 启用并交回画布，解码未动；VIEW-08 不受影响。上次：P0-05/06 真机运行（aeb4138..66e752d），VIEW-06/07/08 只改限制，验收未改 |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：ViewerChromeState（约 2.5 秒期限、交互锁、常驻）与 Preview Set 来源恢复只在 Application 与单元测试中，App 不启动调度、无工具条；CHROME-01…05 保持 `Absent`（提交声明无用户可见变化）。上次：建账 |
+| 外观与显示偏好 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：新增 `DisplayPreferences` 键 `alwaysShowTools`、`filmstripExpanded`（内存 store，无 UI、无持久化），尚未出现在任何行，已提议；PREF-03/04 保持 `Absent`。上次：PREF-04 验收按 ADR-002 写明即时同步，状态未变 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
-| Filmstrip | 2026-10-21 | 建账 | 同上 |
-| 网格、选择与菜单 | 2026-10-21 | 建账 | 同上 |
+| Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`，键名归属已提议。上次：建账 |
+| 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
 | 授权与文件访问 | 2026-10-21 | 建账 | 同上 |
 | 缓存与资源 | 2026-10-21 | 建账 | 同上 |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P0-08（#12，86950cc..f9c2ef6）：Window › Component Preview 仅 `#if DEBUG`、无 keyEquivalent、不经 CommandRouter，无新命令 ID 或菜单 identifier；预览组件的 Space 处理只在预览窗口内；CMD-01/02 不受影响。上次：P0-09 真机运行（88a76ef..24bd082），CMD-01/02 与 P0.md 第 1–9 项一致；Focus Canvas 菜单缺陷见 #29 |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：CommandRouter 移到 `PicseeApplication/Viewer/` 并以 ViewerSession 为目标，命令目录与菜单项未变；CMD-01/02 在哪已随改；#29 修复无本范围内真机记录，限制仍写失败。上次：P0-08（86950cc..f9c2ef6）无影响；P0-09 真机运行（88a76ef..24bd082）与 P0.md 第 1–9 项一致 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
-| 格式 | 2026-10-23 | doc-gardener | P0-05/06 真机运行（#9，aeb4138..66e752d）：FMT-01 仍 `Partial`/`单元`，只改限制，验收未改；与 P0.md 第 3 项一致（目视，S1 未完整、颜色未测量、@2x 未验）；限制已链接 P0-05/06 记录。上次：P0-05 实现（54d9510..9b45af9），FMT-01 升到 `Partial`/`单元`，验收未改 |
-| 可访问性与本地化 | 2026-10-22 | doc-gardener | P0-05/P0-06（#9，54d9510..9b45af9）改了 `App/CanvasWindowController.swift` 的解码任务与取消，不涉及焦点或键盘；A11Y-02 不受影响。上次：P0-09 真机运行（88a76ef..24bd082），A11Y-02 与 P0.md 第 5、6、10、11、15 项一致 |
+| 格式 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`App/CanvasWindowController.swift` 未改解码路径；FMT-01 不受影响。上次：P0-05/06 真机运行（aeb4138..66e752d），FMT-01 只改限制，验收未改 |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：InspectorFocus 移到 `PicseeApplication/Viewer/`，焦点经 Session；#29 修复（忽略字段释放时的瞬时窗口 responder）无本范围内真机记录，A11Y-02 限制仍写失败。上次：P0-05/06（54d9510..9b45af9）无影响；P0-09 真机运行与 P0.md 第 5、6、10、11、15 项一致 |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
