@@ -135,8 +135,8 @@ public struct SearchFilterField: View {
     }
 }
 public struct ScaleIndicator: View {
-    public init(actualPixels: Bool, customZoom: Double? = nil, input: ComponentInput = .live, action: @escaping () -> Void) {
-        self.actualPixels = actualPixels; self.customZoom = customZoom; self.input = input; self.action = action
+    public init(actualPixels: Bool, customZoom: Double? = nil, state: ComponentState = [], theme: DesignTheme = .light, input: ComponentInput = .live, action: @escaping () -> Void) {
+        self.actualPixels = actualPixels; self.customZoom = customZoom; self.state = state; self.theme = theme; self.input = input; self.action = action
     }
     func activate() { guard input == .live else { return }; action() }
     public var label: String {
@@ -144,8 +144,9 @@ public struct ScaleIndicator: View {
         if let customZoom { return customZoom.formatted(.percent.precision(.fractionLength(0...2))) }
         return String(localized: "Fit window")
     }
+    let state: ComponentState; let theme: DesignTheme
     let actualPixels: Bool; let customZoom: Double?; let input: ComponentInput; let action: () -> Void
-    public var body: some View { Button(action: activate) { ShortcutHint(text: label) }.buttonStyle(.plain).focusable(input == .live).allowsHitTesting(input == .live) }
+    public var body: some View { Button(action: activate) { ShortcutHint(text: label) }.buttonStyle(DesignCommandStyle(kind: .scale, state: state, theme: theme, input: input)).focusable(input == .live).allowsHitTesting(input == .live) }
 }
 public struct IndeterminateProgressRow: View {
     public init(label: String) { self.label = label }

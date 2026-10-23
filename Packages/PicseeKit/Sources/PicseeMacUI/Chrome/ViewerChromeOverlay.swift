@@ -7,8 +7,10 @@ struct ChromeToolFace: View {
     let session: ViewerSession
     let id: CommandID
     let enabled: Bool
-    init(session: ViewerSession, id: CommandID) {
+    let state: ComponentState
+    init(session: ViewerSession, id: CommandID, interaction: ComponentState = []) {
         self.session = session; self.id = id; enabled = session.isEnabled(id)
+        state = interaction.union(enabled ? [] : .disabled)
     }
     @Environment(\.colorScheme) private var scheme
     var command: CommandID { id == .actualPixels && session.zoomMode == .actualPixels ? .fit : id }
@@ -16,10 +18,10 @@ struct ChromeToolFace: View {
     func activate() { CommandRouter().route(command, from: .button, to: session) }
     var body: some View {
         if id == .actualPixels {
-            ScaleIndicator(actualPixels: session.zoomMode == .actualPixels, customZoom: customZoom, input: .live, action: activate)
+            ScaleIndicator(actualPixels: session.zoomMode == .actualPixels, customZoom: customZoom, state: state, theme: scheme == .dark ? .dark : .light, input: .live, action: activate)
                 .disabled(!enabled)
         } else {
-            IconCommandButton(symbol: Self.symbol(id), state: enabled ? [] : .disabled,
+            IconCommandButton(symbol: Self.symbol(id), state: state,
                 theme: scheme == .dark ? .dark : .light, input: .live, action: activate)
         }
     }
@@ -66,15 +68,16 @@ public final class ChromeToolView: NSView {
     }
     weak var pointerCanvas: NSView?
     private var pressed = false
+    private var focused = false
     public override var mouseDownCanMoveWindow: Bool { false }
     public override func mouseDown(with event: NSEvent) {
         guard acceptsFirstResponder else { return }
-        pressed = true
+        pressed = true; refresh()
         session?.setChromeInteraction(.pointerPress, active: true)
     }
     public override func mouseUp(with event: NSEvent) {
         guard pressed else { return }
-        pressed = false
+        pressed = false; refresh()
         if bounds.contains(convert(event.locationInWindow, from: nil)) { activate() }
         session?.setChromeInteraction(.pointerPress, active: false)
         if window?.firstResponder === self, let pointerCanvas {
@@ -84,10 +87,11 @@ public final class ChromeToolView: NSView {
     }
     public override func becomeFirstResponder() -> Bool {
         guard acceptsFirstResponder else { return false }
+        focused = true; refresh()
         session?.updateFocus(.tools); needsDisplay = true
         return true
     }
-    public override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
+    public override func resignFirstResponder() -> Bool { focused = false; refresh(); needsDisplay = true; return true }
     public override var focusRingMaskBounds: NSRect { bounds }
     public override func drawFocusRingMask() { bounds.fill() }
     public override func keyDown(with event: NSEvent) {
@@ -109,7 +113,8 @@ public final class ChromeToolView: NSView {
     }
     func refresh() {
         toolTip = commandTooltip
-        if let session { face?.rootView = ChromeToolFace(session: session, id: id) }
+        if let session { face?.rootView = ChromeToolFace(session: session, id: id,
+            interaction: ComponentInput.live.state([], focused: focused, pressed: pressed)) }
         setAccessibilityEnabled(session?.isEnabled(command) == true)
         if id == .actualPixels, let session {
             setAccessibilityValue(ScaleIndicator(actualPixels: session.zoomMode == .actualPixels,
