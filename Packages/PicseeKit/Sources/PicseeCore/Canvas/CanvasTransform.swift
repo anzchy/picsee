@@ -79,6 +79,23 @@ public struct CanvasTransform: Sendable {
         }
     }
 
+    public mutating func viewportChanged(source: CGSize, from old: CGSize, to new: CGSize,
+                                         backingScale: Double, mode: CanvasZoomMode) {
+        if mode == .fit {
+            self = Self.fitted(source: source, viewport: new, backingScale: backingScale)
+            return
+        }
+        let oldCentre = CGPoint(x: old.width / 2, y: old.height / 2)
+        setBackingScale(backingScale, about: oldCentre)
+        if case .custom(let value) = mode {
+            zoom(to: value, about: oldCentre)
+        } else {
+            actualPixels(about: oldCentre)
+        }
+        pan(by: CGPoint(x: (new.width - old.width) / 2, y: (new.height - old.height) / 2),
+            source: source, viewport: new, snap: mode == .actualPixels)
+    }
+
     private mutating func pin(_ pixel: CGPoint, to anchor: CGPoint) {
         let ratio = CGFloat(zoom / backingScale)
         origin = CGPoint(x: anchor.x - pixel.x * ratio, y: anchor.y - pixel.y * ratio)
