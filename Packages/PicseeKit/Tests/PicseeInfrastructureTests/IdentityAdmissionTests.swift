@@ -60,3 +60,19 @@ import PicseeInfrastructure
     try FileManager.default.moveItem(at: tree.file, to: renamed)
     #expect(try await fresh.request(for: renamed, maximumPixelSize: 128).renderKey?.itemID == after.itemID)
 }
+
+@Test func identityPipelineAliasesShareCanonicalRevisions() async throws {
+    let tree = try IdentityTree(); defer { tree.remove() }
+    try Data(contentsOf: fixture("orientation-1.tiff")).write(to: tree.file)
+    let link = tree.root.appendingPathComponent("alias.tiff")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: tree.file)
+    let pipeline = ImageIOPipeline(identityResolver: FileItemIdentityResolver(root: tree.scope))
+    let original = try #require(try await pipeline.request(for: tree.file, maximumPixelSize: 128).renderKey)
+    for alias in [link, tree.root.appendingPathComponent("a/../b.png")] {
+        let request = try await pipeline.request(for: alias, maximumPixelSize: 128)
+        #expect(request.renderKey == original)
+        let decoded = try await pipeline.image(for: request)
+        #expect(decoded.itemID == original.itemID)
+        #expect(decoded.revision == original.revision)
+    }
+}
