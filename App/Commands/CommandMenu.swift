@@ -1,5 +1,6 @@
 import AppKit
 import PicseeCore
+import PicseeApplication
 
 extension CommandID {
     var menuTitle: String {
@@ -31,12 +32,15 @@ final class CommandMainMenu: NSMenu {
 
 @MainActor
 final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
+    private let preferencesStore: any DisplayPreferencesStore
+    private var trackingMenus: Set<ObjectIdentifier> = []
     private let openWithoutWindow: () -> Void
     private(set) var isTracking = false
     private let recentFolders = NSMenu(title: String(localized: "Open Recent"))
     private let recentTarget = RecentFolderMenuTarget()
 
-    init(openWithoutWindow: @escaping () -> Void) {
+    init(preferencesStore: any DisplayPreferencesStore, openWithoutWindow: @escaping () -> Void) {
+        self.preferencesStore = preferencesStore
         self.openWithoutWindow = openWithoutWindow
         super.init()
         let main = CommandMainMenu(title: "Picsee")
@@ -68,6 +72,10 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             item.target = self
             (id == .open ? file : view).addItem(item)
         }
+        let always = view.addItem(withTitle: String(localized: "Always Show Tools"), action: #selector(toggleAlwaysShowTools(_:)), keyEquivalent: "")
+        always.target = self
+        always.identifier = NSUserInterfaceItemIdentifier("chrome.always-show-tools")
+        always.setAccessibilityIdentifier("chrome.always-show-tools.menu")
         view.addItem(.separator())
         let fullScreen = view.addItem(withTitle: String(localized: "Enter Full Screen"),
             action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
@@ -75,6 +83,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         let recentItem = NSMenuItem(title: String(localized: "Open Recent"), action: nil, keyEquivalent: "")
         recentItem.submenu = recentFolders
         recentFolders.autoenablesItems = false
+        recentFolders.delegate = self
         file.addItem(recentItem)
         setRecentFolders([], onOpen: { _ in })
         let windows = submenu("Window")
@@ -108,18 +117,30 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         } else if id == .open { openWithoutWindow() }
     }
 
+    @objc private func toggleAlwaysShowTools(_ item: NSMenuItem) {
+        var value = preferencesStore.value
+        value.alwaysShowTools.toggle()
+        preferencesStore.value = value
+    }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.identifier?.rawValue == "chrome.always-show-tools" {
+            item.state = preferencesStore.value.alwaysShowTools ? .on : .off
+            return true
+        }
         guard let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return false }
         let target = NSApp.keyWindow?.windowController as? CanvasWindowController
         if id == .inspector { item.title = target?.inspectorVisible == true ? "Hide Inspector" : "Show Inspector" }
         return target?.session.isEnabled(id) ?? (id == .open)
     }
     func menuWillOpen(_ menu: NSMenu) {
+        trackingMenus.insert(ObjectIdentifier(menu))
         isTracking = true
         (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session.setMenuTracking(true)
     }
     func menuDidClose(_ menu: NSMenu) {
-        isTracking = false
+        trackingMenus.remove(ObjectIdentifier(menu))
+        isTracking = !trackingMenus.isEmpty
+        guard !isTracking else { return }
         // The key window can change during menu tracking. Release the original window too.
         for window in NSApp.windows {
             (window.windowController as? CanvasWindowController)?.session.setMenuTracking(false)

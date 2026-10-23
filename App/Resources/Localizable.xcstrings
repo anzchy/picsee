@@ -765,6 +765,38 @@
           }
         }
       }
+    },
+    "Always Show Tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always Show Tools"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "始终显示工具"
+          }
+        }
+      }
+    },
+    "Zoom mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缩放模式"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sha = Bundle.main.object(forInfoDictionaryKey: "PicseeGitSHA") as? String ?? "unknown"
         logger.notice("Picsee launch git=\(sha, privacy: .public)")
 
-        commandMenu = CommandMenu { [weak self] in
+        commandMenu = CommandMenu(preferencesStore: displayPreferences) { [weak self] in
             self?.viewer().route(.open, from: .menu)
         }
         viewer().showWindow(nil)
