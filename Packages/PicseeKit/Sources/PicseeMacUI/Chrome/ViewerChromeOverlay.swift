@@ -6,6 +6,10 @@ import PicseeApplication
 struct ChromeToolFace: View {
     let session: ViewerSession
     let id: CommandID
+    let enabled: Bool
+    init(session: ViewerSession, id: CommandID) {
+        self.session = session; self.id = id; enabled = session.isEnabled(id)
+    }
     @Environment(\.colorScheme) private var scheme
     var command: CommandID { id == .actualPixels && session.zoomMode == .actualPixels ? .fit : id }
     var customZoom: Double? { if case .custom(let value) = session.zoomMode { value } else { nil } }
@@ -13,9 +17,9 @@ struct ChromeToolFace: View {
     var body: some View {
         if id == .actualPixels {
             ScaleIndicator(actualPixels: session.zoomMode == .actualPixels, customZoom: customZoom, input: .live, action: activate)
-                .disabled(!session.isEnabled(command))
+                .disabled(!enabled)
         } else {
-            IconCommandButton(symbol: Self.symbol(id), state: session.isEnabled(command) ? [] : .disabled,
+            IconCommandButton(symbol: Self.symbol(id), state: enabled ? [] : .disabled,
                 theme: scheme == .dark ? .dark : .light, input: .live, action: activate)
         }
     }
@@ -44,6 +48,7 @@ public final class ChromeToolView: NSView {
         face.frame = bounds; face.autoresizingMask = [.width, .height]
         addSubview(face); self.face = face
         face.setAccessibilityHidden(true)
+        setAccessibilityChildren([])
         focusRingType = .exterior
         setAccessibilityElement(true); setAccessibilityRole(.button)
         setAccessibilityIdentifier("command.\(command.rawValue).button")
