@@ -266,7 +266,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <p>某项能力在某个环境下行为不同，在本节加一行：<code>| &lt;ID&gt; | &lt;环境&gt; | &lt;状态&gt; | &lt;差异与 validation 链接&gt; |</code>。</p>
 <h2 id="part-3-区域审查">Part 3 — 区域审查</h2>
 <div class="table-wrap"><table><thead><tr><th scope="col">区域</th><th scope="col">最近审查</th><th scope="col">审查人</th><th scope="col">备注</th></tr></thead><tbody>
-<tr><td>打开与输入</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：OPEN-01、OPEN-05 由 Absent 升为 Partial/单元，验收原文保留（仅补句号），限制与代码一致；复跑（fa2703f..91dce4f）：两行限制已精简，细节移入 validation/P1.md（单元证据，非真机记录）；OPEN-05 精简时删去「Esc 只回真实来源」，而 Esc 仅在有 Preview Set 时返回、App 尚无入口，已提议恢复。OPEN-02 不变（空态按钮复用 Open 路由）。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）</td></tr>
+<tr><td>打开与输入</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：OPEN-01、OPEN-05 由 Absent 升为 Partial/单元，验收原文保留（仅补句号），限制与代码一致；复跑（fa2703f..91dce4f）：两行限制已精简，细节移入 validation/P1.md（单元证据，非真机记录）；OPEN-05 精简时删去「Esc 只回真实来源」，而 Esc 仅在有 Preview Set 时返回、App 尚无入口；第三次复跑（fa2703f..040ff26）确认已恢复为「网格与 Esc 返回待 P3-01」。OPEN-02 不变（空态按钮复用 Open 路由）。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）</td></tr>
 <tr><td>查看与画布</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：<code>CanvasView</code> 只移除旧的加载/失败文字，缩放命令在加载与失败时禁用；VIEW-01…09 不变。VIEW-10：复跑（fa2703f..91dce4f）已补「空态与取消后 ←/→ 禁用」限制，与 <code>ViewerSession.isEnabled</code> 一致。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）</td></tr>
 <tr><td>C 沉浸界面</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：Tab 环先经状态按钮再到底部工具，工具文件名改随加载身份；CHROME-01…05 验收与限制仍成立，不变。上次：#60 真机复验（validation/issue60-device-mini，cfef98f..2dc72ff，run 20261023-205349-issue60-CHROME-03）</td></tr>
 <tr><td>外观与显示偏好</td><td>2026-10-23</td><td>doc-gardener</td><td>P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：状态界面无新增动画；PREF-02 不变。上次：P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4）</td></tr>
@@ -294,7 +294,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>107 项能力</span><span>·</span><span>Shipped 0 · Partial 32 · Stub 1 · Absent 74 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 f8da3c506ea9 · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 222b85d1a330 · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>

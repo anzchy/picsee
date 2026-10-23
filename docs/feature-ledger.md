@@ -330,7 +330,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：OPEN-01、OPEN-05 由 Absent 升为 Partial/单元，验收原文保留（仅补句号），限制与代码一致；复跑（fa2703f..91dce4f）：两行限制已精简，细节移入 validation/P1.md（单元证据，非真机记录）；OPEN-05 精简时删去「Esc 只回真实来源」，而 Esc 仅在有 Preview Set 时返回、App 尚无入口，已提议恢复。OPEN-02 不变（空态按钮复用 Open 路由）。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：OPEN-01、OPEN-05 由 Absent 升为 Partial/单元，验收原文保留（仅补句号），限制与代码一致；复跑（fa2703f..91dce4f）：两行限制已精简，细节移入 validation/P1.md（单元证据，非真机记录）；OPEN-05 精简时删去「Esc 只回真实来源」，而 Esc 仅在有 Preview Set 时返回、App 尚无入口；第三次复跑（fa2703f..040ff26）确认已恢复为「网格与 Esc 返回待 P3-01」。OPEN-02 不变（空态按钮复用 Open 路由）。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
 | 查看与画布 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`CanvasView` 只移除旧的加载/失败文字，缩放命令在加载与失败时禁用；VIEW-01…09 不变。VIEW-10：复跑（fa2703f..91dce4f）已补「空态与取消后 ←/→ 禁用」限制，与 `ViewerSession.isEnabled` 一致。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：Tab 环先经状态按钮再到底部工具，工具文件名改随加载身份；CHROME-01…05 验收与限制仍成立，不变。上次：#60 真机复验（validation/issue60-device-mini，cfef98f..2dc72ff，run 20261023-205349-issue60-CHROME-03） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：状态界面无新增动画；PREF-02 不变。上次：P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4） |
