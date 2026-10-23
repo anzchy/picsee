@@ -28,14 +28,6 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <div class="content">
 <h1>功能账簿</h1>
 <p class="meta"><strong>picsee</strong> · 首次建账 2026-10-21 · 分支 <code>main</code> · 依据 <a href="./PICSEE_DEVELOPMENT_PLAN.md">分阶段开发计划 v0.2</a></p>
-<div class="toolbar" role="search" aria-label="筛选账簿">
-<div role="group" aria-label="按状态筛选"><button type="button" class="chip" data-filter-state="Shipped" aria-pressed="false"><span aria-hidden="true">●</span> Shipped<span class="mono">0</span></button><button type="button" class="chip" data-filter-state="Partial" aria-pressed="false"><span aria-hidden="true">◐</span> Partial<span class="mono">24</span></button><button type="button" class="chip" data-filter-state="Stub" aria-pressed="false"><span aria-hidden="true">◌</span> Stub<span class="mono">1</span></button><button type="button" class="chip" data-filter-state="Absent" aria-pressed="false"><span aria-hidden="true">○</span> Absent<span class="mono">81</span></button><button type="button" class="chip" data-filter-state="Unknown" aria-pressed="false"><span aria-hidden="true">?</span> Unknown<span class="mono">0</span></button></div>
-<label class="result" for="milestone">范围</label>
-<select id="milestone"><option value="all">全部阶段</option><option value="3">MVP（P0–P3）</option><option value="6">首发 v1（P0–P6）</option><option value="7">增强（P7）</option></select>
-<input type="search" id="q" placeholder="搜索 ID、能力、工作包、确认步骤" aria-label="搜索账簿行">
-<span class="result" id="result" aria-live="polite"></span>
-<button type="button" class="clear hidden" id="clear">清除筛选</button>
-</div>
 <p>这份账簿只回答一件事：<strong>picsee 原生 App 现在实际有什么</strong>。每一项能力占一行，写明状态、代码位置，以及在运行中的 App 里怎么确认。</p>
 <p>建账时还没有任何 Swift 源文件，所以每一行都是 <code>Absent</code>。这些行是<strong>先写好的验收</strong>：「怎么确认」现在就写成将来要做的操作，实现之后只改状态、验证、位置三格，验收不跟着实现降低（见「防止验收被悄悄放宽」）。</p>
 <p>它不是 changelog、计划或 ADR。什么时候变的看 git 历史和 <code>CHANGELOG.md</code>；先后顺序与验收门槛看 <code>docs/PICSEE_DEVELOPMENT_PLAN.md</code>；为什么这样做看 <code>docs/adr/</code>；实测数据和过程记录看 <code>docs/validation/P*.md</code>。</p>
@@ -85,6 +77,14 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <hr>
 <h2 id="part-1-picsee-现在有什么">Part 1 — picsee 现在有什么</h2>
 <h3 id="打开与输入">打开与输入</h3>
+<div class="toolbar" role="search" aria-label="筛选账簿">
+<div role="group" aria-label="按状态筛选"><button type="button" class="chip" data-filter-state="Shipped" aria-pressed="false"><span aria-hidden="true">●</span> Shipped<span class="mono">0</span></button><button type="button" class="chip" data-filter-state="Partial" aria-pressed="false"><span aria-hidden="true">◐</span> Partial<span class="mono">24</span></button><button type="button" class="chip" data-filter-state="Stub" aria-pressed="false"><span aria-hidden="true">◌</span> Stub<span class="mono">1</span></button><button type="button" class="chip" data-filter-state="Absent" aria-pressed="false"><span aria-hidden="true">○</span> Absent<span class="mono">81</span></button><button type="button" class="chip" data-filter-state="Unknown" aria-pressed="false"><span aria-hidden="true">?</span> Unknown<span class="mono">0</span></button></div>
+<label class="result" for="milestone">范围</label>
+<select id="milestone"><option value="all">全部阶段</option><option value="3">MVP（P0–P3）</option><option value="6">首发 v1（P0–P6）</option><option value="7">增强（P7）</option></select>
+<input type="search" id="q" placeholder="搜索 ID、能力、工作包、确认步骤" aria-label="搜索账簿行">
+<span class="result" id="result" aria-live="polite"></span>
+<button type="button" class="clear hidden" id="clear">清除筛选</button>
+</div>
 <div class="table-wrap"><table class="inv"><thead><tr><th scope="col">ID</th><th scope="col">能力</th><th scope="col">状态</th><th scope="col">验证</th><th scope="col">计划</th><th scope="col">在哪</th><th scope="col">怎么确认</th></tr></thead><tbody>
 <tr id="OPEN-01" data-state="Absent" data-phase="1" data-search="open-01 首次打开空态 p1-02、p1-07 — 冷启动、没有打开过文件夹：显示 21 页空态，有“选择文件夹”按钮和拖入提示；底部搜索、排序、信息、显示按钮为禁用。⌘o 可选单张图片或文件夹"><td class="mono id"><a href="#OPEN-01">OPEN-01</a></td><td class="cap">首次打开空态</td><td><span class="state s-absent"><span aria-hidden="true">○</span> Absent</span></td><td class="ver">无</td><td class="mono plan">P1-02、P1-07</td><td class="where">—</td><td class="how">冷启动、没有打开过文件夹：显示 21 页空态，有“选择文件夹”按钮和拖入提示；底部搜索、排序、信息、显示按钮为禁用。⌘O 可选单张图片或文件夹</td></tr>
 <tr id="OPEN-02" data-state="Partial" data-phase="0" data-search="open-02 打开面板 p0-09、p1-02 app/picseeapp.swift、app/commands/commandmenu.swift、packages/picseekit/sources/picseemacui/chrome/viewerchromeoverlay.swift ⌘o 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变。限制：file › open…、⌘o（图片与目录）与取消已 @1x 真机通过；底部工具组 open… 按钮仅单元证明。"><td class="mono id"><a href="#OPEN-02">OPEN-02</a></td><td class="cap">打开面板</td><td><span class="state s-partial"><span aria-hidden="true">◐</span> Partial</span></td><td class="ver">无</td><td class="mono plan">P0-09、P1-02</td><td class="where"><code>App/PicseeApp.swift</code>、<code>App/Commands/CommandMenu.swift</code>、<code>Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift</code></td><td class="how">⌘O 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变。限制：File › Open…、⌘O（图片与目录）与取消已 @1x 真机通过；底部工具组 Open… 按钮仅单元证明。</td></tr>

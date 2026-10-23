@@ -160,6 +160,7 @@ function parseMarkdown(markdown) {
 }
 
 function inventoryRow(row) {
+  if (row.length !== 7) throw new Error(`row ${row[0] || "<unknown>"}: expected 7 cells`);
   const [id, capability, state, verification, plan, location, confirmation] = row;
   const phases = [...plan.matchAll(/P(\d+)/g)].map((match) => Number(match[1]));
   const phase = phases.length ? Math.min(...phases) : 99;
@@ -220,16 +221,19 @@ function renderContent(blocks, counts) {
   for (const block of blocks) {
     if (block.type === "heading") output.push(`<h${block.level}${block.level > 1 ? ` id="${escapeHtml(block.id)}"` : ""}>${renderInline(block.text)}</h${block.level}>`);
     else if (block.type === "paragraph") {
-      const meta = !toolbarAdded && output.length === 1 ? ' class="meta"' : "";
+      const meta = output.length === 1 ? ' class="meta"' : "";
       output.push(`<p${meta}>${renderInline(block.text)}</p>`);
-      if (meta) {
-        output.push(toolbar(counts));
-        toolbarAdded = true;
-      }
     } else if (block.type === "list") {
       const tag = block.ordered ? "ol" : "ul";
       output.push(`<${tag}>${block.items.map((item) => `<li>${renderInline(item)}</li>`).join("")}</${tag}>`);
-    } else if (block.type === "table") output.push(renderTable(block));
+    } else if (block.type === "table") {
+      const inventory = block.header.join("|") === "ID|能力|状态|验证|计划|在哪|怎么确认";
+      if (inventory && !toolbarAdded) {
+        output.push(toolbar(counts));
+        toolbarAdded = true;
+      }
+      output.push(renderTable(block));
+    }
     else if (block.type === "hr") output.push("<hr>");
   }
   return output.join("\n");

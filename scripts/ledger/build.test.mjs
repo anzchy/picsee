@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -72,6 +72,42 @@ test("renders ledger rows, navigation counts, attributes, and escaped inline con
   assert.match(html, /Keep &lt;safe&gt; &amp; follow <a href="guide\.md">guide<\/a>/);
   assert.match(html, /Intro with <strong>bold<\/strong>, <a href="\.\/plan\.md">plan<\/a>, and <code>a\|b &lt; &amp;<\/code>\./);
   assert.equal((html.match(/id="OPEN-01"/g) ?? []).length, 1);
+  for (const [state, count] of Object.entries({ Shipped: 0, Partial: 1, Stub: 1, Absent: 1, Unknown: 0 })) {
+    assert.match(html, new RegExp(`data-filter-state="${state}"[^>]*>.*?${state}<span class="mono">${count}</span>`), state);
+  }
+  assert.match(html, /<span>3 项能力<\/span><span>·<\/span><span>Shipped 0 · Partial 1 · Stub 1 · Absent 1 · Unknown 0<\/span>/);
+});
+
+test("anchors the toolbar immediately before the first inventory table when a list follows the title", () => {
+  const paths = tempPaths();
+  const listFirst = fixture.replace(
+    "Intro with **bold**, [plan](./plan.md), and `a|b < &`.\n",
+    "- First title note\n- Second title note\n",
+  );
+  writeFileSync(paths.source, listFirst);
+
+  const result = build(paths.source, paths.output);
+  assert.equal(result.status, 0, result.stderr);
+  const html = readFileSync(paths.output, "utf8");
+  const toolbarAt = html.indexOf('<div class="toolbar"');
+  const inventoryAt = html.indexOf('<table class="inv">');
+
+  assert.ok(toolbarAt > html.indexOf("First title note"));
+  assert.ok(toolbarAt < inventoryAt);
+  assert.equal((html.match(/<div class="toolbar"/g) ?? []).length, 1);
+});
+
+test("rejects a short inventory row with its ID and expected cell count", () => {
+  const paths = tempPaths();
+  const shortRow = fixture.replace(
+    "| OPEN-02 | Empty | Absent | 无 | P7-01 | — | Nothing |",
+    "| OPEN-02 | Empty | Absent | 无 | P7-01 | — |",
+  );
+  writeFileSync(paths.source, shortRow);
+
+  const result = build(paths.source, paths.output);
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "row OPEN-02: expected 7 cells\n");
 });
 
 test("build output is byte-identical for the same input", () => {
@@ -87,14 +123,24 @@ test("--check passes for fresh output and fails after the Markdown changes", () 
   const paths = tempPaths();
   writeFileSync(paths.source, fixture);
   assert.equal(build(paths.source, paths.output).status, 0);
+  const fixedTime = new Date("2020-01-02T03:04:05.000Z");
+  utimesSync(paths.output, fixedTime, fixedTime);
+  const freshBytes = readFileSync(paths.output);
+  const freshMtime = statSync(paths.output).mtimeMs;
 
   const fresh = build(paths.source, paths.output, "--check");
   assert.equal(fresh.status, 0, fresh.stderr);
+  assert.deepEqual(readFileSync(paths.output), freshBytes);
+  assert.equal(statSync(paths.output).mtimeMs, freshMtime);
 
   writeFileSync(paths.source, `${fixture}\nchanged\n`);
+  const staleBytes = readFileSync(paths.output);
+  const staleMtime = statSync(paths.output).mtimeMs;
   const stale = build(paths.source, paths.output, "--check");
   assert.equal(stale.status, 1);
   assert.match(stale.stderr, /^feature ledger HTML is stale; run npm run ledger:build\n$/);
+  assert.deepEqual(readFileSync(paths.output), staleBytes);
+  assert.equal(statSync(paths.output).mtimeMs, staleMtime);
 });
 
 test("real ledger renders every Part 1 row ID exactly once with matching area counts", () => {
