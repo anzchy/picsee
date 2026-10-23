@@ -135,12 +135,17 @@ public struct SearchFilterField: View {
     }
 }
 public struct ScaleIndicator: View {
-    public init(actualPixels: Bool, input: ComponentInput = .live, action: @escaping () -> Void) {
-        self.actualPixels = actualPixels; self.input = input; self.action = action
+    public init(actualPixels: Bool, customZoom: Double? = nil, input: ComponentInput = .live, action: @escaping () -> Void) {
+        self.actualPixels = actualPixels; self.customZoom = customZoom; self.input = input; self.action = action
     }
     func activate() { guard input == .live else { return }; action() }
-    let actualPixels: Bool; let input: ComponentInput; let action: () -> Void
-    public var body: some View { Button(action: activate) { ShortcutHint(text: actualPixels ? "1:1 · 100%" : String(localized: "Fit window")) }.buttonStyle(.plain).focusable(input == .live).allowsHitTesting(input == .live) }
+    public var label: String {
+        if actualPixels { return "1:1 · 100%" }
+        if let customZoom { return customZoom.formatted(.percent.precision(.fractionLength(0...2))) }
+        return String(localized: "Fit window")
+    }
+    let actualPixels: Bool; let customZoom: Double?; let input: ComponentInput; let action: () -> Void
+    public var body: some View { Button(action: activate) { ShortcutHint(text: label) }.buttonStyle(.plain).focusable(input == .live).allowsHitTesting(input == .live) }
 }
 public struct IndeterminateProgressRow: View {
     public init(label: String) { self.label = label }

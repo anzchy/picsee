@@ -1,0 +1,96 @@
+import AppKit
+import SwiftUI
+import PicseeCore
+import PicseeApplication
+
+struct ChromeToolFace: View {
+    let session: ViewerSession
+    let id: CommandID
+    @Environment(\.colorScheme) private var scheme
+    var command: CommandID { id == .actualPixels && session.zoomMode == .actualPixels ? .fit : id }
+    var customZoom: Double? { if case .custom(let value) = session.zoomMode { value } else { nil } }
+    func activate() { CommandRouter().route(command, from: .button, to: session) }
+    var body: some View {
+        if id == .actualPixels {
+            ScaleIndicator(actualPixels: session.zoomMode == .actualPixels, customZoom: customZoom, input: .live, action: activate)
+                .disabled(!session.isEnabled(command))
+        } else {
+            IconCommandButton(symbol: Self.symbol(id), state: session.isEnabled(command) ? [] : .disabled,
+                theme: scheme == .dark ? .dark : .light, input: .live, action: activate)
+        }
+    }
+    static func symbol(_ id: CommandID) -> DesignSymbol {
+        switch id {
+        case .open: .folder
+        case .inspector: .info
+        case .previous: .previous
+        case .next: .next
+        case .zoomOut: .zoomOut
+        default: .zoomIn
+        }
+    }
+}
+
+/// Native input/focus shell around the shared live design component.
+public final class ChromeToolView: NSView {
+    private var session: ViewerSession?
+    private var id: CommandID = .open
+    private var face: NSHostingView<ChromeToolFace>?
+    public var command: CommandID { id == .actualPixels && session?.zoomMode == .actualPixels ? .fit : id }
+    convenience init(frame: NSRect, session: ViewerSession, command: CommandID) {
+        self.init(frame: frame)
+        self.session = session; id = command
+        let face = NSHostingView(rootView: ChromeToolFace(session: session, id: command))
+        face.frame = bounds; face.autoresizingMask = [.width, .height]
+        addSubview(face); self.face = face
+        setAccessibilityElement(true); setAccessibilityRole(.button)
+        setAccessibilityIdentifier("command.\(command.rawValue).button")
+        setAccessibilityLabel(command == .actualPixels ? "Zoom mode" : ChromeToolFace.symbol(command).label)
+        toolTip = command.shortcutHint
+    }
+    public func activate() {
+        face?.rootView.activate()
+    }
+    func refresh() {
+        if let session { face?.rootView = ChromeToolFace(session: session, id: id) }
+        setAccessibilityEnabled(session?.isEnabled(command) == true)
+    }
+}
+
+public final class ViewerChromeOverlay: NSView {
+    public private(set) var tools: [ChromeToolView] = []
+    public private(set) var groups: [NSView] = []
+    public private(set) var filename: String?
+    public private(set) var position: String?
+    private let fileLabel = NSTextField(labelWithString: "")
+    public convenience init(frame: NSRect, session: ViewerSession) {
+        self.init(frame: frame)
+        let commands: [[CommandID]] = [[.open, .inspector], [.previous, .next], [.zoomOut, .actualPixels, .zoomIn]]
+        let frames = [NSRect(x: 16, y: 16, width: 80, height: 40),
+            NSRect(x: bounds.midX - 130, y: 16, width: 260, height: 40),
+            NSRect(x: bounds.width - 222, y: 16, width: 206, height: 40)]
+        let positions: [[CGFloat]] = [[8, 42], [8, 222], [8, 42, 168]]
+        for index in 0..<3 {
+            let group = NSView(frame: frames[index])
+            group.autoresizingMask = index == 0 ? [.maxXMargin, .maxYMargin] : index == 1 ? [.minXMargin, .maxXMargin, .maxYMargin] : [.minXMargin, .maxYMargin]
+            group.wantsLayer = true; group.layer?.cornerRadius = DesignMetrics.radii["popover"]!
+            group.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
+            addSubview(group); groups.append(group)
+            for (offset, command) in commands[index].enumerated() {
+                let tool = ChromeToolView(frame: NSRect(x: positions[index][offset], y: 6,
+                    width: command == .actualPixels ? 122 : 30, height: 28), session: session, command: command)
+                group.addSubview(tool); tools.append(tool)
+            }
+        }
+        fileLabel.frame = NSRect(x: 44, y: 11, width: 172, height: 18)
+        fileLabel.lineBreakMode = .byTruncatingMiddle
+        fileLabel.font = DesignMetrics.font("uiSmall")
+        groups[1].addSubview(fileLabel)
+        refresh()
+    }
+    public func refresh(filename: String? = nil, position: String? = nil) {
+        self.filename = filename; self.position = position
+        fileLabel.stringValue = [filename, position].compactMap { $0 }.joined(separator: " · ")
+        for tool in tools { tool.refresh() }
+    }
+}
