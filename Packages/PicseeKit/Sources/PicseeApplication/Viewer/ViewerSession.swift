@@ -152,10 +152,12 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         switch command {
         case .fit, .actualPixels, .zoomIn, .zoomOut: host?.hasImage == true
         case .escape: inspectorFocus.focus != .canvas || previewSet != nil
-        case .open, .inspector: true
+        case .open: true
+        case .inspector: inspectorFocus.isVisible || host?.hasImage == true
         case .preview, .enter: mode == .browsing && !orderedItemIDs.isEmpty
         case .previous, .next:
-            mode == .viewing && (previewSet != nil || (host as? any ViewerSessionNavigationHost)?.canNavigate == true)
+            mode == .viewing && (previewSet != nil || ((host as? any ViewerSessionNavigationHost)?.canNavigate == true
+                && (host?.hasImage == true || imageStatus != .empty)))
         case .search: false
         }
     }

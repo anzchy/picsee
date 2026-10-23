@@ -17,6 +17,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let accessIntent = AccessIntent()
 
     private var chromeOverlay: ViewerChromeOverlay!
+    private var stateHost: ViewerStateHost!
     private let chromeTimer = ChromeTimerAdapter()
     private var chromeEvents: ChromeEventBridge?
     private var chromeGeneration: UUID?
@@ -65,6 +66,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         canvas.focusRingType = .exterior
         canvas.setAccessibilityIdentifier("viewer.canvas")
         content.addSubview(canvas)
+        stateHost = ViewerStateHost(frame: content.bounds, session: session)
+        stateHost.autoresizingMask = [.width, .height]
+        content.addSubview(stateHost)
         let dragStrip = ChromeDragStrip(frame: NSRect(x: 0, y: content.bounds.height - 28, width: content.bounds.width, height: 28))
         dragStrip.autoresizingMask = [.width, .minYMargin]
         dragStrip.setAccessibilityIdentifier("chrome.drag-strip")
