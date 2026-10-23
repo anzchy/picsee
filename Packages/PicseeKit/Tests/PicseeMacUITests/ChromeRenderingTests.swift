@@ -57,5 +57,5 @@ import PicseeApplication
     scale.activate()
     #expect(session.zoomMode == .fit)
     overlay.pointerMoved(NSPoint(x: -1, y: -1))
-    #expect(overlay.tools[5].toolTip == "1")
+    #expect(overlay.tools[5].toolTip == "Actual Pixels (1)")
 }
