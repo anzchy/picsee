@@ -125,7 +125,7 @@
 | VIEW-07 | 透明图 | Partial | 单元 | P0-05 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`App/CanvasView.swift` | 打开透明 PNG，透明区域按背景设置显示，不是黑色；限制：@1x 真机不发黑（[记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；尚无背景设置；@2x 未验 |
 | VIEW-08 | 大图不卡界面 | Partial | 单元 | P0-05、P1-04 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/DecodeAdmission.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePipeline.swift`、`Packages/PicseeKit/Sources/PicseeCore/Canvas/CanvasDecodePolicy.swift`、`App/CanvasWindowController.swift` | 打开 48MP 图：加载期间窗口能拖、菜单能开；先出预览再变清晰；限制：@1x 真机先预览再清晰（日志）、加载中经辅助功能移动窗口可响应（[记录](validation/P0.md#p0-0506解码真机验收9view-06--view-07--view-08--fmt-01mac-mini)）；鼠标拖动与菜单未验；48MP 以 45.4MP 代替；@2x 未验 |
 | VIEW-09 | 快速切图不串图 | Absent | 无 | P1-05 | — | 快速打开 A→B→C，让 A 最后才解码完：画布、标题、Inspector 都只显示 C |
-| VIEW-10 | 上一张 / 下一张 | Partial | 单元 | P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Access/FolderNavigation.swift`、`App/Access/AccessCommandRouter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | ←/→ 按目录顺序翻图；到首尾时按设置停止或循环。限制：真机未验；仅 Access Roots，规范路径定位，非递归 Finder 顺序，到首尾停止；无循环设置、筛选或排序，余项由 P2-03 实现；菜单 Previous Image / Next Image。 |
+| VIEW-10 | 上一张 / 下一张 | Partial | 单元 | P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Access/FolderNavigation.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Access/ViewerSessionNavigationHost.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | ←/→ 按目录顺序翻图；到首尾时按设置停止或循环。限制：真机未验；仅 Access Roots，规范路径定位，非递归 Finder 顺序，到首尾停止；无循环设置、筛选或排序，余项由 P2-03 实现；菜单 Previous Image / Next Image。 |
 
 ### C 沉浸界面
 
@@ -222,7 +222,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/enter/search 未实现；previous/next 三入口接线已实现，真机未验；inspector 等三入口 @1x 真机一致；escape 菜单项失败 #29。 |
+| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/enter/search 未实现；previous/next 经 Session/host 三入口接线，真机未验；inspector 等三入口 @1x 真机一致；escape 菜单项失败 #29。 |
 | CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是 Inspector 占位字段，不是搜索；字段裸键、Edit 菜单与菜单 Esc 已 @1x 真机通过；非画布窗口不处理裸键菜单等价键，未验。 |
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |

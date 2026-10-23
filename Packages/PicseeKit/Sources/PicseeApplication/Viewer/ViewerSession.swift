@@ -104,7 +104,8 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         case .escape: inspectorFocus.focus != .canvas || previewSet != nil
         case .open, .inspector: true
         case .preview, .enter: mode == .browsing && !orderedItemIDs.isEmpty
-        case .previous, .next: mode == .viewing && previewSet != nil
+        case .previous, .next:
+            mode == .viewing && (previewSet != nil || (host as? any ViewerSessionNavigationHost)?.canNavigate == true)
         case .search: false
         }
     }
@@ -132,7 +133,11 @@ public enum ViewerMode: Sendable { case browsing, viewing }
             updateFocus(.canvas)
             host?.applyFocus(.canvas)
         } else if command == .next || command == .previous {
-            previewSet?.move(forward: command == .next)
+            if previewSet != nil {
+                previewSet?.move(forward: command == .next)
+            } else {
+                (host as? any ViewerSessionNavigationHost)?.navigate(command == .next ? .next : .previous)
+            }
         } else {
             host?.performCanvas(command, from: entry)
         }
