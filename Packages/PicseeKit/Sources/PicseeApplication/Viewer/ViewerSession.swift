@@ -26,6 +26,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public var displayPreferences: DisplayPreferences { preferencesStore.value }
     public private(set) var selection = BrowserSelection()
     public private(set) var previewSet: PreviewSet?
+    public internal(set) var filePreviewSet: FilePreviewSet?
     public private(set) var mode: ViewerMode = .viewing
     public private(set) var scrollAnchor: ItemID?
     public private(set) var inspectorFocus = InspectorFocus()
@@ -153,13 +154,16 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public func isEnabled(_ command: CommandID) -> Bool {
         switch command {
         case .fit, .actualPixels, .zoomIn, .zoomOut: imageCommandsAvailable
-        case .escape: inspectorFocus.focus != .canvas || previewSet != nil
+        case .escape: inspectorFocus.focus != .canvas || (filePreviewSet == nil && previewSet != nil)
         case .open: true
         case .inspector: inspectorFocus.isVisible || imageCommandsAvailable
         case .preview, .enter: mode == .browsing && !orderedItemIDs.isEmpty
         case .previous, .next:
-            mode == .viewing && (host?.hasImage == true || imageStatus != .empty)
-                && (previewSet != nil || (host as? any ViewerSessionNavigationHost)?.canNavigate == true)
+            if let filePreviewSet { filePreviewSet.canMove(forward: command == .next) }
+            else {
+                mode == .viewing && (host?.hasImage == true || imageStatus != .empty)
+                    && (previewSet != nil || (host as? any ViewerSessionNavigationHost)?.canNavigate == true)
+            }
         case .search: false
         }
     }
@@ -174,7 +178,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
                 inspectorFocus.escape()
                 syncFocusLock()
                 host?.applyFocus(.canvas)
-            } else if let origin = previewSet?.origin {
+            } else if filePreviewSet == nil, let origin = previewSet?.origin {
                 selection = origin.selection
                 scrollAnchor = origin.scrollAnchor
                 previewSet = nil
@@ -187,7 +191,9 @@ public enum ViewerMode: Sendable { case browsing, viewing }
             updateFocus(.canvas)
             host?.applyFocus(.canvas)
         } else if command == .next || command == .previous {
-            if previewSet != nil {
+            if filePreviewSet != nil {
+                moveInputFile(forward: command == .next)
+            } else if previewSet != nil {
                 previewSet?.move(forward: command == .next)
             } else {
                 (host as? any ViewerSessionNavigationHost)?.navigate(command == .next ? .next : .previous)

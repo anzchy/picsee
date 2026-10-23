@@ -1,5 +1,6 @@
 import Foundation
 import PicseeCore
+import os
 
 public enum ViewerInputNotice: Equatable, Sendable { case unsupported(String), rejected }
 @MainActor public protocol ViewerInputHost: AnyObject {
@@ -45,11 +46,21 @@ extension ViewerSession {
                           host: any ViewerInputHost) async {
         guard operation.isCurrent else { return }
         let input = ViewerInput.classify(urls)
-        if case .single(let url) = input {
+        if case .files(let files) = input {
+            logInputExclusions(urls)
+            filePreviewSet = FilePreviewSet(files: files)
+            host.openInputImage(files[0], accessRequest: nil)
+        } else if case .single(let url) = input {
+            logInputExclusions(urls)
             let result = await admission.probe(url, operation: operation)
             guard operation.isCurrent else { return }
-            if case .open(let request) = result { host.openInputImage(url, accessRequest: request) }
+            if case .open(let request) = result { endFilePreviewSet(); host.openInputImage(url, accessRequest: request) }
             else if result == .unsupported { host.showInputNotice(.unsupported(url.lastPathComponent)) }
         } else if case .rejected = input { host.showInputNotice(.rejected) }
     }
+}
+
+private func logInputExclusions(_ urls: [URL]) {
+    let count = ViewerInput.excludedCount(in: urls)
+    if count > 0 { Logger(subsystem: "io.github.anzchy.picsee", category: "filesystem").notice("Input excluded=\(count, privacy: .public)") }
 }

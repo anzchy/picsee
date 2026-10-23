@@ -440,7 +440,7 @@ extension CanvasWindowController: ViewerInputHost {
             } catch { if operation.isCurrent { showAccessError(error) } }
         }
     }
-    private func endInput() { inputIntent.invalidate() }
+    private func endInput() { inputIntent.invalidate(); session.endFilePreviewSet() }
     func openInputImage(_ url: URL, accessRequest: AccessRequest?) { open(url, accessRequest: accessRequest) }
     func showInputNotice(_ notice: ViewerInputNotice) { showInputMessage(notice) }
     func promptForInputFolder(_ folder: URL) { promptForFolder(folder, currentImage: nil, direction: .next) }
