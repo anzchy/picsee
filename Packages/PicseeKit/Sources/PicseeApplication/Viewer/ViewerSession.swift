@@ -36,6 +36,25 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public var currentItemID: ItemID? {
         mode == .viewing ? previewSet?.currentItemID : selection.currentItemID
     }
+    private var chromeScheduler: (any ViewerChromeScheduling)?
+    private var scheduledChromeDeadline: Double?
+    private var chromeWakeupConsumed = false
+    public func installChromeScheduler(_ scheduler: any ViewerChromeScheduling) {
+        chromeScheduler = scheduler
+        chromeWakeupConsumed = true
+        synchronizeChrome()
+    }
+    private func synchronizeChrome() {
+        guard let chromeScheduler else { return }
+        let deadline = nextHideDeadline
+        guard chromeWakeupConsumed || deadline != scheduledChromeDeadline else { return }
+        chromeWakeupConsumed = false
+        scheduledChromeDeadline = deadline
+        chromeScheduler.replace(deadline: deadline) { [weak self] in
+            self?.chromeWakeupConsumed = true
+            self?.advanceChrome()
+        }
+    }
     public var nextHideDeadline: Double? { chrome.nextHideDeadline }
     public init(preferencesStore: any DisplayPreferencesStore = InMemoryDisplayPreferencesStore(),
                 clock: any ViewerClock = MonotonicViewerClock(), hideDelay: Double = 2.5,
@@ -74,6 +93,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public func setMenuTracking(_ tracking: Bool) {
         isMenuTracking = tracking
         chrome.setLock(.menu, active: tracking, at: clock.now)
+        synchronizeChrome()
     }
     public func updateFocus(_ context: FocusContext) {
         inspectorFocus.updateFocus(context)
@@ -94,6 +114,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     }
     private func syncFocusLock() {
         chrome.setLock(.keyboardFocus, active: inspectorFocus.focus != .canvas, at: clock.now)
+        synchronizeChrome()
     }
     public func preferencesDidChange(_ preferences: DisplayPreferences) {
         chrome.setPinned(preferences.alwaysShowTools, at: clock.now)
@@ -101,9 +122,10 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         if chrome.locks.contains(.filmstrip) != preferences.filmstripExpanded {
             chrome.setLock(.filmstrip, active: preferences.filmstripExpanded, at: clock.now)
         }
+        synchronizeChrome()
     }
-    public func activity() { chrome.activity(at: clock.now) }
-    public func advanceChrome() { chrome.advance(to: clock.now) }
+    public func activity() { chrome.activity(at: clock.now); synchronizeChrome() }
+    public func advanceChrome() { chrome.advance(to: clock.now); synchronizeChrome() }
     public func isEnabled(_ command: CommandID) -> Bool {
         switch command {
         case .fit, .actualPixels, .zoomIn, .zoomOut: host?.hasImage == true
