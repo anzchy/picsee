@@ -73,6 +73,7 @@ public struct PresentedImage: Sendable {
                     progress.completed(image, isPreview: preview)
                     presented = PresentedImage(fileURL: fileURL, key: key)
                     host?.installImage(image, fileURL: fileURL)
+                    guard token.generation == generation else { return }
                     finishFirstPreview(.success)
                     phase = .refining
                 }
@@ -103,7 +104,7 @@ public struct PresentedImage: Sendable {
                     }
                     break
                 }
-                failure = error; phase = .failed
+                failure = error; presented = nil; phase = .failed
                 finishFirstPreview(.failed)
                 host?.imageLoadFailed(error)
                 break
@@ -112,7 +113,7 @@ public struct PresentedImage: Sendable {
         if token.generation == generation { loading = false }
     }
     public func requireResolution(_ maximum: Int) {
-        guard phase != .failed, phase != .detailLimited else { return }
+        guard phase != .idle, phase != .failed, phase != .detailLimited else { return }
         desiredMaximum = max(1, maximum)
         guard progress.previewCompleted, desiredMaximum > progress.completedMaximum else { return }
         phase = .refining
