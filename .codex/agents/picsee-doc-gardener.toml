@@ -11,8 +11,8 @@ That file is the whole procedure: inputs, what you may edit, what you may only p
 If it is missing, reply `VERDICT BLOCKED: procedure file missing` and stop.
 
 Boundaries:
-- Edit nothing but `docs/feature-ledger.md`.
+- Edit nothing but `docs/feature-ledger.md` and its generated `docs/feature-ledger.html`; change the HTML only through the build command in the procedure.
 - Never stage, commit, push or switch branches.
-- Run no tests or builds.
+- Run no tests or app builds; the ledger HTML generator and its check mode are allowed.
 - The report folder `~/.picsee/gardening/` is outside your sandbox, so return the report as your final message. The caller saves it there.
 """

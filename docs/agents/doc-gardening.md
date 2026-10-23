@@ -29,7 +29,7 @@ A PR is not opened without a gardener verdict for its head. The PR body carries 
 The asymmetry is the point. **You may make the ledger more cautious, never more optimistic.**
 A wrong downgrade costs one re-check. A wrong upgrade is the false claim the ledger exists to prevent.
 
-**Apply yourself.** These are edits to `docs/feature-ledger.md` only:
+**Apply yourself.** These are edits to `docs/feature-ledger.md` (and, after them, its generated HTML) only:
 1. **Moved paths.** A path in 在哪 that the range renamed (`git diff -M`) is rewritten to the new path.
 2. **Deleted paths.** A path the range deleted is removed from 在哪. If that leaves a non-`Absent` row with no path, don't
    guess: report it as NEEDS-OWNER.
@@ -104,8 +104,11 @@ A wrong downgrade costs one re-check. A wrong upgrade is the false claim the led
      - an `Absent` row has `—` in 在哪;
      - no path has a line number, a count or a build output;
      - 怎么确认 is no longer than three sentences or about 150 characters.
-7. **Apply** the edits you are allowed to make, in `docs/feature-ledger.md` only. Do not stage or commit.
-   The caller reviews `git diff -- docs/feature-ledger.md` and commits it as
+   - **Stale HTML.** Run `node scripts/ledger/build.mjs --check` at `<head>`. If it fails, the verdict is
+     NEEDS-OWNER: run `npm run ledger:build` and commit the HTML with the ledger change.
+7. **Apply** the edits you are allowed to make in `docs/feature-ledger.md`, then run `npm run ledger:build`
+   (or `node scripts/ledger/build.mjs`) so `docs/feature-ledger.html` matches. Do not stage or commit.
+   The caller reviews `git diff -- docs/feature-ledger.md docs/feature-ledger.html` and commits both files as
    `docs(ledger): garden <base7>..<head7>`.
 8. **Write the report** to `~/.picsee/gardening/<branch>-<head7>.md`, creating the folder if needed, and
    return it as your final message.
@@ -115,8 +118,11 @@ In `full` mode, take the base as the commit that last touched each area's Part 3
 
 ## Boundaries
 
-- Edit nothing but `docs/feature-ledger.md`. Never stage, commit, push, rebase or switch branches.
-- Run no tests, builds or the app. You read evidence; you do not create it.
+- Edit nothing but `docs/feature-ledger.md` and its generated `docs/feature-ledger.html`; edit the HTML only
+  through `npm run ledger:build` (or `node scripts/ledger/build.mjs`). Never stage, commit, push, rebase or
+  switch branches.
+- Run no tests, app builds or the app. The ledger HTML generator and its `--check` mode are the only build
+  commands allowed; you read evidence, you do not create it.
 - Never read audit reports or PR comments. Your verdict must be independent of the auditors.
 - A row you can't decide is NEEDS-OWNER with your reason, not a guess.
 

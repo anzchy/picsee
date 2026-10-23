@@ -8,6 +8,8 @@
   "private": true,
   "description": "Project-scoped REA installation and static Picview analysis",
   "scripts": {
+    "ledger:build": "node scripts/ledger/build.mjs",
+    "ledger:html-check": "node scripts/ledger/build.mjs --check",
     "rules:check": "node --test scripts/codex-rules/rules.test.mjs",
     "rea": "rea",
     "analyze": "python3 scripts/analyze_picview.py",

@@ -26,7 +26,7 @@
   ├─ ② 写 brief
   ├─ ③ 在 herdr 会话中新开 Claude pane，跑 macos-device-test（本机 mini）
   ├─ ④ 读结论表，写/提交 docs/validation/P<n>.md
-  ├─ ⑤ 你按记录更新账簿行（单独提交）
+  ├─ ⑤ 你按记录更新账簿行，运行 npm run ledger:build，把 Markdown 与 HTML 一起提交
   ├─ ⑥ 跑 picsee-doc-gardener（pr 模式）
   └─ ⑦ 按 gardener 结果处理，把 Ledger-Gardener 行放进 PR 描述，开 PR
 ```
@@ -156,6 +156,9 @@ Validated-by: claude-imple-1 run=20261105-143012-VIEW-02-03
 | 部分入口 NOT VERIFIED | 状态最多 `Partial`，「怎么确认」加 `限制：`写明没验的入口 |
 | 有 FAIL | 不升级；回到 tdd-guardian 修 |
 
+改完 `docs/feature-ledger.md` 后运行 `npm run ledger:build`，把生成的 `docs/feature-ledger.html` 与 Markdown
+放在同一个提交里；不要手改 HTML。
+
 两条硬规矩：
 
 - **状态升级的那次提交，可以追加或修改「限制：」文本，但不得改写「怎么确认」中的验收本身。确需改验收时，单独提交并在提交说明里引用用户原话或 ADR。**
@@ -180,7 +183,7 @@ PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 里说�
 | 结论 | 意思 | 你做什么 |
 |---|---|---|
 | `CLEAN` | 没有过时的行 | 把 `Ledger-Gardener:` 行放进 PR 描述，开 PR |
-| `UPDATED` | 它只做了允许的谨慎修改（路径改名、证据丢失降级、审查日期） | 看 `git diff -- docs/feature-ledger.md`，提交为 `docs(ledger): garden <base7>..<head7>`，再开 PR |
+| `UPDATED` | 它只做了允许的谨慎修改（路径改名、证据丢失降级、审查日期） | 看 `git diff -- docs/feature-ledger.md docs/feature-ledger.html`，确认 gardener 已运行 `npm run ledger:build`，把两者提交为 `docs(ledger): garden <base7>..<head7>`，再开 PR |
 | `NEEDS-OWNER` | 有需要你决定的事：升级缺入口、缺第二次确认、可能的自我认证、该加新行 | 改它点名的行，或在 PR 描述里逐条写 `无用户可见变化：<ID> <理由>`，然后**重跑** gardener |
 | `BLOCK` | 有升级没有证据，或升级的同时改写了「怎么确认」中的验收本身（只追加或修改「限制：」不算） | 不开 PR：把验收改动拆成单独提交，或补齐真机记录 |
 
