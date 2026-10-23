@@ -23,7 +23,7 @@ private struct ScopeSession {
     func stop() {
         if scopeStarted { scope.stop(url) }
         os_signpost(.end, log: Self.log, name: "AccessLease", signpostID: trace, "outcome=released")
-        Logger(subsystem: "io.github.anzchy.picsee", category: "access").notice("AccessLease root=\(rootID?.rawValue.uuidString ?? "file", privacy: .public) remaining=0 outcome=released path=\(url.path, privacy: .private)")
+        Logger(subsystem: "io.github.anzchy.picsee", category: "access").notice("AccessLease root=\(rootID?.rawValue.uuidString ?? "file", privacy: .public) remaining=0 outcome=released scopeStarted=\(scopeStarted, privacy: .public) path=\(url.path, privacy: .private)")
     }
 }
 

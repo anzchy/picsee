@@ -119,10 +119,11 @@ test('a started Swift Testing stream must finish even when XCTest finished elsew
   assert.equal(r.status,70);
   assert.equal(exec.parseCounts(r.stdout,r.stderr),null);
 });
-test('both discovery probes share the heavy lock', () => {
+test('all discovery probes share the heavy lock and issue-specific integration stays manual', () => {
   const config=JSON.parse(readFileSync('.claude/tdd-guardian/config.json','utf8'));
   const probes=config.lanes.map(l=>l.probeCommand);
-  assert.equal(probes.length,2);
+  assert.deepEqual(config.lanes.map(l=>l.name).sort(), ['integration','swift-red','unit']);
+  assert.deepEqual(config.lanes.find(l=>l.name==='integration').gateOn, ['manual']);
   assert.ok(probes.every(command=>command.startsWith('scripts/heavy-lock.sh swift test ')));
 });
 
