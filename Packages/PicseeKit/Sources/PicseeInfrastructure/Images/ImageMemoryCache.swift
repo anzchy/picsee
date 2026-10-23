@@ -6,6 +6,10 @@ struct ImageCacheRequest: Sendable {
     let key: RenderKey
     let id: UUID
     let image: DecodedImage?
+    let sourceChanged: Bool
+    init(key: RenderKey, id: UUID, image: DecodedImage?, sourceChanged: Bool = false) {
+        self.key = key; self.id = id; self.image = image; self.sourceChanged = sourceChanged
+    }
 }
 
 struct ImageCacheUsage: Equatable, Sendable {
@@ -35,6 +39,9 @@ public actor ImageMemoryCache {
     // Oldest first; keys use complete session value equality, without an encoding or digest.
     private var entries: [Entry] = []
     private var pending: [UUID: RenderKey] = [:]
+    private var epoch = 0
+    private var observations: [UUID: (epoch: Int, itemID: ItemID?)] = [:]
+    private var recent: [ItemID: (epoch: Int, revision: FileRevision)] = [:]
     public init(capacity: Int, pressureRecoveryDelay: TimeInterval = 5,
                 pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         precondition(capacity >= 0); self.capacity = capacity; limit = capacity
@@ -105,9 +112,40 @@ public actor ImageMemoryCache {
             emit(context)
         }
     }
-    func lookup(_ key: RenderKey, context: ResourceSnapshotContext? = nil) -> ImageCacheRequest {
+    func withObservation<T: Sendable>(itemID: ItemID? = nil,
+        _ operation: @Sendable (UUID) async throws -> T) async rethrows -> T {
+        let id = UUID()
+        observations[id] = (epoch, itemID)
+        defer { observations[id] = nil; pruneObservations() }
+        return try await operation(id)
+    }
+    private func pruneObservations() {
+        // Only a still-running validation can need an intervening revision, including after eviction.
+        recent = recent.filter { item, value in
+            observations.values.contains { ($0.itemID == nil || $0.itemID == item) && $0.epoch < value.epoch }
+        }
+    }
+    func lookup(_ key: RenderKey, observation: UUID? = nil, context: ResourceSnapshotContext? = nil) -> ImageCacheRequest {
+        if let observation {
+            guard let validation = observations[observation],
+                  validation.itemID == nil || validation.itemID == key.itemID else {
+                return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
+            }
+            if let latest = recent[key.itemID], latest.epoch > validation.epoch, latest.revision != key.revision {
+                return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
+            }
+        }
+        guard !entries.contains(where: { $0.key.itemID == key.itemID && $0.key.revision == key.revision && $0.stale }) else {
+            return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
+        }
+        // Revision values are opaque. Reject conflicting observations made during this validation,
+        // rather than assuming either mtimes or request-start order identify the newest header.
+        epoch += 1
+        if let observation { observations[observation]?.itemID = key.itemID }
+        recent[key.itemID] = (epoch, key.revision)
+        pruneObservations()
         for index in entries.indices where entries[index].key.itemID == key.itemID {
-            entries[index].stale = entries[index].key.revision != key.revision
+            entries[index].stale = entries[index].stale || entries[index].key.revision != key.revision
         }
         while let index = entries.firstIndex(where: { $0.stale && $0.pins == 0 }) {
             entries.remove(at: index); emit(context)
