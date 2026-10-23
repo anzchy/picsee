@@ -160,3 +160,26 @@ private struct ResourceReadingFailure: ItemIdentityResolving {
         }
     }
 }
+
+private struct RealReadingThenRemoving: FileIdentityResourceReading {
+    func identity(for fileURL: URL) throws -> FileResourceIdentity? {
+        let identity = try URLIdentityResourceReader().identity(for: fileURL)
+        try FileManager.default.removeItem(at: fileURL)
+        return identity
+    }
+}
+
+@Test func loadErrorsMissingUnpreparedSourceRetainsResolvedItem() async throws {
+    let tree = try IdentityTree(); defer { tree.remove() }
+    let resolver = FileItemIdentityResolver(root: tree.scope, reader: RealReadingThenRemoving())
+    let pipeline = ImageIOPipeline(identityResolver: resolver)
+    do {
+        _ = try await pipeline.request(for: tree.file, maximumPixelSize: 128)
+        Issue.record("Expected source to disappear after resolving its identity")
+    } catch {
+        let failure = try #require(error as? ImageLoadError)
+        #expect(failure.kind == .sourceChanged)
+        #expect(failure.itemID == .rootRelative(rootID: tree.id, relativePath: "b.png"))
+        #expect(failure.revision == nil)
+    }
+}
