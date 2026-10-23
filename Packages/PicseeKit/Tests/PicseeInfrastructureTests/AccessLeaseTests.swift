@@ -152,3 +152,17 @@ private final class ScopeSensitiveBoundary: SecurityScope, @unchecked Sendable {
     #expect(await access.rootCovering(base.appendingPathComponent("a.jpg")) == nil)
     #expect(scope.observations == [0, 2, 0])
 }
+
+@Test func accessFailedPanelGrantLeavesStoreUntouchedAndNeverStopsFailedScope() async throws {
+    let storeURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: storeURL) }
+    let scope = CountingScope(); scope.succeeds = false
+    let store = BookmarkStore(url: storeURL)
+    let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: store, buildSHA: "A")
+    await #expect(throws: FileAccessError.startFailed) {
+        try await access.grant(folder: URL(fileURLWithPath: "/tmp"))
+    }
+    #expect(scope.counts == [1, 0])
+    #expect(await access.records().isEmpty)
+    #expect(try store.load().isEmpty)
+}
