@@ -5,26 +5,32 @@ import UniformTypeIdentifiers
 public enum ViewerInput: Equatable, Sendable {
     case single(URL), files([URL]), folder(URL), rejected([URL])
 
-    public static func classify(_ urls: [URL]) -> ViewerInput {
-        let unique = uniqueFiles(urls)
-        let images = unique.filter { !$0.hasDirectoryPath && isImage($0) }.sorted {
-            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+    public static func classification(_ urls: [URL]) -> (input: ViewerInput, excludedCount: Int) {
+        var seen = Set<String>()
+        var unique: [URL] = [], images: [URL] = [], folders: [URL] = []
+        var excluded = 0
+        for url in urls where url.isFileURL {
+            guard seen.insert(url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL.path).inserted else { continue }
+            unique.append(url)
+            if url.hasDirectoryPath { folders.append(url) }
+            else if isImage(url) { images.append(url) }
+            else { excluded += 1 }
         }
-        if images.count == 1 { return .single(images[0]) }
-        if images.count > 1 { return .files(images) }
-        let folders = unique.filter(\.hasDirectoryPath)
-        return folders.count == 1 ? .folder(folders[0]) : .rejected(unique)
+        images.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        let input: ViewerInput
+        if images.count == 1 { input = .single(images[0]) }
+        else if images.count > 1 { input = .files(images) }
+        else { input = folders.count == 1 ? .folder(folders[0]) : .rejected(unique) }
+        return (input, excluded)
+    }
+
+    public static func classify(_ urls: [URL]) -> ViewerInput {
+        classification(urls).input
     }
     public static func excludedCount(in urls: [URL]) -> Int {
-        uniqueFiles(urls).filter { !$0.hasDirectoryPath && !isImage($0) }.count
+        classification(urls).excludedCount
     }
     private static func isImage(_ url: URL) -> Bool {
         UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
-    }
-    private static func uniqueFiles(_ urls: [URL]) -> [URL] {
-        var seen = Set<String>()
-        return urls.filter {
-            $0.isFileURL && seen.insert($0.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL.path).inserted
-        }
     }
 }
