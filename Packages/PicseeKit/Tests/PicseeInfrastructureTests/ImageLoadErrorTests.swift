@@ -61,3 +61,30 @@ func loadError(_ kind: ImageLoadError.Kind) -> @Sendable (any Error) -> Bool {
         try await ImageIOPipeline().image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 128))
     }, throws: loadError(.corruptImage))
 }
+
+private struct LoadFailureDecoder: ImageDecoding {
+    let failure: any Error
+    func decode(_ request: ImageDecodeRequest) throws -> DecodedImage { throw failure }
+}
+
+@Test func loadErrorsKeepContextAndPassThroughAccessErrors() async throws {
+    let failures: [(any Error, ImageLoadError.Kind)] = [
+        (ImageDecodeError.invalidRequest, .sourceChanged), (ImageDecodeError.unreadableImage, .corruptImage),
+        (ImageDecodeError.budgetExceeded, .resourceLimit), (CancellationError(), .cancelled)
+    ]
+    for (failure, kind) in failures {
+        let pipeline = ImageIOPipeline(decoder: LoadFailureDecoder(failure: failure))
+        let request = try await pipeline.request(for: fixture("orientation-1.tiff"), maximumPixelSize: 128)
+        do { _ = try await pipeline.image(for: request); Issue.record("Expected decoder failure") }
+        catch {
+            let actual = try #require(error as? ImageLoadError)
+            #expect(actual.kind == kind)
+            #expect(actual.itemID == request.renderKey?.itemID)
+            #expect(actual.revision == request.renderKey?.revision)
+        }
+    }
+    let access = ImageIOPipeline(decoder: LoadFailureDecoder(failure: FileAccessError.startFailed))
+    await #expect(throws: FileAccessError.startFailed) {
+        try await access.image(for: ImageDecodeRequest(fileURL: fixture("orientation-1.tiff"), maximumPixelSize: 128))
+    }
+}

@@ -38,7 +38,8 @@ private struct RevisionChangingDecoder: ImageDecoding {
     let decoded = try await pipeline.image(for: request)
     let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
     let expected = FileRevision(byteCount: (attributes[.size] as! NSNumber).intValue,
-                                modificationDate: Date(timeIntervalSince1970: 1_234_567))
+                                modificationDate: Date(timeIntervalSince1970: 1_234_567),
+                                resourceIdentifier: request.renderKey?.revision.resourceIdentifier)
     #expect(decoded.revision == expected)
     #expect(decoded.revision != request.renderKey?.revision)
 }

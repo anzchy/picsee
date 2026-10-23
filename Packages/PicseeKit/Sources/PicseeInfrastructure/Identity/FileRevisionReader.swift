@@ -1,0 +1,14 @@
+import Foundation
+import PicseeCore
+
+/// Filesystem reads run on the header/decoder executor. No watcher generation or content hashing.
+enum FileRevisionReader {
+    static func read(_ url: URL) throws -> FileRevision {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard let size = attributes[.size] as? NSNumber else { throw ImageDecodeError.unreadableImage }
+        let resource = try URLIdentityResourceReader().identity(for: url)
+        let token = resource.map { ItemID.resource(volumeUUID: $0.volumeUUID, fileIdentifier: $0.fileIdentifier).stableEncoding }
+        return FileRevision(byteCount: size.intValue, modificationDate: attributes[.modificationDate] as? Date,
+                            resourceIdentifier: token)
+    }
+}

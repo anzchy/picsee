@@ -38,6 +38,7 @@ private struct MissingIdentityReader: FileIdentityResourceReading {
     #expect(try await trailingRoot.identity(for: tree.file) == original)
     let hardLink = tree.root.appendingPathComponent("hard.png")
     try FileManager.default.linkItem(at: tree.file, to: hardLink)
+    #expect(try URLIdentityResourceReader().identity(for: hardLink) == URLIdentityResourceReader().identity(for: tree.file))
     // User chose path identity: two simultaneously existing hard-link paths are two items.
     #expect(try await resolver.identity(for: hardLink) != original)
     let other = tree.root.appendingPathComponent("other.png")
@@ -59,7 +60,7 @@ private struct MissingIdentityReader: FileIdentityResourceReading {
     let other = tree.root.appendingPathComponent("other.png")
     try Data("other".utf8).write(to: other)
     #expect(try await grant.identity(for: other) != first)
-    let outside = tree.root.deletingLastPathComponent().appendingPathComponent("outside.png")
+    let outside = tree.root.deletingLastPathComponent().appendingPathComponent("outside-\(UUID().uuidString).png")
     await #expect(throws: FileAccessError.outsideRoot) { try await resolver.identity(for: outside) }
     // resolvingSymlinksInPath needs an existing target; never overwrite or remove another owner's file.
     let ownsOutside = !FileManager.default.fileExists(atPath: outside.path)

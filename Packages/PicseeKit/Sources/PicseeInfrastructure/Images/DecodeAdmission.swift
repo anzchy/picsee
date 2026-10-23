@@ -76,12 +76,8 @@ public actor DecodeAdmission {
     func setCompletionBarrier(_ barrier: @escaping @Sendable () async -> Void) {
         completionBarrier = barrier
     }
-    private var identities: [URL: ItemID] = [:]
-    public func key(for url: URL, revision: FileRevision, maximumPixelSize: Int, isPreview: Bool = false) -> RenderKey {
-        let path = url.standardizedFileURL
-        let item = identities[path] ?? ItemID.ephemeral(UUID())
-        identities[path] = item
-        return RenderKey(itemID: item, revision: revision, maximumPixelSize: maximumPixelSize, isPreview: isPreview)
+    public func key(for itemID: ItemID, revision: FileRevision, maximumPixelSize: Int, isPreview: Bool = false) -> RenderKey {
+        RenderKey(itemID: itemID, revision: revision, maximumPixelSize: maximumPixelSize, isPreview: isPreview)
     }
     public func image(_ request: ImageDecodeRequest, key: RenderKey, cost: Int, heavy: Bool,
                       priority: DecodePriority) async throws -> DecodedImage {

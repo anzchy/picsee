@@ -7,8 +7,8 @@ private let encodingItem = ItemID.ephemeral(UUID(uuidString: "00000000-0000-0000
 @Test func renderKeyGoldenEncodings() {
     let missing = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42, modificationDate: nil), maximumPixelSize: 512)
     let dated = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42, modificationDate: Date(timeIntervalSinceReferenceDate: 1)), maximumPixelSize: 512)
-    #expect(missing.stableEncoding == "rk1|id1:ephemeral:00000000-0000-0000-0000-000000000001|42|none|0|512|0|orientedSDR|1|viewer")
-    #expect(dated.stableEncoding == "rk1|id1:ephemeral:00000000-0000-0000-0000-000000000001|42|3ff0000000000000|0|512|0|orientedSDR|1|viewer")
+    #expect(missing.stableEncoding == "rk1|id1:ephemeral:00000000-0000-0000-0000-000000000001|42|none|0|512|0|orientedSDR|1|viewer|none")
+    #expect(dated.stableEncoding == "rk1|id1:ephemeral:00000000-0000-0000-0000-000000000001|42|3ff0000000000000|0|512|0|orientedSDR|1|viewer|none")
 }
 
 @Test func renderKeyEveryFieldChangesEncoding() {
@@ -43,4 +43,13 @@ private let encodingItem = ItemID.ephemeral(UUID(uuidString: "00000000-0000-0000
         modificationDate: Date(timeIntervalSinceReferenceDate: -0.0)), maximumPixelSize: 512)
     #expect(positive == negative)
     #expect(positive.stableEncoding == negative.stableEncoding)
+}
+
+@Test func renderKeyResourceRevisionChangesStableEncoding() {
+    let original = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42, modificationDate: nil), maximumPixelSize: 512)
+    let replacement = RenderKey(itemID: encodingItem, revision: FileRevision(byteCount: 42, modificationDate: nil,
+        resourceIdentifier: "file1"), maximumPixelSize: 512)
+    #expect(original != replacement)
+    #expect(original.stableEncoding != replacement.stableEncoding)
+    #expect(replacement.stableEncoding == "rk1|id1:ephemeral:00000000-0000-0000-0000-000000000001|42|none|0|512|0|orientedSDR|1|viewer|ZmlsZTE=")
 }
