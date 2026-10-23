@@ -35,6 +35,9 @@ private let statesLocalizationKeys = [
     "Cancel", "Retry", "Close", "Open Recent", "Always Show Tools", "Zoom mode", "Fit window",
     "Previous Image", "Next Image", "Previous image", "Next image", "Zoom in", "Zoom out",
     "Show image information", "Open folder", "Enter Full Screen", "Exit Full Screen", "Component Preview",
+    "This File Can’t Be Opened", "“%@” isn’t a supported image format.",
+    "None of These Files Can Be Opened", "None of the dropped or opened files is a supported image.",
+    "You can also drop images or folders here.",
     "No Recent Folders", "canvas.image"
 ]
 
