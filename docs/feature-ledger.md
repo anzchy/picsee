@@ -110,7 +110,7 @@
 | OPEN-02 | 打开面板 | Partial | 无 | P0-09、P1-02 | `App/PicseeApp.swift`、`App/Commands/CommandMenu.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift` | ⌘O 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变。限制：File › Open…、⌘O（图片与目录）与取消已 @1x 真机通过；底部工具组 Open… 按钮仅单元证明。 |
 | OPEN-03 | 从 Finder 打开 | Stub | 无 | P1-02 | `App/Info.plist`、`App/PicseeApp.swift` | 在 Finder 对一张 JPEG 用“打开方式 → picsee”，App 启动并显示该图。限制：已声明 `public.image` 文档类型，真机运行中的 `open -a` 可用（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；Finder“打开方式”与双击未验；多文件仅显示首个文件。 |
 | OPEN-04 | 拖入打开 | Absent | 无 | P1-02 | — | 从 Finder 拖一张图进窗口，显示该图；拖入不支持的文件给出明确提示，当前图不变 |
-| OPEN-05 | 无法读取的图片 | Absent | 无 | P1-07、P2-03 | — | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图 |
+| OPEN-05 | 无法读取的图片 | Partial | 单元 | P1-07、P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerRetryIntent.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图。限制：网格返回待 P3-01，Esc 只回真实来源；“下一张”仅在 Session 导航可用时出现；素材为截断 PNG（无截断 JPEG 素材）；错误种类、同授权重试、底部命中和细节受限保图仅单元证明；真机未验。 |
 | OPEN-06 | 最近打开 | Partial | 单元 | P2-09、P3-14 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/RecentFolderStore.swift`、`App/Access/AccessMenus.swift` | 打开一个目录后退出重开，最近列表里有它；授权失效时显示重新授权入口；不保存图片副本。限制：重启后 Open Recent 浏览 @1x 真机通过；仅文件夹、最多 10 项；授权失效的重连入口未验；损坏库降级仅单元验证。 |
 | OPEN-07 | 从剪贴板打开 | Absent | 无 | P4-02 | — | 截图到剪贴板后选“从剪贴板打开”，新窗口显示该图 |
 
