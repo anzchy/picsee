@@ -20,6 +20,8 @@ struct InspectorPlaceholder: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Inspector Placeholder").font(.headline)
+            Text(verbatim: model.session.imageLoader.presented?.name ?? "")
+                .accessibilityIdentifier("inspector.item-name")
             TextField("Focus test (not saved)", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("inspector.focus-test")
