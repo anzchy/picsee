@@ -64,9 +64,9 @@ public final class ChromeToolView: NSView {
         toolTip = commandTooltip
     }
     var commandTooltip: String {
-        let label = command == .open ? "Open…" : command == .fit ? "Fit window" : command == .actualPixels ? "Actual Pixels" : ChromeToolFace.symbol(command).label
+        let label = String(localized: String.LocalizationValue(command == .open ? "Open…" : command == .fit ? "Fit window" : command == .actualPixels ? "Actual Pixels" : ChromeToolFace.symbol(command).label))
         let hint = command == .previous ? "←" : command == .next ? "→" : command.usesCommand ? "⌘" + command.defaultKey.uppercased() : command.defaultKey
-        return String(localized: String.LocalizationValue(label)) + " (\(hint))"
+        return label + " (\(hint))"
     }
     public override var acceptsFirstResponder: Bool { !isHiddenOrHasHiddenAncestor && session?.isEnabled(command) == true }
     public override func hitTest(_ point: NSPoint) -> NSView? {
