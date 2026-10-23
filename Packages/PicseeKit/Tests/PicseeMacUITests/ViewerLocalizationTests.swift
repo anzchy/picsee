@@ -38,6 +38,7 @@ private let statesLocalizationKeys = [
     "This File Can’t Be Opened", "“%@” isn’t a supported image format.",
     "None of These Files Can Be Opened", "None of the dropped or opened files is a supported image.",
     "You can also drop images or folders here.",
+    "Open One Folder at a Time", "Drop or open a single folder to continue.",
     "No Recent Folders", "canvas.image"
 ]
 
