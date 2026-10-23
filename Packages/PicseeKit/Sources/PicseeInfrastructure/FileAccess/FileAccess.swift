@@ -202,6 +202,13 @@ public actor FileAccess: AccessLeasing {
         }
         let lease = AccessLease(url: url, rootID: rootID)
         if var entry = active[key] {
+            if let record = staleRecord, roots[record.id] != url {
+                do { try refreshBookmark(record, for: url) }
+                catch {
+                    roots.removeValue(forKey: record.id)
+                    throw FileAccessError.needsReconnection(record.id)
+                }
+            }
             entry.tokens.insert(lease.token); active[key] = entry
         } else {
             let session = try ScopeSession(scope: scope, url: url, rootID: rootID)
@@ -209,23 +216,27 @@ public actor FileAccess: AccessLeasing {
                 session.stop()
                 throw FileAccessError.outsideRoot
             }
-            if var record = staleRecord {
-                do {
-                    record.bookmark = try bookmarks.create(for: url)
-                    let refreshed = saved.map { $0.id == record.id ? record : $0 }
-                    try store.save(refreshed)
-                    saved = refreshed
-                } catch {
+            if let record = staleRecord {
+                do { try refreshBookmark(record, for: url) }
+                catch {
                     session.stop()
                     roots.removeValue(forKey: record.id)
                     throw FileAccessError.needsReconnection(record.id)
                 }
             }
-            if let rootID { roots[rootID] = url }
             active[key] = Active(session: session, tokens: [lease.token])
         }
+        if let rootID { roots[rootID] = url }
         requests[lease.token] = key
         return lease
+    }
+    /// The caller holds either a newly started or an existing live session scope.
+    private func refreshBookmark(_ record: AccessRootRecord, for url: URL) throws {
+        var replacement = record
+        replacement.bookmark = try bookmarks.create(for: url)
+        let refreshed = saved.map { $0.id == record.id ? replacement : $0 }
+        try store.save(refreshed)
+        saved = refreshed
     }
     public func release(_ lease: AccessLease) {
         guard let key = requests.removeValue(forKey: lease.token), var entry = active[key] else { return }
