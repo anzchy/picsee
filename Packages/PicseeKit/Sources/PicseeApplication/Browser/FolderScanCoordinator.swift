@@ -16,14 +16,16 @@ import PicseeCore
     var automaticPresentationAllowed: (@MainActor () -> Bool)?
     private let access: any AccessLeasing
     private let scanner: any FolderScanning
+    private let trace: (any FolderScanTracing)?
+    private var firstBatchTraced = false
     private var scanTask: Task<Void, any Error>?
     private var activeGeneration: UInt64?
-    public init(access: any AccessLeasing, scanner: any FolderScanning) {
-        self.access = access; self.scanner = scanner
+    public init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)? = nil) {
+        self.access = access; self.scanner = scanner; self.trace = trace
     }
     @discardableResult public func begin(folder: URL, rootID: AccessRootID, input: URL? = nil,
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool = { true }) -> Task<Void, any Error> {
-        end()
+        stop(.replaced)
         generation &+= 1
         let token = generation
         activeGeneration = token
@@ -32,6 +34,8 @@ import PicseeCore
         pendingDirection = pending
         automaticPresentationAllowed = canPresent
         isReadingFolder = input == nil
+        firstBatchTraced = false
+        trace?.begin(generation: token, folderURL: folder)
         let task = Task { [self] in
             do {
                 try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: input,
@@ -42,6 +46,10 @@ import PicseeCore
                     }, emit: { [self] batch in
                         guard activeGeneration == token, let snapshot else { return }
                         self.snapshot = snapshot.appending(batch, isComplete: false)
+                        if !batch.isEmpty, !firstBatchTraced {
+                            firstBatchTraced = true
+                            trace?.firstBatch(count: batch.count, generation: token)
+                        }
                         if isReadingFolder, let first = self.snapshot?.entries.first,
                            automaticPresentationAllowed?() != false {
                             isReadingFolder = false
@@ -54,13 +62,15 @@ import PicseeCore
                         advancePending()
                     })
                 try Task.checkCancellation()
-                guard activeGeneration == token else { return }
-                let showEmpty = input == nil && snapshot?.entries.isEmpty == true && automaticPresentationAllowed?() != false
+                guard activeGeneration == token, let completed = snapshot else { return }
+                let showEmpty = input == nil && completed.entries.isEmpty && automaticPresentationAllowed?() != false
                 activeGeneration = nil
-                snapshot = snapshot?.appending([], isComplete: true)
+                snapshot = completed.appending([], isComplete: true)
                 pendingDirection = nil
                 isReadingFolder = false
                 scanTask = nil
+                trace?.complete(count: completed.entries.count, generation: token)
+                trace?.end(outcome: .complete, generation: token)
                 if showEmpty { host?.showEmptyFolder() }
             } catch {
                 guard activeGeneration == token else { return }
@@ -69,9 +79,11 @@ import PicseeCore
                 scanTask = nil
                 if error is CancellationError {
                     snapshot = nil; inputURL = nil; currentItemID = nil; currentURL = nil; pendingDirection = nil
+                    trace?.end(outcome: .cancelled, generation: token)
                     return
                 }
                 failure = error
+                trace?.end(outcome: .failed, generation: token)
                 throw error
             }
         }
@@ -79,7 +91,9 @@ import PicseeCore
         return task
     }
     public func cancel() { end() }
-    public func end() {
+    public func end() { stop(.cancelled) }
+    private func stop(_ outcome: FolderScanOutcome) {
+        let ending = activeGeneration
         activeGeneration = nil
         scanTask?.cancel()
         scanTask = nil
@@ -91,6 +105,7 @@ import PicseeCore
         automaticPresentationAllowed = nil
         isReadingFolder = false
         failure = nil
+        if let ending { trace?.end(outcome: outcome, generation: ending) }
     }
     /// Explicitly nonisolated: path canonicalization and scanning begin only inside the acquired lease.
     private nonisolated static func scanLeased(folder: URL, rootID: AccessRootID, generation: UInt64, input: URL?,

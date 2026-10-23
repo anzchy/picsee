@@ -495,7 +495,7 @@ extension CanvasWindowController: ViewerInputHost {
 extension CanvasWindowController: FolderScanHost {
     private func folderScanner(_ services: AccessServices) -> FolderScanCoordinator {
         if let scan = session.folderScan { return scan }
-        let scan = FolderScanCoordinator(access: services.files, scanner: services.browser)
+        let scan = FolderScanCoordinator(access: services.files, scanner: services.browser, trace: NativeFolderScanTrace())
         scan.host = self
         session.folderScan = scan
         return scan
@@ -514,4 +514,32 @@ extension CanvasWindowController: FolderScanHost {
         refreshRecents()
     }
     func showEmptyFolder() { showAccessMessage(String(localized: "No Images in This Folder")) }
+
+    /// Untested native os adapter; structured lifecycle is covered at the Application trace port.
+    @MainActor private final class NativeFolderScanTrace: FolderScanTracing {
+        private let log = OSLog(subsystem: "io.github.anzchy.picsee", category: "filesystem")
+        private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "filesystem")
+        private var ids: [UInt64: OSSignpostID] = [:]
+        func begin(generation: UInt64, folderURL: URL) {
+            let id = OSSignpostID(log: log)
+            ids[generation] = id
+            os_signpost(.begin, log: log, name: "FolderScan", signpostID: id,
+                "generation=%{public}llu folder=%{private}s", generation, folderURL.path)
+            logger.notice("FolderScan begin generation=\(generation, privacy: .public) folder=\(folderURL.path, privacy: .private)")
+        }
+        func firstBatch(count: Int, generation: UInt64) {
+            os_signpost(.event, log: log, name: "scan_first_batch", "count=%{public}ld generation=%{public}llu", count, generation)
+            logger.notice("scan_first_batch count=\(count, privacy: .public) generation=\(generation, privacy: .public)")
+        }
+        func complete(count: Int, generation: UInt64) {
+            os_signpost(.event, log: log, name: "scan_complete", "count=%{public}ld generation=%{public}llu", count, generation)
+            logger.notice("scan_complete count=\(count, privacy: .public) generation=\(generation, privacy: .public)")
+        }
+        func end(outcome: FolderScanOutcome, generation: UInt64) {
+            guard let id = ids.removeValue(forKey: generation) else { return }
+            os_signpost(.end, log: log, name: "FolderScan", signpostID: id,
+                "outcome=%{public}s generation=%{public}llu", outcome.rawValue, generation)
+            logger.notice("FolderScan outcome=\(outcome.rawValue, privacy: .public) generation=\(generation, privacy: .public)")
+        }
+    }
 }
