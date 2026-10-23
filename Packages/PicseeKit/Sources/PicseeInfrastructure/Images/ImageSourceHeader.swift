@@ -6,6 +6,22 @@ struct ImageSourceHeader: Sendable {
     let width: Int
     let height: Int
     let revision: FileRevision
+    // ImageIO can return partial pixels for incomplete PNGs. Check chunk boundaries without reading payloads.
+    private static func requireCompletePNG(_ url: URL) throws {
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        let size = try file.seekToEnd()
+        var offset: UInt64 = 8
+        while offset + 12 <= size {
+            try file.seek(toOffset: offset)
+            guard let header = try file.read(upToCount: 8), header.count == 8 else { throw ImageDecodeError.unreadableImage }
+            let length = header.prefix(4).reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+            guard length <= size - offset - 12 else { throw ImageDecodeError.unreadableImage }
+            if Array(header.suffix(4)) == [73, 69, 78, 68] { return }
+            offset += length + 12
+        }
+        throw ImageDecodeError.unreadableImage
+    }
     static func read(_ request: ImageDecodeRequest, budget: Int) throws -> ImageSourceHeader {
         guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else { throw ImageDecodeError.invalidRequest }
         // A header-only PNG may be too incomplete for ImageIO properties. Inspect
@@ -19,12 +35,14 @@ struct ImageSourceHeader: Sendable {
             let width = data[16..<20].reduce(0) { ($0 << 8) | Int($1) }
             let height = data[20..<24].reduce(0) { ($0 << 8) | Int($1) }
             _ = try DecodeBudget.sourceCost(width: width, height: height, budget: budget)
+            try requireCompletePNG(request.fileURL)
         }
         guard let source = CGImageSourceCreateWithURL(request.fileURL as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int else { throw ImageDecodeError.unreadableImage }
         _ = try DecodeBudget.sourceCost(width: width, height: height, budget: budget)
+        guard CGImageSourceGetStatus(source) == .statusComplete else { throw ImageDecodeError.unreadableImage }
         let attributes = try FileManager.default.attributesOfItem(atPath: request.fileURL.path)
         guard let size = attributes[.size] as? NSNumber else { throw ImageDecodeError.unreadableImage }
         return ImageSourceHeader(width: width, height: height,

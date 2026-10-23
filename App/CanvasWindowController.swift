@@ -195,7 +195,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 if token == current && !Task.isCancelled {
                     // This controller supplies valid URLs and positive sizes. invalidRequest
                     // here means the prepared render identity no longer matches the file.
-                    if error as? ImageDecodeError == .invalidRequest,
+                    if (error as? ImageLoadError)?.kind == .sourceChanged,
                        decodeProgress.restartForRevision(request: token, current: current) {
                         currentKey = nil
                         canvas.beginOpening()

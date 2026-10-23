@@ -54,15 +54,15 @@ private struct ThreadProbeDecoder: ImageDecoding {
         try await withImage { file in
             try Data("not an image".utf8).write(to: file)
             let pipeline = ImageIOPipeline()
-            await #expect(throws: ImageDecodeError.unreadableImage) {
+            await #expect(performing: {
                 try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 8))
-            }
-            await #expect(throws: ImageDecodeError.invalidRequest) {
+            }, throws: loadError(.unsupportedFormat))
+            await #expect(performing: {
                 try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 0))
-            }
-            await #expect(throws: ImageDecodeError.invalidRequest) {
+            }, throws: loadError(.sourceChanged))
+            await #expect(performing: {
                 try await pipeline.image(for: ImageDecodeRequest(fileURL: URL(string: "https://invalid.example/image")!, maximumPixelSize: 8))
-            }
+            }, throws: loadError(.sourceChanged))
         }
     }
     @Test func zoomSequenceDecodesOnlyPreviewAndOneDetailOnPipelineQueue() async throws {

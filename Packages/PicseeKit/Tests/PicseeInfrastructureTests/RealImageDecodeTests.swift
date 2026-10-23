@@ -23,9 +23,9 @@ final class DecodeCounter: ImageDecoding, @unchecked Sendable {
 @Test func oversizeHeaderNeverReachesPixelDecoder() async {
     let decoder = DecodeCounter()
     let pipeline = ImageIOPipeline(decoder: decoder)
-    await #expect(throws: ImageDecodeError.budgetExceeded) {
+    await #expect(performing: {
         try await pipeline.image(for: ImageDecodeRequest(fileURL: fixture("oversize-header.png"), maximumPixelSize: 512))
-    }
+    }, throws: loadError(.resourceLimit))
     #expect(decoder.count == 0)
 }
 func rgba(_ image: CGImage) throws -> [UInt8] {
@@ -50,13 +50,13 @@ func rgba(_ image: CGImage) throws -> [UInt8] {
     #expect(pixels[3] == 0)
     #expect(pixels[255 * 4 + 3] == 255)
     #expect(pixels[255 * 4] > 0)
-    await #expect(throws: ImageDecodeError.unreadableImage) {
+    await #expect(performing: {
         try await pipeline.image(for: ImageDecodeRequest(fileURL: fixture("corrupt.png"), maximumPixelSize: 512))
-    }
+    }, throws: loadError(.corruptImage))
     do {
         let partial = try await pipeline.image(for: ImageDecodeRequest(fileURL: fixture("truncated.png"), maximumPixelSize: 512))
         #expect(partial.image.width <= 64 && partial.image.height <= 48)
-    } catch { #expect(error as? ImageDecodeError == .unreadableImage) }
+    } catch { #expect((error as? ImageLoadError)?.kind == .corruptImage) }
 }
 @Test func selfEncodedJPEGAndHEICDecodeAtRequestedSize() async throws {
     let context = try #require(CGContext(data: nil, width: 64, height: 32, bitsPerComponent: 8, bytesPerRow: 256,
@@ -117,7 +117,7 @@ func rgba(_ image: CGImage) throws -> [UInt8] {
                 #expect(max(result.image.width, result.image.height) <= maximum)
             } catch {
                 #expect(name == "truncated.png")
-                #expect(error as? ImageDecodeError == .unreadableImage)
+                #expect((error as? ImageLoadError)?.kind == .corruptImage)
             }
         }
     }

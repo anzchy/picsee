@@ -3,6 +3,7 @@ import Foundation
 import ImageIO
 import os
 import PicseeCore
+import UniformTypeIdentifiers
 
 public enum ImageDecodeError: Error, Equatable {
     case budgetExceeded
@@ -42,7 +43,7 @@ public struct ImageIODecoder: ImageDecoding {
             options[kCGImageSourceCreateThumbnailFromImageAlways] = true
             thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         }
-        guard let image = thumbnail else { throw ImageDecodeError.unreadableImage }
+        guard let image = thumbnail, CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else { throw ImageDecodeError.unreadableImage }
         let rotated = (5...8).contains(properties[kCGImagePropertyOrientation] as? Int ?? 1)
         return DecodedImage(image: image, sourcePixelSize: CGSize(width: rotated ? height : width, height: rotated ? width : height),
                             formatIdentifier: CGImageSourceGetType(source) as String?)
@@ -63,27 +64,42 @@ public final class ImageIOPipeline: ImagePipeline, Sendable {
         let budget = configuration.budget
         return try await withCheckedThrowingContinuation { continuation in
             executor.submit {
-                continuation.resume(with: Result { try ImageSourceHeader.read(request, budget: budget) })
+                continuation.resume(with: Result {
+                    do { return try ImageSourceHeader.read(request, budget: budget) }
+                    catch {
+                        let attributes = try? FileManager.default.attributesOfItem(atPath: request.fileURL.path)
+                        let revision = (attributes?[.size] as? NSNumber).map {
+                            FileRevision(byteCount: $0.intValue, modificationDate: attributes?[.modificationDate] as? Date)
+                        }
+                        throw loadFailure(error, request: request, revision: revision,
+                                          unreadableKind: error as? ImageDecodeError == .unreadableImage
+                                            ? imageFailureKind(request.fileURL) : .corruptImage)
+                    }
+                })
             }
         }
     }
     public func request(for fileURL: URL, maximumPixelSize: Int) async throws -> ImageDecodeRequest {
-        try Task.checkCancellation()
+        if Task.isCancelled { throw ImageLoadError(.cancelled) }
         let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize))
         let key = await admission.key(for: fileURL, revision: header.revision, maximumPixelSize: maximumPixelSize)
         return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, renderKey: key)
     }
     public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
-        try Task.checkCancellation()
+        if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision) }
         let header = try await header(request)
         let key = await admission.key(for: request.fileURL, revision: header.revision, maximumPixelSize: request.maximumPixelSize, isPreview: request.isPreview)
         // An explicit request revision must still match at the last predecode check.
-        if let requested = request.renderKey, requested != key { throw ImageDecodeError.invalidRequest }
+        if let requested = request.renderKey, requested != key {
+            throw ImageLoadError(.sourceChanged, itemID: requested.itemID, revision: header.revision)
+        }
         let cost = try DecodeBudget.sourceCost(width: header.width, height: header.height, budget: configuration.budget)
         let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
             renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview)
-        return try await admission.image(admittedRequest, key: key, cost: cost,
-            heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
+        do {
+            return try await admission.image(admittedRequest, key: key, cost: cost,
+                heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
+        } catch { throw loadFailure(error, request: admittedRequest, revision: header.revision, unreadableKind: .corruptImage) }
     }
 }
 
@@ -98,4 +114,35 @@ private struct RevisionReportingDecoder: ImageDecoding {
             formatIdentifier: decoded.formatIdentifier,
             revision: FileRevision(byteCount: size.intValue, modificationDate: attributes[.modificationDate] as? Date))
     }
+}
+
+/// Called only on the bounded executor. Extensions are not evidence of an image format.
+private func imageFailureKind(_ url: URL) -> ImageLoadError.Kind {
+    if let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetType(source) != nil {
+        return .corruptImage
+    }
+    // A recognised signature identifies damaged PNG data even if ImageIO cannot construct a source.
+    let file = try? FileHandle(forReadingFrom: url)
+    let prefix = try? file?.read(upToCount: 512)
+    try? file?.close()
+    if prefix?.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) == true { return .corruptImage }
+    // With no decoder signature, binary data advertised as an image is treated as corrupt.
+    // Plain text remains unsupported regardless of its suffix (including a misleading .jpg).
+    if prefix?.contains(0) == true, UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true {
+        return .corruptImage
+    }
+    return .unsupportedFormat
+}
+
+private func loadFailure(_ error: Error, request: ImageDecodeRequest, revision: FileRevision?,
+                         unreadableKind: ImageLoadError.Kind) -> Error {
+    let kind: ImageLoadError.Kind
+    switch error {
+    case ImageDecodeError.budgetExceeded: kind = .resourceLimit
+    case ImageDecodeError.invalidRequest: kind = .sourceChanged
+    case ImageDecodeError.unreadableImage: kind = unreadableKind
+    case is CancellationError: kind = .cancelled
+    default: return error // Includes FileAccess errors; never reinterpret permission failures.
+    }
+    return ImageLoadError(kind, itemID: request.renderKey?.itemID, revision: revision ?? request.renderKey?.revision)
 }
