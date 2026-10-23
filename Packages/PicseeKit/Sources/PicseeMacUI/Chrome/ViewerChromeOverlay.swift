@@ -59,6 +59,7 @@ public final class ChromeToolView: NSView {
     public override func hitTest(_ point: NSPoint) -> NSView? {
         !isHiddenOrHasHiddenAncestor && frame.contains(point) ? self : nil
     }
+    weak var pointerCanvas: NSView?
     private var pressed = false
     public override var mouseDownCanMoveWindow: Bool { false }
     public override func mouseDown(with event: NSEvent) {
@@ -71,6 +72,10 @@ public final class ChromeToolView: NSView {
         pressed = false
         if bounds.contains(convert(event.locationInWindow, from: nil)) { activate() }
         session?.setChromeInteraction(.pointerPress, active: false)
+        if window?.firstResponder === self, let pointerCanvas {
+            window?.makeFirstResponder(pointerCanvas)
+            session?.updateFocus(.canvas)
+        }
     }
     public override func becomeFirstResponder() -> Bool {
         guard acceptsFirstResponder else { return false }
@@ -201,6 +206,7 @@ public final class ViewerChromeOverlay: NSView {
     }
     public func linkKeyViews(to canvas: NSView) {
         self.canvas = canvas
+        for tool in tools { tool.pointerCanvas = canvas }
         let enabled = tools.filter(\.acceptsFirstResponder)
         let loop: [NSView] = [canvas] + enabled
         for index in loop.indices { loop[index].nextKeyView = loop[(index + 1) % loop.count] }
