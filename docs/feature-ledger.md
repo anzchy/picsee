@@ -327,21 +327,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..3419561）：OPEN-02（面板可选目录）、OPEN-06（Absent→Partial/单元，File › Open Recent）已随改，验收未改；OPEN-03 单文件改走 File Grant 租约、目录 URL 被忽略，JPEG 验收不受影响。上次：P1 素材与记录骨架（6f36f45..45fa1f8）OPEN-01…05 不受影响 |
-| 查看与画布 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..3419561）：VIEW-10 Absent→Partial/单元已随改，验收未改；解码改经 `AccessImageSource` 租约，pipeline 调用顺序不变，VIEW-06/07/08 不改行，但其 @1x 真机记录早于此改动。上次：P1 素材与记录骨架（6f36f45..45fa1f8）VIEW-01/04 不变 |
+| 打开与输入 | 2026-10-23 | doc-gardener | P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6）：OPEN-02、OPEN-06 只改限制文本，与 P0.md 第 8、10 项一致；状态、验证与验收未改；OPEN-06 的“不保存图片副本”与重连入口仍未真机验。上次：P0-04 授权（e8f6e88..3419561）OPEN-02/06 随改 |
+| 查看与画布 | 2026-10-23 | doc-gardener | P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6）：VIEW-10 只改限制文本，与 P0.md 第 5、6 项一致，状态与验收未改；P0.md 仅追加小节，VIEW-02/03/06/07/08 的链接与 ID 仍在。上次：P0-04 授权（e8f6e88..3419561）VIEW-10 随改 |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CHROME-01…05 待验项，无结果；保持 `Absent`。上次：P0-09 Session（dcfe3f8..bef71d5）CHROME-01…05 保持 `Absent` |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 PREF-01/02/04 待验项，无结果；状态不变。上次：P0-09 Session（dcfe3f8..bef71d5）新增两键暂不入行（PR 描述裁定），待 P1-08/P1-09 命名 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-22 | doc-gardener | P0-09（#10，749697a..7054a5d）⌘I 只切换 Inspector 占位面板，无任何文件信息；INFO-01 保持 `Absent` |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..3419561）：ACCESS-01/02/05 Absent→Partial/单元已随改，验收未改；新 entitlement `com.apple.security.files.bookmarks.app-scope` 记在 ACCESS-02；ADR-008 仍为 proposed；无真机记录。上次：建账 |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6）：ACCESS-01/02/05 只改限制文本，与 P0.md 第 1–4、9、10、13 项一致；ADR-008「Bookmark after rebuild」按第 13 项填写，ADR 仍为 proposed；ACCESS-05“日志不区分临时与租约会话”与 `FileAccess.swift` 一致；状态与验收未改。上次：P0-04 授权（e8f6e88..3419561） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CACHE-01 待验项与内存压力用户步骤，无结果；CACHE-01 保持 `Absent`。上次：建账 |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..c537e90）：previous/next 改为已实现，CMD-01 限制已精简（保留全部命令 ID）；CMD-02 限制已注明字段裸键真机记录早于 ← 有动作、打开目录后字段内 ← 未验（c537e90）；状态不变。上次：P1 素材与记录骨架（6f36f45..45fa1f8）CMD-01/02 不变 |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6）：CMD-01、CMD-02 只改限制文本，与 P0.md 第 6、7、11、12、14 项一致（escape 菜单项即 Focus Canvas）；CMD-01 不在新小节标题中、无链接；状态与验收未改。上次：P0-04 授权（e8f6e88..c537e90） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..3419561）：`App/CanvasWindowController.swift` 解码改经 `AccessImageSource` 租约，ImageIOPipeline 未改；FMT-01 不改行，其 @1x 真机记录早于此改动。上次：P0-09 Session（dcfe3f8..bef71d5）FMT-01 不受影响 |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P0-04 授权（#8，p0/p0-04-access，e8f6e88..c537e90）：Inspector 占位面板新增 Previous/Next 按钮，有图时进入 Tab 顺序；A11Y-02 限制已改为 ⌘O 选目录与新按钮 Tab 顺序真机未验（c537e90）；状态不变。上次：P1 素材与记录骨架（6f36f45..45fa1f8）A11Y-02 不变 |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6）：A11Y-02 只改限制文本，与 P0.md 第 8、12、14 项一致；Previous/Next 按钮 Tab 顺序仍未验；状态与验收未改。上次：P0-04 授权（e8f6e88..c537e90） |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
