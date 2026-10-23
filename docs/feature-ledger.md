@@ -106,7 +106,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| OPEN-01 | 首次打开空态 | Partial | 单元 | P1-02、P1-07 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 冷启动、没有打开过文件夹：显示 21 页空态，有“选择文件夹”按钮和拖入提示；底部搜索、排序、信息、显示按钮为禁用。⌘O 可选单张图片或文件夹。限制：拖入提示待 P1-02；搜索/排序/显示按钮尚不存在（P3），现有图片工具在空态禁用；冷启动（空 Recent/授权存储）真机未验，需用户批准的移开再恢复步骤；@1x 真机未验。 |
+| OPEN-01 | 首次打开空态 | Partial | 单元 | P1-02、P1-07 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 冷启动、没有打开过文件夹：显示 21 页空态，有“选择文件夹”按钮和拖入提示；底部搜索、排序、信息、显示按钮为禁用。⌘O 可选单张图片或文件夹。限制：拖入提示待 P1-02；搜索/排序/显示按钮尚不存在（P3），现有图片工具在空态禁用；加载使用不定进度与取消，取消与外部 cancelled 失败回空态、租约及迟到结果仅单元证明；冷启动（空 Recent/授权存储）真机未验，需用户批准的移开再恢复步骤；@1x 真机未验。 |
 | OPEN-02 | 打开面板 | Partial | 无 | P0-09、P1-02 | `App/PicseeApp.swift`、`App/Commands/CommandMenu.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift` | ⌘O 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变。限制：File › Open…、⌘O（图片与目录）与取消已 @1x 真机通过；底部工具组 Open… 按钮仅单元证明。 |
 | OPEN-03 | 从 Finder 打开 | Stub | 无 | P1-02 | `App/Info.plist`、`App/PicseeApp.swift` | 在 Finder 对一张 JPEG 用“打开方式 → picsee”，App 启动并显示该图。限制：已声明 `public.image` 文档类型，真机运行中的 `open -a` 可用（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；Finder“打开方式”与双击未验；多文件仅显示首个文件。 |
 | OPEN-04 | 拖入打开 | Absent | 无 | P1-02 | — | 从 Finder 拖一张图进窗口，显示该图；拖入不支持的文件给出明确提示，当前图不变 |

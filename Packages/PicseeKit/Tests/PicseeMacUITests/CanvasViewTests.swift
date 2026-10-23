@@ -178,7 +178,8 @@ import PicseeApplication
     let opening = try canvasBitmap(canvas)
     canvas.showFailure()
     let failure = try canvasBitmap(canvas)
-    #expect(opening.tiffRepresentation != failure.tiffRepresentation)
+    // P1-07 owns both messages in the state surface; the canvas stays blank in both.
+    #expect(opening.tiffRepresentation == failure.tiffRepresentation)
     canvas.install(try canvasImage(.init(width: 800, height: 400)))
     #expect(canvas.apply(.open, from: .menu) == nil)
     canvas.onCommand = { CommandRouter().route($0, from: .key, to: canvas.session) }
