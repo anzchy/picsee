@@ -51,6 +51,34 @@ public struct CanvasTransform: Sendable {
         pin(pixel, to: anchor)
     }
 
+    public mutating func pan(by delta: CGPoint, source: CGSize, viewport: CGSize, snap: Bool = false) {
+        origin = CGPoint(x: origin.x + delta.x, y: origin.y + delta.y)
+        bound(source: source, viewport: viewport, snap: snap)
+    }
+
+    public mutating func bound(source: CGSize, viewport: CGSize, snap: Bool = false) {
+        func bounded(_ value: Double, image: Double, view: Double) -> Double {
+            let extent = view - image * zoom / backingScale
+            var low = min(0, extent), high = max(0, extent)
+            if snap {
+                low = (low * backingScale).rounded(.up) / backingScale
+                high = (high * backingScale).rounded(.down) / backingScale
+            }
+            let proposed = snap ? (value * backingScale).rounded() / backingScale : value
+            return min(high, max(low, proposed))
+        }
+        origin = CGPoint(x: bounded(origin.x, image: source.width, view: viewport.width),
+                         y: bounded(origin.y, image: source.height, view: viewport.height))
+    }
+
+    public mutating func zoom(to proposed: Double, about anchor: CGPoint, source: CGSize, viewport: CGSize) {
+        zoom(to: proposed, about: anchor)
+        let end = imageToView(CGPoint(x: source.width, y: source.height))
+        if end.x <= 0 || end.y <= 0 || origin.x >= viewport.width || origin.y >= viewport.height {
+            bound(source: source, viewport: viewport)
+        }
+    }
+
     private mutating func pin(_ pixel: CGPoint, to anchor: CGPoint) {
         let ratio = CGFloat(zoom / backingScale)
         origin = CGPoint(x: anchor.x - pixel.x * ratio, y: anchor.y - pixel.y * ratio)
