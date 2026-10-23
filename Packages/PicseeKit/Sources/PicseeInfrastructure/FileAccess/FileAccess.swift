@@ -80,6 +80,53 @@ public actor FileAccess: AccessLeasing {
     }
     public func records() -> [AccessRootRecord] { saved }
     public func launchOutcomes() -> [AccessRootID: String] { outcomes }
+    /// Only an explicit system-panel selection may replace a persisted root.
+    public func reconnect(_ id: AccessRootID, folder: URL) throws -> URL {
+        let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "access")
+        var phase = "scope"
+        do {
+            let session = try ScopeSession(scope: scope, url: folder, rootID: id)
+            defer { session.stop() }
+            phase = "directory"
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+                throw FileAccessError.invalidFolder
+            }
+            phase = "collision"
+            if let other = try matchingRoot(canonical(folder), excluding: id) {
+                throw FileAccessError.alreadyGranted(other)
+            }
+            phase = "bookmark"
+            let bookmark = try bookmarks.create(for: folder)
+            let previous = saved.first { $0.id == id }
+            let record = AccessRootRecord(id: id, bookmark: bookmark, displayName: folder.lastPathComponent,
+                creatingBuildSHA: previous?.creatingBuildSHA ?? buildSHA, createdAt: previous?.createdAt ?? Date())
+            var replacement = saved.filter { $0.id != id }
+            if let index = saved.firstIndex(where: { $0.id == id }) { replacement.insert(record, at: index) }
+            else { replacement.append(record) }
+            phase = "store"
+            try store.save(replacement)
+            saved = replacement; roots[id] = folder
+            logger.notice("AccessReconnect root=\(id.rawValue.uuidString, privacy: .public) outcome=reconnected error=none path=\(folder.path, privacy: .private)")
+            return folder
+        } catch {
+            logger.notice("AccessReconnect root=\(id.rawValue.uuidString, privacy: .public) outcome=failed error=\(phase, privacy: .public) path=\(folder.path, privacy: .private)")
+            throw error
+        }
+    }
+    private func canonical(_ url: URL) -> URL {
+        url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+    }
+    /// Canonicalizing another root may inspect metadata: hold its own scope too.
+    private func matchingRoot(_ folder: URL, excluding id: AccessRootID? = nil) throws -> AccessRootID? {
+        for record in saved where record.id != id {
+            guard let url = roots[record.id] else { continue }
+            let session = try ScopeSession(scope: scope, url: url, rootID: record.id)
+            defer { session.stop() }
+            if canonical(url).pathComponents == folder.pathComponents { return record.id }
+        }
+        return nil
+    }
     public func rootCovering(_ file: URL) -> AccessRootID? {
         // Unscoped path resolution cannot establish authority. Confirm each
         // candidate using the same balanced, scoped check as an actual lease.
