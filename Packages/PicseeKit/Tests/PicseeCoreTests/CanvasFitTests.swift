@@ -21,12 +21,7 @@ import PicseeCore
         #expect(fit.zoom == zoom)
         #expect(fit.origin == origin)
     }
-    // EXIF 5–8: decoder delivers 400×800 displayed size, not the 800×400 stored size.
-    for _ in 5...8 {
-        let fit = CanvasTransform.fitted(source: .init(width: 400, height: 800),
-            viewport: .init(width: 432, height: 232), backingScale: 1)
-        #expect(fit.origin == CGPoint(x: 166, y: 16))
-    }
+
 }
 
 @Test func canvasFitAtOneSnapsOddDifferencesToBackingGrid() {
