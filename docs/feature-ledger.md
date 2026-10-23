@@ -328,7 +328,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
 | 打开与输入 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：`App/Commands/CommandMenu.swift` 只在 View 菜单加全屏项，File › Open… 与 ⌘O 未变；OPEN-02 不受影响。上次：P0-04/P0-09 真机记录（#8/#11，docs/p0-04-09-device-mini，da64b08..69e56c6） |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5）：VIEW-01…06 随改，VIEW-01 Stub→Partial、VIEW-04/05 Absent→Partial，均为单元、验收未改；VIEW-07 路径随 `App/CanvasView.swift` 迁入 PicseeMacUI 改写，绘制与背景色值未变；VIEW-08 行未改，但保留位置的重装与视口变化现会重报细节需求，其 @1x 记录早于此改动，交所有者。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..1a380ad）：VIEW-01…06 随改，VIEW-01 Stub→Partial、VIEW-04/05 Absent→Partial，均为单元、验收未改；VIEW-07 路径随 `App/CanvasView.swift` 迁入 PicseeMacUI 改写，绘制与背景色值未变；VIEW-08 由所有者在 1a380ad 补画布路径和限制（@1x 记录早于重装与视口变化时的细节重请求），状态与验收未改。上次：P1-01 身份（#36，p1/p1-01-identity，8beb967..a8fe43b） |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 CHROME-01…05 待验项，无结果；保持 `Absent`。上次：P0-09 Session（dcfe3f8..bef71d5）CHROME-01…05 保持 `Absent` |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8）：P1.md 只列 PREF-01/02/04 待验项，无结果；状态不变。上次：P0-09 Session（dcfe3f8..bef71d5）新增两键暂不入行（PR 描述裁定），待 P1-08/P1-09 命名 |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
