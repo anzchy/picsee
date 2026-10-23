@@ -66,10 +66,6 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             item.representedObject = id.rawValue
             item.setAccessibilityIdentifier("command.\(id.rawValue).menu")
             item.target = self
-            if id == .previous || id == .next {
-                item.target = AccessNavigationMenuTarget.shared
-                item.action = #selector(AccessNavigationMenuTarget.invoke(_:))
-            }
             (id == .open ? file : view).addItem(item)
         }
         let recentItem = NSMenuItem(title: String(localized: "Open Recent"), action: nil, keyEquivalent: "")
