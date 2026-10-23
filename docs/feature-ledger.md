@@ -345,7 +345,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：`ImageIOPipeline` 只在准入解码前后加缓存查找与回填，解码器、方向、透明与格式集合未改；FMT-01、VIEW-06/07 不变。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083） |
 | 可访问性与本地化 | 2026-10-23 | doc-gardener | #60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570）：只改指针点击后的焦点交还；Tab/Space 进入的工具焦点保持，A11Y-02 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
-| 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
+| 分发 | 2026-10-23 | doc-gardener | App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2）：按用户 2026-10-23 决定新增 DIST-06（P1-10，`Partial`/`无`，限制真机未验），路径存在、格式合规；`design/app-icon/` 与 `scripts/design/` 不在 App sources 内，DIST-03 不变。上次：DIST-05 计划由 P7-09 移到 P6-08（ADR-006） |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
 ### 2026-10-21 建账
