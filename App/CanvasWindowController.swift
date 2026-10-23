@@ -2,6 +2,7 @@ import AppKit
 import os
 import PicseeCore
 import PicseeApplication
+import PicseeMacUI
 import PicseeInfrastructure
 import SwiftUI
 
@@ -15,6 +16,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var generation: UUID { session.imageLoader.generation }
     private let accessIntent = AccessIntent()
 
+    private var chromeOverlay: ViewerChromeOverlay!
+    private let chromeTimer = ChromeTimerAdapter()
+    private var chromeEvents: ChromeEventBridge?
+    private var chromeGeneration: UUID?
+    private var chromeHasImage = false
     let session: ViewerSession
     private let inspector: InspectorModel
     private let router = CommandRouter()
@@ -33,9 +39,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         canvas = CanvasInputBridge(frame: .zero, session: session)
         inspector = InspectorModel(session: session)
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
         window.title = "Picsee"
+        window.titlebarAppearsTransparent = true
+        window.acceptsMouseMovedEvents = true
+        window.autorecalculatesKeyViewLoop = false
         window.isReleasedWhenClosed = false
         window.collectionBehavior.insert(.fullScreenPrimary)
         window.center()
@@ -50,6 +59,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         canvas.focusRingType = .exterior
         canvas.setAccessibilityIdentifier("viewer.canvas")
         content.addSubview(canvas)
+        let dragStrip = ChromeDragStrip(frame: NSRect(x: 0, y: content.bounds.height - 28, width: content.bounds.width, height: 28))
+        dragStrip.autoresizingMask = [.width, .minYMargin]
+        dragStrip.setAccessibilityIdentifier("chrome.drag-strip")
+        content.addSubview(dragStrip)
         inspectorHost = NSHostingView(rootView: InspectorPlaceholder(model: inspector, route: { [weak self] id in
             self?.route(id, from: .button)
         }, restoreCanvasFocus: { [weak self] in
@@ -59,7 +72,16 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         inspectorHost.autoresizingMask = [.minXMargin, .height]
         inspectorHost.isHidden = true
         content.addSubview(inspectorHost)
+        chromeOverlay = ViewerChromeOverlay(frame: content.bounds, session: session)
+        chromeOverlay.autoresizingMask = [.width, .height]
+        chromeOverlay.setAccessibilityIdentifier("chrome.tools")
+        content.addSubview(chromeOverlay)
         window.contentView = content
+        chromeOverlay.linkKeyViews(to: canvas)
+        inspectorHost.nextKeyView = canvas
+        session.chromeHost = self
+        session.installChromeScheduler(chromeTimer)
+        chromeEvents = ChromeEventBridge(window: window, overlay: chromeOverlay, timer: chromeTimer)
         window.makeFirstResponder(canvas)
         window.preserveResponder = { [weak self] responder in
             guard let self else { return false }
@@ -93,8 +115,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { nil }
 
     func windowDidResize(_ notification: Notification) { canvas.synchronizeViewport() }
-    func windowDidEnterFullScreen(_ notification: Notification) { canvas.synchronizeViewport() }
-    func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport() }
+    func windowDidEnterFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
+    func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
 
     func open(_ url: URL, accessRequest: AccessRequest? = nil) {
         _ = accessIntent.begin()
@@ -264,6 +286,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     var inspectorVisible: Bool { session.inspectorFocus.isVisible }
     var hasImage: Bool { canvas.hasImage }
     private var focusContext: FocusContext {
+        if let view = window?.firstResponder as? NSView,
+           chromeOverlay.tools.contains(where: { view === $0 || view.isDescendant(of: $0) }) { return .tools }
         if window?.firstResponder is NSTextInputClient { return .textInput }
         return window?.firstResponder === canvas ? .canvas : .panel
     }
@@ -291,14 +315,31 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     private func consumePanelKey(_ event: NSEvent) -> Bool {
         guard !menuTracking(), inspectorVisible, focusContext != .canvas else { return false }
         if event.keyCode == 53 { return route(.escape, from: .key) }
-        if event.keyCode == 48 && event.modifierFlags.contains(.shift) {
-            session.tab(reverse: true)
+        if event.keyCode == 48 && (focusContext == .tools || event.modifierFlags.contains(.shift)) {
+            session.tab(reverse: event.modifierFlags.contains(.shift))
             return true
         }
         return false
     }
     func windowDidUpdate(_ notification: Notification) {
         if inspector.hasImage != canvas.hasImage { inspector.hasImage = canvas.hasImage }
+        if chromeGeneration != generation || chromeHasImage != canvas.hasImage {
+            let opened = chromeGeneration != generation
+            chromeGeneration = generation; chromeHasImage = canvas.hasImage
+            chromeOverlay.refresh(filename: fileURL?.lastPathComponent)
+            if opened { session.activity() }
+        }
+    }
+}
+
+// Untested native titlebar/first-responder wiring; policy and views are package-tested.
+extension CanvasWindowController: ViewerChromeHost {
+    func applyChrome(toolsVisible: Bool, trafficLightsVisible: Bool) {
+        chromeOverlay.setToolsVisible(toolsVisible)
+        if let window { ChromeTitlebarPolicy.apply(to: window, visible: trafficLightsVisible, fullScreen: window.styleMask.contains(.fullScreen)) }
+    }
+    func focusChromeTool(reverse: Bool, entering: Bool) -> Bool {
+        chromeOverlay.focusTool(reverse: reverse, entering: entering)
     }
 }
 
