@@ -14,7 +14,9 @@ def squircle(cx=512, cy=512, half=412, n=5.0, steps=360):
     return "M" + " L".join(f"{x:.2f},{y:.2f}" for x, y in pts) + " Z"
 
 SQ = squircle()
-SQ_SMALL = squircle(half=416)
+# The small-source extrema and circular radii are multiples of 64 units, so
+# they land on whole-pixel boundaries when rendered directly at 16 or 32 px.
+SQ_SMALL = squircle(half=448)
 
 R_LENS = 322
 R_BLADE = 258
