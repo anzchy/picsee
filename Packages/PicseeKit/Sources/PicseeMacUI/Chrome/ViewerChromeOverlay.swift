@@ -47,7 +47,7 @@ public final class ChromeToolView: NSView {
         focusRingType = .exterior
         setAccessibilityElement(true); setAccessibilityRole(.button)
         setAccessibilityIdentifier("command.\(command.rawValue).button")
-        setAccessibilityLabel(command == .actualPixels ? "Zoom mode" : ChromeToolFace.symbol(command).label)
+        setAccessibilityLabel(command == .open ? String(localized: "Open…") : command == .actualPixels ? String(localized: "Zoom mode") : String(localized: String.LocalizationValue(ChromeToolFace.symbol(command).label)))
         toolTip = command.shortcutHint
     }
     public override var acceptsFirstResponder: Bool { !isHiddenOrHasHiddenAncestor && session?.isEnabled(command) == true }
@@ -83,6 +83,11 @@ public final class ChromeToolView: NSView {
             if let session { CommandRouter().route(.escape, from: .key, to: session) }
         default: break
         }
+    }
+    public override func accessibilityPerformPress() -> Bool {
+        guard acceptsFirstResponder else { return false }
+        activate()
+        return true
     }
     public func activate() {
         face?.rootView.activate()
