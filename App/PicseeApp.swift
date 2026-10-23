@@ -11,7 +11,7 @@ import PicseeMacUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let imagePipeline = ImageIOPipeline(cacheTrace: UntestedNativeResourceSnapshotTrace())
     private lazy var memoryPressure = UntestedNativeMemoryPressureForwarder(pipeline: imagePipeline)
-    private let displayPreferences = InMemoryDisplayPreferencesStore()
+    private let displayPreferences = UserDefaultsDisplayPreferencesStore(defaults: .standard)
     private var commandMenu: CommandMenu?
     private var windowController: CanvasWindowController?
     private lazy var accessServices: Task<AccessServices, Error> = {

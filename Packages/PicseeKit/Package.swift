@@ -25,3 +25,6 @@ let package = Package(
 
 // Exercise two real Sessions against the real admission actor at the integration seam.
 package.targets.first(where: { $0.name == "PicseeInfrastructureTests" })!.dependencies.append("PicseeApplication")
+
+// Preferences implement the Application store port.
+package.targets.first(where: { $0.name == "PicseeInfrastructure" })!.dependencies.append("PicseeApplication")

@@ -34,7 +34,7 @@ public struct DisplayPreferences: Codable, Equatable, Sendable {
     func observe(_ observer: any DisplayPreferencesObserver)
 }
 
-/// P1-09 supplies real persistence. All windows share this one observable store.
+/// In-memory preferences for tests and callers that do not need persistence.
 @MainActor @Observable public final class InMemoryDisplayPreferencesStore: DisplayPreferencesStore {
     private struct WeakObserver {
         weak var value: (any DisplayPreferencesObserver)?
