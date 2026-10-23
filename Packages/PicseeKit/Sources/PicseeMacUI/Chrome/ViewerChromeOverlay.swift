@@ -53,7 +53,12 @@ public final class ChromeToolView: NSView {
         setAccessibilityElement(true); setAccessibilityRole(.button)
         setAccessibilityIdentifier("command.\(command.rawValue).button")
         setAccessibilityLabel(command == .open ? String(localized: "Open…") : command == .actualPixels ? String(localized: "Zoom mode") : String(localized: String.LocalizationValue(ChromeToolFace.symbol(command).label)))
-        toolTip = command.shortcutHint
+        toolTip = commandTooltip
+    }
+    var commandTooltip: String {
+        let label = command == .open ? "Open…" : command == .fit ? "Fit window" : command == .actualPixels ? "Actual Pixels" : ChromeToolFace.symbol(command).label
+        let hint = command == .previous ? "←" : command == .next ? "→" : command.shortcutHint ?? ""
+        return String(localized: String.LocalizationValue(label)) + " (\(hint))"
     }
     public override var acceptsFirstResponder: Bool { !isHiddenOrHasHiddenAncestor && session?.isEnabled(command) == true }
     public override func hitTest(_ point: NSPoint) -> NSView? {
@@ -103,6 +108,7 @@ public final class ChromeToolView: NSView {
         face?.rootView.activate()
     }
     func refresh() {
+        toolTip = commandTooltip
         if let session { face?.rootView = ChromeToolFace(session: session, id: id) }
         setAccessibilityEnabled(session?.isEnabled(command) == true)
         if id == .actualPixels, let session {
@@ -168,7 +174,7 @@ public final class ViewerChromeOverlay: NSView {
         let region: ChromePointerRegion = !bounds.contains(point) ? .outside : point.y < Self.edgeBandHeight ? .bottom : point.y >= bounds.height - Self.edgeBandHeight ? .top : .canvas
         session?.pointerMoved(in: region)
         session?.setChromeInteraction(.pointerHover, active: groups.contains { !$0.isHidden && $0.frame.contains(point) })
-        for tool in tools { tool.toolTip = tool.command.shortcutHint }
+        for tool in tools { tool.toolTip = tool.commandTooltip }
     }
     public func focusTool(reverse: Bool, entering: Bool) -> Bool {
         let enabled = tools.filter(\.acceptsFirstResponder)
