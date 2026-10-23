@@ -110,7 +110,7 @@
 | OPEN-02 | 打开面板 | Partial | 无 | P0-09、P1-02 | `App/PicseeApp.swift`、`App/Commands/CommandMenu.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift` | ⌘O 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变。限制：File › Open…、⌘O（图片与目录）与取消已 @1x 真机通过；底部工具组 Open… 按钮仅单元证明。 |
 | OPEN-03 | 从 Finder 打开 | Stub | 无 | P1-02 | `App/Info.plist`、`App/PicseeApp.swift` | 在 Finder 对一张 JPEG 用“打开方式 → picsee”，App 启动并显示该图。限制：已声明 `public.image` 文档类型，真机运行中的 `open -a` 可用（见 [P0-03 真机记录](validation/P0.md#p0-03画布真机验收7view-02--view-03)）；Finder“打开方式”与双击未验；多文件仅显示首个文件。 |
 | OPEN-04 | 拖入打开 | Absent | 无 | P1-02 | — | 从 Finder 拖一张图进窗口，显示该图；拖入不支持的文件给出明确提示，当前图不变 |
-| OPEN-05 | 无法读取的图片 | Partial | 单元 | P1-07、P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerRetryIntent.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图。限制：网格返回待 P3-01；素材为截断 PNG；错误分类与重试仅单元（[细节](validation/P1.md#p1-07空态加载失败取消菜单焦点与中英文本)）；真机未验。 |
+| OPEN-05 | 无法读取的图片 | Partial | 单元 | P1-07、P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerRetryIntent.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图。限制：网格与 Esc 返回待 P3-01；素材为截断 PNG；错误分类与重试仅单元（[细节](validation/P1.md#p1-07空态加载失败取消菜单焦点与中英文本)）；真机未验。 |
 | OPEN-06 | 最近打开 | Partial | 单元 | P2-09、P3-14 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/RecentFolderStore.swift`、`App/Access/AccessMenus.swift` | 打开一个目录后退出重开，最近列表里有它；授权失效时显示重新授权入口；不保存图片副本。限制：重启后 Open Recent 浏览 @1x 真机通过；仅文件夹、最多 10 项；授权失效的重连入口未验；损坏库降级仅单元验证。 |
 | OPEN-07 | 从剪贴板打开 | Absent | 无 | P4-02 | — | 截图到剪贴板后选“从剪贴板打开”，新窗口显示该图 |
 
@@ -330,8 +330,8 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：OPEN-01、OPEN-05 由 Absent 升为 Partial/单元，验收原文保留（仅补句号），限制与代码一致；两行「怎么确认」超出约 150 字，已提议精简。OPEN-02 不变（空态按钮复用 Open 路由）。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`CanvasView` 只移除旧的加载/失败文字，缩放命令在加载与失败时禁用；VIEW-01…09 不变。VIEW-10：取消加载回空态后 ←/→ 禁用（c0b887b），行未写，已提议限制。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：OPEN-01、OPEN-05 由 Absent 升为 Partial/单元，验收原文保留（仅补句号），限制与代码一致；复跑（fa2703f..91dce4f）：两行限制已精简，细节移入 validation/P1.md（单元证据，非真机记录）；OPEN-05 精简时删去「Esc 只回真实来源」，而 Esc 仅在有 Preview Set 时返回、App 尚无入口，已提议恢复。OPEN-02 不变（空态按钮复用 Open 路由）。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`CanvasView` 只移除旧的加载/失败文字，缩放命令在加载与失败时禁用；VIEW-01…09 不变。VIEW-10：复跑（fa2703f..91dce4f）已补「空态与取消后 ←/→ 禁用」限制，与 `ViewerSession.isEnabled` 一致。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：Tab 环先经状态按钮再到底部工具，工具文件名改随加载身份；CHROME-01…05 验收与限制仍成立，不变。上次：#60 真机复验（validation/issue60-device-mini，cfef98f..2dc72ff，run 20261023-205349-issue60-CHROME-03） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：状态界面无新增动画；PREF-02 不变。上次：P1-09 真机记录（#50，validation/p1-09-device-mini，51da3c0..f458eb4） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
@@ -340,11 +340,11 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
 | 授权与文件访问 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：取消加载不再弹访问错误，重试复用原授权请求；ACCESS-01/ACCESS-05 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`；CACHE-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：CMD-01 只追加「限制：」（空态/加载/失败命令启用、标准 App/File/Window 菜单），仍 Partial/单元，验收不变；单元格约 259 字，已提议精简。CMD-02 不变。上次：#60 真机复验（validation/issue60-device-mini，cfef98f..2dc72ff） |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：CMD-01 只追加「限制：」（空态/加载/失败命令启用、标准 App/File/Window 菜单），仍 Partial/单元，验收不变；复跑（fa2703f..91dce4f）已精简为约 169 字、两句，细节移入 validation/P1.md。CMD-02 不变。上次：#60 真机复验（validation/issue60-device-mini，cfef98f..2dc72ff） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`，解码器与格式集合未改；FMT-01 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：A11Y-04 由 Absent 升为 Partial/单元，验收保留；A11Y-02 只追加「限制：」，约 200 字，已提议精简。A11Y-01/03 不变。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：A11Y-04 由 Absent 升为 Partial/单元，验收保留；A11Y-02 只改「限制：」，复跑（fa2703f..91dce4f）已精简，细节移入 validation/P1.md。A11Y-01/03 不变。上次：#60 工具点击焦点（fix/chrome-pointer-focus，7deaa9d..ecce570） |
 | 分发 | 2026-10-23 | doc-gardener | P1-10 真机记录（validation/p1-10-device-mini，3996845..08c5ecf，run 20261023-212346-P1-10-DIST-06）：DIST-06 只改「限制：」（@1x Dock 与访达列表/图标视图通过），仍 `Partial`/`无`，验收不变；⌘Tab、浅色 Dock、@2x 未验。DIST-01…05 不变。上次：App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2） |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
