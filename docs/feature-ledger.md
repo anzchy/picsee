@@ -330,7 +330,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：OPEN-03 `Stub`→`Partial`、OPEN-04 `Absent`→`Partial`，均 `单元`，验收不变（OPEN-04 仅在单独的账簿提交 defbf44 补句号）；OPEN-01/02 只改「限制：」。与代码一致：Finder 全部 URL、面板文件走同一输入策略，多文件按名称冻结、不回绕、Esc 无来源，头部探测不支持时保留当前图，文件夹弹授权提示。OPEN-03 怎么确认约 315 字、OPEN-01/02/04 各 4 句，超出格式上限，已提给 owner。上次：P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..4f8af50，runs 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD 与 …-coldstart） |
+| 打开与输入 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..730eca9）：OPEN-03 `Stub`→`Partial`、OPEN-04 `Absent`→`Partial`，均 `单元`，验收不变（OPEN-04 仅在单独的账簿提交 defbf44 补句号）；OPEN-01/02 只改「限制：」。与代码一致：Finder 全部 URL、面板文件走同一输入策略，多文件按名称冻结、不回绕、Esc 无来源，头部探测不支持时保留当前图，文件夹弹授权提示。格式超限已由 730eca9 解决：只缩短 OPEN-01…04 的「限制：」，验收句不变，单元细节移到 validation/P1.md §P1-02（Launch Services 分批标为由代码推断）；OPEN-03 约 150 字，处于上限。上次：P1-07 真机记录（#49，validation/p1-07-device-mini，daf0733..4f8af50，runs 20261023-220851-P1-07-OPEN-01-05-A11Y-CMD 与 …-coldstart） |
 | 查看与画布 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：←/→ 在多文件集合内按集合翻页，输入探测以加载代次丢弃过期结果；画布与缩放未改，VIEW-01…09 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d） |
 | C 沉浸界面 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：多文件集合时 Esc 禁用（无来源），与 CHROME-05「单独打开不出现网格」一致；窗口内容视图换成拖入视图，不改 chrome 命中；CHROME-01…05 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d） |
 | 外观与显示偏好 | 2026-10-24 | doc-gardener | P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44）：工具显隐与面板切换未改；PREF-02 不变。上次：P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d） |
