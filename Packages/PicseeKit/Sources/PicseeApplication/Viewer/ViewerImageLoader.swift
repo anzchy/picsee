@@ -26,6 +26,7 @@ public struct PresentedImage: Sendable {
     public convenience init() { self.init(trace: nil) }
     public init(trace: (any FirstPreviewTracing)?) { self.trace = trace }
     private var revisionRetryUsed = false
+    private var deliveredDetailMaximum = 0
     private var desiredMaximum = 0
     private var progress = CanvasDecodeProgress()
     private var loading = false
@@ -41,7 +42,7 @@ public struct PresentedImage: Sendable {
         phase = .opening; presented = nil; failure = nil; preparedKey = nil
         source = nil
         self.fileURL = fileURL; self.opener = opener
-        desiredMaximum = max(1, maximumPixelSize); progress = CanvasDecodeProgress()
+        desiredMaximum = max(1, maximumPixelSize); progress = CanvasDecodeProgress(); deliveredDetailMaximum = 0
         host?.beginImageOpening()
         schedule()
     }
@@ -62,7 +63,7 @@ public struct PresentedImage: Sendable {
                     self.source = source
                 }
                 while let maximum = progress.nextMaximum(desired: desiredMaximum),
-                      !progress.previewCompleted || maximum > progress.completedMaximum {
+                      !progress.previewCompleted || maximum > max(progress.completedMaximum, deliveredDetailMaximum) {
                     let preview = !progress.previewCompleted
                     let (request, image) = try await source.image(maximumPixelSize: maximum, isPreview: preview)
                     guard token == PresentationToken(binding: binding, generation: generation) else { return }
@@ -71,6 +72,7 @@ public struct PresentedImage: Sendable {
                         throw ImageLoadError(.sourceChanged, itemID: preparedKey?.itemID, revision: image.revision)
                     }
                     progress.completed(image, isPreview: preview)
+                    if !preview { deliveredDetailMaximum = max(deliveredDetailMaximum, maximum) }
                     presented = PresentedImage(fileURL: fileURL, key: key)
                     host?.installImage(image, fileURL: fileURL)
                     guard token.generation == generation else { return }
@@ -83,7 +85,7 @@ public struct PresentedImage: Sendable {
                 guard token.generation == generation else { return }
                 if (error as? ImageLoadError)?.kind == .sourceChanged, !revisionRetryUsed {
                     revisionRetryUsed = true
-                    preparedKey = nil; presented = nil; progress = CanvasDecodeProgress()
+                    preparedKey = nil; presented = nil; progress = CanvasDecodeProgress(); deliveredDetailMaximum = 0
                     phase = .opening
                     host?.beginImageOpening()
                     let old = source; source = nil
@@ -116,7 +118,7 @@ public struct PresentedImage: Sendable {
     public func requireResolution(_ maximum: Int) {
         guard phase != .idle, phase != .failed, phase != .detailLimited else { return }
         desiredMaximum = max(1, maximum)
-        guard progress.previewCompleted, desiredMaximum > progress.completedMaximum else { return }
+        guard progress.previewCompleted, desiredMaximum > max(progress.completedMaximum, deliveredDetailMaximum) else { return }
         phase = .refining
         if !loading { schedule() }
     }
