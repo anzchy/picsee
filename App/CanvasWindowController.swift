@@ -28,7 +28,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var navigationTask: Task<Void, Never>?
     var onRecentsChanged: (([RecentFolder]) -> Void)?
     var canNavigate: Bool { fileURL != nil && window?.attachedSheet == nil }
-    private var inspectorHost: NSHostingView<InspectorPlaceholder>!
+    private var inspectorHost: NSHostingView<MotionPolicyContent<InspectorPlaceholder>>!
     var onOpenRequest: (() -> Void)?
     var menuTracking: () -> Bool = { false }
     var appearanceAdapter: WindowAppearanceAdapter?
@@ -38,7 +38,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         super.showWindow(sender)
     }
 
-    init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore, accessServices: Task<AccessServices, Error>) {
+    init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore, accessServices: Task<AccessServices, Error>, motionPolicy: MotionPolicy) {
         self.pipeline = pipeline
         self.accessServices = accessServices
         session = ViewerSession(preferencesStore: preferencesStore, imageLoader: ViewerImageLoader(trace: NativeFirstPreviewTrace(), presentation: pipeline as? any ImagePresentationPinning))
@@ -69,16 +69,16 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         dragStrip.autoresizingMask = [.width, .minYMargin]
         dragStrip.setAccessibilityIdentifier("chrome.drag-strip")
         content.addSubview(dragStrip)
-        inspectorHost = NSHostingView(rootView: InspectorPlaceholder(model: inspector, route: { [weak self] id in
+        inspectorHost = NSHostingView(rootView: MotionPolicyContent(policy: motionPolicy) { InspectorPlaceholder(model: inspector, route: { [weak self] id in
             self?.route(id, from: .button)
         }, restoreCanvasFocus: { [weak self] in
             self?.window?.makeFirstResponder(self?.canvas)
-        }))
+        }) })
         inspectorHost.frame = NSRect(x: content.bounds.width - 272, y: 0, width: 272, height: content.bounds.height)
         inspectorHost.autoresizingMask = [.minXMargin, .height]
         inspectorHost.isHidden = true
         content.addSubview(inspectorHost)
-        chromeOverlay = ViewerChromeOverlay(frame: content.bounds, session: session)
+        chromeOverlay = ViewerChromeOverlay(frame: content.bounds, session: session, motionPolicy: motionPolicy)
         chromeOverlay.autoresizingMask = [.width, .height]
         chromeOverlay.setAccessibilityIdentifier("chrome.tools")
         content.addSubview(chromeOverlay)
