@@ -45,13 +45,14 @@ extension ViewerSession {
     public func openInput(_ urls: [URL], operation: AccessOperation, admission: ViewerInputAdmission,
                           host: any ViewerInputHost) async {
         guard operation.isCurrent else { return }
-        let input = ViewerInput.classify(urls)
+        let classification = ViewerInput.classification(urls)
+        let input = classification.input
         if case .files(let files) = input {
-            logInputExclusions(urls)
+            logInputExclusions(classification.excludedCount)
             filePreviewSet = FilePreviewSet(files: files)
             host.openInputImage(files[0], accessRequest: nil)
         } else if case .single(let url) = input {
-            logInputExclusions(urls)
+            logInputExclusions(classification.excludedCount)
             let navigation = inputNavigationIntent.current
             let generation = imageLoader.generation
             let result = await admission.probe(url, operation: operation)
@@ -63,7 +64,6 @@ extension ViewerSession {
     }
 }
 
-private func logInputExclusions(_ urls: [URL]) {
-    let count = ViewerInput.excludedCount(in: urls)
+private func logInputExclusions(_ count: Int) {
     if count > 0 { Logger(subsystem: "io.github.anzchy.picsee", category: "filesystem").notice("Input excluded=\(count, privacy: .public)") }
 }
