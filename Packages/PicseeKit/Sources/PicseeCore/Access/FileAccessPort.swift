@@ -2,6 +2,7 @@ import Foundation
 
 public enum FileAccessError: Error, Equatable, Sendable {
     case needsReconnection(AccessRootID), outsideRoot, startFailed, corruptStore, invalidFolder
+    case alreadyGranted(AccessRootID)
 }
 
 public enum AccessRequest: Hashable, Sendable {
