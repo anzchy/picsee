@@ -328,14 +328,14 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
 | 打开与输入 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`App/PicseeApp.swift` 只改为一条 app 级共享 ImageIOPipeline，打开面板与 Finder 打开入口未改；OPEN-02/03 不受影响。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-04/P1-05 真机记录（#41，validation/p1-04-05-device-mini，4bdd6ef..006a650）：VIEW-08、VIEW-09 只改「限制：」，状态 `Partial`、验证 `单元` 与验收不变；P1.md 运行 `20261023-150718-…` 有两行 ID 与 `Validated-by` trailer，提交只改 `docs/`。VIEW-08 新「限制：」删去了「新路径真机未验」，而本次运行未覆盖 P1-03 的缩放、全屏、同尺寸重装重请求细节，已提请补回。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）。VIEW-08/09 的「怎么确认」各一句但远超约 150 字。 |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-04/P1-05 真机记录（#41，validation/p1-04-05-device-mini，4bdd6ef..d7713c3）：VIEW-08、VIEW-09 只改「限制：」，状态 `Partial`、验证 `单元` 与验收不变；P1.md 运行 `20261023-150718-…` 有两行 ID 与 `Validated-by` trailer，提交只改 `docs/`。d7713c3 已补回 VIEW-08「该重请求路径真机未验」（本次运行未覆盖缩放、全屏、同尺寸重装）。VIEW-08「限制：」仍把「源图更小时仍请求首个非预览档」列为仅单元证明，而 P1.md 第 2 行已 @1x 真机看到，偏保守、不阻塞。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）。VIEW-08/09 的「怎么确认」各一句但远超约 150 字。 |
 | C 沉浸界面 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 注明 CHROME-04 持久化部分按开发计划 P1-09 文本归入（计划列 P1-08、P3-11），无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-04/P1-05 真机记录（#41，validation/p1-04-05-device-mini，4bdd6ef..006a650）：ACCESS-05 只改「限制：」，状态 `Partial`、验证 `单元` 与验收不变；P1.md 第 6 行与 app.log 的 `remaining=0 outcome=released` 一致。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）。 |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-04/P1-05 真机记录（#41，validation/p1-04-05-device-mini，4bdd6ef..d7713c3）：ACCESS-05 只改「限制：」，状态 `Partial`、验证 `单元` 与验收不变；P1.md 第 6 行与 app.log 的 `remaining=0 outcome=released` 一致。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）。 |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 命令与键盘 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`ViewerSession` 只加 imageLoader 构造参数，控制器移除解码块，命令路由、菜单与 Inspector 切换未改；CMD-01/02 不受影响。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
