@@ -8,13 +8,13 @@ extension CommandID {
         switch self {
         case .previous: String(localized: "Previous Image")
         case .next: String(localized: "Next Image")
-        case .fit: "Fit"
-        case .actualPixels: "Actual Pixels"
-        case .zoomIn: "Zoom In"
-        case .zoomOut: "Zoom Out"
-        case .open: "Open…"
-        case .inspector: "Show Inspector"
-        case .escape: "Focus Canvas"
+        case .fit: String(localized: "Fit")
+        case .actualPixels: String(localized: "Actual Pixels")
+        case .zoomIn: String(localized: "Zoom In")
+        case .zoomOut: String(localized: "Zoom Out")
+        case .open: String(localized: "Open…")
+        case .inspector: String(localized: "Show Inspector")
+        case .escape: String(localized: "Focus Canvas")
         default: preconditionFailure("Unimplemented commands have no menu item")
         }
     }
@@ -53,18 +53,18 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             main.addItem(item)
             return menu
         }
-        submenu("Picsee").addItem(withTitle: "Quit Picsee", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        let file = submenu("File")
-        let edit = submenu("Edit")
-        edit.addItem(withTitle: "Undo", action: NSSelectorFromString("undo:"), keyEquivalent: "z")
-        let redo = edit.addItem(withTitle: "Redo", action: NSSelectorFromString("redo:"), keyEquivalent: "z")
+        submenu("Picsee").addItem(withTitle: String(localized: "Quit Picsee"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let file = submenu(String(localized: "File"))
+        let edit = submenu(String(localized: "Edit"))
+        edit.addItem(withTitle: String(localized: "Undo"), action: NSSelectorFromString("undo:"), keyEquivalent: "z")
+        let redo = edit.addItem(withTitle: String(localized: "Redo"), action: NSSelectorFromString("redo:"), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]
         edit.addItem(.separator())
         for (title, action, key) in [("Cut", "cut:", "x"), ("Copy", "copy:", "c"),
                                      ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
-            edit.addItem(withTitle: title, action: NSSelectorFromString(action), keyEquivalent: key)
+            edit.addItem(withTitle: String(localized: String.LocalizationValue(title)), action: NSSelectorFromString(action), keyEquivalent: key)
         }
-        let view = submenu("View")
+        let view = submenu(String(localized: "View"))
         for id in CommandID.menuCommands {
             let item = NSMenuItem(title: id.menuTitle, action: #selector(invoke(_:)), keyEquivalent: id.defaultKey)
             item.keyEquivalentModifierMask = id.usesCommand ? [.command] : []
@@ -102,8 +102,8 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         recentFolders.delegate = self
         file.addItem(recentItem)
         setRecentFolders([], onOpen: { _ in })
-        let windows = submenu("Window")
-        windows.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        let windows = submenu(String(localized: "Window"))
+        windows.addItem(withTitle: String(localized: "Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         #if DEBUG
         let preview = windows.addItem(withTitle: String(localized: "Component Preview"), action: #selector(DesignPreviewLauncher.openPreview(_:)), keyEquivalent: "")
         preview.target = DesignPreviewLauncher.shared
@@ -154,7 +154,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         }
         guard let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return false }
         let target = NSApp.keyWindow?.windowController as? CanvasWindowController
-        if id == .inspector { item.title = target?.inspectorVisible == true ? "Hide Inspector" : "Show Inspector" }
+        if id == .inspector { item.title = target?.inspectorVisible == true ? String(localized: "Hide Inspector") : String(localized: "Show Inspector") }
         return target?.session.isEnabled(id) ?? (id == .open)
     }
     func menuWillOpen(_ menu: NSMenu) {
