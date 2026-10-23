@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var memoryPressure = UntestedNativeMemoryPressureForwarder(pipeline: imagePipeline)
     private let displayPreferences = UserDefaultsDisplayPreferencesStore(defaults: .standard)
     private lazy var appearanceAdapter = WindowAppearanceAdapter(preferencesStore: displayPreferences)
+    private lazy var motionPolicy = MotionPolicy(source: UntestedNativeReduceMotionSource())
     private var commandMenu: CommandMenu?
     private var windowController: CanvasWindowController?
     private lazy var accessServices: Task<AccessServices, Error> = {
@@ -52,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func viewer() -> CanvasWindowController {
         if let windowController { return windowController }
-        let controller = CanvasWindowController(pipeline: imagePipeline, preferencesStore: displayPreferences, accessServices: accessServices)
+        let controller = CanvasWindowController(pipeline: imagePipeline, preferencesStore: displayPreferences, accessServices: accessServices, motionPolicy: motionPolicy)
         controller.appearanceAdapter = appearanceAdapter
         controller.onOpenRequest = { [weak self] in
             let panel = NSOpenPanel()
@@ -71,4 +72,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController = controller
         return controller
     }
+}
+
+/// Untested native forwarding only; injected source behavior is covered in PicseeMacUI.
+@MainActor private final class UntestedNativeReduceMotionSource: NSObject, ReduceMotionSource {
+    var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    var onChange: (@MainActor () -> Void)?
+    override init() {
+        super.init()
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(changed(_:)),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+    }
+    @objc private func changed(_ notification: Notification) { onChange?() }
 }

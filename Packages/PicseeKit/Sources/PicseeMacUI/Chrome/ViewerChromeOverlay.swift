@@ -4,11 +4,13 @@ import PicseeCore
 import PicseeApplication
 
 struct ChromeToolFace: View {
+    let motionPolicy: MotionPolicy?
     let session: ViewerSession
     let id: CommandID
     let enabled: Bool
     let state: ComponentState
-    init(session: ViewerSession, id: CommandID, interaction: ComponentState = []) {
+    init(session: ViewerSession, id: CommandID, interaction: ComponentState = [], motionPolicy: MotionPolicy? = nil) {
+        self.motionPolicy = motionPolicy
         self.session = session; self.id = id; enabled = session.isEnabled(id)
         state = interaction.union(enabled ? [] : .disabled)
     }
@@ -17,12 +19,14 @@ struct ChromeToolFace: View {
     var customZoom: Double? { if case .custom(let value) = session.zoomMode { value } else { nil } }
     func activate() { CommandRouter().route(command, from: .button, to: session) }
     var body: some View {
-        if id == .actualPixels {
-            ScaleIndicator(actualPixels: session.zoomMode == .actualPixels, customZoom: customZoom, state: state, theme: scheme == .dark ? .dark : .light, input: .live, action: activate)
-                .disabled(!enabled)
-        } else {
-            IconCommandButton(symbol: Self.symbol(id), state: state,
-                theme: scheme == .dark ? .dark : .light, input: .live, action: activate)
+        MotionPolicyContent(policy: motionPolicy) {
+            if id == .actualPixels {
+                ScaleIndicator(actualPixels: session.zoomMode == .actualPixels, customZoom: customZoom, state: state, theme: scheme == .dark ? .dark : .light, input: .live, action: activate)
+                    .disabled(!enabled)
+            } else {
+                IconCommandButton(symbol: Self.symbol(id), state: state,
+                    theme: scheme == .dark ? .dark : .light, input: .live, action: activate)
+            }
         }
     }
     static func symbol(_ id: CommandID) -> DesignSymbol {
@@ -42,11 +46,13 @@ public final class ChromeToolView: NSView {
     private var session: ViewerSession?
     private var id: CommandID = .open
     private var face: NSHostingView<ChromeToolFace>?
+    private var motionPolicy: MotionPolicy?
     public var command: CommandID { id == .actualPixels && session?.zoomMode == .actualPixels ? .fit : id }
-    convenience init(frame: NSRect, session: ViewerSession, command: CommandID) {
+    convenience init(frame: NSRect, session: ViewerSession, command: CommandID, motionPolicy: MotionPolicy? = nil) {
         self.init(frame: frame)
+        self.motionPolicy = motionPolicy
         self.session = session; id = command
-        let face = NSHostingView(rootView: ChromeToolFace(session: session, id: command))
+        let face = NSHostingView(rootView: ChromeToolFace(session: session, id: command, motionPolicy: motionPolicy))
         face.frame = bounds; face.autoresizingMask = [.width, .height]
         addSubview(face); self.face = face
         face.setAccessibilityHidden(true)
@@ -119,7 +125,7 @@ public final class ChromeToolView: NSView {
     func refresh() {
         toolTip = commandTooltip
         if let session { face?.rootView = ChromeToolFace(session: session, id: id,
-            interaction: ComponentInput.live.state([], focused: focused, pressed: pressed)) }
+            interaction: ComponentInput.live.state([], focused: focused, pressed: pressed), motionPolicy: motionPolicy) }
         setAccessibilityEnabled(session?.isEnabled(command) == true)
     }
 }
@@ -131,7 +137,7 @@ public final class ViewerChromeOverlay: NSView {
     public private(set) var filename: String?
     public private(set) var position: String?
     private let fileLabel = NSTextField(labelWithString: "")
-    public convenience init(frame: NSRect, session: ViewerSession) {
+    public convenience init(frame: NSRect, session: ViewerSession, motionPolicy: MotionPolicy? = nil) {
         self.init(frame: frame)
         self.session = session
         let commands: [[CommandID]] = [[.open, .inspector], [.previous, .next], [.zoomOut, .actualPixels, .zoomIn]]
@@ -145,7 +151,7 @@ public final class ViewerChromeOverlay: NSView {
             addSubview(group); groups.append(group)
             for (offset, command) in commands[index].enumerated() {
                 let tool = ChromeToolView(frame: NSRect(x: positions[index][offset], y: 6,
-                    width: command == .actualPixels ? 122 : 30, height: 28), session: session, command: command)
+                    width: command == .actualPixels ? 122 : 30, height: 28), session: session, command: command, motionPolicy: motionPolicy)
                 group.addSubview(tool); tools.append(tool)
             }
         }
