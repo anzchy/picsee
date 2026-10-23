@@ -28,7 +28,9 @@ public struct PresentedImage: Sendable {
     private var fileURL: URL?
     private var opener: Opener?
     public func open(_ fileURL: URL, maximumPixelSize: Int, opener: @escaping Opener) {
+        retire()
         generation = UUID()
+        loading = false
         phase = .opening; presented = nil; failure = nil; preparedKey = nil
         source = nil
         self.fileURL = fileURL; self.opener = opener
@@ -79,7 +81,17 @@ public struct PresentedImage: Sendable {
         phase = .refining
         if !loading { schedule() }
     }
-    public func close() { }
+    private func retire() {
+        loadTask?.cancel()
+        let old = source; source = nil
+        Task { await old?.close() }
+    }
+    public func close() {
+        retire()
+        generation = UUID(); loading = false
+        desiredMaximum = 0; fileURL = nil; opener = nil
+        presented = nil; preparedKey = nil; failure = nil; phase = .idle
+    }
 
 }
 
