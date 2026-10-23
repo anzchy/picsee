@@ -1545,6 +1545,74 @@
           }
         }
       }
+    },
+    "None of These Files Can Be Opened": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None of These Files Can Be Opened"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这些文件都无法打开"
+          }
+        }
+      }
+    },
+    "None of the dropped or opened files is a supported image.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None of the dropped or opened files is a supported image."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖入或打开的文件中没有支持的图片。"
+          }
+        }
+      }
+    },
+    "This File Can’t Be Opened": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This File Can’t Be Opened"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法打开此文件"
+          }
+        }
+      }
+    },
+    "“%@” isn’t a supported image format.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” isn’t a supported image format."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”不是支持的图片格式。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
