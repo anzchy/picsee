@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picsee Lens Icon</title>
+<style>
+:root{
+  --bg:#ffffff; --surface:#f6f7fb; --panel:#ffffff; --text:#1a1a1a; --muted:#6b7280; --accent:#2563eb; --accent-fill:#2563eb;
+  --line:rgba(26,26,26,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1115; --surface:#161a22; --panel:#141821; --text:#e5e7eb; --muted:#9aa4b2; --accent:#60a5fa; --accent-fill:#1d4ed8;
+    --line:rgba(229,231,235,.10);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1115; --surface:#161a22; --panel:#141821; --text:#e5e7eb; --muted:#9aa4b2; --accent:#60a5fa; --accent-fill:#1d4ed8;
+  --line:rgba(229,231,235,.10);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif}
+main{max-width:1240px;margin:0 auto;padding:40px 16px 64px}
+h1{font-size:32px;margin:0 0 4px;font-weight:600;letter-spacing:-.01em}
+h2{font-size:16px;font-weight:600;margin:48px 0 12px}
+p{margin:0}
+.muted{color:var(--muted)}
+.hero{display:flex;gap:40px;align-items:center;flex-wrap:wrap;padding-bottom:32px;border-bottom:1px solid var(--line)}
+.hero img{width:min(360px,80vw);height:auto}
+.tag{display:inline-block;font-size:12px;color:var(--accent);margin-bottom:8px}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.tile{border-radius:10px;padding:28px 16px 14px;display:flex;flex-direction:column;align-items:center;gap:12px;border:1px solid var(--line)}
+.tile img{width:180px;height:180px}
+.tile span{font-size:12px}
+.t-light{background:linear-gradient(160deg,#e9edf5,#d9dfea);color:#1a1a1a}
+.t-dark{background:linear-gradient(160deg,#1a1e27,#0b0d11);color:#e5e7eb}
+.t-tint{background:linear-gradient(160deg,#20242c,#0d0f13);color:#e5e7eb}
+.t-clear{background:
+  radial-gradient(circle at 20% 25%,#f59e0b 0,transparent 45%),
+  radial-gradient(circle at 80% 30%,#ec4899 0,transparent 45%),
+  radial-gradient(circle at 50% 90%,#06b6d4 0,transparent 50%),
+  linear-gradient(135deg,#7c3aed,#2563eb);color:#fff}
+.t-clear img{filter:drop-shadow(0 0 0 transparent)}
+.ladder{border-radius:10px;padding:24px 16px;display:flex;align-items:flex-end;gap:20px;overflow-x:auto;border:1px solid var(--line)}
+.ladder figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:6px;flex:none}
+.ladder figcaption{font:11px ui-monospace,"SF Mono",monospace;opacity:.7}
+.l-light{background:#f6f7fb;color:#1a1a1a}
+.l-dark{background:#161a22;color:#e5e7eb;margin-top:12px}
+.scroll{overflow-x:auto}
+.desk{border-radius:10px;padding:80px 16px 18px;background:linear-gradient(160deg,#94a3b8,#475569);display:flex;justify-content:center;min-width:620px}
+.dock{display:flex;gap:10px;align-items:flex-end;padding:8px 10px;border-radius:22px;background:rgba(255,255,255,.28);border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(20px)}
+.dock .app{position:relative;display:flex;flex-direction:column;align-items:center}
+.dock .app img,.dock .ph{width:64px;height:64px;display:block}
+.ph{width:52px!important;height:52px!important;margin:6px;border-radius:12px;background:linear-gradient(#e5e7eb,#cbd0d8);box-shadow:0 2px 4px rgba(0,0,0,.2)}
+.ph.d{background:linear-gradient(#4b5563,#374151)}
+.cap{position:absolute;top:-34px;white-space:nowrap;font-size:12px;padding:2px 8px;border-radius:6px;background:rgba(30,30,30,.78);color:#fff}
+.dock .app:not(.me) .cap{opacity:.55}
+.finder{border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--panel);margin-top:12px}
+.row{display:flex;align-items:center;gap:8px;padding:4px 12px;font-size:13px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row.sel{background:var(--accent-fill);color:#fff}
+.row .k{margin-left:auto;font-size:12px;opacity:.7}
+.row.big{padding:6px 12px}
+.ficon{width:16px;height:16px;border-radius:4px;background:var(--line)}
+.notes{max-width:72ch;color:var(--text);padding-left:20px}
+.notes li{margin:4px 0}
+@media (max-width:640px){ main{padding-top:24px} h1{font-size:26px} .tile img{width:140px;height:140px} }
+</style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <img src="icon-default.svg" width="360" height="360" alt="picsee Lens icon, default appearance">
+    <div>
+      <span class="tag">Option 2 · chosen 2026-10-23</span>
+      <h1>Lens</h1>
+      <p class="muted" style="max-width:46ch">picsee = pic + see. A front-facing iris: a quiet ring of aperture blades closing around one blue pupil, the app's single accent. It means "look closely at an image".</p>
+    </div>
+  </section>
+
+  <h2>Appearances</h2>
+  <div class="grid4">
+    <div class="tile t-light"><img src="icon-default.svg" alt="Default"><span>Default · light desktop</span></div>
+    <div class="tile t-dark"><img src="icon-dark.svg" alt="Dark"><span>Dark · dark desktop</span></div>
+    <div class="tile t-tint"><img src="icon-tinted.svg" alt="Tinted"><span>Tinted · greyscale source on dark</span></div>
+    <div class="tile t-clear"><img src="icon-clear.svg" alt="Clear"><span>Clear · over a colourful wallpaper</span></div>
+  </div>
+
+  <h2>Size ladder (true pixel size)</h2>
+  <div class="ladder l-light">
+    <figure><img src="icon-default.svg" width="1024" height="1024" style="width:1024px;height:1024px;max-width:none" alt=""><figcaption>1024</figcaption></figure>
+  </div>
+  <div class="ladder l-light" style="margin-top:12px">
+    <figure><img src="icon-default.svg" width="512" height="512" alt=""><figcaption>512</figcaption></figure>
+    <figure><img src="icon-default.svg" width="256" height="256" alt=""><figcaption>256</figcaption></figure>
+    <figure><img src="icon-default.svg" width="128" height="128" alt=""><figcaption>128</figcaption></figure>
+    <figure><img src="icon-default.svg" width="64" height="64" alt=""><figcaption>64</figcaption></figure>
+    <figure><img src="icon-small.svg" width="32" height="32" alt=""><figcaption>32</figcaption></figure>
+    <figure><img src="icon-small.svg" width="16" height="16" alt=""><figcaption>16</figcaption></figure>
+  </div>
+  <div class="ladder l-dark">
+    <figure><img src="icon-dark.svg" width="512" height="512" alt=""><figcaption>512</figcaption></figure>
+    <figure><img src="icon-dark.svg" width="256" height="256" alt=""><figcaption>256</figcaption></figure>
+    <figure><img src="icon-dark.svg" width="128" height="128" alt=""><figcaption>128</figcaption></figure>
+    <figure><img src="icon-dark.svg" width="64" height="64" alt=""><figcaption>64</figcaption></figure>
+    <figure><img src="icon-small-dark.svg" width="32" height="32" alt=""><figcaption>32</figcaption></figure>
+    <figure><img src="icon-small-dark.svg" width="16" height="16" alt=""><figcaption>16</figcaption></figure>
+  </div>
+
+  <h2>In context</h2>
+  <div class="scroll">
+    <div class="desk">
+      <div class="dock">
+        <div class="app"><div class="ph"></div><span class="cap">Files</span></div>
+        <div class="app"><div class="ph d"></div><span class="cap">Browser</span></div>
+        <div class="app"><div class="ph"></div><span class="cap">Viewer</span></div>
+        <div class="app me"><img src="icon-default.svg" alt="picsee"><span class="cap">picsee</span></div>
+        <div class="app"><div class="ph"></div><span class="cap">Library</span></div>
+        <div class="app"><div class="ph d"></div><span class="cap">Terminal</span></div>
+        <div class="app"><div class="ph"></div><span class="cap">Settings</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="finder">
+    <div class="row"><span class="ficon"></span>Notes<span class="k">Application</span></div>
+    <div class="row"><img src="icon-small.svg" width="16" height="16" alt="">picsee<span class="k">Application · 16 px</span></div>
+    <div class="row sel"><img src="icon-small.svg" width="16" height="16" alt="">picsee<span class="k">selected · 16 px</span></div>
+    <div class="row big"><img src="icon-small.svg" width="32" height="32" alt="">picsee<span class="k">Application · 32 px</span></div>
+    <div class="row"><span class="ficon"></span>Preview<span class="k">Application</span></div>
+  </div>
+
+  <h2>Design notes</h2>
+  <ul class="notes">
+    <li><b>Metaphor:</b> an iris/aperture: six blades around one blue pupil. Seeing, not shooting: no camera body, no shutter button.</li>
+    <li><b>Grid:</b> 1024 canvas, 824 superellipse body (n = 5, 100 px margin). Lens r 322, ring band 64 px, opening r 172, pupil r 120, all on centre.</li>
+    <li><b>Layers:</b> background (body), fg-1 ring, fg-2 blades, fg-3 pupil. Flat fills, no baked glare. The shadow (y+12, 28 px blur, 30%) is its own group.</li>
+    <li><b>Applied:</b> continuous corners, Icon Composer layering, four appearances, one blue element, no strokes under 18 px, checked from 1024 down to 16.</li>
+    <li><b>Small sizes:</b> 16/32 px use an optical variant without blades. Its body, ring, opening and pupil land on the pixel grid; the full six-blade icon begins at 64 px.</li>
+    <li><b>Risks:</b> it may read as a camera aperture. Clear is faint on plain white.</li>
+  </ul>
+</main>
+</body>
+</html>
