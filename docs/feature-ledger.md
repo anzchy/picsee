@@ -133,7 +133,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CHROME-01 | 工具自动隐藏 | Partial | 单元 | P1-08 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift`、`App/CanvasWindowController.swift` | 不动鼠标约 2.5 秒，底部三组工具和窗口红绿灯一起消失；隐藏后 Tab 聚焦不到、VoiceOver 读不到它们（13 页）。限制：@1x 真机隐藏后 AX 只剩画布（[记录](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）；VoiceOver 读出、@2x 未验。 |
+| CHROME-01 | 工具自动隐藏 | Partial | 单元 | P1-08 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift`、`App/CanvasWindowController.swift` | 不动鼠标约 2.5 秒，底部三组工具和窗口红绿灯一起消失；隐藏后 Tab 聚焦不到、VoiceOver 读不到它们（13 页）。限制：@1x 隐藏后 AX 只剩画布（[记录](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）；隐藏时 Tab 与命中排除仅单元；VoiceOver、@2x 未验。 |
 | CHROME-02 | 唤回工具 | Partial | 单元 | P1-08 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerChromeHost.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift`、`App/CanvasWindowController.swift`、`App/ChromeAdapters.swift` | 鼠标移到底边或按 Tab，工具出现；移到顶部，红绿灯出现；按 Tab 时先唤回、再聚焦第一个控件（14 页）。限制：@1x 底边/顶边/Tab 唤回与窄窗口不重叠通过（合成指针，[记录](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）；真实鼠标、@2x 未验。 |
 | CHROME-03 | 操作中不隐藏 | Partial | 单元 | P1-08 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerChromeState.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift`、`App/CanvasWindowController.swift`、`App/Commands/CommandMenu.swift` | 打开菜单、拖动控件、Inspector 或 Filmstrip 展开时工具不消失；结束后重新计时。限制：@1x 菜单、Inspector、键盘焦点锁通过（[记录](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）；点击工具后焦点不立即回画布（已知）；拖动、Filmstrip 未验。 |
 | CHROME-04 | 工具常驻 | Partial | 单元 | P1-08、P3-11 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/DisplayPreferences.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift` | 开启“始终显示工具”，工具不再隐藏；退出重开后设置仍在。限制：@1x View › Always Show Tools 开关通过（[记录](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）；窗口间同步仅单元；持久化待 P1-09，面板待 P3-11。 |
@@ -224,7 +224,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ChromeWindowCommands.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/enter/search 未实现；菜单/按键/占位按钮 @1x 真机一致；File › Close 与 ⌘W @1x 真机通过；工具组按钮仅合成点击。 |
+| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ChromeWindowCommands.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/enter/search 未实现；菜单/按键/占位按钮与 File › Close、⌘W @1x 真机一致；工具组按钮仅合成点击。 |
 | CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是占位字段，不是搜索；字段裸键（含打开目录后的 ←/→）、Edit 菜单与菜单 Esc 已 @1x 真机通过；非画布窗口裸键未验。 |
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |
@@ -331,7 +331,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 |---|---|---|---|
 | 打开与输入 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮只改 CMD-01/A11Y-02 与审查表，OPEN-02 不变（`Partial`/`无`，验收原文未改）。上次：P1-08 复审（db028d8..2a67114），OPEN-02「限制：」已更新 |
 | 查看与画布 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮无源码改动，VIEW-01/VIEW-10 不变（`Partial`/`单元`，验收原文未改）。上次：P1-08 复审（db028d8..2a67114），只追加「限制：」 |
-| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：CHROME-01…05 仍 `Partial`/`单元`，验收原文未改（只在原句后加句号与「限制：」），无真机记录，`build.mjs --check` 通过。上次：P1-08 复审（db028d8..2a67114），File › Close 移到 CMD-01 |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-08 真机记录（#42，validation/p1-08-device-mini，0e1d1d1..3cb894e）：CHROME-01…05 仍 `Partial`/`单元`，只改「限制：」，验收原文未改；新限制与 P1.md 运行 `20261023-163840-P1-08-CHROME-01-05-CMD-01` 一致（含第 7 项已知 FAIL）；CHROME-01 新限制不再提隐藏后 Tab 不可达与命中，该点在记录中未单独检查。上次：P1-08 复审（db028d8..1060f3c） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
@@ -339,7 +339,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
 | 授权与文件访问 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮只改账簿，ACCESS-01/05 不受影响。上次：P1-08 复审（db028d8..2a67114） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：CMD-01「怎么确认」缩到约 149 字，「在哪」加 `ChromeWindowCommands.swift`、`ViewerChromeOverlay.swift`；新限制「菜单/按键/占位按钮 @1x 真机一致」与 P0.md P0-09 节结论一致；状态与验收不变。上次：P1-08 复审（db028d8..2a67114），提出 CMD-01 超长与在哪缺路径 |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1-08 真机记录（#42，validation/p1-08-device-mini，0e1d1d1..3cb894e）：CMD-01 只改「限制：」（File › Close 与 ⌘W @1x 真机通过，与 P1.md 运行第 10 项一致），状态与验收不变；「怎么确认」由约 149 字增到约 158 字，超 150 字上限，待 owner 缩短。上次：P1-08 复审（db028d8..1060f3c） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`DecodeBudget`/`ImageSourceHeader` 改为按位深估算请求输出预约，`ImageIOPipeline` 只加预约复核与根作用域身份，方向、透明与格式解码未改；FMT-01 只改「在哪」，状态与验收不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
