@@ -1,6 +1,8 @@
 import Foundation
 
-/// Opaque, persistable identity. Components use Base64 so separators cannot collide with filenames.
+/// Opaque, Codable identity. Only root-relative tokens identify an item across launches;
+/// resource and ephemeral tokens are session-only. Codable round trips do not imply durable identity.
+/// Components use Base64 so separators cannot collide with filenames.
 public struct ItemID: Hashable, Codable, Sendable {
     public let stableEncoding: String
     private init(_ encoding: String) { stableEncoding = encoding }

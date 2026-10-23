@@ -155,6 +155,8 @@ picsee/
 
 URL 可变化，资源身份也非在所有文件系统上稳定。同一 resolver 内观察到原路径消失、资源标识移到新路径时保留 ItemID；旧名字被新文件复用时另建身份，避免与已重命名项冲突。重命名关联暂不持久化，跨启动跟踪留给后续图库/监听；跨卷移动视为重新识别。P1-01 临时树测试在同字节数、固定相同修改时间下原子替换 TIFF，ItemID 保持不变，资源标识使 FileRevision 与 RenderKey 改变，落实“同一项的新版本”。文件被原路径替换必须产生新修订；资源信息不可得或同 inode 原地改写且大小/时间不变时，仍需后续文件事件提升修订代次并失效缓存。无事件且元数据完全相同时的可靠内容识别留给可选内容指纹，首版不承诺全量哈希检测。
 
+编码持久性与 Codable 往返是两件事：`id1:root:`（AccessRootID + 规范化相对路径）可跨启动保存；`id1:res:` 中的 fileResourceIdentifier 不保证跨系统重启稳定，`id1:ephemeral:` 也只属于当前会话。`FileRevision.resourceIdentifier` 同样是会话 token。`RenderKey.stableEncoding` 保留全部字段，供会话内比较和去重；P3-03 的磁盘文件名必须对单独的 `persistentEncoding`（`rkp1`）做 SHA-256，不能直接散列 `stableEncoding`。目前仅 root-relative 身份且修订无资源 token 时返回持久化编码；其余返回 nil，调用方跳过持久化。选择拒绝这些 key，是因为直接省略资源 token 会把同大小、同时间的原子替换混为同一修订。正常真实读取含资源 token 时暂不具备跨启动缓存键；P3-03 若要缓存它们，须先引入可靠的持久修订证据（例如内容指纹），不能将会话 token 当成持久值。
+
 ### 3.3 打开与授权流程
 
 ```text
