@@ -22,3 +22,6 @@ let package = Package(
     ],
     swiftLanguageModes: [.v6]
 )
+
+// Exercise two real Sessions against the real admission actor at the integration seam.
+package.targets.first(where: { $0.name == "PicseeInfrastructureTests" })!.dependencies.append("PicseeApplication")
