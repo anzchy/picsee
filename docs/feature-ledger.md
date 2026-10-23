@@ -224,7 +224,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/enter/search 未实现；inspector、previous/next 三入口 @1x 真机一致；escape 菜单项 #29 已修；底部工具组按钮入口与 File › Close（⌘W）仅单元证明。 |
+| CMD-01 | 基础快捷键 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeCore/Commands/`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/CanvasWindowController.swift`、`App/UI/InspectorPlaceholder.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ChromeWindowCommands.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift` | Space、←/→、Esc、Enter、0/1、+/−、⌘F、⌘O、⌘I 在菜单、按钮和键盘上触发的是同一个动作；未实现的不在菜单里显示快捷键。限制：preview/enter/search 未实现；菜单/按键/占位按钮 @1x 真机一致；工具组按钮与 File › Close（⌘W）仅单元证明。 |
 | CMD-02 | 输入框和菜单优先 | Partial | 单元 | P0-09 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/CommandRouter.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/Commands/CommandMenu.swift`、`App/Commands/CommandWindow.swift` | 在搜索框里按 Space 或 ←，只编辑文字不翻图；菜单打开时按 Esc 只关菜单。限制：输入框是占位字段，不是搜索；字段裸键（含打开目录后的 ←/→）、Edit 菜单与菜单 Esc 已 @1x 真机通过；非画布窗口裸键未验。 |
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |
@@ -275,7 +275,7 @@ MVP 起就是门槛（见计划 P3「MVP 还需检查」），P6-04 补全全部
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | A11Y-01 | VoiceOver | Absent | 无 | P3-10、P6-04 | — | 开 VoiceOver 走一遍打开→网格→大图→Inspector，每个控件都有正确的名称，隐藏的工具不被读出 |
-| A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorFocus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/CanvasWindowController.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：选图/网格待 P3；⌘O 选目录、占位面板焦点与 Focus Canvas（#29 已修）@1x 真机通过；上一张/下一张按钮的 Tab 顺序未验；P1-08 起 Tab 经底部工具（画布 → 工具 → 面板），P0 记录早于此，待复验。 |
+| A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorFocus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/CanvasWindowController.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：选图/网格待 P3；⌘O 选目录、占位面板焦点与 Focus Canvas（#29 已修）@1x 真机通过；P1-08 后 Tab 经底部工具，待复验。 |
 | A11Y-03 | 对比度与焦点不被遮挡 | Absent | 无 | P6-04 | — | 浅色和深色下文字与控件对比度符合 `design/DESIGN.md` 的目标；获得焦点的控件不被其他元素挡住 |
 | A11Y-04 | 中英文界面 | Absent | 无 | P1-07、P6-04 | — | 系统语言切到中文或英文，界面文字跟随变化，没有截断和未翻译的键名 |
 
@@ -329,21 +329,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1-08 沉浸工具（#42，p1/p1-08-chrome，db028d8..0927a6a）：`App/PicseeApp.swift` 只把共享 DisplayPreferences 传给菜单；底部工具新增“打开…”按钮，OPEN-02「限制：无打开按钮」已过时，已提交给 owner。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083） |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-08 沉浸工具（#42，p1/p1-08-chrome，db028d8..0927a6a）：`ViewerSession` 只加 chrome 宿主、调度与指针区域；新增底部工具的上一张/下一张、缩放、比例按钮入口，窗口改为 full-size content，VIEW-01/VIEW-10 的真机记录早于这些改动，已提交给 owner。上次：P1-04/P1-05 真机记录（#41，validation/p1-04-05-device-mini，4bdd6ef..d7713c3） |
-| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-08 沉浸工具（#42，p1/p1-08-chrome，db028d8..0927a6a）：CHROME-01…05 由 `Absent` 升为 `Partial`/`单元`，「怎么确认」验收原文未改，只追加「限制：」；无 `docs/validation/` 结果（P1.md 表仍为 —）。CHROME-01/02/04 的「怎么确认」超出约 150 字；File › Close（⌘W）写在 CHROME-01，已提交给 owner。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：OPEN-02 已改「限制：」并加 `ViewerChromeOverlay.swift`，状态与验证 `无` 不变，验收原文未改。上次：P1-08 沉浸工具（db028d8..0927a6a），提出 OPEN-02「无打开按钮」已过时 |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：VIEW-01/VIEW-10 只追加「限制：」写明底部工具入口与全尺寸内容窗口真机未验，状态与验收不变。上次：P1-08 沉浸工具（db028d8..0927a6a），提出 VIEW-01/VIEW-10 真机记录早于改动 |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：CHROME-01/02/04「限制：」已缩短（124/107/96 字），细节移到 P1.md P1-08 节的单元证据说明，非真机记录；File › Close 移到 CMD-01。CHROME-01…05 仍 `Partial`/`单元`，验收原文未改。上次：P1-08 沉浸工具（db028d8..0927a6a） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-08 沉浸工具（#42，p1/p1-08-chrome，db028d8..0927a6a）：`App/CanvasWindowController.swift` 只加 chrome 覆盖层、拖动条与标题栏策略，打开/授权/释放路径未改；ACCESS-01/05 不受影响（⌘W 是新的关窗入口，ACCESS-05 验收不限入口）。上次：P1-04/P1-05 真机记录（#41，validation/p1-04-05-device-mini，4bdd6ef..d7713c3） |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：本次只改账簿与 P1.md，ACCESS-01/05 不受影响。上次：P1-08 沉浸工具（db028d8..0927a6a），chrome 接线未改打开/授权/释放路径 |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | P1-08 沉浸工具（#42，p1/p1-08-chrome，db028d8..0927a6a）：新增 `FocusContext.tools`、底部工具按钮入口、View › Always Show Tools（`chrome.always-show-tools`，记在 CHROME-04）与 File › Close（⌘W，无 identifier）；CMD-01 按钮入口限制已提交给 owner；CMD-02 字段裸键处理未改。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083） |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：CMD-01 已加底部工具按钮与 File › Close（⌘W）仅单元证明的限制；「怎么确认」现约 188 字，超出约 150 字，且「在哪」未列 `ChromeWindowCommands.swift`、`ViewerChromeOverlay.swift`，已提交给 owner。上次：P1-08 沉浸工具（db028d8..0927a6a） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`DecodeBudget`/`ImageSourceHeader` 改为按位深估算请求输出预约，`ImageIOPipeline` 只加预约复核与根作用域身份，方向、透明与格式解码未改；FMT-01 只改「在哪」，状态与验收不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-08 沉浸工具（#42，p1/p1-08-chrome，db028d8..0927a6a）：有 chrome 宿主时 Tab 先进入底部工具（画布 → 工具 → 面板），P0.md 第 10 行记录的 Tab 顺序（画布 → 字段 → Fit → Actual Pixels）已不成立，A11Y-02 已提交给 owner；新增字符串带 en 与 zh-Hans，A11Y-04 仍 `Absent`。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083） |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..2a67114）：A11Y-02 已加 Tab 经底部工具待复验的限制，状态与验收不变；「怎么确认」现约 169 字，超出约 150 字，已提交给 owner。上次：P1-08 沉浸工具（db028d8..0927a6a），提出 P0 Tab 顺序记录已过时 |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
