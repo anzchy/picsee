@@ -92,6 +92,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         content.addSubview(chromeOverlay)
         window.contentView = content
         chromeOverlay.linkKeyViews(to: canvas)
+        stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
         inspectorHost.nextKeyView = canvas
         session.chromeHost = self
         session.installChromeScheduler(chromeTimer)
@@ -301,8 +302,9 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     var inspectorVisible: Bool { session.inspectorFocus.isVisible }
     var hasImage: Bool { canvas.hasImage }
     private var focusContext: FocusContext {
+        let controls: [NSView] = stateHost.buttons + chromeOverlay.tools
         if let view = window?.firstResponder as? NSView,
-           chromeOverlay.tools.contains(where: { view === $0 || view.isDescendant(of: $0) }) { return .tools }
+           controls.contains(where: { view === $0 || view.isDescendant(of: $0) }) { return .tools }
         if window?.firstResponder is NSTextInputClient { return .textInput }
         return window?.firstResponder === canvas ? .canvas : .panel
     }
@@ -337,11 +339,13 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         return false
     }
     func windowDidUpdate(_ notification: Notification) {
+        stateHost.refresh()
         if inspector.hasImage != canvas.hasImage { inspector.hasImage = canvas.hasImage }
         if chromeGeneration != generation || chromeHasImage != canvas.hasImage {
             let opened = chromeGeneration != generation
             chromeGeneration = generation; chromeHasImage = canvas.hasImage
             chromeOverlay.refresh(filename: fileURL?.lastPathComponent)
+            stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
             if opened { session.activity() }
         }
     }
@@ -351,10 +355,11 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
 extension CanvasWindowController: ViewerChromeHost {
     func applyChrome(toolsVisible: Bool, trafficLightsVisible: Bool) {
         chromeOverlay.setToolsVisible(toolsVisible)
+        stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
         if let window { ChromeTitlebarPolicy.apply(to: window, visible: trafficLightsVisible, fullScreen: window.styleMask.contains(.fullScreen)) }
     }
     func focusChromeTool(reverse: Bool, entering: Bool) -> Bool {
-        chromeOverlay.focusTool(reverse: reverse, entering: entering)
+        ViewerStateFocus.move(reverse: reverse, entering: entering, state: stateHost, chrome: chromeOverlay)
     }
 }
 

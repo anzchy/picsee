@@ -123,7 +123,9 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         activity()
         if let chromeHost {
             let focus = inspectorFocus.focus
-            if focus == .canvas || focus == .tools || reverse {
+            if reverse && focus == .canvas && inspectorFocus.isVisible {
+                inspectorFocus.updateFocus(.textInput)
+            } else if focus == .canvas || focus == .tools || reverse {
                 if chromeHost.focusChromeTool(reverse: reverse, entering: focus != .tools) {
                     inspectorFocus.updateFocus(.tools)
                 } else {
