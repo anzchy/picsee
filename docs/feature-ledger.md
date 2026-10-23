@@ -215,7 +215,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| CACHE-01 | 内存占用有上限 | Partial | 单元 | P1-06、P3-06 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageMemoryCache.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/MemoryPressurePolicy.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ResourceSnapshotTracing.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePresentationPinning.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageLoader.swift` | 连续浏览 S2 三轮，内存不持续增长；两个窗口共用同一个上限（数据见 `docs/validation/P3.md`）。限制：仅内存缓存，按成本有界、应用级单实例、授权后才查找；过期修订查找拒绝交付且保留新修订解码（单元）；无磁盘缓存（P3-03）；无预取（P2）；内存压力仅单元证明（真机需 sudo 用户步骤）；S2 三轮与两窗口共享上限的数据待 P3（`docs/validation/P3.md`）。 |
+| CACHE-01 | 内存占用有上限 | Partial | 单元 | P1-06、P3-06 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageMemoryCache.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/MemoryPressurePolicy.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ResourceSnapshotTracing.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePresentationPinning.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageLoader.swift`、`App/PicseeApp.swift`、`App/UntestedResourceAdapters.swift` | 连续浏览 S2 三轮，内存不持续增长；两个窗口共用同一个上限（数据见 `docs/validation/P3.md`）。限制：仅内存缓存，按成本有界、单实例、授权后才查找，过期修订不交付（单元）；无磁盘缓存与预取；内存压力与 S2/两窗口数据真机未验（P3）。 |
 | CACHE-02 | 缩略图磁盘缓存 | Absent | 无 | P3-03、P3-04 | — | 第二次打开同一目录，网格明显更快出图；手动删掉缓存目录后自动重建，原图不受影响 |
 | CACHE-03 | 清理缓存 | Absent | 无 | P3-05、P3-07 | — | 设置里显示缓存占用，点清理后占用归零，正在进行的旧任务不会把缓存重新写回 |
 | CACHE-04 | 本地诊断面板 | Absent | 无 | P3-07 | — | 打开诊断面板，看到本地的解码数、队列长度、缓存命中；不上传任何数据 |
@@ -329,21 +329,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮只改 CMD-01/A11Y-02 与审查表，OPEN-02 不变（`Partial`/`无`，验收原文未改）。上次：P1-08 复审（db028d8..2a67114），OPEN-02「限制：」已更新 |
-| 查看与画布 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：本轮无源码改动，VIEW-01/VIEW-10 不变（`Partial`/`单元`，验收原文未改）。上次：P1-08 复审（db028d8..2a67114），只追加「限制：」 |
-| C 沉浸界面 | 2026-10-23 | doc-gardener | Low 批次 7（chore/followups-7，20501b8..a76629d）：只新增真机步骤 `features/chrome-show-hide.md` 与 doctor/key.sh 工具改动，无 App 源码与验证记录改动；CHROME-01…05 仍 `Partial`/`单元`，验收原文未改。注：P1-08 真机记录早于该步骤，下次复验按此步骤做。上次：P1-08 真机记录复审（#42，0e1d1d1..93861af） |
+| 打开与输入 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：`App/PicseeApp.swift` 只改管线构造（缓存 trace）并接入内存压力转发器，打开入口未改；OPEN-02/OPEN-03 不变。上次：P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c） |
+| 查看与画布 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：`ViewerImageLoader` 只加已接受图片的 pin/unpin，`ImageIOPipeline` 在租约与键校验后加内存命中，`DecodeAdmission` 只加缓存容量与恢复延迟配置；接受与代次校验未放宽，VIEW-05…09 不变（`Partial`/`单元`）。注：VIEW-08/VIEW-09 真机记录早于缓存命中路径；两行「怎么确认」超 150 字（既有）。上次：P1-08 复审（#42，db028d8..1060f3c） |
+| C 沉浸界面 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：`App/CanvasWindowController.swift` 只给 ViewerImageLoader 多传一个 pin 依赖，chrome 未改；CHROME-01…03 不变。上次：Low 批次 7（chore/followups-7，20501b8..a76629d） |
 | 外观与显示偏好 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 只加 PREF-01/02/04 的 P1-09 归入依据，无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
 | 文件夹浏览 | 2026-10-21 | 建账 | 同上 |
 | Filmstrip | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：`filmstripExpanded` 键只作为 chrome 锁输入，无 Filmstrip UI；FILM-01 保持 `Absent`；PR 描述裁定键名待 P1-09（PREF-04）命名。上次：建账 |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-23 | doc-gardener | Low 批次 7（chore/followups-7，20501b8..a76629d）：chrome 步骤只把 ACCESS-01 提示作为预期干扰写明取消方法；ACCESS-01 不变。上次：P1-08 复审（#42，db028d8..1060f3c） |
-| 缓存与资源 | 2026-10-23 | doc-gardener | P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef）：P1.md 的 CACHE-01 一节未改，仍无结果；保持 `Absent`。上次：P1 素材与记录骨架（chore/followups-3，6f36f45..45fa1f8） |
-| 命令与键盘 | 2026-10-23 | doc-gardener | Low 批次 7（chore/followups-7，20501b8..a76629d）：chrome 步骤只引用 CMD-01 的 File › Close/⌘W，key.sh 拒绝命名键仅为测试工具；CMD-01 不变。上次：P1-08 真机记录复审（#42，0e1d1d1..93861af） |
+| 授权与文件访问 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：ViewerImageLoader 的 retire/失败路径只加 unpin，关闭与续租未改；缓存查找在授权头校验之后；ACCESS-01/ACCESS-05 不变。上次：Low 批次 7（chore/followups-7，20501b8..a76629d） |
+| 缓存与资源 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：本范围把 CACHE-01 由 `Absent` 改为 `Partial`/`单元`，验收原文未改，只追加「限制：」；无真机记录。提出：「怎么确认」约 204 字超限，「在哪」未列 App 接线文件。`ResourceSnapshot` 只是 signpost，CACHE-04 仍 `Absent`。上次：P1 记录与真机步骤措辞（chore/followups-4，38a1846..11ee2ef） |
+| 命令与键盘 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：`App/CanvasWindowController.swift` 只多传一个构造参数，命令与菜单未改；CMD-01 不变。上次：Low 批次 7（chore/followups-7，20501b8..a76629d） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
-| 格式 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083）：`DecodeBudget`/`ImageSourceHeader` 改为按位深估算请求输出预约，`ImageIOPipeline` 只加预约复核与根作用域身份，方向、透明与格式解码未改；FMT-01 只改「在哪」，状态与验收不变。上次：P1-03 画布（#37，p1/p1-03-canvas，88fbb3d..d0727b5） |
-| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c）：A11Y-02「怎么确认」缩到约 126 字，原「上一张/下一张按钮的 Tab 顺序未验」并入「P1-08 后 Tab 经底部工具，待复验」（这两个按钮现在就在底部工具里）；状态与验收不变。上次：P1-08 复审（db028d8..2a67114），提出 A11Y-02 超长 |
+| 格式 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：`ImageIOPipeline` 只在准入解码前后加缓存查找与回填，解码器、方向、透明与格式集合未改；FMT-01、VIEW-06/07 不变。上次：P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..a397083） |
+| 可访问性与本地化 | 2026-10-23 | doc-gardener | P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed）：`App/CanvasWindowController.swift` 只多传一个构造参数，焦点与键盘路径未改；A11Y-02 不变。上次：P1-08 复审（#42，p1/p1-08-chrome，db028d8..1060f3c） |
 | 分发 | 2026-10-22 | doc-gardener | DIST-05 计划由 P7-09 移到 P6-08（ADR-006）；DIST-04 验收不变 |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
