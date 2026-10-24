@@ -52,26 +52,26 @@ import PicseeCore
                             firstBatchTraced = true
                             trace?.firstBatch(count: batch.count, generation: token)
                         }
-                        if isReadingFolder, let first = self.snapshot?.entries.first,
-                           automaticPresentationAllowed?() != false {
-                            isReadingFolder = false
-                            currentItemID = first.itemID; currentURL = first.url
-                            try await host?.rememberFolder(folder, rootID: rootID)
-                            guard activeGeneration == token, automaticPresentationAllowed?() != false,
-                                  !Task.isCancelled else { return }
-                            host?.openFolderImage(first.url, rootID: rootID)
-                        }
                         advancePending()
                     })
                 try Task.checkCancellation()
                 guard activeGeneration == token, retainReadingAuthority(), let completed = snapshot else { return }
                 let showEmpty = input == nil && completed.entries.isEmpty && automaticPresentationAllowed?() != false
-                activeGeneration = nil
-                activeFolder = nil
+                let first = input == nil ? completed.entries.first : nil
                 snapshot = completed.appending([], isComplete: true)
                 pendingDirection = nil
                 isReadingFolder = false
                 scanTask = nil
+                if let first, automaticPresentationAllowed?() != false {
+                    currentItemID = first.itemID; currentURL = first.url
+                    try await host?.rememberFolder(folder, rootID: rootID)
+                    guard activeGeneration == token, automaticPresentationAllowed?() != false else { return }
+                    try Task.checkCancellation()
+                    host?.openFolderImage(first.url, rootID: rootID)
+                }
+                guard activeGeneration == token, !Task.isCancelled else { return }
+                activeGeneration = nil
+                activeFolder = nil
                 trace?.complete(count: completed.entries.count, generation: token)
                 trace?.end(outcome: .complete, generation: token)
                 if showEmpty { host?.showEmptyFolder() }
