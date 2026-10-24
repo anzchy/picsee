@@ -16,7 +16,7 @@ import PicseeCore
     func showEmptyFolder() { emptyCount += 1 }
 }
 
-@Test @MainActor func folderReadingFirstNonemptyBatchOpensOnce() async throws {
+@Test @MainActor func folderReadingCompletedSnapshotOpensNameFirstOnce() async throws {
     let fixture = FolderScanFixture(), host = FolderReadingHost(), session = ViewerSession()
     fixture.coordinator.host = host; session.folderScan = fixture.coordinator
     let task = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id)
@@ -25,17 +25,18 @@ import PicseeCore
     try await fixture.scanner.deliver([])
     #expect(host.opens.isEmpty && fixture.coordinator.isReadingFolder)
     try await fixture.scanner.deliver(["img10.png", "img2.png"])
-    #expect(host.opens == [fixture.folder.appendingPathComponent("img2.png")])
+    #expect(host.opens.isEmpty && host.remembered.isEmpty)
+    #expect(fixture.coordinator.isReadingFolder && fixture.coordinator.currentItemID == nil)
+    try await fixture.scanner.deliver(["img1.png"])
+    #expect(host.opens.isEmpty && fixture.coordinator.isReadingFolder)
+    await fixture.scanner.finish(); try await task.value
+    #expect(host.opens.map(\.lastPathComponent) == ["img1.png"])
     #expect(host.remembered.map(\.0) == [fixture.folder])
     #expect(host.remembered.map(\.1) == [fixture.id])
-    #expect(!fixture.coordinator.isReadingFolder)
-    #expect(fixture.coordinator.currentItemID == .rootRelative(rootID: fixture.id, relativePath: "A/img2.png"))
-    try await fixture.scanner.deliver(["img1.png"])
-    await fixture.scanner.finish(); try await task.value
-    #expect(host.opens.map(\.lastPathComponent) == ["img2.png"])
     #expect(host.remembered.count == 1 && host.emptyCount == 0)
     #expect(fixture.coordinator.snapshot?.entries.map(\.url.lastPathComponent) == ["img1.png", "img2.png", "img10.png"])
-    #expect(fixture.coordinator.currentURL == fixture.folder.appendingPathComponent("img2.png"))
+    #expect(fixture.coordinator.currentItemID == .rootRelative(rootID: fixture.id, relativePath: "A/img1.png"))
+    #expect(fixture.coordinator.currentURL == fixture.folder.appendingPathComponent("img1.png"))
     #expect(await fixture.access.balance == [1, 1])
 }
 
@@ -93,13 +94,10 @@ import PicseeCore
     let task = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id)
     await fixture.scanner.waitForStart()
     try await fixture.scanner.deliver(["img2.png"])
-    #expect(host.opens.count == (action == "cancel-open" ? 1 : 0))
-    #expect(await fixture.access.released.isEmpty)
-    if replacement != nil { await fixture.scanner.waitForStart(1) }
-    let before = fixture.coordinator.snapshot
-    try await fixture.scanner.deliver(["late.png"])
-    #expect(fixture.coordinator.snapshot == before)
     await fixture.scanner.finish(); try await task.value
+    #expect(host.opens.count == (action == "cancel-open" ? 1 : 0))
+    #expect(await fixture.access.released.count == 1)
+    if replacement != nil { await fixture.scanner.waitForStart(1) }
     #expect(host.remembered.count == 1 && host.emptyCount == 0)
     #expect(host.opens.count == (action == "cancel-open" ? 1 : 0))
     if let replacement {

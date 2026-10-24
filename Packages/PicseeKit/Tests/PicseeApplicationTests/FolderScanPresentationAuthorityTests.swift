@@ -99,15 +99,15 @@ private actor FolderAuthorityBarrier {
     host.beforeRememberCommit = { await rememberBarrier.hold() }
     let task = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id, canPresent: { authority.isCurrent })
     await fixture.scanner.waitForStart()
-    let delivery = Task { try await fixture.scanner.deliver(["img1.png"]) }
+    try await fixture.scanner.deliver(["img1.png"])
+    await fixture.scanner.finish()
     await rememberBarrier.waitForStart()
     #expect(host.rememberAttempts == 1 && host.remembered.isEmpty && host.opens.isEmpty)
     let newerInput = inputIntent.begin()
     #expect(access.isCurrent && !origin.isCancelled && newerInput.isCurrent)
     #expect(!authority.isCurrent)
-    await rememberBarrier.finish(); try await delivery.value
+    await rememberBarrier.finish(); try await task.value
     #expect(host.remembered.isEmpty && host.opens.isEmpty)
-    await fixture.scanner.finish(); try await task.value
     #expect(host.emptyCount == 0 && fixture.coordinator.failure == nil)
     #expect(await fixture.access.balance == [1, 1])
     await originBarrier.finish(); await origin.value

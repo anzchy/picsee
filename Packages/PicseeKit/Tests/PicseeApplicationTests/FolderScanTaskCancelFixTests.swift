@@ -74,13 +74,10 @@ private struct FolderFixReleaseLeases: AccessLeasing {
     fixture.coordinator.host = host; host.onRemember = { await barrier.hold() }
     let task = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id)
     await fixture.scanner.waitForStart()
-    let delivery = Task { try await fixture.scanner.deliver(["img2.png"]) }
-    await barrier.entered(); task.cancel(); await barrier.finish(); try await delivery.value
-    let before = fixture.coordinator.snapshot
-    try await fixture.scanner.deliver(["img10.png"])
-    #expect(fixture.coordinator.snapshot == before)
+    try await fixture.scanner.deliver(["img2.png"])
+    await fixture.scanner.finish()
+    await barrier.entered(); task.cancel(); await barrier.finish(); try await task.value
     #expect(host.opens.isEmpty && host.remembered == [fixture.folder])
-    await fixture.scanner.finish(); try await task.value
     #expect(fixture.coordinator.snapshot == nil && fixture.coordinator.failure == nil)
     #expect(await fixture.access.balance == [1, 1])
 }
