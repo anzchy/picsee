@@ -56,8 +56,11 @@ Low only. Never touch mdpro or its tmux `dtrack`.
    `$SK/scripts/listen-notify.py start` with a fresh event/round ID, agent, expected handoff/report path, and an
    **explicit delegator route**. A Codex delegator uses `--route codex-thread --thread <current UUID>`;
    a Claude/Opus delegator uses `--route claude-pane --pane <ID> --terminal-id <ID> --cwd <absolute repo path>`
-   from a fresh `herdr pane list` (check `gui-lock.sh status` before inspecting the pane). The listener verifies the
-   Claude pane identity again before `herdr pane run`; stale or changed targets get no receipt. Existing registered
+   from a fresh `herdr pane list` (check `gui-lock.sh status` before inspecting the pane). The listener checks
+   Claude pane identity before and after `herdr pane run`. It sends only a shell-inert event token; the full notice
+   stays in the listener event directory. A mismatch observed by either check, or an uncertain send, gets no success
+   receipt and no automatic replay; client checks cannot eliminate the race between inspection and send. The Claude
+   recipient must verify the event destination before acting. Existing registered
    `--thread`-only events remain Codex routes; use an explicit route for every new event. Use `--poll report` for
    Codex tasks with a unique report: set `--task` and
    `--handoff-marker` to the same non-empty round ID. The report must have exactly one line

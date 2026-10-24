@@ -23,6 +23,10 @@ class DeliveryError(RuntimeError):
     """The queue transport failed after all configured attempts."""
 
 
+class DeliveryUncertain(RuntimeError):
+    """A Claude pane send may have happened; never replay without reconciliation."""
+
+
 class EventIdentityError(RuntimeError):
     """An event ID was reused for a different task or destination."""
 
@@ -46,6 +50,13 @@ def _atomic_json(path, value):
     path = Path(path)
     temporary = path.with_name(path.name + ".tmp-" + str(os.getpid()))
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    os.replace(str(temporary), str(path))
+
+
+def _atomic_text(path, value):
+    path = Path(path)
+    temporary = path.with_name(path.name + ".tmp-" + str(os.getpid()))
+    temporary.write_text(value)
     os.replace(str(temporary), str(path))
 
 
@@ -357,23 +368,73 @@ def _checked_claude_pane(destination, run):
         raise ValueError("malformed herdr pane list") from error
 
 
-def _acknowledged_claude_run(completed, pane):
-    if completed.returncode != 0:
-        return False
-    try:
-        envelope = json.loads(completed.stdout)
-    except (TypeError, json.JSONDecodeError):
-        return False
-    if (not isinstance(envelope, dict) or envelope.get("id") != "cli:pane:run"
-            or "error" in envelope or not isinstance(envelope.get("result"), dict)
-            or not envelope["result"]):
-        return False
-    result = envelope["result"]
-    if "error" in result or result.get("type") == "error" or result.get("ok") is False:
-        return False
-    # Herdr versions may omit pane_id in the acknowledgement. Reject a
-    # contradictory ID when present; the preflight pins the actual recipient.
-    return result.get("pane_id", pane) == pane
+def _accepted_claude_run(completed):
+    # Observed on the installed herdr CLI: a successful pane run exits 0 and
+    # emits no stdout/stderr. Any other result is not proof of acceptance.
+    return completed.returncode == 0 and completed.stdout == "" and completed.stderr == ""
+
+
+def _uncertain(event_dir, config, reason):
+    _atomic_json(event_dir / "status.json", {
+        "state": "delivery-uncertain", "event": config["event"], "reason": reason,
+    })
+    raise DeliveryUncertain("Claude delivery uncertain; inspect pane and event before a new event: " + reason)
+
+
+def _deliver_claude(event_dir, config, destination, message, run, sleep):
+    # Keep the full message out of pane input: if the terminal became a shell,
+    # ':' is a no-op and the event ID cannot contain shell metacharacters.
+    _atomic_text(event_dir / "notification.txt", message + "\n")
+    token = ": PICSEE_LISTENER_EVENT_" + config["event"]
+    attempts = config.get("max_delivery_attempts", 5)
+    initial_backoff = config.get("initial_backoff_seconds", 5)
+    errors = []
+    for attempt in range(1, attempts + 1):
+        _atomic_json(event_dir / "status.json", {
+            "state": "delivering", "event": config["event"], "attempt": attempt,
+        })
+        try:
+            _checked_claude_pane(destination, run)
+        except Exception as error:
+            errors.append(type(error).__name__ + ": " + str(error))
+            if attempt < attempts:
+                sleep(min(initial_backoff * (2 ** (attempt - 1)), 300))
+            continue
+
+        # Persist uncertainty *before* entering the transport. A crash, timeout,
+        # lost response, or receipt-write failure can never trigger a replay.
+        _atomic_json(event_dir / "status.json", {
+            "state": "delivery-uncertain", "event": config["event"],
+            "attempt": attempt, "reason": "pane run entered; awaiting result and postflight",
+        })
+        argv = ["herdr", "pane", "run", destination["pane"], token]
+        try:
+            completed = run(argv, capture_output=True, text=True, timeout=30)
+        except Exception as error:
+            _uncertain(event_dir, config, type(error).__name__ + ": " + str(error))
+        if not _accepted_claude_run(completed):
+            _uncertain(event_dir, config, "pane run did not return observed exit-0/empty success")
+        try:
+            _checked_claude_pane(destination, run)
+        except Exception as error:
+            _uncertain(event_dir, config, "post-send pane identity changed: " + str(error))
+
+        _atomic_json(event_dir / "queue-receipt.json", {
+            "event": config["event"], "task": config["task"], "agent": config["agent"],
+            "destination": destination, "queued_at": time.time(), "attempt": attempt,
+            "queue_response": "", "transport_observation": "herdr pane run exit 0, empty output; postflight matched",
+        })
+        _atomic_json(event_dir / "status.json", {
+            "state": "delivered", "event": config["event"], "attempt": attempt,
+        })
+        return "delivered"
+
+    _atomic_json(event_dir / "status.json", {
+        "state": "delivery-failed", "event": config["event"],
+        "attempts": attempts, "last_error": errors[-1],
+    })
+    raise DeliveryError("Claude preflight failed before send after {} attempts: {}".format(
+        attempts, errors[-1]))
 
 
 def _deliver(event_dir, config, poll_result, run, sleep):
@@ -381,27 +442,26 @@ def _deliver(event_dir, config, poll_result, run, sleep):
     with _locked(event_dir / "delivery.lock"):
         if receipt_path.exists():
             return "already-delivered"
+        status_path = event_dir / "status.json"
+        if status_path.exists() and _read_json(status_path).get("state") == "delivery-uncertain":
+            raise DeliveryUncertain("Claude delivery uncertain; reconcile this event before any retry")
         message = _notification_message(config, poll_result)
+        destination = _destination(config)
+        if destination["kind"] == "claude-pane":
+            return _deliver_claude(event_dir, config, destination, message, run, sleep)
         attempts = config.get("max_delivery_attempts", 5)
         initial_backoff = config.get("initial_backoff_seconds", 5)
         errors = []
-        destination = _destination(config)
         for attempt in range(1, attempts + 1):
             _atomic_json(
                 event_dir / "status.json",
                 {"state": "delivering", "event": config["event"], "attempt": attempt},
             )
             try:
-                if destination["kind"] == "codex-thread":
-                    argv = ["codex", "queue", "--thread", destination["thread"],
-                            "--message", message]
-                else:
-                    _checked_claude_pane(destination, run)
-                    argv = ["herdr", "pane", "run", destination["pane"], message]
+                argv = ["codex", "queue", "--thread", destination["thread"],
+                        "--message", message]
                 completed = run(argv, capture_output=True, text=True, timeout=30)
-                acknowledged = (completed.returncode == 0 if destination["kind"] == "codex-thread"
-                                else _acknowledged_claude_run(completed, destination["pane"]))
-                if acknowledged:
+                if completed.returncode == 0:
                     response = completed.stdout.strip() or completed.stderr.strip()
                     receipt = {
                         "event": config["event"],
@@ -469,6 +529,9 @@ def start_listener(event_dir, config, launch=subprocess.Popen):
     with _locked(event_dir / "launch.lock"):
         if (event_dir / "queue-receipt.json").exists():
             return "already-delivered"
+        status_path = event_dir / "status.json"
+        if status_path.exists() and _read_json(status_path).get("state") == "delivery-uncertain":
+            raise DeliveryUncertain("Claude delivery uncertain; reconcile this event before any retry")
         if _pid_is_running(event_dir / "pid"):
             return "already-running"
         _atomic_json(event_dir / "status.json", {"state": "launching", "event": config["event"]})
@@ -573,7 +636,7 @@ def _config_from_args(args):
         schema = 2
         route_fields = {"destination": {
             "kind": "claude-pane", "pane": args.pane,
-            "terminal_id": args.terminal_id, "cwd": str(Path(args.cwd).expanduser().resolve()),
+            "terminal_id": args.terminal_id, "cwd": args.cwd,
         }}
     return {
         "schema": schema,
@@ -604,7 +667,7 @@ def main(argv=None):
         config = _config_from_args(args)
         event_dir = args.state_root.expanduser().resolve() / args.event
         result = start_listener(event_dir, config)
-    except (EventIdentityError, ValueError) as error:
+    except (DeliveryUncertain, EventIdentityError, ValueError) as error:
         print(type(error).__name__ + ": " + str(error), file=sys.stderr)
         return 2
     print(

@@ -115,14 +115,26 @@ does not restore the suspended `opus-auditor`.
   event remains a schema-1 Codex route and is neither rewritten nor retargeted.
 - **Claude/Opus delegator:** before inspecting the pane, run `$SK/scripts/gui-lock.sh status`. Read a fresh
   `herdr pane list` and copy the delegator pane's `pane_id`, `terminal_id`, and absolute repo `cwd` into
-  `--route claude-pane --pane ... --terminal-id ... --cwd ...`. The listener checks a fresh pane-list envelope just
-  before delivery: exactly one pane must match, report `agent: claude`, and have the same terminal ID, `cwd`, and
-  `foreground_cwd`. Then `herdr pane run` sends the complete notification and Enter in one argv-based call. A
-  changed or malformed pane fails delivery without a receipt. Do not reuse an old target after a Claude restart.
+  `--route claude-pane --pane ... --terminal-id ... --cwd ...`. Copy the **literal absolute cwd spelling** from
+  herdr, including any symlink alias; registration and preflight compare that spelling exactly. The listener checks
+  a fresh pane-list envelope before delivery: exactly one pane must match, report `agent: claude`, and have the same
+  terminal ID, `cwd`, and `foreground_cwd`. It writes the full notice to
+  `~/.picsee/herdr/delegator/listeners/<event>/notification.txt`, then sends only
+  `: PICSEE_LISTENER_EVENT_<event>` through `herdr pane run` (text plus Enter). In a shell, `:` is a no-op and the
+  event ID contains no shell metacharacters. It checks pane identity again after an observed herdr success. This
+  prevents a changed pane observed by either check from getting a success receipt; it does not bind the send to a
+  terminal or session. Do not reuse an old target after a Claude restart.
 
-The helper uses argv, not a shell command string. A pane can change between inspection and delivery; a receipt
-proves transport acceptance, not that the intended Claude turn read or acted on it. The delegator must ACK the
-event after checking the pane, report, task identity and SHA.
+  On receiving the event token, the Claude delegator reads that event's `config.json`, `poll-result.json` and
+  `notification.txt`; checks the route's pane ID, terminal ID and cwd against its current pane (after checking the
+  GUI lock status before `herdr pane list`); then inspects the named report, task identity and SHA. An unexpected
+  destination or absent file is an incident to reconcile, not an instruction to accept the audit. A token that
+  landed in a shell executes only the no-op and may never wake Claude, so a live Claude probe is still required.
+
+The helper uses argv, not a local shell command string. A pane can change between checks and delivery, including
+changing away and back. A receipt records herdr's observed transport result and matching before/after snapshots;
+it cannot prove the intended Claude turn read the token. The delegator must ACK the event after checking the pane,
+report, task identity and SHA.
 
 One complete Codex implementation-round command is (the agent must put the line
 `Report-Task: issue90-implementation-r1` in its unique report):
@@ -167,27 +179,38 @@ other unique token. Reusing an event with a different agent, task, destination, 
 
 The start command detaches a new process session, so it survives the parent shell and agent turn. Runtime state is
 under `~/.picsee/herdr/delegator/listeners/<event>/`: `config.json`, `pid`, `listener.log`, `status.json`,
-`poll-result.json`, and, only after accepted Codex queue or Claude pane delivery, `queue-receipt.json`. The filename
-is retained for compatibility; new receipts identify the selected destination. The shipped pollers
+`poll-result.json`, and, only after accepted Codex queue or Claude pane delivery, `queue-receipt.json`. Claude events
+also retain `notification.txt`; the token points to that event directory. The receipt filename is retained for
+compatibility; new receipts identify the selected destination. The shipped pollers
 have a listener-enforced overall deadline of `--max-minutes` plus one poll interval and 10 seconds. If a poller
 hangs inside `herdr`, the listener terminates its private poller process group, records `timeout` in
 `poll-result.json`, and continues to queue a **needs inspection** message. The private group leader remains alive
 until cleanup after either a normal poller exit or a deadline, so a poller cannot leave a same-group child running after
-its result is recorded; failed cleanup records a poll error for inspection. Queue delivery uses finite 30-second
-attempts and bounded exponential backoff. No heavy lock is taken. A nonzero poller exit, timeout, blocker,
+its result is recorded; failed cleanup records a poll error for inspection. Codex queue delivery and Claude
+preflight use finite 30-second attempts and bounded exponential backoff; a Claude send itself is attempted once.
+No heavy lock is taken. A nonzero poller exit, timeout, blocker,
 question, `missing-handoff`, or missing/stale report is still queued as **needs inspection** and is never labelled
 successful or accepted.
 
-Inspect `status.json` and `poll-result.json` first. A `queue-receipt.json` proves only transport acceptance; it is
+Inspect `status.json` and `poll-result.json` first. For Claude, this installed herdr version was observed to return
+exit 0 with **empty stdout/stderr** after `pane run` delivered text plus Enter to a scratch shell pane; missing pane
+returned exit 1 with JSON error. The listener accepts only that observed success shape and requires the post-send
+pane check. Any timeout, nonempty unknown success, error or post-send identity change is `delivery-uncertain` with
+no receipt. It is never automatically replayed: inspect the pane and event, then use a new event ID only after
+manual reconciliation. Preflight failures happen before any send and may retry within the configured bound.
+
+A `queue-receipt.json` proves only transport acceptance under those limits; it is
 not the delegator's ACK and poll completion is not audit acceptance. Before relying on a new host or environment,
 run one user-authorized probe event, confirm the exact Codex thread or Claude pane visibly receives it, ACK it there,
 and then continue the real work. Do not make the helper accept an audit, merge, or advance a lifecycle unattended.
 
-Failed delivery keeps the poll result and can be restarted with the identical command; repeats after a receipt do
-not queue again. Registration and delivery are serialized per event without holding a duplicate lock through the
-long poll. There is an unavoidable at-least-once edge: if either transport accepts the message and the listener
-crashes before writing its receipt, a retry can duplicate the notification. Treat event IDs and message labels as the
-deduplication aid, not as an exactly-once transport guarantee.
+Failed Codex delivery keeps the poll result and can be retried with the identical command; repeats after a receipt
+do not queue again. Claude retries only failures before `pane run`; it persists `delivery-uncertain` **before**
+entering the send so even a crash before receipt blocks replay of that event. Registration and delivery are
+serialized per event without holding a duplicate lock through the long poll. Codex still has an at-least-once edge
+if its queue accepts input but the listener crashes before its receipt. A Claude send may have succeeded even when
+no receipt exists; do not treat the absence as permission to resend. Event IDs and message labels support manual
+deduplication, not exactly-once transport.
 
 This helper is available after its reviewed change lands; it does not migrate or stop listeners already running, and
 it does not provide unattended acceptance or merge safeguards. When a real operating failure is demonstrated, fix

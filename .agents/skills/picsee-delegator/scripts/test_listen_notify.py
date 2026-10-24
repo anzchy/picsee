@@ -134,18 +134,20 @@ class ListenerTests(unittest.TestCase):
             if argv == ["herdr", "pane", "list"]:
                 return self.completed(argv, stdout=json.dumps(self.pane_list()))
             self.assertEqual(argv[:4], ["herdr", "pane", "run", "w1:p1"])
-            self.assertIn(config["event"], argv[4])
-            return self.completed(argv, stdout=json.dumps({
-                "id": "cli:pane:run", "result": {"pane_id": "w1:p1"},
-            }))
+            self.assertEqual(argv[4], ": PICSEE_LISTENER_EVENT_" + config["event"])
+            return self.completed(argv)
 
         self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "delivered")
         self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "already-delivered")
         self.assertEqual([call[:3] for call in calls],
-                         [["herdr", "pane", "list"], ["herdr", "pane", "run"]])
+                         [["herdr", "pane", "list"], ["herdr", "pane", "run"],
+                          ["herdr", "pane", "list"]])
         receipt = json.loads((self.event_dir / "queue-receipt.json").read_text())
         self.assertEqual(receipt["destination"], config["destination"])
         self.assertNotIn("thread", receipt)
+        self.assertIn(config["event"], (self.event_dir / "notification.txt").read_text())
+        self.assertIn(str(self.handoff), (self.event_dir / "notification.txt").read_text())
+        self.assertNotIn(str(self.handoff), calls[1][4])
 
     def test_claude_route_refuses_stale_or_malformed_pane_before_send(self):
         config = self.claude_config()
@@ -190,19 +192,84 @@ class ListenerTests(unittest.TestCase):
                 "id": "cli:pane:run", "error": {"code": "pane_replaced"},
             }))
 
-        with self.assertRaises(listen_notify.DeliveryError):
+        with self.assertRaises(listen_notify.DeliveryUncertain):
             listen_notify.run_event(self.event_dir, run=run, sleep=lambda _: None)
         self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+        self.assertEqual(sum(x[:3] == ["herdr", "pane", "run"] for x in calls), 1)
 
-        self.assertFalse(listen_notify._acknowledged_claude_run(self.completed([], stdout=json.dumps({
-            "id": "cli:pane:run", "result": {"pane_id": "w1:p9"},
-        })), "w1:p1"))
-        self.assertFalse(listen_notify._acknowledged_claude_run(self.completed([], stdout=json.dumps({
-            "id": "cli:pane:run", "result": {"type": "error", "message": "not running"},
-        })), "w1:p1"))
-        self.assertTrue(listen_notify._acknowledged_claude_run(self.completed([], stdout=json.dumps({
-            "id": "cli:pane:run", "result": {"type": "pane_run"},
-        })), "w1:p1"))
+    def test_claude_uses_observed_herdr_success_contract_only(self):
+        self.assertTrue(listen_notify._accepted_claude_run(self.completed([])))
+        self.assertFalse(listen_notify._accepted_claude_run(self.completed(
+            [], returncode=1, stdout=json.dumps({
+                "error": {"code": "pane_not_found"}, "id": "cli:request",
+            }))))
+        self.assertFalse(listen_notify._accepted_claude_run(self.completed(
+            [], stdout=json.dumps({"id": "cli:pane:run", "result": {"success": True}}))))
+        self.assertFalse(listen_notify._accepted_claude_run(self.completed(
+            [], stderr="unexpected diagnostic")))
+
+    def test_claude_lost_response_never_replays(self):
+        self.claude_config()
+        calls = []
+
+        def run(argv, **_):
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            raise subprocess.TimeoutExpired(argv, 30)
+
+        with self.assertRaises(listen_notify.DeliveryUncertain):
+            listen_notify.run_event(self.event_dir, run=run, sleep=lambda _: None)
+        self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+        self.assertEqual(json.loads((self.event_dir / "status.json").read_text())["state"],
+                         "delivery-uncertain")
+        with self.assertRaises(listen_notify.DeliveryUncertain):
+            listen_notify.run_event(self.event_dir, run=run)
+        self.assertEqual(sum(x[:3] == ["herdr", "pane", "run"] for x in calls), 1)
+        with self.assertRaises(listen_notify.DeliveryUncertain):
+            listen_notify.start_listener(self.event_dir, json.loads(
+                (self.event_dir / "config.json").read_text()), launch=lambda *_a, **_k: self.fail("replayed"))
+
+    def test_claude_pane_replaced_after_send_has_no_receipt(self):
+        self.claude_config()
+        calls = []
+
+        def run(argv, **_):
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                terminal = "term_123abc" if len(calls) == 1 else "term_replacement"
+                return self.completed(argv, stdout=json.dumps(self.pane_list(terminal=terminal)))
+            return self.completed(argv)
+
+        with self.assertRaises(listen_notify.DeliveryUncertain):
+            listen_notify.run_event(self.event_dir, run=run, sleep=lambda _: None)
+        self.assertEqual(len(calls), 3)
+        self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+
+    def test_claude_cli_keeps_copied_symlink_alias_for_preflight(self):
+        real_cwd = self.root / "real-picsee"
+        real_cwd.mkdir()
+        alias = self.root / "alias-picsee"
+        alias.symlink_to(real_cwd, target_is_directory=True)
+        parser = listen_notify._build_parser()
+        args = parser.parse_args([
+            "start", "--event", "alias-event", "--task", "alias-event",
+            "--agent", "gpt-auditor", "--handoff", str(self.handoff),
+            "--poll", "idle", "--route", "claude-pane", "--pane", "w1:p1",
+            "--terminal-id", "term_123abc", "--cwd", str(alias),
+        ])
+        config = listen_notify._config_from_args(args)
+        self.assertEqual(config["destination"]["cwd"], str(alias))
+        calls = []
+
+        def run(argv, **_):
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                return self.completed(argv, stdout=json.dumps(self.pane_list(cwd=str(alias))))
+            return self.completed(argv)
+
+        listen_notify._checked_claude_pane(config["destination"], run)
+        self.assertEqual(calls, [["herdr", "pane", "list"]])
 
     def test_event_identity_rejects_cross_route_reuse(self):
         listen_notify.register_event(self.event_dir, self.config)
