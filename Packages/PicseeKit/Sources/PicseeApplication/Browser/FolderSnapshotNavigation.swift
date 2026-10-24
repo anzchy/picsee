@@ -35,11 +35,8 @@ extension FolderScanCoordinator {
     private func navigation(matching actual: URL?) -> (entries: [FolderEntry], index: Int)? {
         guard let snapshot, let currentItemID else { return nil }
         if let actual, actual.standardizedFileURL != currentURL?.standardizedFileURL { return nil }
-        // An allowed inward file link shares the pipeline's canonical identity.
-        // Keep all scanner URLs in the snapshot, but navigate each identity once.
-        var seen = Set<ItemID>()
-        let entries = snapshot.entries.filter { seen.insert($0.itemID).inserted }
-        guard let index = entries.firstIndex(where: { $0.itemID == currentItemID }) else { return nil }
+        let entries = snapshot.navigationEntries
+        guard let index = snapshot.navigationIndex(for: currentItemID) else { return nil }
         return (entries, index)
     }
     private func neighbor(in navigation: (entries: [FolderEntry], index: Int), direction: NavigationDirection) -> FolderEntry? {
