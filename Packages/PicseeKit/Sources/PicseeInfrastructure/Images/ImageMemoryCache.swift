@@ -7,8 +7,10 @@ struct ImageCacheRequest: Sendable {
     let id: UUID
     let image: DecodedImage?
     let sourceChanged: Bool
-    init(key: RenderKey, id: UUID, image: DecodedImage?, sourceChanged: Bool = false) {
+    let requiresSourceValidation: Bool
+    init(key: RenderKey, id: UUID, image: DecodedImage?, sourceChanged: Bool = false, requiresSourceValidation: Bool = false) {
         self.key = key; self.id = id; self.image = image; self.sourceChanged = sourceChanged
+        self.requiresSourceValidation = requiresSourceValidation
     }
 }
 
@@ -126,17 +128,18 @@ public actor ImageMemoryCache {
         }
     }
     func lookup(_ key: RenderKey, observation: UUID? = nil, context: ResourceSnapshotContext? = nil) -> ImageCacheRequest {
+        guard !entries.contains(where: { $0.key.itemID == key.itemID && $0.key.revision == key.revision && $0.stale }) else {
+            return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
+        }
         if let observation {
             guard let validation = observations[observation],
                   validation.itemID == nil || validation.itemID == key.itemID else {
                 return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
             }
             if let latest = recent[key.itemID], latest.epoch > validation.epoch, latest.revision != key.revision {
-                return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
+                // Either header may have been delayed. Only a new leased source read can resolve this.
+                return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true, requiresSourceValidation: true)
             }
-        }
-        guard !entries.contains(where: { $0.key.itemID == key.itemID && $0.key.revision == key.revision && $0.stale }) else {
-            return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
         }
         // Revision values are opaque. Reject conflicting observations made during this validation,
         // rather than assuming either mtimes or request-start order identify the newest header.

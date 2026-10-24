@@ -133,6 +133,24 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
             try await self.image(for: request, observation: observation)
         }
     }
+    private func lookup(_ request: ImageDecodeRequest, key: RenderKey, observation: UUID) async throws -> ImageCacheRequest {
+        let context = await snapshotContext()
+        let result = await cache.lookup(key, observation: observation, context: context)
+        guard result.requiresSourceValidation else { return result }
+        // One bounded reread, inside the caller's existing lease. Observe BEFORE reading so a
+        // conflicting lookup during this validation still rejects us, including after eviction.
+        return try await cache.withObservation(itemID: key.itemID) { freshObservation in
+            let fresh = try await self.header(request)
+            let freshKey = await self.admission.key(for: fresh.itemID, revision: fresh.revision,
+                maximumPixelSize: request.maximumPixelSize, isPreview: request.isPreview)
+            guard freshKey == key else {
+                throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: fresh.revision)
+            }
+            if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
+            let context = await self.snapshotContext()
+            return await self.cache.lookup(key, observation: freshObservation, context: context)
+        }
+    }
     private func image(for request: ImageDecodeRequest, observation: UUID) async throws -> DecodedImage {
         if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision) }
         let header = try await header(request)
@@ -144,8 +162,7 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
         guard await cache.permits(request.priority) else {
             throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision)
         }
-        let lookupContext = await snapshotContext()
-        let cached = await cache.lookup(key, observation: observation, context: lookupContext)
+        let cached = try await lookup(request, key: key, observation: observation)
         if cached.sourceChanged { throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: key.revision) }
         if let image = cached.image {
             if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
