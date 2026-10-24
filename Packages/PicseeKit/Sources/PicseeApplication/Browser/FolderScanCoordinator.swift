@@ -65,7 +65,11 @@ import PicseeCore
                 if let first, automaticPresentationAllowed?() != false {
                     currentItemID = first.itemID; currentURL = first.url
                     try await host?.rememberFolder(folder, rootID: rootID)
-                    guard activeGeneration == token, automaticPresentationAllowed?() != false else { return }
+                    guard activeGeneration == token else { return }
+                    guard automaticPresentationAllowed?() != false else {
+                        stop(.replaced)
+                        return
+                    }
                     try Task.checkCancellation()
                     host?.openFolderImage(first.url, rootID: rootID)
                 }
