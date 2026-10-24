@@ -330,21 +330,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..7670267）：打开目录改为分批扫描、首批前显示 24 页读取态；OPEN-01/02/04/05/06 验收不受影响（空态、失败态、最近列表写入时机与过滤规则不变）。上次：P2-01 真机记录（docs/p2-01-device-mini，1c28a09..e8de551，run 20261024-074141-P2-01-ACCESS-02-03-OPEN-06） |
-| 查看与画布 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..7670267）：VIEW-10 由本范围改 在哪 与「限制：」，验收未改；扫描中到已知末尾 ←/→ 仍启用但不动未写入限制，单元格超长，待 owner；VIEW-01…09 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
-| C 沉浸界面 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..7670267）：`ViewerSession` 只改上一张/下一张启用与路由，不改 chrome 显隐；CHROME-01…05 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
-| 外观与显示偏好 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..7670267）：`CanvasWindowController` 只接扫描与读取态；PREF-02 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
-| 文件夹浏览 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..7670267）：FOLDER-01 由本范围升 `Partial`/`单元`，验收原文未改，限制写明仅单层（S2 嵌套，待 P2-04）与真机未验；「怎么确认」远超约 150 字，待 owner 收短；FOLDER-02…09 仍 `Absent`（排序沿用 Finder 自然序，空目录仍为提示框）。上次：建账 |
+| 打开与输入 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：打开目录改为分批扫描、首批前显示 24 页读取态；OPEN-01/02/04/05/06 验收不受影响（空态、失败态、最近列表写入时机与过滤规则不变）。上次：P2-01 真机记录（docs/p2-01-device-mini，1c28a09..e8de551，run 20261024-074141-P2-01-ACCESS-02-03-OPEN-06） |
+| 查看与画布 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：VIEW-10 由本范围改 在哪 与「限制：」，验收未改；a0fbe5a 已写明扫描中到已知末尾仍可按但不动、未枚举时合并为最后方向（单元），单元格较基线略短，超长主要为既有记录链接；VIEW-01…09 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
+| C 沉浸界面 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：`ViewerSession` 只改上一张/下一张启用与路由，不改 chrome 显隐；CHROME-01…05 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
+| 外观与显示偏好 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：`CanvasWindowController` 只接扫描与读取态；PREF-02 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
+| 文件夹浏览 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：FOLDER-01 由本范围升 `Partial`/`单元`，验收原文未改；a0fbe5a 将限制收短为仅单层（S2 嵌套，待 P2-04）、顺序临时、首批后无扫描状态与取消入口（P2-09）、真机未验，在哪补 `PicseeCore/Ports/FolderScanning.swift`；FOLDER-02…09 仍 `Absent`（排序沿用 Finder 自然序，空目录仍为提示框）。上次：建账 |
 | Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 网格、选择与菜单 | 2026-10-23 | doc-gardener | P0-09 Session（#11/#29，dcfe3f8..bef71d5）：BrowserSelection、Preview Set、瞬时搜索词与不可变右键目标只在 Application 与单元测试中，App 无网格入口，preview/enter/previous/next/search 仍未实现；GRID-02/04/05/07/09 保持 `Absent`。上次：建账 |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..7670267）：每次扫描持一份根租约直到枚举退出，关窗先结束扫描；ACCESS-05 真机记录早于此改动，扫描租约释放仅单元，建议补限制；ACCESS-01 授权后翻图改经扫描，提示路径不变。上次：P2-01 真机记录（docs/p2-01-device-mini，1c28a09..e8de551，run 20261024-074141-P2-01-ACCESS-02-03-OPEN-06） |
+| 授权与文件访问 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：每次扫描持一份根租约直到枚举退出，关窗先结束扫描；ACCESS-05 真机记录早于此改动，a0fbe5a 已补「扫描租约关窗释放仅单元」；该格超长为既有问题，PR 以「无用户可见变化」说明；ACCESS-01 授权后翻图改经扫描，提示路径不变。上次：P2-01 真机记录（docs/p2-01-device-mini，1c28a09..e8de551，run 20261024-074141-P2-01-ACCESS-02-03-OPEN-06） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`；CACHE-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
-| 命令与键盘 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..7670267）：未增删命令 ID、菜单项或快捷键；读取中 ←/→ 禁用，路由仍经 CommandRouter；CMD-01/02 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
+| 命令与键盘 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：未增删命令 ID、菜单项或快捷键；读取中 ←/→ 禁用，路由仍经 CommandRouter；CMD-01/02 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`，解码器与格式集合未改；FMT-01 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
-| 可访问性与本地化 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..7670267）：新增 3 条读取页字符串（Reading Folder…、说明、Cancel Reading），均有 en、zh-Hans，ViewerLocalizationTests 覆盖；A11Y-04 不变；A11Y-02 读取页 Cancel 键盘可达未验。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
+| 可访问性与本地化 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：新增 3 条读取页字符串（Reading Folder…、说明、Cancel Reading），均有 en、zh-Hans，ViewerLocalizationTests 覆盖；A11Y-04 不变；A11Y-02 读取页 Cancel 键盘可达未验。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
 | 分发 | 2026-10-23 | doc-gardener | P1-10 真机记录（validation/p1-10-device-mini，3996845..08c5ecf，run 20261023-212346-P1-10-DIST-06）：DIST-06 只改「限制：」（@1x Dock 与访达列表/图标视图通过），仍 `Partial`/`无`，验收不变；⌘Tab、浅色 Dock、@2x 未验。DIST-01…05 不变。上次：App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2） |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
