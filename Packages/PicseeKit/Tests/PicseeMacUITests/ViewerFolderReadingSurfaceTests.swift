@@ -7,7 +7,7 @@ import PicseeCore
 private actor ReadingSurfaceScanner: FolderScanning {
     private var end: CheckedContinuation<Void, Never>?
     private var arrival: CheckedContinuation<Void, Never>?
-    func scan(in folder: URL, root: ItemIdentityRoot, emit: @Sendable ([FolderEntry]) async throws -> Void) async {
+    func scan(in folder: URL, root: ItemIdentityRoot, options: FolderScanOptions, emit: @Sendable ([FolderEntry]) async throws -> Void) async {
         await withCheckedContinuation { end = $0; arrival?.resume(); arrival = nil }
     }
     func entered() async { if end == nil { await withCheckedContinuation { arrival = $0 } } }

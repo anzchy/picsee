@@ -254,7 +254,7 @@ struct FolderScanRestorePoint {
             let itemID = input.flatMap { AccessBoundary.contains($0, in: lease.url) ? FolderEntry(url: $0, root: root).itemID : nil }
             await ready(version, itemID)
             try Task.checkCancellation()
-            try await scanner.scan(in: folder, root: root) { batch in
+            try await scanner.scan(in: folder, root: root, options: .init()) { batch in
                 try await emit(batch)
             }
         }

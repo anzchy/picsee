@@ -18,7 +18,7 @@ private actor FolderReadingNativeScanner: FolderScanning {
     private var ending: CheckedContinuation<Void, Never>?
     private var waiter: CheckedContinuation<Void, Never>?
     func scan(in folder: URL, root: ItemIdentityRoot,
-        emit: @Sendable ([FolderEntry]) async throws -> Void) async {
+        options: FolderScanOptions, emit: @Sendable ([FolderEntry]) async throws -> Void) async {
         await withCheckedContinuation {
             ending = $0; waiter?.resume(); waiter = nil
         }
@@ -95,7 +95,7 @@ private actor FolderReadingNativeScanner: FolderScanning {
 
 private struct FolderNoMatchesScanner: FolderScanning {
     func scan(in folder: URL, root: ItemIdentityRoot,
-              emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
+              options: FolderScanOptions, emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
         try await emit([FolderEntry(url: folder.appendingPathComponent("a.jpg"), root: root)])
     }
 }

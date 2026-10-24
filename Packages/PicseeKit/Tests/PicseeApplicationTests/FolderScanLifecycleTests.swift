@@ -56,7 +56,7 @@ actor FolderScanControlledScanner: FolderScanning {
     private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
     var startedCount: Int { calls.count }
     func scan(in folder: URL, root: ItemIdentityRoot,
-              emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
+              options: FolderScanOptions, emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
         let index = calls.count
         calls.append(Call(folder: folder, root: root)); events.append([])
         let ready = waiters.filter { calls.count > $0.0 }
