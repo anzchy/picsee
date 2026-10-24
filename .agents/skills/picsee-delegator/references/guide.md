@@ -21,7 +21,7 @@ The delegator itself:
 
 1. Plans the next work packages (WPs) and files GitHub issues (`gh issue create`).
 2. Writes the **brief** for an implementer, dispatches it and answers scope questions.
-3. Writes **audit requests**, dispatches both auditors blind and merges their verdicts.
+3. Writes **audit requests** and dispatches the independent roster auditor with fresh context.
 4. Writes fix briefs and decides between a confirm round and Still open.
 5. Rebases, reruns the gates itself, runs the **doc gardener**, opens the PR and merges it with
    `gh pr merge --rebase` once CI is green.
@@ -30,7 +30,7 @@ The delegator itself:
 7. Keeps the user informed, asks for decisions only when they are genuinely the user's, and records every user
    decision verbatim (commit body, roster plan, handoff log).
 
-Merge authority, granted by the user: merge without asking when the audits show no blocking Critical/High, the
+Merge authority, granted by the user: merge without asking when the active audit shows no blocking Critical/High, the
 gardener is not BLOCK, and CI is green.
 
 ---
@@ -52,7 +52,7 @@ gardener is not BLOCK, and CI is green.
 | w1:p3 | gpt-imple-2 | Codex `gpt-6-sol`, effort `medium` (transition applied) | `picsee-wt/gpt-imple-2` | Medium/High implementer |
 | w1:p4 | gpt-imple-3 | Codex `gpt-5.6-sol` | `picsee-wt/gpt-imple-3` | Low-only implementer |
 | w1:p5 | gpt-auditor | Codex `gpt-6-astra`, reasoning high | `picsee-wt/gpt-auditor` (detached) | auditor |
-| w1:p6 | opus-auditor | Claude Code `--agent picsee-opus-auditor --model opus --dangerously-skip-permissions` | `picsee-wt/opus-auditor` (detached) | auditor |
+| w1:p6 | opus-auditor | **Suspended until explicit user restoration** | `picsee-wt/opus-auditor` (detached) | do not dispatch or auto-restore |
 | w1:p7 | kimi-imple-1 | Kimi Code CLI, **K3.1 Pro, thinking effort high** (user rule) | `picsee-wt/kimi-imple-1` | Medium/High implementer |
 
 **Slots:** at most two Medium/High implementation items in flight at once. gpt-imple-1/2 and kimi-imple-1 share
@@ -157,7 +157,7 @@ conversation, but reset it if its context is above ~80%; the fix brief must then
 | Agent | Reset | Notes |
 |---|---|---|
 | Codex (p2–p5) | `.agents/skills/picsee-delegator/scripts/reset.sh <name> <pane>` | Sends `/new`, then Enter twice (the "Where should the new conversation run?" chooser). Then check `Context 0% used` on screen. Zoom first if the pane is tiny. If the next prompt "didn't land" (still 0% and idle after 20 s), send it again. |
-| opus-auditor (p6) | `herdr pane send-text w1:p6 '/clear' && herdr pane send-keys w1:p6 Enter` before **every** request | `/clear` does not reload `.claude/agents/picsee-opus-auditor.md`. When that file changes on main, move `picsee-wt/opus-auditor` to the new main and restart the pane with the start command in §2. |
+| opus-auditor (p6) | No requests while suspended | Only an explicit user restoration reactivates it; a quota reset does not. Then re-establish the fresh-context procedure before use. |
 | kimi-imple-1 (p7) | type `/new`, Enter; the status bar must show `context: 0%` | Start: `herdr agent start kimi-imple-1 --kind kimi --pane w1:p7 -- --yolo -m kimi-code/k3.1-pro`. Effort comes from `~/.kimi-code/config.toml` (`[models."kimi-code/k3.1-pro"] default_effort = "high"`). The status bar must read `K3.1 Pro thinking: high`. The first run in a new folder asks "Trust this folder?". Kimi lives in `~/.kimi-code/bin`, which `.zshrc` puts on PATH; a non-login shell may not find `kimi`. |
 
 To create a **new implementer pane**:
@@ -165,8 +165,8 @@ To create a **new implementer pane**:
 1. `git worktree add -b <branch> ~/Documents/mac-app/picsee-wt/<name> origin/main`
 2. `herdr pane split …`, then `send-text 'cd <worktree>'` + Enter.
 3. `herdr agent start <name> --kind … --pane … -- <args>`.
-4. Give it a small Low trial task first. Audit it with opus-auditor and evaluate the agent before you trust it with
-   Medium work. That is how kimi-imple-1 was admitted.
+4. Give it a small Low trial task first. Audit it with the active independent auditor and evaluate the agent before
+   you trust it with Medium work. Kimi's historical admission used opus-auditor; that is not an active routing rule.
 
 ---
 
@@ -174,7 +174,7 @@ To create a **new implementer pane**:
 
 ```
 plan → issue → brief → dispatch → (scope questions / amendments) → handoff
-  → blind audits → merge verdicts → fix round (± confirm) → rebase → gates → gardener → PR → CI → merge
+  → blind audit → verdict → fix round (± confirm) → rebase → gates → gardener → PR → CI → merge
   → device validation → validation record PR → timeline / handoff log
 ```
 
@@ -182,11 +182,13 @@ Risk tier decides the audits:
 
 | Tier | Typical scope | Audit |
 |---|---|---|
-| Low | docs, ledger wording, mechanical renames, tiny scripts, Low audit follow-ups | opus-auditor alone, one blind round (+ confirm only if it raised something you fixed) |
-| Medium | ordinary features, UI states, navigation, scanning | gpt-auditor + opus-auditor, blind; one fix round for user-visible/AC Mediums, no confirm |
-| High | FileAccess/sandbox/bookmarks, entitlements, concurrency core, anything that can lose data or access | both auditors; every C/H gets a confirm round from both; cap of three rounds |
+| Low | docs, ledger wording, mechanical renames, tiny scripts, Low audit follow-ups | gpt-auditor alone, one blind round; non-C/H remains Still open unless cheaply folded in |
+| Medium | ordinary features, UI states, navigation, scanning | gpt-auditor alone; one fix round for user-visible/AC Mediums, no confirm |
+| High | FileAccess/sandbox/bookmarks, entitlements, concurrency core, anything that can lose data or access | gpt-auditor alone; every C/H gets a fresh-context confirm; cap of three rounds |
 
 Raise the tier if a change touches FileAccess, AccessIntent, the loader, entitlements, Info.plist or signing.
+This GPT-only table is an active temporary user override. The prior dual-audit baseline stays suspended until the user
+explicitly restores Opus; never infer restoration from quota availability.
 
 ### 5.1 Issue
 
@@ -260,16 +262,12 @@ in [Durable listener notification](#durable-listener-notification).
 
 ### 5.4 Audit requests
 
-Put them at `~/.picsee/herdr/delegator/<item>-audit-{gpt,opus}.md`. Template:
-`~/.picsee/herdr/delegator/p2-02-folder-audit-opus.md`. The gpt version is derived with `sed` and differs in three
-places:
+Put each request at `~/.picsee/herdr/delegator/<item>-audit-gpt.md` and its report at
+`~/.picsee/herdr/gpt-auditor/<item>-r<round>.md`, ending with the VERDICT block. Reset gpt-auditor to fresh context
+before every audit and confirm. Do not dispatch opus-auditor until the user explicitly restores it.
 
-- **gpt-auditor cannot take the heavy lock in its sandbox.** Tell it: "Do not run swift test; judge from source and
-  supplied gate evidence; the second auditor reruns the suite."
-- **opus-auditor may run** `scripts/heavy-lock.sh swift test --package-path Packages/PicseeKit` once in the
-  implementer worktree.
-- **Report paths differ:** `~/.picsee/herdr/{gpt-auditor,opus-auditor}/<item>-r<round>.md`, each ending with the
-  VERDICT block.
+**gpt-auditor cannot take the heavy lock in its sandbox.** Tell it: "Do not run Swift tests; judge from source and
+supplied owner gate evidence." The delegator reruns applicable gates; no absent second auditor is implied.
 
 Every request carries:
 - item, exact range `base..head`, worktree, commit list, and the note "objects are shared; use git show/diff";
@@ -278,26 +276,25 @@ Every request carries:
   isolation);
 - inputs: brief, amendments, handoff ("a claim to test"), evidence dir, receipts command;
 - "Judge specifically", 5–10 bullets on the risky points;
-- for a new implementer, ask opus for an "Implementer assessment" paragraph.
+- for a new implementer, ask gpt-auditor for an "Implementer assessment" paragraph.
 
-Dispatch both at the same time, blind (neither sees the other's report). Before each request: reset gpt-auditor and
-`/clear` opus-auditor.
+Dispatch only gpt-auditor. Its round-one request is blind to previous audit conclusions. For a C/H confirm, reset it
+again so the confirmation begins in fresh context, then provide the earlier finding, merged/sole verdict, fix range,
+and counter-proof inputs required to judge closure.
 
-**Confirm requests** (`<item>-confirm-{gpt,opus}.md`; template `p2-02-confirm-gpt.md`) list each finding in scope
+**Confirm requests** (`<item>-confirm-gpt.md`; template `p2-02-confirm-gpt.md`) list each finding in scope
 with its requested fix, the fix diff range, any rebase, and "Still open (do not re-judge)". They ask for
 CLOSED/PARTIAL/OPEN per finding plus any new C/H.
 
-**Challenge mode** is for when only one auditor raised a High and it is doubtful. Ask the other auditor to rule on
-that one finding. If the fix is cheap, it is usually faster to fix it and then confirm with both.
+**Challenge mode is unavailable** under the sole-auditor override. Resolve doubtful C/H with counter-proof or a fix,
+then use the required fresh-context gpt-auditor confirm.
 
-### 5.5 Merging verdicts and severity policy
+### 5.5 Applying the verdict and severity policy
 
-- **Critical/High** blocks. Fix round, then a confirm round from both auditors; cap of three rounds.
+- **Critical/High** blocks. Fix round, then a fresh-context confirm from gpt-auditor; cap of three rounds.
 - **Medium** that is user-visible or breaks an AC: one fix round, no confirm. Other Mediums go to the PR's
   "Still open" and the next Low batch.
 - **Low:** fold in only the cheap, obvious ones; the rest go to Still open.
-- **Same finding from both auditors at different severities** (e.g. gpt High, opus Medium): treat it at the higher
-  severity unless you have a counter-proof.
 
 ### 5.6 Rebase onto main
 
@@ -350,7 +347,7 @@ Typical NEEDS-OWNER causes:
 
 PR body sections:
 - **Summary**, what and why;
-- **Review**, a round table per auditor plus a Still open list;
+- **Review**, the gpt-auditor rounds plus a Still open list; do not claim dual review while Opus is suspended;
 - **Gates**, with numbers;
 - the `无用户可见变化` lines;
 - the exact `Ledger-Gardener:` line;
@@ -470,8 +467,8 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
   - in the commit body for acceptance and plan changes;
   - in the roster plan for roster and model rules;
   - in `~/.picsee/handoff/20261022-migrate-to-mini.md` for the session log.
-- Report budget. Codex weekly usage shows in Codex panes ("weekly limit: N% left"); Claude weekly usage shows in the
-  opus-auditor status bar. When budget is low, dispatch only necessary work.
+- Report budget. Codex weekly usage shows in Codex panes ("weekly limit: N% left"). Opus quota recovery does not
+  reactivate opus-auditor; only an explicit user restoration does.
 
 ---
 
@@ -520,7 +517,7 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 | A brief's target was already fixed (Kimi trial) | brief written from an older audit head | a good implementer reports it and makes no empty commit; check `git log -S` before briefing |
 | Implementer stopped at a fence (P1-02 ×2) | fences didn't allow a needed hook | read the code before writing fences; approve minimal amendments in a file |
 | A Codex turn hung on "Reconnecting…" for 28 min | network drop | verify network, `Escape`, then "resume, commits so far: …" |
-| gpt-auditor reported "no runs" | its sandbox can't take the heavy lock | tell gpt not to run swift test; opus reruns |
+| gpt-auditor reported "no runs" | its sandbox can't take the heavy lock | tell gpt not to run Swift tests; delegator reruns owner gates and supplies evidence |
 | Kimi poller false "question" | word match on screen | poll herdr status + handoff file |
 | Implementer committed workflow reports into `.claude/tdd-guardian/` | the workflow writes prose there | fix-round item: remove them, keep copies beside the handoff |
 | `matchingRoot`-style dead-code briefs | stale finding | check the current main first |
@@ -536,7 +533,7 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 | Session handoff log (append every milestone and decision) | `~/.picsee/handoff/20261022-migrate-to-mini.md` |
 | Timeline (WP status) | `~/.picsee/timeline.json` (back it up before editing) |
 | Briefs, requests, PR bodies | `~/.picsee/herdr/delegator/`, `~/.picsee/herdr/<agent>/` |
-| Audit reports | `~/.picsee/herdr/{gpt-auditor,opus-auditor}/<item>-r<n>.md`, `-confirm.md` |
+| Audit reports | Active: `~/.picsee/herdr/gpt-auditor/<item>-r<n>.md`, `-confirm.md`; historical Opus reports remain evidence but receive no new dispatches |
 | Gardener reports | `~/.picsee/gardening/` |
 | Device runs (evidence, screenshots, logs) | `~/.picsee/device-runs/<run-id>/` |
 | Delegator scripts and templates | `.agents/skills/picsee-delegator/scripts/`, `.agents/skills/picsee-delegator/references/templates/` (`.claude/skills/picsee-delegator` is a symlink to the same folder); the auditors' rules file is installed at `~/.picsee/herdr/delegator/audit-brief.md` (copy of `references/templates/audit-brief.md`) |
@@ -553,8 +550,9 @@ Codex delegator doesn't see it, which is one reason this guide and the handoff l
   and CI is green. The Medium policy and C/H confirm rounds are as in §5.5.
 - **Implementers:** Codex implementers run with `-s danger-full-access` and use `$tdd-guardian-workflow` (from P1
   wave 3). Kimi is admitted; it always runs K3.1 Pro at effort high (2026-10-24).
-- **Auditors:** opus-auditor is the Claude auditor (replaced Fable subagents on 2026-10-23); `/clear` before each
-  request.
+- **Auditors:** active temporary override: all tiers use only gpt-auditor, reset to fresh context before every audit
+  and C/H confirm. User decision: 「目前opus auditor qouta 不够用了，暂时停用opus-auditor，只由gpt-auditor 来审」.
+  Do not restore Opus automatically when quota returns; wait for an explicit user restoration.
 - **Ledger:** feature-ledger md and html are committed together.
 - **Git:** force-with-lease is allowed only on the delegator's own unmerged PR branches.
 - **Product decisions of 2026-10-24:**

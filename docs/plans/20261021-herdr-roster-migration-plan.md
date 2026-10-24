@@ -7,7 +7,7 @@
 用户决定（2026-10-21）：
 - git init，并建 GitHub 私有库；
 - 合成一份 picsee 自己的规则，不保留 70/71 的两层结构；
-- 角色保留 gpt-imple-1/2、gpt-auditor + opus-auditor 双审（2026-10-23 前为 fable-auditor subagent）、claude-imple-1 真机；不设 `/security-review` fork；
+- 角色保留 gpt-imple-1/2、gpt-auditor + opus-auditor 双审（2026-10-23 前为 fable-auditor subagent）、claude-imple-1 真机；不设 `/security-review` fork（历史基线，已被 2026-10-24 第三轮临时覆盖暂停）；
 - 先出本计划，确认后再动手。
 
 用户决定（2026-10-21，第二轮）：
@@ -38,6 +38,12 @@
   「当前任务完成后，gpt-imple-1/2背后的模型切换为GPT-6-Sol medium effort」。记录时 gpt-imple-2 已切换，
   gpt-imple-1 等当前任务/修复轮结束后切换；本次文档更新不操作活会话。
 
+用户决定（2026-10-24，第三轮，临时审计覆盖规则）：
+- 「目前opus auditor qouta 不够用了，暂时停用opus-auditor，只由gpt-auditor 来审」。立即生效，所有风险级别
+  只由 `gpt-auditor` 独立审计，直至用户明确恢复 Opus；额度恢复不自动解除。C/H 仍阻断，修复后由同一角色
+  在全新上下文确认，最多三轮；Medium、gardener、delegator owner gates 与 CI 政策不变。下文双审内容仅为
+  历史基线，凡与本覆盖规则冲突者均暂停。
+
 ## 1. 为什么不能直接复制
 
 - M71 只是 M70 的覆盖层，只替换角色表、Codex 派活方式、guard、审计分工这几块。合入流程（三个条件和 `--ff-only`）、两份审计结论怎么合并、三轮上限、风险分级、receipts、编号预留、会话轮换、真机批次，都写在 M70 里。
@@ -50,14 +56,14 @@
 
 | 节 | 来源 | picsee 改法 |
 |---|---|---|
-| 角色表 | M71 Roster + M70 Sessions | delegator 改名 `picsee-delegator`；实现者为 `gpt-imple-1/2`（Codex `gpt-6-sol`、effort `medium`，各自当前任务/修复轮结束后生效，不中断在途工作）、`gpt-imple-3`（Codex `gpt-5.6-sol`）和 `kimi-imple-1`（Kimi Code CLI，模型 `kimi-code/k3.1-pro`，thinking effort `high`；`herdr agent start kimi-imple-1 --kind kimi --pane <id> -- --yolo -m kimi-code/k3.1-pro`，effort 由 `~/.kimi-code/config.toml` 中该模型的 `default_effort = "high"` 设定；独立 worktree `picsee-wt/kimi-imple-1`）；审计者为 `gpt-auditor`、`opus-auditor`（herdr 窗格，Claude Code + Opus），真机为 `claude-imple-1`；报告目录在 `~/.picsee/herdr/<name>/`，`gpt-imple-3` 对应 `~/.picsee/herdr/gpt-imple-3/`；去掉 `/security-review` 行；去掉 mdpro-device-harness 和历史别名表 |
-| 模型规则 | M70 “Every session runs on Opus” | 只保留结论：Claude 会话和 subagent 用 Opus（审计者 `opus-auditor` 也用 Opus，2026-10-23 用户决定）；`gpt-imple-1/2` 在各自在途任务完成后使用 `gpt-6-sol`、effort medium，不由文档改动直接切换活会话；其他 Codex 用指定模型；Kimi 实现者固定用 K3.1 Pro、effort high（2026-10-24 用户决定），换模型或 effort 须用户同意。Kimi 没有 `$tdd-guardian-workflow`，brief 须写明测试先行步骤（先写失败测试并贴出失败输出，再实现）。不搬演变历史 |
-| 派活与上限 | M70 How work is assigned、idle pull | 工作项编号用开发计划里的 `P0-01…P7-09`；新发现的问题编号改用 `F<n>`，替代 mdpro 的 D 编号；每会话一个、picsee 整机最多三个未合入实现项，不与 mdpro 合计：`gpt-imple-1/2` 与 `kimi-imple-1` 共用 Medium/High 工作名额，同时最多两个（2026-10-24 起），Kimi 的 Medium/High 项走双审，第三个名额只给 `gpt-imple-3` 的 Low 项。`gpt-imple-3` 只接 Low 风险工作：纯文档、机械重命名与路径修复、Low 审计修复、小脚本与测试 fixture、账簿与时间线措辞；Swift、并发、sandbox、entitlements、签名、真机脚本、receipt lane 及 Medium/High 风险仍由 `gpt-imple-1/2` 负责。`gpt-imple-3` 的 Low 项采用一名盲审加 confirm，gardener 与 CI 不变 |
+| 角色表 | M71 Roster + M70 Sessions | delegator 改名 `picsee-delegator`；实现者为 `gpt-imple-1/2`（Codex `gpt-6-sol`、effort `medium`，各自当前任务/修复轮结束后生效，不中断在途工作）、`gpt-imple-3`（Codex `gpt-5.6-sol`）和 `kimi-imple-1`（Kimi Code CLI，模型 `kimi-code/k3.1-pro`，thinking effort `high`；`herdr agent start kimi-imple-1 --kind kimi --pane <id> -- --yolo -m kimi-code/k3.1-pro`，effort 由 `~/.kimi-code/config.toml` 中该模型的 `default_effort = "high"` 设定；独立 worktree `picsee-wt/kimi-imple-1`）；当前唯一活跃审计者为 `gpt-auditor`，`opus-auditor` 保留窗格但暂停派活，直至用户明确恢复；真机为 `claude-imple-1`；报告目录在 `~/.picsee/herdr/<name>/`，`gpt-imple-3` 对应 `~/.picsee/herdr/gpt-imple-3/`；去掉 `/security-review` 行；去掉 mdpro-device-harness 和历史别名表 |
+| 模型规则 | M70 “Every session runs on Opus” | 只保留结论：Claude 会话和 subagent 用 Opus；`opus-auditor` 的 2026-10-23 基线决定被 2026-10-24 临时规则暂停，额度恢复不得自动重启；`gpt-imple-1/2` 在各自在途任务完成后使用 `gpt-6-sol`、effort medium，不由文档改动直接切换活会话；其他 Codex 用指定模型；Kimi 实现者固定用 K3.1 Pro、effort high（2026-10-24 用户决定），换模型或 effort 须用户同意。Kimi 没有 `$tdd-guardian-workflow`，brief 须写明测试先行步骤（先写失败测试并贴出失败输出，再实现）。不搬演变历史 |
+| 派活与上限 | M70 How work is assigned、idle pull | 工作项编号用开发计划里的 `P0-01…P7-09`；新发现的问题编号改用 `F<n>`，替代 mdpro 的 D 编号；每会话一个、picsee 整机最多三个未合入实现项，不与 mdpro 合计：`gpt-imple-1/2` 与 `kimi-imple-1` 共用 Medium/High 工作名额，同时最多两个（2026-10-24 起），第三个名额只给 `gpt-imple-3` 的 Low 项。临时审计覆盖规则下，所有实现者和风险级别都由 `gpt-auditor` 单审。`gpt-imple-3` 只接 Low 风险工作：纯文档、机械重命名与路径修复、Low 审计修复、小脚本与测试 fixture、账簿与时间线措辞；Swift、并发、sandbox、entitlements、签名、真机脚本、receipt lane 及 Medium/High 风险仍由 `gpt-imple-1/2` 负责。gardener 与 CI 不变 |
 | Codex 智能体 | M71 Codex agents + mdpro ADR-0131 | 照搬 `prompt --wait`、唤醒、超时只重新等待不重发、restart 四步。`herdr agent wait --timeout` 和 `herdr agent prompt --wait --timeout` 的 `--timeout` 均以毫秒计（20 分钟写 `1200000`）；立即返回 timeout 说明单位写错，不是 agent 卡住。`prompt` 后立即 `wait` 可能读到上一轮残留的 `done` 而马上返回；先确认 pane 已进入 working（`herdr pane read` 见 `Working`），或返回后核对 handoff/报告文件确已更新。路径改为 `~/.picsee/herdr/<name>/`，环境变量改为 `PICSEE_ROLE`。每次 gpt-auditor 请求前只在 idle 或 done 时重置：先记录 session id，执行 `herdr pane send-text <pane> '/new'`，再用 `herdr pane send-keys <pane> enter` 提交（`herdr agent send-keys` 不会提交；第一次 Enter 可能被斜杠命令弹层吞掉，要按到出现选择框为止），Codex 0.163.0 随后问「Where should the new conversation run?」，再按一次 Enter 选默认的当前 worktree；都不用 `--wait`。状态行回到 `Context 0% used` 才继续；herdr 要到下一轮才报告新 session id，所以在请求开始后核对 id 已变，没变就作废结果并开新 pane。脚本：`~/.picsee/herdr/delegator/reset.sh <name> <pane>`。2026-10-22 的探针通过：gpt-auditor 重置后 id 由 `01a161b4…` 变为 `01a16250…`，问上一请求答 `NONE`。依赖前先做一次探针：重置后问上一请求是什么；id 已变且回答不含此前请求才通过。实现者每项一个新会话；仅当 fix 1 brief 点名 1–2 个 finding 且 context used 低于约 50% 时留在原会话。其余 fix（fix 2 起）都开新会话，只读 brief、上一份 handoff、merged verdict 和 fix brief。context used 超过约 60% 时先写 progress note，再重启。通过 `herdr pane read` 读取 Codex status line 计算 context used |
 | Brief 与自验收 | M71 Briefs and self-acceptance + mdpro ADR-0131 | 6 节 brief 结构照搬；Background 引用开发计划工作包、mockup 编号、DESIGN 条款和 ADR；测试矩阵、对抗审查四步照搬，skill 改为 `$picsee-tdd-workflow`；每份 handoff 列出曾拒绝的方法及原因 |
 | 测试矩阵用例清单 | M71 | 换成 picsee 的高风险用例：A→B→C 乱序返回、generation 过期、continuation 恰好恢复一次、security-scoped 访问范围释放、bookmark stale、cell 复用串图、取消前/排队中/执行中、1×/2× backing scale、浅深主题、Reduce Motion |
 | 提交与合入 | M70 Commits and branches 1–5 | 主干 `main`；合入条件：verifier PASS、合并后的结论无阻断级 Critical/High、PR head 等于该 SHA 且 CI 绿。树身份校验改看 `:Sources :Tests :Picsee.xcodeproj`（或 `Package.swift`）。去掉 frontend-backend-redesign、release/x.y 等历史 |
-| 审计 | M70 item 4 + M71 Audits under herdr + mdpro ADR-0131 | 第一轮盲审、合并、单方发现互相质疑、降级须附复现或反证、三轮上限照搬。Medium 只对影响用户可见行为或违背验收的项目在合入前修一轮，不再 confirm 追求清零；其余 Medium 写入 PR `Still open`，排进后续 Low 批次，不阻挡合入。`gpt-imple-3` 的 Low 项只由 `opus-auditor` 做一次盲审（窗格先 `/clear`），再由它做 confirm；没有第二份 verdict，所以跳过合并与 challenge，delegator 直接按这份 verdict 写 fix brief。审计者发现须升到 Medium/High 时，该项改走双审。每个请求前 delegator 都对 `opus-auditor` 窗格执行 `/clear`（`claude --agent picsee-opus-auditor --model opus`，独立 worktree `picsee-wt/opus-auditor`），使每次审计从空上下文开始（`/clear` 不会重新加载 agent 定义；定义改动合入后，delegator 把该 worktree 移到新 main 并重启窗格）；它把报告写入请求指定的 `~/.picsee/herdr/opus-auditor/<item>-r<round>.md` 并以 VERDICT 块结束。plan 和 ADR review 仍用 Opus subagent。双审路径的两名审计者遵守下表读屏障；单审路径由唯一审计者遵守适用的读屏障，其单份 verdict 视为 merged verdict。confirm 请求携带全部 open finding 的原文及须回答的 counter-proof；范围是 fix diff，加 fix commit 新引入的 Critical/High。发送前，delegator 对照 merged verdict（单审路径即唯一审计者的 verdict）的 open finding 清单检查请求 |
+| 审计 | M70 item 4 + M71 Audits under herdr + mdpro ADR-0131 | 临时覆盖：所有风险级别只由 `gpt-auditor` 做独立盲审，其单份 verdict 即 merged verdict；不派 `opus-auditor`，额度恢复也不自动恢复。C/H 阻断，修复后重置 `gpt-auditor` 到全新上下文再 confirm，最多三轮；confirm 请求携带全部 open finding 原文、fix diff、counter-proof，并检查 fix 新引入的 C/H。Medium 政策不变：影响用户可见行为或违背 AC 的项目修一轮、不 confirm；其余 Medium 与 Low 写入 PR `Still open`。单审期间无 challenge；降级仍须复现或反证。gpt-auditor 不运行 Swift tests，delegator 负责重跑 owner gates；gardener 与 CI 不变。旧双审/Opus 文本只作历史基线，不是活跃派活规则 |
 | 风险分级 | ADR-0121 映射 | **High**：FileAccess/sandbox/bookmark、磁盘缓存/SQLite、文件写入（导出、Trash、编辑另存）、entitlements、签名/公证、CI、依赖、未列出的路径。**Medium**：其余 `Sources/`。**Low**：文档、设计稿、预览、纯展示测试 |
 | 编号预留 | M70 Reserving numbers | ADR、F 编号和 receipt id 前缀（`P1-05-WI-2`）由 delegator 统一分配 |
 | 会话轮换 | M70 Session rotation + mdpro ADR-0131 | handoff 路径改为 `~/.picsee/handoff/`；hook 是否移植见第 3 节。安静时、没有 landing 进行且每次 wait 都已记录后，delegator 请用户输入 `/compact`，并点名保留 open findings、SHAs 和 waits |
@@ -67,9 +73,9 @@ mdpro ADR-0131 的阶段读屏障：
 
 | 阶段 | 可读 | 不可读 |
 |---|---|---|
-| round 1 | range、brief、handoff | 其他审计者的 verdict |
-| confirm | 两名审计者的较早轮次、merged verdict、counter-proofs | 其他审计者的当前轮报告 |
-| challenge | 被质疑的 finding 及其 evidence | 其余审计材料 |
+| round 1 | range、brief、handoff | 此项任何先前审计 verdict |
+| confirm | sole auditor 的较早轮次、merged/sole verdict、counter-proofs | confirm 开始后的外部审计结论 |
+| challenge | **暂停**；单审覆盖期间不发 challenge | — |
 
 暂不采纳 mdpro ADR-0131 的 escape replay 和 fresh-context cost table。
 
@@ -138,6 +144,6 @@ record/verify、指纹、防削弱检查仍由插件完成，不像 mdpro 那样
 2. 写 B2、B3、B1 和规则 70，再写 A2、A1、A3。
 3. 写 A6、A7、A8，确认 hooks 在 settings.json 中生效。
 4. 写 A4、A5，Swift 命令先按架构文档里的 target 名填写，标注“P0-01 后校准”。
-5. 规则和 ADR 草稿交给 gpt-auditor 加 Opus plan reviewer 盲审（照搬规则本身的 plan 审计流程）。
+5. 历史基线原定由 gpt-auditor 加 Opus plan reviewer 盲审；临时覆盖期间只交 gpt-auditor，Opus 不派活。
 6. P0-01 是唯一记录在案的 bootstrap 例外（2026-10-21 grilling 决定）：在主对话里做，仍先写一个会失败的 Swift Testing 测试、看它变红再实现，红/绿输出贴进 PR，PR 描述写明“bootstrap：tdd-guardian 尚不可用”；没有 receipt，但照常走审计与合入。
 7. P0-01 合入后：用户运行 `/tdd-guardian:init`，再写 A9、A10，然后用一个真实 P0 工作项完整跑一遍 brief → matrix → attack → RED → handoff → 审计 → 合入。P0-02 起不再有例外。
