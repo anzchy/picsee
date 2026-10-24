@@ -1,11 +1,52 @@
 import Foundation
 import Testing
 import PicseeCore
-import PicseeInfrastructure
+import PicseeApplication
+@testable import PicseeInfrastructure
 
 private actor RecursiveResults {
     var entries: [FolderEntry] = []
     func append(_ batch: [FolderEntry]) { entries += batch }
+}
+
+private actor RecursiveRootLease: AccessLeasing {
+    let root: URL
+    init(root: URL) { self.root = root }
+    func acquire(_ request: AccessRequest) -> AccessLease { AccessLease(url: root, rootID: nil) }
+    func release(_ lease: AccessLease) { }
+}
+
+private final class FailingMetadataRead: @unchecked Sendable {
+    private let lock = NSLock()
+    private let failAfterImages: Int
+    private var images = 0
+    init(failAfterImages: Int) { self.failAfterImages = failAfterImages }
+    func read(_ url: URL) throws -> URLResourceValues {
+        lock.lock()
+        defer { lock.unlock() }
+        if url.pathExtension == "png" {
+            if images == failAfterImages { throw CocoaError(.fileReadUnknown) }
+            images += 1
+        }
+        return try url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isPackageKey,
+            .contentTypeKey, .contentModificationDateKey, .fileSizeKey])
+    }
+}
+
+private final class DepthGuardMetadataRead: @unchecked Sendable {
+    private let lock = NSLock()
+    private let image: URL
+    private let directory: URL
+    private var calls = 0
+    init(image: URL, directory: URL) { self.image = image; self.directory = directory }
+    func read(_ url: URL) throws -> URLResourceValues {
+        lock.lock()
+        defer { lock.unlock() }
+        calls += 1
+        let source = calls == 1 ? image : directory
+        return try source.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isPackageKey,
+            .contentTypeKey, .contentModificationDateKey, .fileSizeKey])
+    }
 }
 
 private struct RecursiveTree {
@@ -57,8 +98,113 @@ private struct RecursiveTree {
     let result = RecursiveResults()
     try await FolderBrowser().scan(in: tree.root, root: tree.identity, options: .init(recursive: true)) { await result.append($0) }
     let entries = await result.entries
-    #expect(entries.count == 1)
-    #expect(entries[0].itemID == .rootRelative(rootID: tree.rootID, relativePath: "sub/a.png"))
+    #expect(entries.count == 2)
+    #expect(Set(entries.map(\.itemID)) == [.rootRelative(rootID: tree.rootID, relativePath: "sub/a.png")])
+}
+
+@Test func p204FixAliasFilterKeepsEligibleNestedRepresentative() async throws {
+    let tree = try RecursiveTree(); defer { tree.cleanup() }
+    _ = try tree.image("a.png")
+    _ = try tree.directory("sub")
+    let nested = try tree.image("sub/b.png")
+    try FileManager.default.createSymbolicLink(at: tree.root.appendingPathComponent("link.jpg"), withDestinationURL: nested)
+    let result = RecursiveResults()
+    try await FolderBrowser().scan(in: tree.root, root: tree.identity, options: .init(recursive: true)) {
+        await result.append($0)
+    }
+    let entries = await result.entries
+    let snapshot = FolderSnapshot(version: .init(rootID: tree.rootID, folder: tree.root, generation: 1),
+        entries: entries, isComplete: true)
+    #expect(Set(entries.map(\.relativePath)) == ["a.png", "link.jpg", "sub/b.png"])
+    #expect(snapshot.navigationEntries.count == 2)
+    let png = snapshot.applying(.init(selectedExtensions: ["png"]))
+    #expect(png.navigationEntries.map(\.relativePath) == ["a.png", "sub/b.png"])
+    #expect(png.navigationEntries.count == 2)
+    #expect(snapshot.applying(.init(sort: .type, direction: .descending)).navigationEntries.count == 2)
+}
+
+@Test(arguments: ["00-link.jpg", "z-link.jpg"])
+func recursiveAliasNameDoesNotChangeFilteredSort(aliasName: String) async throws {
+    let tree = try RecursiveTree(); defer { tree.cleanup() }
+    _ = try tree.image("a.png")
+    _ = try tree.directory("sub")
+    let nested = try tree.image("sub/b.png")
+    try FileManager.default.createSymbolicLink(at: tree.root.appendingPathComponent(aliasName), withDestinationURL: nested)
+    let result = RecursiveResults()
+    try await FolderBrowser().scan(in: tree.root, root: tree.identity, options: .init(recursive: true)) {
+        await result.append($0)
+    }
+    let snapshot = FolderSnapshot(version: .init(rootID: tree.rootID, folder: tree.root, generation: 1),
+        entries: await result.entries, isComplete: true)
+    #expect(snapshot.navigationEntries.count == 2)
+    let filtered = snapshot.applying(.init(sort: .name, direction: .descending, selectedExtensions: ["png"]))
+    #expect(filtered.navigationEntries.map(\.relativePath) == ["sub/b.png", "a.png"])
+    #expect(Set(filtered.navigationEntries.map(\.itemID)).count == 2)
+}
+
+@Test(arguments: [3, 70]) func p204FixMetadataFailureEmitsBufferedPrefix(imageCount: Int) async throws {
+    let tree = try RecursiveTree(); defer { tree.cleanup() }
+    for index in 0...imageCount { _ = try tree.image(String(format: "%04d.png", index)) }
+    let failure = FailingMetadataRead(failAfterImages: imageCount)
+    let result = RecursiveResults()
+    var didFail = false
+    do {
+        try await FolderBrowser(readValues: failure.read).scan(in: tree.root, root: tree.identity,
+            options: .init(recursive: true)) { await result.append($0) }
+    } catch { didFail = (error as NSError).domain == NSCocoaErrorDomain }
+    #expect(didFail)
+    let entries = await result.entries
+    #expect(entries.count == imageCount)
+    #expect(Set(entries.map(\.itemID)).count == imageCount)
+}
+
+@Test @MainActor func recursiveAliasCountTracksUniqueNavigationAcrossModesAndFilter() async throws {
+    let tree = try RecursiveTree(); defer { tree.cleanup() }
+    _ = try tree.image("a.png")
+    _ = try tree.directory("sub")
+    let nested = try tree.image("sub/b.png")
+    try FileManager.default.createSymbolicLink(at: tree.root.appendingPathComponent("link.jpg"), withDestinationURL: nested)
+    let coordinator = FolderScanCoordinator(access: RecursiveRootLease(root: tree.root), scanner: FolderBrowser())
+    try await coordinator.begin(folder: tree.root, rootID: tree.rootID).value
+    #expect(coordinator.sourceSnapshot?.entries.count == 2)
+    #expect(coordinator.completedImageCount == 2)
+    coordinator.setConditions(.init(selectedExtensions: ["png"]))
+    #expect(coordinator.snapshot?.navigationEntries.map(\.relativePath) == ["a.png"])
+    let recursive = try #require(coordinator.setRecursiveEnabled(true))
+    try await recursive.value
+    #expect(coordinator.sourceSnapshot?.entries.count == 3)
+    #expect(coordinator.completedImageCount == 2)
+    #expect(coordinator.snapshot?.navigationEntries.map(\.relativePath) == ["a.png", "sub/b.png"])
+}
+
+@Test @MainActor func recursiveBufferedFailureCountMatchesRetainedSnapshot() async throws {
+    let tree = try RecursiveTree(); defer { tree.cleanup() }
+    for index in 0...3 { _ = try tree.image(String(format: "%04d.png", index)) }
+    let failure = FailingMetadataRead(failAfterImages: 3)
+    let coordinator = FolderScanCoordinator(access: RecursiveRootLease(root: tree.root),
+        scanner: FolderBrowser(readValues: failure.read))
+    _ = try? await coordinator.begin(folder: tree.root, rootID: tree.rootID).value
+    #expect(coordinator.failure != nil)
+    #expect(coordinator.sourceSnapshot?.isComplete == false)
+    #expect(coordinator.sourceSnapshot?.navigationEntries.count == 3)
+    #expect(coordinator.failureReason == "Folder scan failed")
+    #expect(coordinator.completedImageCount == nil)
+}
+
+@Test func recursiveDepthGuardFlushesPendingImageBeforeFailure() async throws {
+    let tree = try RecursiveTree(); defer { tree.cleanup() }
+    let image = try tree.image("a.png")
+    _ = try tree.image("b.png")
+    let directory = try tree.directory("metadata-directory")
+    let values = DepthGuardMetadataRead(image: image, directory: directory)
+    let result = RecursiveResults()
+    var limitError: FolderScanLimitError?
+    do {
+        try await FolderBrowser(readValues: values.read).scan(in: tree.root, root: tree.identity,
+            options: .init(recursive: true, maxDepth: 0)) { await result.append($0) }
+    } catch { limitError = error as? FolderScanLimitError }
+    #expect(limitError == .depthLimit(limit: 0, admittedImages: 1))
+    #expect(await result.entries.count == 1)
 }
 
 @Test func recursiveScanEntryGuardReportsHonestPartialCount() async throws {

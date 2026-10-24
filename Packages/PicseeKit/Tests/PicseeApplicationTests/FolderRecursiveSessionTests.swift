@@ -46,9 +46,38 @@ private struct PartialFailureScanner: FolderScanning {
 
 @MainActor private final class RecursiveSelectionHost: FolderScanHost {
     var opened: [URL] = []
+    var cleared = 0
+    weak var session: ViewerSession?
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opened.append(url) }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { }
     func showEmptyFolder() { }
+    func clearFolderImageForNoMatches() { cleared += 1; session?.closeImage() }
+}
+
+@Test @MainActor func p204FixEmptyFlatToggleClearsExcludedNestedImage() async throws {
+    let fixture = FolderScanFixture(), host = RecursiveSelectionHost()
+    let session = ViewerSession(host: nil)
+    host.session = session
+    session.folderScan = fixture.coordinator
+    fixture.coordinator.host = host
+    _ = fixture.coordinator.setRecursiveEnabled(true)
+    let nested = fixture.folder.appendingPathComponent("sub/nested.png")
+    let first = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id, input: nested)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["sub/nested.png"])
+    await fixture.scanner.finish(); try await first.value
+    session.openImage(nested, maximumPixelSize: 1) { throw CancellationError() }
+    #expect(session.imageLoader.fileURL == nested)
+    let second = try #require(fixture.coordinator.setRecursiveEnabled(false))
+    await fixture.scanner.waitForStart(1)
+    await fixture.scanner.finish(1); try await second.value
+    #expect(fixture.coordinator.snapshot?.entries.isEmpty == true)
+    #expect(fixture.coordinator.currentURL == nil)
+    #expect(host.cleared == 1)
+    #expect(session.imageLoader.fileURL == nil)
+    #expect(session.imageStatus == .empty)
+    #expect(fixture.coordinator.canMove(.next, currentURL: nested) == false)
+    #expect(fixture.coordinator.canMove(.previous, currentURL: nested) == false)
 }
 
 @Test @MainActor func recursiveToggleOffRemovesNestedSelectionAndKeepsConditions() async throws {

@@ -48,7 +48,8 @@ struct FolderScanRestorePoint {
         let staysInFlatFolder = shown?.deletingLastPathComponent().standardizedFileURL == folder.url.standardizedFileURL
         let retainedInput = value || staysInFlatFolder ? shown : nil
         return start(folder: folder.url, rootID: folder.rootID, input: retainedInput,
-            canPresent: canPresent, preserveConditions: true)
+            canPresent: canPresent, preserveConditions: true,
+            clearExcludedOnEmpty: !value && shown != nil && !staysInFlatFolder)
     }
     public private(set) var generation: UInt64 = 0
     public var isScanning: Bool { activeGeneration != nil }
@@ -56,7 +57,7 @@ struct FolderScanRestorePoint {
     public private(set) var failure: (any Error)?
     public var completedImageCount: Int? {
         guard failure == nil, sourceSnapshot?.isComplete == true else { return nil }
-        return sourceSnapshot?.entries.count
+        return sourceSnapshot?.navigationEntries.count
     }
     public var failureReason: String? {
         guard let failure else { return nil }
@@ -68,7 +69,7 @@ struct FolderScanRestorePoint {
             if error.code == Int(POSIXError.Code.EACCES.rawValue) { return "Folder access denied" }
             if error.code == Int(POSIXError.Code.EPERM.rawValue) { return "Folder access denied" }
         }
-        return nil
+        return "Folder scan failed"
     }
     @discardableResult public func retry() -> Task<Void, any Error>? {
         guard failure != nil, let activeFolder, let canPresent = automaticPresentationAllowed else { return nil }
@@ -100,7 +101,7 @@ struct FolderScanRestorePoint {
     }
     @discardableResult private func start(folder: URL, rootID: AccessRootID, input: URL? = nil,
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool,
-        preserveConditions: Bool) -> Task<Void, any Error> {
+        preserveConditions: Bool, clearExcludedOnEmpty: Bool = false) -> Task<Void, any Error> {
         let previousConditions = conditions
         stop(.replaced)
         conditions = preserveConditions ? previousConditions : FolderViewConditions()
@@ -144,6 +145,11 @@ struct FolderScanRestorePoint {
                 isReadingFolder = false
                 scanTask = nil
                 presentNoMatchesIfNeeded()
+                if clearExcludedOnEmpty, !hasNoMatches, snapshot?.navigationEntries.isEmpty == true {
+                    currentItemID = nil; currentURL = nil; inputURL = nil
+                    presentationRevision &+= 1
+                    host?.clearFolderImageForNoMatches()
+                }
                 if let first, automaticPresentationAllowed?() != false {
                     currentItemID = first.itemID; currentURL = first.url
                     let initialPresentationRevision = presentationRevision
@@ -167,9 +173,9 @@ struct FolderScanRestorePoint {
                 guard activeGeneration == token, !Task.isCancelled else { return }
                 activeGeneration = nil
                 activeFolder = nil
-                trace?.complete(count: completed.entries.count, generation: token)
+                trace?.complete(count: completed.navigationEntries.count, generation: token)
                 trace?.end(outcome: .complete, generation: token)
-                host?.folderScanDidComplete(count: completed.entries.count)
+                host?.folderScanDidComplete(count: completed.navigationEntries.count)
                 if showEmpty { host?.showEmptyFolder() }
             } catch {
                 guard activeGeneration == token else { return }
@@ -183,14 +189,10 @@ struct FolderScanRestorePoint {
                     trace?.end(outcome: .cancelled, generation: token)
                     return
                 }
-                if Self.isRecoverableScanFailure(error) {
-                    snapshot = sourceSnapshot?.applying(conditions)
-                } else {
-                    sourceSnapshot = sourceSnapshot?.appending([], isComplete: true)
-                    snapshot = sourceSnapshot?.applying(conditions)
-                }
+                snapshot = sourceSnapshot?.applying(conditions)
                 pendingDirection = nil
                 failure = error
+                trace?.failure(error, generation: token)
                 trace?.end(outcome: .failed, generation: token)
                 host?.folderScanDidEnd()
                 throw error
@@ -199,16 +201,6 @@ struct FolderScanRestorePoint {
         scanTask = task
         host?.folderScanDidStart()
         return task
-    }
-    private nonisolated static func isRecoverableScanFailure(_ error: any Error) -> Bool {
-        if error is FolderScanLimitError || error is FileAccessError { return true }
-        let nsError = error as NSError
-        if nsError.domain == NSCocoaErrorDomain { return nsError.code == NSFileReadNoPermissionError }
-        if nsError.domain == NSPOSIXErrorDomain {
-            return nsError.code == Int(POSIXError.Code.EACCES.rawValue)
-                || nsError.code == Int(POSIXError.Code.EPERM.rawValue)
-        }
-        return false
     }
     /// Coalesce arrows while the current input has not reached the admitted batches yet.
     public func queueNavigation(_ direction: NavigationDirection, folder: URL, input: URL, rootID: AccessRootID? = nil) -> Bool {

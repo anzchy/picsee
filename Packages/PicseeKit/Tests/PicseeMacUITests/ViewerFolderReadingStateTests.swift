@@ -30,6 +30,40 @@ private actor FolderReadingNativeScanner: FolderScanning {
     func finish() { ending?.resume(); ending = nil }
 }
 
+private actor GenericFailureThenSuccessScanner: FolderScanning {
+    private var calls = 0
+    var callCount: Int { calls }
+    func scan(in folder: URL, root: ItemIdentityRoot, options: FolderScanOptions,
+        emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
+        calls += 1
+        try await emit([FolderEntry(url: folder.appendingPathComponent("a.png"), root: root)])
+        if calls == 1 { throw CocoaError(.fileReadUnknown) }
+    }
+}
+
+@Test @MainActor func p204FixGenericFailureRendersPartialCountAndRetryButton() async throws {
+    let scene = StatesScene(), scanner = GenericFailureThenSuccessScanner()
+    defer { scene.window.close() }
+    let folder = URL(fileURLWithPath: "/native-folder/A")
+    let coordinator = FolderScanCoordinator(access: FolderReadingNativeLeases(), scanner: scanner)
+    scene.session.folderScan = coordinator
+    scene.session.openImage(folder.appendingPathComponent("old.png"), maximumPixelSize: 1) { throw CancellationError() }
+    _ = try? await coordinator.begin(folder: folder, rootID: AccessRootID(),
+        input: folder.appendingPathComponent("old.png")).value
+    scene.state.refresh()
+    #expect(scene.session.imageStatus == .folderScanFailed("Folder scan failed", 1))
+    #expect(scene.state.textLines == ["Unable to finish reading folder", "Folder scan failed",
+        "Images found before scan stopped: 1"])
+    let retry = try #require(scene.state.buttons.first)
+    #expect(retry.identifier?.rawValue == "state.retry-folder")
+    retry.performClick(nil)
+    for _ in 0..<1_000 {
+        if await scanner.callCount >= 2 { break }
+        await Task.yield()
+    }
+    #expect(await scanner.callCount == 2)
+}
+
 @Test @MainActor func viewerFolderReadingStateRendersAndCancels() async throws {
     let scene = StatesScene(), leases = FolderReadingNativeLeases(), scanner = FolderReadingNativeScanner()
     defer { scene.window.close() }
@@ -71,6 +105,7 @@ private actor FolderReadingNativeScanner: FolderScanning {
         ("Looking for images to browse. Please wait.", "正在查找可浏览的图片，请稍候。"),
         ("Cancel Reading", "取消读取"), ("Include Subfolders", "包含子文件夹"),
         ("Scan limit reached", "已达到扫描上限"), ("Folder access denied", "文件夹访问被拒绝"),
+        ("Folder scan failed", "文件夹读取失败"),
         ("Unable to finish reading folder", "无法完成文件夹读取"),
         ("Images: %lld", "图片：%lld 张"),
         ("Images found before scan stopped: %lld", "扫描停止前找到图片：%lld 张")] {

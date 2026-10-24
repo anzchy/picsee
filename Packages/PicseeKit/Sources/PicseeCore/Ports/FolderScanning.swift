@@ -14,6 +14,8 @@ public struct FolderScanOptions: Equatable, Sendable {
 }
 
 public enum FolderScanLimitError: Error, Equatable, Sendable {
+    /// The diagnostic admittedImages value counts accepted URL paths, including aliases;
+    /// user-facing counts come from the snapshot's unique navigable identities.
     case entryLimit(limit: Int, admittedImages: Int)
     case depthLimit(limit: Int, admittedImages: Int)
 }
