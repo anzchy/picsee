@@ -203,7 +203,11 @@ public final class ViewerStateHost: NSView {
             button.setAccessibilityIdentifier(action.1)
             addSubview(button); buttons.append(button)
         }
-        setAccessibilityChildren([image] + stateLabels + buttons)
+        if failure {
+            setAccessibilityChildren([image] + stateLabels + buttons)
+        } else {
+            setAccessibilityChildren([image, stateLabels[0], stateLabels[1], buttons[0], stateLabels[2]])
+        }
         needsLayout = true
         layoutSubtreeIfNeeded()
     }
@@ -240,10 +244,16 @@ public final class ViewerStateHost: NSView {
         let filenameHeight = failure ? descriptionHeight : 0
         let reasonHeight = failure ? measure(stateLabels[2], width: textWidth) : 0
         let hint = failure ? nil : stateLabels[2]
-        let buttonWidth: CGFloat = failure ? 80 : 180
+        let buttonWidth: CGFloat = failure ? 80 : max(180, ceil(buttons[0].intrinsicContentSize.width))
         let buttonHeight: CGFloat = 32
-        let hintHeight = hint.map { measure($0, width: textWidth) } ?? 0
-        let actionHeight = buttonHeight + (failure ? 0 : 9 + hintHeight)
+        let naturalHintWidth = hint.map {
+            ceil(($0.stringValue as NSString).size(withAttributes: [.font: $0.font!]).width) + 4
+        } ?? 0
+        let rowWidth = buttonWidth + 16 + naturalHintWidth
+        let inlineHint = !failure && rowWidth <= textWidth
+        let hintWidth = inlineHint ? naturalHintWidth : textWidth
+        let hintHeight = hint.map { measure($0, width: hintWidth) } ?? 0
+        let actionHeight = inlineHint ? max(buttonHeight, hintHeight) : buttonHeight + (failure ? 0 : 9 + hintHeight)
         let contentHeight: CGFloat = 32 + 18 + headingHeight + 9 +
             (failure ? filenameHeight + 9 + reasonHeight : descriptionHeight) + 18 + actionHeight
         var top = bounds.midY + contentHeight / 2
@@ -270,11 +280,20 @@ public final class ViewerStateHost: NSView {
                                       y: top - buttonHeight, width: buttonWidth, height: buttonHeight)
             }
         } else if let button = buttons.first, let hint {
-            button.frame = NSRect(x: bounds.midX - buttonWidth / 2, y: top - buttonHeight,
-                                  width: buttonWidth, height: buttonHeight)
-            hint.frame = NSRect(x: bounds.midX - textWidth / 2,
-                                y: top - buttonHeight - 9 - hintHeight,
-                                width: textWidth, height: hintHeight)
+            if inlineHint {
+                button.frame = NSRect(x: bounds.midX - rowWidth / 2,
+                                      y: top - (actionHeight + buttonHeight) / 2,
+                                      width: buttonWidth, height: buttonHeight)
+                hint.frame = NSRect(x: button.frame.maxX + 16,
+                                    y: top - (actionHeight + hintHeight) / 2,
+                                    width: hintWidth, height: hintHeight)
+            } else {
+                button.frame = NSRect(x: bounds.midX - buttonWidth / 2, y: top - buttonHeight,
+                                      width: buttonWidth, height: buttonHeight)
+                hint.frame = NSRect(x: bounds.midX - textWidth / 2,
+                                    y: top - buttonHeight - 9 - hintHeight,
+                                    width: textWidth, height: hintHeight)
+            }
         }
     }
     @objc private func activate(_ sender: NSButton) {
