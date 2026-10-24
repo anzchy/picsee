@@ -94,7 +94,7 @@ P0 技术验证、设计映射与命令底座
 | [21 首次打开](../design/prototypes/picsee-browser/states/first-launch.html) | P1-02 | 无目录时选择/拖入；不可用操作明确禁用 |
 | [22 空文件夹](../design/prototypes/picsee-browser/states/empty-folder.html) | P2-08 | 空快照显示“选择其他文件夹”，侧栏与底部工具仍可用 |
 | [23 搜索无结果](../design/prototypes/picsee-browser/states/search-empty.html) | P3-10 | 清除筛选恢复内容与合理当前项 |
-| [24 读取文件夹](../design/prototypes/picsee-browser/states/folder-loading.html) | P2-02/04 | 首批先可用，未得总数不伪造百分比 |
+| [24 读取文件夹](../design/prototypes/picsee-browser/states/folder-loading.html) | P2-02/04 | 打开文件夹时读取到扫描完成再显示按名称首张；以图片打开时该图先可用；未得总数不伪造百分比 |
 | [25 图片无法读取](../design/prototypes/picsee-browser/states/image-error.html) | P1-07、P2-03 | 重试/下一张；经网格按钮或 Esc 返回，错误后不回流旧图 |
 | [26 目录权限失效](../design/prototypes/picsee-browser/states/permission-denied.html) | P2-01/08 | 重新选择/授权；不从缓存绕过撤销权限 |
 | [27 原始尺寸与平移](../design/prototypes/picsee-browser/states/original-size.html) | P0-03、P1-03 | 1×/2×真实 backing pixel、平移边界 |
@@ -201,7 +201,7 @@ P0 技术验证、设计映射与命令底座
 工作包：
 
 - [ ] `P2-01` FileAccess 完整租约、stale bookmark 修复、授权根存储与重连。
-- [ ] `P2-02` FolderBrowser 分批枚举、取消、快照代次，先显示输入图片和首批条目。
+- [ ] `P2-02` FolderBrowser 分批枚举、取消、快照代次；以图片打开时先显示该图，打开文件夹时扫描完成后显示按名称首张（2026-10-24 用户决定）。
 - [ ] `P2-03` 上一张/下一张、首尾与可选循环；名称自然排序、修改日期/类型/大小排序，扩展名过滤。
 - [ ] `P2-04` 递归浏览开关、符号链接边界、扫描数量保护和扫描进度；不静默漏项。
 - [ ] `P2-05` 按需读取拍摄日期/像素尺寸，明确缺失值与排序未完成状态；不阻塞基础列表。
@@ -342,7 +342,7 @@ Rust、Windows/iOS、账号、云同步、语义搜图、批量资产管理/批�
 | 命令反馈 | 导航/缩放输入到状态反馈 p95 ≤ 100 ms；不等于像素已完成解码 |
 | 普通图首个可用预览 | S1、本地 SSD、冷应用缓存 p95 ≤ 500 ms；RAW/PDF/S3 单独报告 |
 | 热内存翻图 | 有相应尺寸像素命中的场景，输入到呈现 p95 ≤ 100 ms |
-| 目录首批 | S2 本地 SSD 首批可浏览内容 ≤ 1 s；扫描最终完成单独记录 |
+| 目录首张 | 打开文件夹：单层扫描完成并显示按名称首张的时间，S2 扁平副本本地 SSD 待测定（目标 ≤ 1 s）；以图片打开：该图显示时间；扫描完成单独记录 |
 | 目录一致性 | 停止写入后普通小批变更 2 s 内核对完成；重扫/慢卷显示进度并另测 |
 | 图形交互 | 60 Hz 基准下记录 frame/hitch；连续缩放与滚动不得出现可复现的长时间主线程解码阻塞 |
 | 资源有界 | 全局 worker/队列/缓存不超过配置；反复浏览同一素材三轮后不持续线性增长；返回空闲状态记录 retained objects 与 RSS，不要求系统立即归还全部 RSS |
