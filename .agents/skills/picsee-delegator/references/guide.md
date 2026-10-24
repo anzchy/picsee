@@ -105,9 +105,24 @@ Don't grep a Kimi screen for words like "permission"; that produced a false "que
 ### Durable listener notification
 
 Starting a bare poller is not enough: it can finish after the delegator's shell or turn exits and leave only a local
-log. Immediately after every implementation, fix, audit or confirm dispatch, start the attached listener. Paste the
-active delegator Codex thread UUID literally; never derive it from cached `herdr agent_session` data, which has been
-observed to point at a stale, wrong session. The helper uses argv throughout and never types into the desktop UI.
+log. Immediately after every implementation, fix, audit or confirm dispatch, start the attached listener. **Choose
+the active delegator host explicitly for each new event**; this is independent of the implementer/auditor model and
+does not restore the suspended `opus-auditor`.
+
+- **Codex delegator:** use `--route codex-thread --thread '<current CODEX_THREAD_ID>'`. Copy the UUID from the
+  current delegator process; if unavailable, verify the active thread against Codex's local session state. Never
+  infer it from cached `herdr agent_session`, which has pointed at a stale, wrong session. A legacy `--thread`-only
+  event remains a schema-1 Codex route and is neither rewritten nor retargeted.
+- **Claude/Opus delegator:** before inspecting the pane, run `$SK/scripts/gui-lock.sh status`. Read a fresh
+  `herdr pane list` and copy the delegator pane's `pane_id`, `terminal_id`, and absolute repo `cwd` into
+  `--route claude-pane --pane ... --terminal-id ... --cwd ...`. The listener checks a fresh pane-list envelope just
+  before delivery: exactly one pane must match, report `agent: claude`, and have the same terminal ID, `cwd`, and
+  `foreground_cwd`. Then `herdr pane run` sends the complete notification and Enter in one argv-based call. A
+  changed or malformed pane fails delivery without a receipt. Do not reuse an old target after a Claude restart.
+
+The helper uses argv, not a shell command string. A pane can change between inspection and delivery; a receipt
+proves transport acceptance, not that the intended Claude turn read or acted on it. The delegator must ACK the
+event after checking the pane, report, task identity and SHA.
 
 One complete Codex implementation-round command is (the agent must put the line
 `Report-Task: issue90-implementation-r1` in its unique report):
@@ -116,6 +131,7 @@ One complete Codex implementation-round command is (the agent must put the line
 python3 .agents/skills/picsee-delegator/scripts/listen-notify.py start \
   --event 'issue90-implementation-r1-head-<sha7>' \
   --task 'issue90-implementation-r1' \
+  --route codex-thread \
   --thread '<exact-delegator-thread-uuid>' \
   --agent 'gpt-imple-3' \
   --handoff "$HOME/.picsee/herdr/gpt-imple-3/issue90-handoff.md" \
@@ -126,6 +142,18 @@ python3 .agents/skills/picsee-delegator/scripts/listen-notify.py start \
   --max-minutes 3000
 ```
 
+For a Claude/Opus delegator, replace the two Codex route arguments with the pinned pane destination:
+
+```sh
+  --route claude-pane --pane 'w1:p1' \
+  --terminal-id '<terminal_id-from-herdr-pane-list>' \
+  --cwd '/absolute/path/to/picsee'
+```
+
+Use these as arguments to the same `listen-notify.py start` command, not as a separate shell command. Never specify
+both `--thread` and a Claude pane. The destination is part of the immutable event identity, so changing host,
+terminal or pane requires a new event ID. Old schema-1 event config and receipts keep their Codex format.
+
 Use `--poll handoff` for Kimi/Claude and add `--handoff-marker '## Fix round 1'` when a report is appended or
 reused. `--poll idle` remains available where no unique report can be required. Report mode checks the expected
 file's modification time against listener registration and requires exactly one line formatted
@@ -135,11 +163,12 @@ It completes only on fresh report plus idle/done. If idle/done persists without 
 grace period, it queues `missing-handoff` for reconciliation. A blocked status queues immediately. Working with
 an old report stays pending until a status change or the bounded deadline. Neither idle nor a report alone means
 acceptance. Every dispatch or rearm gets a new `--event` and matching `--task`; include the round and expected head or
-other unique token. Reusing an event with a different agent, task, target thread, poll argv or report path is rejected.
+other unique token. Reusing an event with a different agent, task, destination, poll argv or report path is rejected.
 
 The start command detaches a new process session, so it survives the parent shell and agent turn. Runtime state is
 under `~/.picsee/herdr/delegator/listeners/<event>/`: `config.json`, `pid`, `listener.log`, `status.json`,
-`poll-result.json`, and, only after a successful `codex queue` response, `queue-receipt.json`. The shipped pollers
+`poll-result.json`, and, only after accepted Codex queue or Claude pane delivery, `queue-receipt.json`. The filename
+is retained for compatibility; new receipts identify the selected destination. The shipped pollers
 have a listener-enforced overall deadline of `--max-minutes` plus one poll interval and 10 seconds. If a poller
 hangs inside `herdr`, the listener terminates its private poller process group, records `timeout` in
 `poll-result.json`, and continues to queue a **needs inspection** message. The private group leader remains alive
@@ -149,16 +178,15 @@ attempts and bounded exponential backoff. No heavy lock is taken. A nonzero poll
 question, `missing-handoff`, or missing/stale report is still queued as **needs inspection** and is never labelled
 successful or accepted.
 
-Inspect `status.json` and `poll-result.json` first. A `queue-receipt.json` proves only that Codex accepted the queued
-message; it is not the delegator's ACK and poll completion is not audit acceptance. Before relying on this mechanism
-for a new environment, run one user-authorized probe event, confirm the exact target thread visibly receives it, ACK
-it there, and then continue the real work. Do not make the helper accept an audit, merge, or advance a lifecycle
-unattended.
+Inspect `status.json` and `poll-result.json` first. A `queue-receipt.json` proves only transport acceptance; it is
+not the delegator's ACK and poll completion is not audit acceptance. Before relying on a new host or environment,
+run one user-authorized probe event, confirm the exact Codex thread or Claude pane visibly receives it, ACK it there,
+and then continue the real work. Do not make the helper accept an audit, merge, or advance a lifecycle unattended.
 
 Failed delivery keeps the poll result and can be restarted with the identical command; repeats after a receipt do
 not queue again. Registration and delivery are serialized per event without holding a duplicate lock through the
-long poll. There is an unavoidable at-least-once edge: if `codex queue` accepts the message and the listener crashes
-before writing its receipt, a retry can duplicate the notification. Treat event IDs and message labels as the
+long poll. There is an unavoidable at-least-once edge: if either transport accepts the message and the listener
+crashes before writing its receipt, a retry can duplicate the notification. Treat event IDs and message labels as the
 deduplication aid, not as an exactly-once transport guarantee.
 
 This helper is available after its reviewed change lands; it does not migrate or stop listeners already running, and
@@ -513,7 +541,7 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Missed that an implementer had finished (twice) | A screen-based poller ended with only a local log | Attach `listen-notify.py start` to `poll-idle.sh`; pin the exact delegator thread and inspect queue receipt vs ACK |
+| Missed that an implementer had finished (twice) | A screen-based poller ended with only a local log | Attach `listen-notify.py start` to a report/handoff poller; pin the exact delegator route and inspect queue receipt vs ACK |
 | `reset.sh` prints `FAIL … after /new` | pane too small to show "Context 0% used" | `herdr pane zoom`, read again; usually the reset did work |
 | Prompt sent right after a reset "didn't land" | chooser still open or the pane redrawing | wait, check for "esc to interrupt" after ~20 s, resend |
 | A mid-rebase commit swallowed the implementer's message | `git rebase … | tail` hid the conflict | never pipe a rebase; check its exit code |

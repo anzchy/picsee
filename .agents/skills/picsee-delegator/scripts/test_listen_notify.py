@@ -104,6 +104,170 @@ class ListenerTests(unittest.TestCase):
         self.assertEqual(receipt["event"], self.config["event"])
         self.assertEqual(receipt["queue_response"], '{"queued":true,"id":"q-1"}')
 
+    def claude_config(self):
+        config = dict(self.config)
+        config.pop("thread")
+        config["schema"] = 2
+        config["destination"] = {
+            "kind": "claude-pane", "pane": "w1:p1",
+            "terminal_id": "term_123abc", "cwd": "/tmp/picsee",
+        }
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        (self.event_dir / "poll-result.json").write_text(json.dumps({
+            "outcome": "done", "exit_code": 0, "handoff_evidence": "ready",
+        }))
+        return config
+
+    def pane_list(self, *, pane="w1:p1", agent="claude", terminal="term_123abc",
+                  cwd="/tmp/picsee", foreground=None):
+        return {"id": "cli:pane:list", "result": {"type": "pane_list", "panes": [{
+            "pane_id": pane, "agent": agent, "terminal_id": terminal,
+            "cwd": cwd, "foreground_cwd": cwd if foreground is None else foreground,
+        }]}}
+
+    def test_claude_route_checks_pane_then_sends_once_with_receipt(self):
+        config = self.claude_config()
+        calls = []
+
+        def run(argv, **_):
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            self.assertEqual(argv[:4], ["herdr", "pane", "run", "w1:p1"])
+            self.assertIn(config["event"], argv[4])
+            return self.completed(argv, stdout=json.dumps({
+                "id": "cli:pane:run", "result": {"pane_id": "w1:p1"},
+            }))
+
+        self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "delivered")
+        self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "already-delivered")
+        self.assertEqual([call[:3] for call in calls],
+                         [["herdr", "pane", "list"], ["herdr", "pane", "run"]])
+        receipt = json.loads((self.event_dir / "queue-receipt.json").read_text())
+        self.assertEqual(receipt["destination"], config["destination"])
+        self.assertNotIn("thread", receipt)
+
+    def test_claude_route_refuses_stale_or_malformed_pane_before_send(self):
+        config = self.claude_config()
+        config["max_delivery_attempts"] = 1
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        bad = [
+            self.pane_list(pane="w1:p8"),
+            self.pane_list(agent="codex"),
+            self.pane_list(terminal="term_replaced"),
+            self.pane_list(cwd="/tmp/other"),
+            self.pane_list(foreground="/tmp/other"),
+            {"id": "cli:pane:list", "result": {"panes": []}},
+            {"id": "cli:pane:list", "result": {"type": "pane_list", "panes": [
+                self.pane_list()["result"]["panes"][0],
+                self.pane_list()["result"]["panes"][0],
+            ]}},
+            {"error": {"code": "offline"}, "id": "cli:pane:list"},
+        ]
+        for payload in bad:
+            with self.subTest(payload=payload):
+                (self.event_dir / "queue-receipt.json").unlink(missing_ok=True)
+                calls = []
+
+                def run(argv, **_):
+                    calls.append(argv)
+                    return self.completed(argv, stdout=json.dumps(payload))
+
+                with self.assertRaises(listen_notify.DeliveryError):
+                    listen_notify.run_event(self.event_dir, run=run, sleep=lambda _: None)
+                self.assertEqual(calls, [["herdr", "pane", "list"]])
+                self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+
+    def test_claude_route_requires_acknowledged_run(self):
+        self.claude_config()
+        calls = []
+
+        def run(argv, **_):
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            return self.completed(argv, stdout=json.dumps({
+                "id": "cli:pane:run", "error": {"code": "pane_replaced"},
+            }))
+
+        with self.assertRaises(listen_notify.DeliveryError):
+            listen_notify.run_event(self.event_dir, run=run, sleep=lambda _: None)
+        self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+
+        self.assertFalse(listen_notify._acknowledged_claude_run(self.completed([], stdout=json.dumps({
+            "id": "cli:pane:run", "result": {"pane_id": "w1:p9"},
+        })), "w1:p1"))
+        self.assertFalse(listen_notify._acknowledged_claude_run(self.completed([], stdout=json.dumps({
+            "id": "cli:pane:run", "result": {"type": "error", "message": "not running"},
+        })), "w1:p1"))
+        self.assertTrue(listen_notify._acknowledged_claude_run(self.completed([], stdout=json.dumps({
+            "id": "cli:pane:run", "result": {"type": "pane_run"},
+        })), "w1:p1"))
+
+    def test_event_identity_rejects_cross_route_reuse(self):
+        listen_notify.register_event(self.event_dir, self.config)
+        new = dict(self.config)
+        new.pop("thread")
+        new["schema"] = 2
+        new["destination"] = {
+            "kind": "claude-pane", "pane": "w1:p1",
+            "terminal_id": "term_123abc", "cwd": "/tmp/picsee",
+        }
+        with self.assertRaises(listen_notify.EventIdentityError):
+            listen_notify.register_event(self.event_dir, new)
+
+    def test_route_cli_builds_explicit_destinations_and_keeps_old_schema(self):
+        parser = listen_notify._build_parser()
+        base = ["start", "--event", "route-test", "--task", "route-test",
+                "--agent", "gpt-auditor", "--handoff", str(self.handoff),
+                "--poll", "idle", "--state-root", str(self.root)]
+        old = listen_notify._config_from_args(parser.parse_args(base + [
+            "--thread", self.config["thread"]]))
+        self.assertEqual(old["schema"], 1)
+        self.assertEqual(old["thread"], self.config["thread"])
+        codex = listen_notify._config_from_args(parser.parse_args(base + [
+            "--route", "codex-thread", "--thread", self.config["thread"]]))
+        self.assertEqual(codex["schema"], 2)
+        self.assertEqual(codex["destination"]["kind"], "codex-thread")
+        claude = listen_notify._config_from_args(parser.parse_args(base + [
+            "--route", "claude-pane", "--pane", "w1:p1", "--terminal-id",
+            "term_123abc", "--cwd", "/tmp/picsee"]))
+        self.assertEqual(claude["schema"], 2)
+        self.assertEqual(claude["destination"]["kind"], "claude-pane")
+        self.assertNotIn("thread", claude)
+        for invalid in (
+            base,
+            base + ["--route", "claude-pane", "--pane", "w1:p1"],
+            base + ["--route", "claude-pane", "--pane", "w1:p1",
+                    "--terminal-id", "term_123abc", "--cwd", "/tmp/picsee",
+                    "--thread", self.config["thread"]],
+            base + ["--route", "codex-thread", "--thread", self.config["thread"],
+                    "--pane", "w1:p1"],
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                listen_notify._config_from_args(parser.parse_args(invalid))
+
+    def test_explicit_codex_route_delivers_to_its_thread(self):
+        config = dict(self.config)
+        config.pop("thread")
+        config["schema"] = 2
+        config["destination"] = {"kind": "codex-thread", "thread": self.config["thread"]}
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        (self.event_dir / "poll-result.json").write_text(json.dumps({
+            "outcome": "done", "exit_code": 0, "handoff_evidence": "ready",
+        }))
+        calls = []
+
+        def run(argv, **_):
+            calls.append(argv)
+            return self.completed(argv, stdout="queued")
+
+        self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "delivered")
+        self.assertEqual(calls[0][:4], ["codex", "queue", "--thread", self.config["thread"]])
+        receipt = json.loads((self.event_dir / "queue-receipt.json").read_text())
+        self.assertEqual(receipt["destination"], config["destination"])
+        self.assertNotIn("thread", receipt)
+
     def test_delivery_retries_with_bounded_backoff_and_marks_only_after_success(self):
         self.handoff.write_text("DONE\n")
         os.utime(self.handoff, (1_800_000_001, 1_800_000_001))

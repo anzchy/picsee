@@ -53,8 +53,13 @@ Low only. Never touch mdpro or its tmux `dtrack`.
    `~/.picsee/herdr/<impl>/<item>-brief.md`. Read the code before writing fences. Codex uses `$tdd-guardian-workflow`;
    Kimi needs the hand-written test-first steps. Dispatch: `herdr agent prompt <impl> 'New task: … Read and follow <brief>…'`.
 3. **Watch** — mandatory after every dispatch and rearm for every fix/audit round: attach
-   `$SK/scripts/listen-notify.py start` with the literal delegator thread UUID, agent, fresh event/round ID and
-   expected handoff/report path. Use `--poll report` for Codex tasks with a unique report: set `--task` and
+   `$SK/scripts/listen-notify.py start` with a fresh event/round ID, agent, expected handoff/report path, and an
+   **explicit delegator route**. A Codex delegator uses `--route codex-thread --thread <current UUID>`;
+   a Claude/Opus delegator uses `--route claude-pane --pane <ID> --terminal-id <ID> --cwd <absolute repo path>`
+   from a fresh `herdr pane list` (check `gui-lock.sh status` before inspecting the pane). The listener verifies the
+   Claude pane identity again before `herdr pane run`; stale or changed targets get no receipt. Existing registered
+   `--thread`-only events remain Codex routes; use an explicit route for every new event. Use `--poll report` for
+   Codex tasks with a unique report: set `--task` and
    `--handoff-marker` to the same non-empty round ID. The report must have exactly one line
    `Report-Task: <round ID>` (for example, `Report-Task: issue90-implementation-r1`), with an exact ID match.
    This uses report freshness and

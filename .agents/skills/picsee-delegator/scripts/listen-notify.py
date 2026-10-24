@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a shipped roster poller, then notify one explicitly named Codex thread."""
+"""Run a shipped roster poller, then notify one explicitly pinned delegator."""
 
 import argparse
 import fcntl
@@ -27,9 +27,12 @@ class EventIdentityError(RuntimeError):
     """An event ID was reused for a different task or destination."""
 
 
-IDENTITY_FIELDS = ("event", "task", "agent", "thread", "handoff", "handoff_marker", "poll")
-REQUIRED_FIELDS = ("schema", "event", "task", "agent", "thread", "handoff", "poll", "created_at")
+IDENTITY_FIELDS = ("schema", "event", "task", "agent", "thread", "destination",
+                   "handoff", "handoff_marker", "poll")
+REQUIRED_FIELDS = ("schema", "event", "task", "agent", "handoff", "poll", "created_at")
 EVENT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+PANE_PATTERN = re.compile(r"^w[0-9]+:p[0-9]+$")
+TERMINAL_PATTERN = re.compile(r"^term_[A-Za-z0-9_-]+$")
 REPORT_SPEC = importlib.util.spec_from_file_location(
     "picsee_poll_report", Path(__file__).with_name("poll-report.py")
 )
@@ -58,14 +61,41 @@ def _validate_config(config):
     missing = [field for field in REQUIRED_FIELDS if field not in config]
     if missing:
         raise ValueError("missing config fields: " + ", ".join(missing))
-    if config["schema"] != 1:
+    if type(config["schema"]) is not int or config["schema"] not in (1, 2):
         raise ValueError("unsupported config schema")
     if not EVENT_PATTERN.fullmatch(config["event"]):
         raise ValueError("event must use only letters, numbers, dot, underscore, or hyphen")
-    try:
-        uuid.UUID(config["thread"])
-    except (AttributeError, TypeError, ValueError) as error:
-        raise ValueError("thread must be an explicit UUID") from error
+    if config["schema"] == 1:
+        if "thread" not in config or "destination" in config:
+            raise ValueError("schema 1 requires thread and no destination")
+        try:
+            uuid.UUID(config["thread"])
+        except (AttributeError, TypeError, ValueError) as error:
+            raise ValueError("thread must be an explicit UUID") from error
+    else:
+        if "thread" in config or not isinstance(config.get("destination"), dict):
+            raise ValueError("schema 2 requires destination and no legacy thread")
+        destination = config["destination"]
+        if destination.get("kind") == "codex-thread":
+            if set(destination) != {"kind", "thread"}:
+                raise ValueError("codex destination must contain only kind and thread")
+            try:
+                uuid.UUID(destination["thread"])
+            except (AttributeError, TypeError, ValueError) as error:
+                raise ValueError("thread must be an explicit UUID") from error
+        elif destination.get("kind") == "claude-pane":
+            if set(destination) != {"kind", "pane", "terminal_id", "cwd"}:
+                raise ValueError("claude destination requires pane, terminal_id and cwd")
+            if not isinstance(destination["pane"], str) or not PANE_PATTERN.fullmatch(destination["pane"]):
+                raise ValueError("pane must be an explicit herdr pane ID")
+            if (not isinstance(destination["terminal_id"], str)
+                    or not TERMINAL_PATTERN.fullmatch(destination["terminal_id"])):
+                raise ValueError("terminal_id must be an explicit herdr terminal ID")
+            cwd = destination["cwd"]
+            if not isinstance(cwd, str) or not Path(cwd).is_absolute() or "\n" in cwd or "\r" in cwd:
+                raise ValueError("cwd must be an absolute single-line path")
+        else:
+            raise ValueError("unsupported destination kind")
     handoff = Path(config["handoff"])
     if not handoff.is_absolute():
         raise ValueError("handoff must be an absolute path")
@@ -293,6 +323,59 @@ def _notification_message(config, poll_result):
     )
 
 
+def _destination(config):
+    return ({"kind": "codex-thread", "thread": config["thread"]}
+            if config["schema"] == 1 else config["destination"])
+
+
+def _checked_claude_pane(destination, run):
+    argv = ["herdr", "pane", "list"]
+    completed = run(argv, capture_output=True, text=True, timeout=30)
+    if completed.returncode != 0:
+        raise ValueError("herdr pane list failed: " + (completed.stderr.strip() or completed.stdout.strip()))
+    try:
+        envelope = json.loads(completed.stdout)
+        if (not isinstance(envelope, dict) or envelope.get("id") != "cli:pane:list"
+                or "error" in envelope):
+            raise ValueError("invalid pane list envelope")
+        result = envelope.get("result")
+        if not isinstance(result, dict) or result.get("type") != "pane_list":
+            raise ValueError("invalid pane list result")
+        panes = result.get("panes")
+        if not isinstance(panes, list) or not all(isinstance(p, dict) for p in panes):
+            raise ValueError("invalid pane list entries")
+        matches = [p for p in panes if p.get("pane_id") == destination["pane"]]
+        if len(matches) != 1:
+            raise ValueError("delegator pane missing or ambiguous")
+        pane = matches[0]
+        if (pane.get("agent") != "claude"
+                or pane.get("terminal_id") != destination["terminal_id"]
+                or pane.get("cwd") != destination["cwd"]
+                or pane.get("foreground_cwd") != destination["cwd"]):
+            raise ValueError("delegator pane identity changed")
+    except (json.JSONDecodeError, TypeError, KeyError) as error:
+        raise ValueError("malformed herdr pane list") from error
+
+
+def _acknowledged_claude_run(completed, pane):
+    if completed.returncode != 0:
+        return False
+    try:
+        envelope = json.loads(completed.stdout)
+    except (TypeError, json.JSONDecodeError):
+        return False
+    if (not isinstance(envelope, dict) or envelope.get("id") != "cli:pane:run"
+            or "error" in envelope or not isinstance(envelope.get("result"), dict)
+            or not envelope["result"]):
+        return False
+    result = envelope["result"]
+    if "error" in result or result.get("type") == "error" or result.get("ok") is False:
+        return False
+    # Herdr versions may omit pane_id in the acknowledgement. Reject a
+    # contradictory ID when present; the preflight pins the actual recipient.
+    return result.get("pane_id", pane) == pane
+
+
 def _deliver(event_dir, config, poll_result, run, sleep):
     receipt_path = event_dir / "queue-receipt.json"
     with _locked(event_dir / "delivery.lock"):
@@ -302,34 +385,46 @@ def _deliver(event_dir, config, poll_result, run, sleep):
         attempts = config.get("max_delivery_attempts", 5)
         initial_backoff = config.get("initial_backoff_seconds", 5)
         errors = []
+        destination = _destination(config)
         for attempt in range(1, attempts + 1):
             _atomic_json(
                 event_dir / "status.json",
                 {"state": "delivering", "event": config["event"], "attempt": attempt},
             )
-            argv = ["codex", "queue", "--thread", config["thread"], "--message", message]
             try:
+                if destination["kind"] == "codex-thread":
+                    argv = ["codex", "queue", "--thread", destination["thread"],
+                            "--message", message]
+                else:
+                    _checked_claude_pane(destination, run)
+                    argv = ["herdr", "pane", "run", destination["pane"], message]
                 completed = run(argv, capture_output=True, text=True, timeout=30)
-                if completed.returncode == 0:
+                acknowledged = (completed.returncode == 0 if destination["kind"] == "codex-thread"
+                                else _acknowledged_claude_run(completed, destination["pane"]))
+                if acknowledged:
                     response = completed.stdout.strip() or completed.stderr.strip()
+                    receipt = {
+                        "event": config["event"],
+                        "task": config["task"],
+                        "agent": config["agent"],
+                        "queued_at": time.time(),
+                        "attempt": attempt,
+                        "queue_response": response,
+                    }
+                    if config["schema"] == 1:
+                        receipt["thread"] = config["thread"]
+                    else:
+                        receipt["destination"] = destination
                     _atomic_json(
                         receipt_path,
-                        {
-                            "event": config["event"],
-                            "task": config["task"],
-                            "agent": config["agent"],
-                            "thread": config["thread"],
-                            "queued_at": time.time(),
-                            "attempt": attempt,
-                            "queue_response": response,
-                        },
+                        receipt,
                     )
                     _atomic_json(
                         event_dir / "status.json",
                         {"state": "delivered", "event": config["event"], "attempt": attempt},
                     )
                     return "delivered"
-                errors.append(completed.stderr.strip() or completed.stdout.strip() or "queue failed")
+                errors.append(completed.stderr.strip() or completed.stdout.strip() or "delivery not acknowledged")
             except Exception as error:
                 errors.append(type(error).__name__ + ": " + str(error))
             if attempt < attempts:
@@ -409,13 +504,18 @@ def _positive_int(value):
 
 def _build_parser():
     parser = argparse.ArgumentParser(
-        description="Detach a shipped picsee roster poller and notify one explicit Codex thread."
+        description="Detach a shipped picsee roster poller and notify one explicit delegator route."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     start = subparsers.add_parser("start", help="register and detach a listener")
     start.add_argument("--event", required=True, help="unique ID for this dispatch or fix/audit round")
     start.add_argument("--task", required=True, help="task or round identity shown in the notification")
-    start.add_argument("--thread", required=True, help="exact delegator Codex thread UUID")
+    start.add_argument("--route", choices=("codex-thread", "claude-pane"),
+                       help="explicit route for new events; omit only for legacy Codex --thread")
+    start.add_argument("--thread", help="exact delegator Codex thread UUID")
+    start.add_argument("--pane", help="exact Claude delegator herdr pane ID")
+    start.add_argument("--terminal-id", help="exact Claude delegator terminal ID from herdr pane list")
+    start.add_argument("--cwd", help="absolute Claude delegator repo cwd from herdr pane list")
     start.add_argument("--agent", required=True)
     start.add_argument("--handoff", required=True, help="absolute expected handoff or report path")
     start.add_argument("--poll", required=True, choices=("idle", "handoff", "report"))
@@ -458,12 +558,29 @@ def _config_from_args(args):
                 config_path, args.handoff_marker, str(args.interval),
                 str(args.max_minutes), str(args.idle_grace_seconds)]
     created_at = time.time()
+    if args.route is None:
+        if not args.thread or any((args.pane, args.terminal_id, args.cwd)):
+            raise ValueError("legacy Codex route requires --thread only")
+        schema, route_fields = 1, {"thread": args.thread}
+    elif args.route == "codex-thread":
+        if not args.thread or any((args.pane, args.terminal_id, args.cwd)):
+            raise ValueError("Codex route requires --thread only")
+        schema = 2
+        route_fields = {"destination": {"kind": "codex-thread", "thread": args.thread}}
+    else:
+        if args.thread or not all((args.pane, args.terminal_id, args.cwd)):
+            raise ValueError("Claude route requires --pane, --terminal-id and --cwd, without --thread")
+        schema = 2
+        route_fields = {"destination": {
+            "kind": "claude-pane", "pane": args.pane,
+            "terminal_id": args.terminal_id, "cwd": str(Path(args.cwd).expanduser().resolve()),
+        }}
     return {
-        "schema": 1,
+        "schema": schema,
         "event": args.event,
         "task": args.task,
         "agent": args.agent,
-        "thread": args.thread,
+        **route_fields,
         "handoff": handoff,
         "handoff_marker": args.handoff_marker,
         "poll": poll,
