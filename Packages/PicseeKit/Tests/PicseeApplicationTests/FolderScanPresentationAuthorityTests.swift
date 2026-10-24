@@ -87,17 +87,18 @@ private actor FolderAuthorityBarrier {
 }
 
 @Test @MainActor func folderAuthorityNewInputDuringRememberPreventsCommitAndOpen() async throws {
-    let fixture = FolderScanFixture(), host = FolderAuthorityHost()
+    let fixture = FolderScanFixture(), host = FolderAuthorityHost(), trace = FolderFixTrace()
+    let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, trace: trace)
     let accessIntent = AccessIntent(), inputIntent = AccessIntent()
     let originBarrier = FolderAuthorityBarrier(), rememberBarrier = FolderAuthorityBarrier()
     let access = accessIntent.current
     let origin = Task { await originBarrier.hold() }
     await originBarrier.waitForStart()
     let authority = FolderScanPresentationAuthority(access: access, input: inputIntent.current, originatingTask: origin)
-    fixture.coordinator.host = host
+    coordinator.host = host
     host.commitAllowed = { authority.isCurrent }
     host.beforeRememberCommit = { await rememberBarrier.hold() }
-    let task = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id, canPresent: { authority.isCurrent })
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id, canPresent: { authority.isCurrent })
     await fixture.scanner.waitForStart()
     try await fixture.scanner.deliver(["img1.png"])
     await fixture.scanner.finish()
@@ -108,7 +109,14 @@ private actor FolderAuthorityBarrier {
     #expect(!authority.isCurrent)
     await rememberBarrier.finish(); try await task.value
     #expect(host.remembered.isEmpty && host.opens.isEmpty)
-    #expect(host.emptyCount == 0 && fixture.coordinator.failure == nil)
+    #expect(host.emptyCount == 0 && coordinator.failure == nil)
+    #expect(coordinator.snapshot == nil)
+    #expect(coordinator.inputURL == nil && coordinator.currentItemID == nil && coordinator.currentURL == nil)
+    #expect(coordinator.pendingDirection == nil && !coordinator.isReadingFolder)
+    #expect(coordinator.automaticPresentationAllowed == nil)
+    #expect(trace.events == ["begin-1", "first-1", "replaced-1"])
+    coordinator.cancel()
+    #expect(trace.events == ["begin-1", "first-1", "replaced-1"])
     #expect(await fixture.access.balance == [1, 1])
     await originBarrier.finish(); await origin.value
 }
