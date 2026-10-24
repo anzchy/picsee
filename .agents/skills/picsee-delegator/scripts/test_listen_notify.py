@@ -1,10 +1,12 @@
 import importlib.util
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -268,6 +270,79 @@ class ListenerTests(unittest.TestCase):
         self.assertEqual(argv[0:3], ["queue", "--thread", self.config["thread"]])
         self.assertEqual(argv[3], "--message")
         self.assertTrue((self.event_dir / "queue-receipt.json").exists())
+
+    def test_real_hung_poller_and_resistant_child_time_out_notify_and_exit(self):
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        captured = self.root / "captured-argv.json"
+        codex = fake_bin / "codex"
+        codex.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "open(os.environ['CAPTURED_ARGV'], 'w').write(json.dumps(sys.argv[1:]))\n"
+            "print('scratch queue receipt')\n"
+        )
+        codex.chmod(0o755)
+        child_pid_path = self.root / "child.pid"
+        hung_poll = self.root / "hung-poll.py"
+        hung_poll.write_text(
+            "import os, signal, subprocess, sys, time\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "child = subprocess.Popen([sys.executable, '-c', "
+            "'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'])\n"
+            "open(sys.argv[1], 'w').write(str(child.pid))\n"
+            "time.sleep(60)\n"
+        )
+        self.config["poll"] = [sys.executable, str(hung_poll), str(child_pid_path)]
+        self.config["poll_deadline_seconds"] = 0.25
+        self.handoff.write_text("DONE\n")
+        os.utime(self.handoff, (1_800_000_001, 1_800_000_001))
+        (self.event_dir / "config.json").write_text(json.dumps(self.config))
+        environment = dict(os.environ)
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment["PATH"]
+        environment["CAPTURED_ARGV"] = str(captured)
+        worker = subprocess.Popen(
+            [sys.executable, str(SCRIPT), "run", "--event-dir", str(self.event_dir)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=environment,
+            start_new_session=True,
+        )
+        bystander = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(5)"], start_new_session=True
+        )
+        try:
+            try:
+                stdout, stderr = worker.communicate(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.fail("listener exceeded its short poll deadline")
+            self.assertEqual(worker.returncode, 0, stderr)
+            self.assertEqual(stdout.strip(), "delivered")
+            result = json.loads((self.event_dir / "poll-result.json").read_text())
+            self.assertEqual(result["outcome"], "timeout")
+            self.assertEqual(result["exit_code"], None)
+            self.assertEqual(result["handoff_evidence"], "ready")
+            argv = json.loads(captured.read_text())
+            self.assertIn("needs inspection", argv[-1].lower())
+            self.assertIn("timeout", argv[-1].lower())
+            self.assertIsNone(bystander.poll(), "cleanup signalled an unrelated process group")
+            child_pid = int(child_pid_path.read_text())
+            for _ in range(20):
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail("hung poller child survived cleanup")
+        finally:
+            if worker.poll() is None:
+                os.killpg(worker.pid, signal.SIGKILL)
+                worker.communicate(timeout=2)
+            if bystander.poll() is None:
+                bystander.kill()
+            bystander.wait(timeout=2)
 
 
 if __name__ == "__main__":
