@@ -180,11 +180,11 @@ replace an already-running image. A private or missing SHA never passes.
 
 ## 7. Drive
 
-- **Follow the feature recipe.** Each feature has a file in [`features/`](features/README.md) with its entry
+- **Follow the feature recipe.** Each feature has a file in [features/](../features/README.md) with its entry
   points, preconditions, steps and observable results. Run the recipe as written. If it's wrong, fix the
   recipe in the same change and say so in the record.
 - **Stable handles first.** Prefer keyboard shortcuts and accessibility identifiers to coordinates. The
-  identifier naming convention is set in P0-01 and listed in `features/README.md`. Coordinates are a last
+  identifier naming convention is set in P0-01 and listed in [`../features/README.md`](../features/README.md). Coordinates are a last
   resort; they differ between the local @1x mini and the @2x MacBook reached over SSH.
 - **Characters and named keys are different inputs.** `key.sh` accepts exactly one printable character.
   Send named keys through `kc.sh`: Tab `48`, Esc `53`, Return `36`, Left/Right/Down/Up `123`–`126`, and
@@ -401,7 +401,7 @@ inside `.build/device-<run-id>/`. Heavy jobs use `scripts/heavy-lock.sh`: picsee
 - A row can move to `验证 = 真机` only from a record like this, written by the device tester. Raising a row to
   `Shipped` is still the owner's edit, never the gardener's. The same commit may append or edit `限制：`, but
   must not rewrite that row's acceptance in 怎么确认 (see `docs/feature-ledger.md`).
-- A row whose recipe in `features/` is missing can't reach 真机: write the recipe first.
+- A row whose recipe in [`../features/`](../features/README.md) is missing can't reach 真机: write the recipe first.
 - A defect found here is a bug: it goes back through `/tdd-guardian:workflow` with a regression test that fails
   without the fix. This lane finds defects; it doesn't license an ad-hoc patch.
 - After a fix, rerun the whole criteria table, not only the row that failed.
