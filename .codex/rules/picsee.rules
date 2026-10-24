@@ -1,3 +1,6 @@
+# Shared safety rules; push/PR ownership is in local picsee-role.rules.
+# Provision every worktree using scripts/codex-rules/install-role.py before Codex.
+# The installer defaults to implementor; only explicit delegator setup omits bans.
 # picsee command rules for Codex (execpolicy, Starlark).
 #
 # Codex port of the delegator-only actions in the herdr roster plan
@@ -29,12 +32,6 @@ prefix_rule(
     not_match = ["rm -f a.txt", "rm a.txt"],
 )
 
-prefix_rule(
-    pattern = ["git", "push"],
-    decision = "forbidden",
-    justification = "Roster: only the delegator pushes. Commit on your branch and hand the SHA to the delegator.",
-    match = ["git push", "git push -f origin main", "git push origin p0-01/x"],
-)
 
 prefix_rule(
     pattern = ["git", "reset", "--hard"],
@@ -109,13 +106,6 @@ prefix_rule(
     match = ["gh release create v1", "gh workflow run release.yml"],
 )
 
-prefix_rule(
-    pattern = ["gh", "pr", ["merge", "create", "close"]],
-    decision = "forbidden",
-    justification = "Roster: the delegator opens, merges and closes PRs.",
-    match = ["gh pr merge 12", "gh pr create"],
-    not_match = ["gh pr view 12", "gh pr diff 12"],
-)
 
 # --- AGENTS.md: sandbox, signing and privacy grants ---
 
@@ -200,4 +190,13 @@ prefix_rule(
     justification = "AGENTS.md sandbox stays on; migration plan A3: do not replace, remove or insert the App Sandbox key. Ask the delegator, naming the entitlement file, exact operation and sandbox conflict; use xcrun plutil -p and record an ADR instead.",
     match = ["xcrun plutil -replace com.apple.security.app-sandbox -bool NO Picsee.entitlements", "/usr/bin/xcrun plutil -remove 'com\\.apple\\.security\\.app-sandbox' Picsee.entitlements"],
     not_match = ["xcrun plutil -p Picsee.entitlements", "/usr/bin/xcrun plutil -replace unrelated.key -bool NO Picsee.entitlements"],
+)
+
+# Force pushes still require separate explicit authorization; ordinary pushes only.
+prefix_rule(
+    pattern = ["git", "push", ["-f", "--force", "--force-with-lease", "--mirror"]],
+    decision = "forbidden",
+    justification = "Force/mirror push requires separate user authorization; role setup permits ordinary pushes only.",
+    match = ["git push --force origin main", "git push -f origin main", "git push --force-with-lease origin topic", "git push --mirror"],
+    not_match = ["git push origin topic"],
 )
