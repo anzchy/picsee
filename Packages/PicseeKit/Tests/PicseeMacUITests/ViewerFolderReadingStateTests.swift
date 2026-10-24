@@ -78,3 +78,63 @@ private actor FolderReadingNativeScanner: FolderScanning {
         }
     }
 }
+
+@Test @MainActor func viewerNoMatchesStateOffersClearFilterAndDistinctEmptyState() throws {
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    scene.state.display(.noMatches)
+    #expect(scene.state.textLines == ["No Images Match This Filter", "Choose another extension or clear the filter."])
+    #expect(scene.state.buttons.map { $0.identifier?.rawValue } == ["state.clear-filter"])
+    #expect(scene.state.buttons.first?.title == "Clear Filter")
+    #expect(scene.state.isHidden == false)
+    scene.state.buttons.first?.performClick(nil)
+    scene.state.display(.empty)
+    #expect(scene.state.buttons.map { $0.identifier?.rawValue } == ["state.open"])
+    #expect(scene.state.textLines.first == "Open a folder to start browsing")
+}
+
+private struct FolderNoMatchesScanner: FolderScanning {
+    func scan(in folder: URL, root: ItemIdentityRoot,
+              emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
+        try await emit([FolderEntry(url: folder.appendingPathComponent("a.jpg"), root: root)])
+    }
+}
+
+@Test @MainActor func viewerNoMatchesClearButtonRestoresEligibleFolderSnapshot() async throws {
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    let folder = URL(fileURLWithPath: "/native-folder/A")
+    let coordinator = FolderScanCoordinator(access: FolderReadingNativeLeases(), scanner: FolderNoMatchesScanner())
+    scene.session.folderScan = coordinator
+    try await coordinator.begin(folder: folder, rootID: AccessRootID(), input: folder.appendingPathComponent("a.jpg")).value
+    scene.session.setFolderConditions(.init(selectedExtensions: ["PNG"]))
+    scene.state.refresh()
+    #expect(scene.session.imageStatus == .noMatches)
+    #expect(coordinator.snapshot?.navigationEntries.isEmpty == true)
+    let clear = try #require(scene.state.buttons.first)
+    #expect(clear.identifier?.rawValue == "state.clear-filter")
+    clear.performClick(nil)
+    #expect(scene.session.folderConditions.selectedExtensions == nil)
+    #expect(coordinator.snapshot?.navigationEntries.map(\.url.lastPathComponent) == ["a.jpg"])
+    #expect(scene.session.imageStatus != .noMatches)
+}
+
+@Test func viewerFolderMenuAndNoMatchesCatalogIsBilingual() throws {
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let data = try Data(contentsOf: root.appendingPathComponent("App/Resources/Localizable.xcstrings"))
+    let catalog = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let strings = try #require(catalog["strings"] as? [String: Any])
+    for key in ["Sort By", "Name", "Modification Date", "Type", "Size", "Sort Order", "Ascending",
+        "Descending", "Extensions", "All Extensions", "Loop Through Folder", "No Images Match This Filter",
+        "Choose another extension or clear the filter.", "Clear Filter", "No Extension"] {
+        let entry = try #require(strings[key] as? [String: Any])
+        let localizations = try #require(entry["localizations"] as? [String: Any])
+        for language in ["en", "zh-Hans"] {
+            let localized = try #require(localizations[language] as? [String: Any])
+            let unit = try #require(localized["stringUnit"] as? [String: Any])
+            #expect((unit["value"] as? String)?.isEmpty == false)
+            if language == "zh-Hans" { #expect(unit["value"] as? String != key) }
+        }
+    }
+}
