@@ -86,7 +86,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         }
         let payload = directory.appendingPathComponent(row.payloadPath)
         guard PayloadLeaseRegistry.shared.acquire(payload.path) else { return nil }
-        defer { PayloadLeaseRegistry.shared.release(payload.path) }
+        var leaseHeld = true
+        defer { if leaseHeld { PayloadLeaseRegistry.shared.release(payload.path) } }
         await afterReadLeaseAcquired?()
         try Task.checkCancellation()
         guard let size = (try? FileManager.default.attributesOfItem(atPath: payload.path)[.size] as? NSNumber)?.intValue,
@@ -101,6 +102,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
               image.width > 0, image.height > 0,
               image.width <= ticket.request.maximumPixelSize,
               image.height <= ticket.request.maximumPixelSize else {
+            PayloadLeaseRegistry.shared.release(payload.path)
+            leaseHeld = false
             removeDamagedEntry(ticket)
             return nil
         }
