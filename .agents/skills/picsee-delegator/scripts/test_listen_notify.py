@@ -67,8 +67,9 @@ class ListenerTests(unittest.TestCase):
 
     def test_status_rejects_malformed_envelopes(self):
         for payload in ({}, {"agent_status": "idle"}, {"result": []},
-                        {"result": {"type": "error", "agent": {"agent_status": "idle"}}},
-                        {"result": {"type": "agent_info", "agent": {"agent_status": "unknown"}}}):
+                        {"result": {"type": "error", "agent": {"name": "gpt-auditor", "agent_status": "idle"}}},
+                        {"result": {"type": "agent_info", "agent": {"name": "gpt-auditor", "agent_status": "unknown"}}},
+                        {"result": {"type": "agent_info", "agent": {"agent_status": "idle"}}}):
             with self.subTest(payload=payload), patch.object(poll_report.subprocess, "run",
                     return_value=self.completed([], stdout=json.dumps(payload))):
                 with self.assertRaises(ValueError):
