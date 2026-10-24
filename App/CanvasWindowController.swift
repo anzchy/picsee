@@ -20,6 +20,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var chromeOverlay: ViewerChromeOverlay!
     private var stateHost: ViewerStateHost!
     private var retryIntent: ViewerRetryIntent?
+    private var retryFromFolderScan = false
     private let chromeTimer = ChromeTimerAdapter()
     private var chromeEvents: ChromeEventBridge?
     private var chromeGeneration: UUID?
@@ -73,7 +74,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         stateHost = ViewerStateHost(frame: content.bounds, session: session)
         stateHost.autoresizingMask = [.width, .height]
         stateHost.onRetry = { [weak self] in
-            self?.retryIntent?.reopen { url, request in self?.open(url, accessRequest: request) }
+            self?.retryIntent?.reopen { url, request in
+                self?.open(url, accessRequest: request, fromFolderScan: self?.retryFromFolderScan == true)
+            }
         }
         content.addSubview(stateHost)
         let dragStrip = ChromeDragStrip(frame: NSRect(x: 0, y: content.bounds.height - 28, width: content.bounds.width, height: 28))
@@ -136,13 +139,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func windowDidEnterFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
     func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
 
-    func open(_ url: URL, accessRequest: AccessRequest? = nil) {
+    func open(_ url: URL, accessRequest: AccessRequest? = nil, fromFolderScan: Bool = false) {
         retryIntent = ViewerRetryIntent(fileURL: url, accessRequest: accessRequest)
-        _ = accessIntent.begin()
+        retryFromFolderScan = fromFolderScan
+        if !fromFolderScan { _ = accessIntent.begin() }
         refreshRecents()
         filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
         fileURL = url
-        navigationTask?.cancel()
+        if !fromFolderScan { navigationTask?.cancel() }
         let scale = window?.backingScaleFactor ?? 1
         let maximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
         session.openImage(url, maximumPixelSize: maximum, opener: ViewerImageLoader.accessOpener(intent: accessIntent) { [accessServices, pipeline] operation in
@@ -504,7 +508,15 @@ extension CanvasWindowController: FolderScanHost {
         return scan
     }
     func openFolderImage(_ url: URL, rootID: AccessRootID) {
-        open(url, accessRequest: .root(rootID, file: url))
+        // A scan-owned move must not revoke the authority that admits its later batches.
+        open(url, accessRequest: .root(rootID, file: url), fromFolderScan: true)
+    }
+    func clearFolderImageForNoMatches() {
+        retryIntent = nil
+        retryFromFolderScan = false
+        fileURL = nil
+        session.closeImage()
+        canvas.showFailure()
     }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws {
         let operation = accessIntent.current

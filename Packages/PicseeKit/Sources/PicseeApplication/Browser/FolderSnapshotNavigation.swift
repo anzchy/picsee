@@ -5,16 +5,23 @@ import PicseeCore
     func openFolderImage(_ url: URL, rootID: AccessRootID)
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws
     func showEmptyFolder()
+    func clearFolderImageForNoMatches()
+}
+
+extension FolderScanHost {
+    public func clearFolderImageForNoMatches() { }
 }
 
 extension FolderScanCoordinator {
     /// Nil lets a nonmember use the existing native grant/navigation path.
     public func canMove(_ direction: NavigationDirection, currentURL: URL? = nil) -> Bool? {
+        if hasNoMatches { return false }
         guard let navigation = navigation(matching: currentURL), let snapshot else { return nil }
         return !snapshot.isComplete || neighbor(in: navigation, direction: direction) != nil
     }
     /// A member endpoint is handled, including a provisional endpoint's enabled no-op.
     @discardableResult public func move(_ direction: NavigationDirection, currentURL: URL? = nil) -> Bool {
+        if hasNoMatches { return true }
         guard let navigation = navigation(matching: currentURL), let snapshot else {
             guard let currentURL else { return false }
             return queueNavigation(direction, folder: currentURL.deletingLastPathComponent(), input: currentURL)
@@ -41,11 +48,25 @@ extension FolderScanCoordinator {
     }
     private func neighbor(in navigation: (entries: [FolderEntry], index: Int), direction: NavigationDirection) -> FolderEntry? {
         let index = navigation.index + (direction == .next ? 1 : -1)
-        return navigation.entries.indices.contains(index) ? navigation.entries[index] : nil
+        if navigation.entries.indices.contains(index) { return navigation.entries[index] }
+        guard loopEnabled, snapshot?.isComplete == true, navigation.entries.count > 1 else { return nil }
+        return direction == .next ? navigation.entries.first : navigation.entries.last
     }
 }
 
 extension ViewerSession {
     public func endFolderScan() { folderScan?.end() }
     public func cancelFolderReading() { folderScan?.cancel() }
+    public var folderConditions: FolderViewConditions { folderScan?.conditions ?? .init() }
+    public var folderLoopEnabled: Bool { folderScan?.loopEnabled ?? false }
+    public var folderAvailableExtensions: [String] { folderScan?.availableExtensions ?? [] }
+    public var hasFolderSource: Bool { folderScan?.sourceSnapshot != nil }
+    public func setFolderConditions(_ conditions: FolderViewConditions) {
+        guard filePreviewSet == nil, previewSet == nil else { return }
+        folderScan?.setConditions(conditions)
+    }
+    public func setFolderLoopEnabled(_ enabled: Bool) {
+        guard filePreviewSet == nil, previewSet == nil else { return }
+        folderScan?.setLoopEnabled(enabled)
+    }
 }
