@@ -126,9 +126,11 @@ other unique token. Reusing an event with a different agent, task, target thread
 The start command detaches a new process session, so it survives the parent shell and agent turn. Runtime state is
 under `~/.picsee/herdr/delegator/listeners/<event>/`: `config.json`, `pid`, `listener.log`, `status.json`,
 `poll-result.json`, and, only after a successful `codex queue` response, `queue-receipt.json`. The shipped pollers
-have finite waits; queue delivery uses finite 30-second attempts and bounded exponential backoff. No heavy lock is
-taken. A nonzero poller exit, timeout, blocker, question, or missing/stale report is still queued as **needs
-inspection** and is never labelled successful or accepted.
+have a listener-enforced overall deadline of `--max-minutes` plus one poll interval and 10 seconds. If a poller
+hangs inside `herdr`, the listener terminates its private poller process group, records `timeout` in
+`poll-result.json`, and continues to queue a **needs inspection** message. Queue delivery uses finite 30-second
+attempts and bounded exponential backoff. No heavy lock is taken. A nonzero poller exit, timeout, blocker,
+question, or missing/stale report is still queued as **needs inspection** and is never labelled successful or accepted.
 
 Inspect `status.json` and `poll-result.json` first. A `queue-receipt.json` proves only that Codex accepted the queued
 message; it is not the delegator's ACK and poll completion is not audit acceptance. Before relying on this mechanism
@@ -182,7 +184,7 @@ Risk tier decides the audits:
 
 | Tier | Typical scope | Audit |
 |---|---|---|
-| Low | docs, ledger wording, mechanical renames, tiny scripts, Low audit follow-ups | gpt-auditor alone, one blind round; non-C/H remains Still open unless cheaply folded in |
+| Low | docs, ledger wording, mechanical renames, tiny scripts, Low audit follow-ups | gpt-auditor alone, one blind round; apply the shared severity policy in §5.5 to every finding |
 | Medium | ordinary features, UI states, navigation, scanning | gpt-auditor alone; one fix round for user-visible/AC Mediums, no confirm |
 | High | FileAccess/sandbox/bookmarks, entitlements, concurrency core, anything that can lose data or access | gpt-auditor alone; every C/H gets a fresh-context confirm; cap of three rounds |
 

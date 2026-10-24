@@ -4,10 +4,13 @@
 import argparse
 import fcntl
 import json
+import math
 import os
 import re
+import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -69,6 +72,11 @@ def _validate_config(config):
         raise ValueError("max_delivery_attempts must be between 1 and 10")
     if not isinstance(backoff, (int, float)) or backoff < 0 or backoff > 300:
         raise ValueError("initial_backoff_seconds must be between 0 and 300")
+    deadline = config.get("poll_deadline_seconds")
+    if deadline is not None and (
+        not isinstance(deadline, (int, float)) or not math.isfinite(deadline) or deadline <= 0
+    ):
+        raise ValueError("poll_deadline_seconds must be finite and positive")
 
 
 def _thread_lock(path):
@@ -129,10 +137,58 @@ def _classify_poll(returncode, output):
     return "poll-error"
 
 
+def _poll_deadline_seconds(config):
+    if "poll_deadline_seconds" in config:
+        return config["poll_deadline_seconds"]
+    # Existing registered events predate the stored deadline. Recover the shipped
+    # poller's configured maximum rather than silently giving them an infinite wait.
+    poll = config["poll"]
+    name = Path(poll[0]).name
+    if name in ("poll-idle.sh", "poll-handoff.sh") and len(poll) >= 4:
+        try:
+            minutes = int(poll[3])
+            interval = int(poll[2]) if name == "poll-idle.sh" else 60
+            if minutes > 0 and interval > 0:
+                return minutes * 60 + interval + 10
+        except ValueError:
+            pass
+    return 600 * 60 + 70
+
+
+def _run_poll_process(argv, deadline):
+    # A file avoids waiting forever on a pipe still held open by a hung descendant.
+    with tempfile.TemporaryFile(mode="w+t") as output:
+        process = subprocess.Popen(
+            argv, stdout=output, stderr=subprocess.STDOUT, text=True, start_new_session=True
+        )
+        try:
+            process.wait(timeout=deadline)
+        except subprocess.TimeoutExpired:
+            # start_new_session made this process the leader of a private group.
+            # Signal only that group, including children which ignore their parent.
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            time.sleep(0.2)
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=1)
+            raise
+        output.seek(0)
+        return subprocess.CompletedProcess(argv, process.returncode, output.read(65536), "")
+
+
 def _run_poll(event_dir, config, run):
     _atomic_json(event_dir / "status.json", {"state": "polling", "event": config["event"]})
     try:
-        completed = run(config["poll"], capture_output=True, text=True)
+        deadline = _poll_deadline_seconds(config)
+        if run is subprocess.run:
+            completed = _run_poll_process(config["poll"], deadline)
+        else:
+            completed = run(config["poll"], capture_output=True, text=True, timeout=deadline)
         output = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part.strip())
         result = {
             "exit_code": completed.returncode,
@@ -145,7 +201,7 @@ def _run_poll(event_dir, config, run):
         result = {
             "exit_code": None,
             "output": type(error).__name__ + ": " + str(error),
-            "outcome": "poll-error",
+            "outcome": "timeout" if isinstance(error, subprocess.TimeoutExpired) else "poll-error",
             "handoff_evidence": _handoff_evidence(config),
             "recorded_at": time.time(),
         }
@@ -340,6 +396,7 @@ def _config_from_args(args):
         "handoff": handoff,
         "handoff_marker": args.handoff_marker,
         "poll": poll,
+        "poll_deadline_seconds": args.max_minutes * 60 + (args.interval if args.poll == "idle" else 60) + 10,
         "created_at": time.time(),
         "max_delivery_attempts": args.max_delivery_attempts,
         "initial_backoff_seconds": args.initial_backoff_seconds,
