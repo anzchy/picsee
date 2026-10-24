@@ -244,8 +244,9 @@ To create a **new implementer pane**:
 
 ```
 plan → issue → brief → dispatch → (scope questions / amendments) → handoff
-  → blind audit → verdict → fix round (± confirm) → rebase → gates → gardener → PR → CI → merge
-  → device validation → validation record PR → timeline / handoff log
+  → blind audit → verdict → fix round (± confirm) → rebase → gates → gardener
+  → UI parity capture + independent review (if UI changes) → PR → CI → merge
+  → full feature validation → validation record PR → timeline / handoff log
 ```
 
 Risk tier decides the audits:
@@ -274,7 +275,8 @@ Put it at `~/.picsee/herdr/<implementer>/<item>-brief.md`. Templates that worked
 
 For any UI change, complete the state mapping, pinned design source, native exceptions, and evidence plan in
 [`docs/agents/ui-parity-contract.md`](../../../../docs/agents/ui-parity-contract.md) before dispatch. Apply its
-signed-device comparison and independent review steps during validation; leave uncaptured states `NOT VERIFIED`.
+signed-device comparison and independent review **before merging the UI PR**. Uncaptured required states are
+`NOT VERIFIED` and block merge; name unreachable future-work states `PENDING` with their work package.
 
 1. **Header:** who they are, worktree, exact branch command (`git fetch origin && git switch -c <branch>
    origin/main`), base SHA, issue number, tier and why.
@@ -426,6 +428,14 @@ PR body sections:
 - the `无用户可见变化` lines;
 - the exact `Ledger-Gardener:` line;
 - the attribution line.
+
+For a UI PR, include the contract's `UI-Parity` table for each changed reachable state: pinned Prototype file and
+hashes, viewport/appearance/scale, signed App build SHA and run ID, independent verifier and gpt-auditor report,
+verdict and remaining limits. The independent verifier captures raw App and HTTP HTML images before merge; the
+auditor reviews those exact images and input hashes. All required conditions must be `PASS` on the current PR head
+(or have a proved App/design/input-identical documentation-only successor). A `FAIL` or `NOT VERIFIED` required
+condition means keep the PR draft and fix or capture it; CI and static code review do not clear it. Do not apply
+`PENDING` to a reachable state. Other prototype states remain separately tracked, including #92.
 
 Then wait for CI and merge:
 

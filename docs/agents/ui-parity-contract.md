@@ -4,7 +4,7 @@
 
 ## 依据与范围
 
-- 视觉和交互方向以用户决定及 [`design/DESIGN.md`](../../design/DESIGN.md) 为准；SwiftUI/AppKit 的颜色、points/backing pixels、组件和系统边界按[原生映射](../../design/picsee-ui-system/native/README.md)。改变设计先改设计源并说明用户决定或 ADR，再改原生实现；不在 Swift 里悄悄创造例外。
+- 视觉和交互方向以用户决定及 [`design/DESIGN.md`](../../design/DESIGN.md) 为准；**具体状态的布局、内容、显隐和交互目标是该状态在 `design/prototypes/picsee-browser/states/` 中的 HTML**。SwiftUI/AppKit 的颜色、points/backing pixels、组件和系统边界按[原生映射](../../design/picsee-ui-system/native/README.md)。若原型与设计规范冲突，先修设计源并取得该设计变更所需的用户决定，再改原生实现；不在 Swift 里悄悄创造例外。
 - 20 个正式状态的唯一目录是 [`states/manifest.json`](../../design/prototypes/picsee-browser/states/manifest.json)。开发计划 [§1.3](../PICSEE_DEVELOPMENT_PLAN.md) 决定每页归属的工作包；[功能账簿](../feature-ledger.md)决定当前实现状态及「怎么确认」。`viewer-v2.html` 只提供已写出的交互参考。HTML 中的按钮、示例文件名或静态蓝框不证明原生功能、权限或可访问性已实现。
 - 原生系统标题栏、菜单、字体栅格化、真实文件内容等按原生映射处理。每个与 HTML 不同的选择都在 brief 的「原生例外」列写具体元素、依据和预期结果；原生映射没有规定的差异，应先修设计或实现，不把它事后称为系统例外。
 
@@ -30,4 +30,12 @@
 4. gpt-auditor 对原始截图、构建输入和行为记录作独立审查，按严重度列出差异和复现步骤。修复后，delegator 安排指定的独立设备验收角色在共享 GUI 锁下重建签名 App、重拍受影响状态并交付新原图和准确的修复版 SHA；gpt-auditor 只审核该批原图、记录与 SHA，不操作 App。缺少重拍证据的状态保持 `NOT VERIFIED`。轮次完成只说明交付范围内的结论，不自动代表 20 页全通过。PR 列出已比对、待实现和未验证的状态及仍开放发现。
 5. 设备验证记录按[功能验收指南](../guide/feature-verification-guide.md)单独提交。账簿状态由 owner 按每行「怎么确认」及真机证据决定；视觉相似、HTML 渲染或静态审计本身都不能把一行升为 `Shipped`，也不能删减验收入口。
 
-CI 可检查构建、单元/渲染断言、manifest 和账簿同步；它不能单独证明签名 App 在所有窗口、显示倍率和交互状态下与设计一致。没有对应真机和独立审计证据的范围保持未验证。
+## UI PR 合并门禁
+
+对每个改变原生 UI 的 PR，delegator 在 brief 中列出**本次新增或改变的所有可达状态和必验条件**（视口、外观、倍率、语言、关键动作），并在 PR 描述放一张逐状态对照表：设计 tree OID、HTML/manifest SHA256、签名 App 的完整构建 SHA、运行 ID、截图/测量与行为记录位置、独立审计报告和 `PASS`/`FAIL`/`NOT VERIFIED`/`PENDING`。证据目录留在 `~/.picsee/`，公开 PR 只写非敏感的 ID、哈希和结论。预先定义的区域、容差、遮罩和原生例外是判断 `PASS` 的条件；有未解释的控件、文案、布局或行为偏移即 `FAIL`，先修实现或经用户确认修订原型，再重拍重审。
+
+- 本次改动的可达状态及其必验条件必须由**当前 PR head** 构建的签名、sandbox App 对照固定版 HTML，全部获独立设备验收者和 gpt-auditor 的 `PASS`，才能合并。每次影响 App、设计或验证输入的提交之后重建、重拍、重审；仅文档/账簿提交也要明确证明与已验证 head 的 App 和设计输入逐文件相同，不能只声称 SHA 相同。
+- 本次改动的必验条件若为 `FAIL` 或 `NOT VERIFIED`，PR 保持 draft/不合并，写清阻碍和下一轮修复或补测。`PENDING` 只用于本次工作包尚未实现且无法由当前 App 抵达、并明确归属后续工作包的状态；已经可达的状态不得用 `PENDING` 绕过。
+- 原型目录里其余未受本次改动影响的状态仍逐项如实报告，不能借本次通过宣称 20 页、@2x 或所有交互已经一致。当前 #92 的历史偏移按其独立清单继续追踪，不因新 PR 的局部 `PASS` 关闭。
+
+CI 可检查构建、单元/渲染断言、manifest 和账簿同步；它不能单独证明签名 App 在所有窗口、显示倍率和交互状态下与设计一致。因此此门禁由签名真机证据和独立审计执行，CI 绿灯不是视觉通过。
