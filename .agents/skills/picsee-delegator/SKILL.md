@@ -34,7 +34,8 @@ a successful guarded dry-run before a remote write (see `scripts/codex-rules/REA
 
 | Pane | Name | Agent | Reset before a new item |
 |---|---|---|---|
-| w1:p2/p3 | gpt-imple-1/2 | Codex `gpt-6.1-sol`, `-s danger-full-access` | `$SK/scripts/reset.sh <name> <pane>` |
+| w1:p2 | gpt-imple-1 | Target Codex `gpt-6-sol`, effort `medium`, after current work/fix rounds end | `$SK/scripts/reset.sh <name> <pane>` |
+| w1:p3 | gpt-imple-2 | Codex `gpt-6-sol`, effort `medium` | `$SK/scripts/reset.sh <name> <pane>` |
 | w1:p4 | gpt-imple-3 | Codex `gpt-5.6-sol`, Low only | `$SK/scripts/reset.sh` |
 | w1:p5 | gpt-auditor | Codex `gpt-6-astra` | `$SK/scripts/reset.sh` (zoom if it says FAIL) |
 | w1:p6 | opus-auditor | Claude `--agent picsee-opus-auditor --model opus` | `/clear` + Enter before every request |
@@ -49,8 +50,10 @@ Low only. Never touch mdpro or its tmux `dtrack`.
 2. **Brief** — copy [templates/brief-template.md](references/templates/brief-template.md) to
    `~/.picsee/herdr/<impl>/<item>-brief.md`. Read the code before writing fences. Codex uses `$tdd-guardian-workflow`;
    Kimi needs the hand-written test-first steps. Dispatch: `herdr agent prompt <impl> 'New task: … Read and follow <brief>…'`.
-3. **Watch** — Codex: `$SK/scripts/poll-idle.sh <agent> 120 3000` (background). Kimi/Claude:
-   `$SK/scripts/poll-handoff.sh <agent> <handoff.md>`. Scope stops → approve minimal hunks in an amendment file.
+3. **Watch** — mandatory after every dispatch and rearm for every fix/audit round: attach
+   `$SK/scripts/listen-notify.py start` to the applicable shipped poller, with the literal delegator thread UUID,
+   agent, fresh event/round ID and expected handoff/report path. Never infer the target from cached herdr state.
+   See [the listener procedure](references/guide.md#durable-listener-notification). Scope stops → approve minimal hunks in an amendment file.
    Fixture-only test mistakes → approve. Network hang → `herdr pane send-keys <pane> Escape`, then "resume…".
    Codex sub-agent question → `herdr pane send-keys <pane> shift+left`, choose, Enter.
 4. **Audit** — [templates/audit-request-template.md](references/templates/audit-request-template.md); gpt version must
@@ -86,3 +89,5 @@ heavy job in `scripts/heavy-lock.sh`, put screenshots or personal paths in the r
 See the trials-and-errors table in [references/guide.md](references/guide.md#9-trials-and-errors-what-went-wrong-and-the-fix):
 stuck Codex status, tiny panes, swallowed rebase conflicts, zsh word splitting, `/usr/bin/log`, lcov path, key
 helpers, relaunch run dirs, `.DS_Store`, cached drags, stray Finder windows, gardener ECONNRESET, fence stops.
+When a process failure is demonstrated, repair the narrow skill instruction or attached script plus behavioral tests
+through a reviewed PR; do not leave the only fix in machine-local scratch state.
