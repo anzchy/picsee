@@ -110,7 +110,7 @@
 | OPEN-02 | 打开面板 | Partial | 无 | P0-09、P1-02 | `App/PicseeApp.swift`、`App/Commands/CommandMenu.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift` | ⌘O 选一张图或一个目录，画布显示该图；在面板里取消，当前状态不变。限制：File › Open…、⌘O（图片与目录）、取消与不支持文件的提示已 @1x 真机通过（[记录](validation/P1.md#p1-02finder打开面板拖入与输入失败)）；底部 Open… 按钮仅单元。 |
 | OPEN-03 | 从 Finder 打开 | Partial | 单元 | P1-02 | `App/Info.plist`、`App/PicseeApp.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Input/`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift` | 在 Finder 对一张 JPEG 用“打开方式 → picsee”，App 启动并显示该图。限制：Finder“打开方式”与双击（rank `Alternate`，需设为默认程序）未验；`open -a` 多文件成集合、按名称 ←/→、不回绕、Esc 无变化 @1x 通过（[记录](validation/P1.md#p1-02finder打开面板拖入与输入失败)）。 |
 | OPEN-04 | 拖入打开 | Partial | 单元 | P1-02 | `Packages/PicseeKit/Sources/PicseeApplication/Input/`、`Packages/PicseeKit/Sources/PicseeMacUI/Input/`、`App/CanvasWindowController.swift` | 从 Finder 拖一张图进窗口，显示该图；拖入不支持的文件给出明确提示，当前图不变。限制：#73 修复后 @1x 合成拖入通过：未打开过的图片、ZIP、文件夹与多文件夹提示、多图成集合（[记录](validation/P1.md#p1-02finder打开面板拖入与输入失败)）；真实鼠标未验；无拖入高亮。 |
-| OPEN-05 | 无法读取的图片 | Partial | 单元 | P1-07、P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerRetryIntent.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图。限制：网格与 Esc 返回待 P3-01；@1x 损坏/截断说明和 Retry 见[记录](validation/P1.md#p1-07空态加载失败取消菜单焦点与中英文本)；#92 r4 签名像素确认错误图标、构图及窄窗无碰撞（[记录](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）；截断 JPEG、加载中未验。 P2-03 过滤 Next、扫描中/后同图 Retry 保留条件/权限仅单元，原生组合未验。 |
+| OPEN-05 | 无法读取的图片 | Partial | 单元 | P1-07、P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerRetryIntent.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图。限制：网格/Esc 待 P3-01；@1x 三类错误/重试（截断 PNG，[P1](validation/P1.md#p1-07空态加载失败取消菜单焦点与中英文本)）、构图/窄窗（[#92](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）通过；JPEG/加载中未验；过滤后下一张、扫描中/后同图重试保留条件/权限仅单元，原生组合未验。 |
 | OPEN-06 | 最近打开 | Partial | 单元 | P2-09、P3-14 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/RecentFolderStore.swift`、`App/Access/AccessMenus.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Access/AccessRecovery.swift` | 打开一个目录后退出重开，最近列表里有它；授权失效时显示重新授权入口；不保存图片副本。限制：重启后浏览、随改名更新、运行中目录消失首次即提示重连 @1x 通过（[记录](validation/P2.md#p2-01授权根存储重连与租约)）；仅文件夹、最多 10 项；不保存图片副本未验；损坏库降级仅单元。 |
 | OPEN-07 | 从剪贴板打开 | Absent | 无 | P4-02 | — | 截图到剪贴板后选“从剪贴板打开”，新窗口显示该图 |
 
@@ -330,21 +330,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-24 | doc-gardener | #92 UI 对照（c9504fe..94f67c2）：OPEN-01/05 已记录空态/错误态布局及签名像素的有限证据，保持 Partial/单元；OPEN-02/03/04 输入路由不变。 前次记录：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：打开目录改为分批扫描、首批前显示 24 页读取态；OPEN-01/02/04/05/06 验收不受影响（空态、失败态、最近列表写入时机与过滤规则不变）。上次：P2-01 真机记录（docs/p2-01-device-mini，1c28a09..e8de551，run 20261024-074141-P2-01-ACCESS-02-03-OPEN-06） |
-| 查看与画布 | 2026-10-24 | doc-gardener | #58 最新 main 复核（430e2a2..9a230ce）：VIEW-09 已注明消耗单次重试后的延迟旧查找仅单测、本修复真机未验；验收、状态与既有未验条件保留。VIEW-06/07 的方向和透明解码不变。上次：#92 UI 对照（c9504fe..94f67c2），VIEW-10 只改底部布局与文件名宽度，翻图路由不变。 |
-| C 沉浸界面 | 2026-10-24 | doc-gardener | #92 UI 对照（c9504fe..94f67c2）：CHROME-01…04 已补布局/静态显隐证据，未升级；CHROME-05 返回路由不变。 前次记录：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：`ViewerSession` 只改上一张/下一张启用与路由，不改 chrome 显隐；CHROME-01…05 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
-| 外观与显示偏好 | 2026-10-24 | doc-gardener | #92 UI 对照（c9504fe..94f67c2）：面板颜色、轮廓与阴影变化不改 PREF-02 的 Reduce Motion 策略或显隐动画。 前次记录：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：`CanvasWindowController` 只接扫描与读取态；PREF-02 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
-| 文件夹浏览 | 2026-10-24 | doc-gardener | #92 UI 对照（c9504fe..94f67c2）：ViewerStateHost 只为 empty/failed 增加组合布局，FOLDER-01 的读取状态与取消路径不变。 前次记录：打开文件夹按名称首张（#82，fix/folder-open-first-by-name，d2fbd1a..1f76c23）：fa06a0a 只删限制「首张取自首批」；0ec1d04 单独改验收并引用用户 2026-10-24 原话；状态 `Partial`/`单元` 不变；代码在扫描完成后取 `completed.entries.first`（按名称排序）。1f76c23 按提议在限制补「按名称首张…真机未验」，因链接的 @1x 记录显示旧行为 `img-0040`；P2.md 无计时，「时间见」暂无数字；能力名「边扫描边浏览」现只合以图片打开。上次：P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132，run 20261024-092410-P2-02-FOLDER-01-VIEW-10） |
+| 打开与输入 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：OPEN-05 已记录过滤 Next 与扫描中/后同图 Retry 保留条件及权限的单元边界，验收未变；owner 已将确认格压缩至约 165 字、两句，保留 P1/#92 链接及全部未验条件，长度提议已解决。OPEN-01/02/04/06 的既有输入、空态与最近列表边界不变。 |
+| 查看与画布 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：VIEW-10 已记录同一排序/过滤快照导航、可选循环及 folder.loop.menu，保留原生菜单/按键组合未验；VIEW-05 的全屏路径不变。前次 #58 的 VIEW-09 限制保留，本范围不改缓存/加载代次。 |
+| C 沉浸界面 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：目录子菜单沿用 menuWillOpen/menuDidClose 的跟踪集合；CHROME-01…04 的计时、唤回、交互锁及常驻偏好未改。新子菜单的真机组合未验已列于 FOLDER-02/03 与 VIEW-10，不据源码升级。 |
+| 外观与显示偏好 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：新增目录排序/过滤/循环为 Session 内条件，无新 DisplayPreferences 键或持久化；PREF-01/02 的外观、系统跟随与 Reduce Motion 路径不变。 |
+| 文件夹浏览 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：FOLDER-02/03 从 Absent/无 到 Partial/单元，验收逐字保留；目录元数据、投影与无匹配清除已接线，菜单 ID 含无扩展名及动态扩展名。FOLDER-01 保留名称首图、读取/取消未真机验；首图等待期间条件变化与 Retry 回归只作单元边界，不宣称规模通过。 |
 | Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 网格、选择与菜单 | 2026-10-24 | doc-gardener | P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132）：5e83132 引用 P2-01，GRID-15 计划含 P2-01，但范围只改文档、无代码；GRID-15 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-24 | doc-gardener | 限制缩写（chore/kimi-trial-low，fe5125d..45e2fea）：只改 ACCESS-05 限制，状态 `Partial`/`单元` 与验收不变；P0、P1-04 记录链接保留，「日志不区分临时/租约」「续租/租约平衡、P2-02 扫描租约释放仅单元」保留；删去的 `4bdd6ef`／关闭按钮细节仍在 P1-04 记录第 6 步。上次：P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132） |
+| 授权与文件访问 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：同一显式输入 Retry 经 root、文件、当前图与呈现权限匹配后保留扫描权限，限制见 OPEN-05/FOLDER-03；ACCESS-01/03/05 的授权入口、重连和租约释放实现未改，无新增 entitlement。 |
 | 缓存与资源 | 2026-10-24 | doc-gardener | #58 最新 main 复核（430e2a2..9a230ce）：CACHE-01 已记录重叠修订在原租约内最多复核一次源文件，保留 Partial/单元、本修复真机未验及压力/S2/两窗口限制；新增测试覆盖旧查找与已消耗重试的交付，未升级能力。上次：P1-07（fa2703f..d97615d），仅公开 fileURL。 |
-| 命令与键盘 | 2026-10-24 | doc-gardener | #92 UI 对照（c9504fe..94f67c2）：CMD-01 的命令集合、路由和启用条件不变；仅底部工具尺寸与排列变化。 前次记录：限制缩写（chore/kimi-trial-low，fe5125d..45e2fea）：只改 CMD-01 限制，状态与验收不变；未实现项与「工具组按钮仅合成点击」保留；删去的 P1-07 句是通过记录而非限制，证据仍在 P1 记录 P1-07 节。上次：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a） |
+| 命令与键盘 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：新增 FolderMenuAction 标识已映射 FOLDER-02/03、VIEW-10；未增改 CommandRouter 命令 ID 或快捷键。CMD-01/02 的既有路由与菜单/输入框优先规则保留，新目录菜单组合真机未验。 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-24 | doc-gardener | #58 最新 main 复核（430e2a2..9a230ce）：ImageIOPipeline 只新增观察冲突后的文件头复核，支持格式、方向与颜色解码不变；FMT-01 保留既有状态及 @1x 记录，@2x 未验。上次：P1-07（fa2703f..d97615d），解码器与格式集合未改。 |
-| 可访问性与本地化 | 2026-10-24 | doc-gardener | #92 UI 对照（c9504fe..94f67c2）：A11Y-04 的“中文仅由目录覆盖测试证明”待 owner 更新为目录及局部布局单元证据；系统中文签名像素与全界面截断仍未验。 前次记录：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：新增 3 条读取页字符串（Reading Folder…、说明、Cancel Reading），均有 en、zh-Hans，ViewerLocalizationTests 覆盖；A11Y-04 不变；A11Y-02 读取页 Cancel 键盘可达未验。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
+| 可访问性与本地化 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：新增 15 条菜单/无匹配状态文案具备 en 与 zh-Hans，Clear Filter 有标识及组件测试；系统中文、VoiceOver 与原生键盘路径仍未验，A11Y-02/04 状态不变。A11Y-04 当前限制已保留 #92 局部布局单元边界，前次措辞提议已解决。 |
 | 分发 | 2026-10-23 | doc-gardener | P1-10 真机记录（validation/p1-10-device-mini，3996845..08c5ecf，run 20261023-212346-P1-10-DIST-06）：DIST-06 只改「限制：」（@1x Dock 与访达列表/图标视图通过），仍 `Partial`/`无`，验收不变；⌘Tab、浅色 Dock、@2x 未验。DIST-01…05 不变。上次：App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2） |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
@@ -377,6 +377,18 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 VIEW-09、CACHE-01 的限制与当前代码和回归测试范围一致，状态/验证仍为 Partial/单元；逐提交核对验收前缀未变。VIEW-06、VIEW-07、FMT-01 因 ImageIOPipeline 路径映射纳入，方向、透明与格式行为未改；既有 P0/P1 验证链接存在并包含对应 ID。未发现新增的命令、菜单、偏好、entitlement 或 UTType 声明；没有能力升级。
 
 这次没有检查什么：未运行测试、App 构建或真机，未读取审计报告或 PR 评论；不把源码与回归测试阅读视为运行通过证据，@2x、性能、压力/S2/两窗口及本修复真机仍未验。
+
+### 2026-10-24 P2-03 在最新 main 上复核（d26e164..057462f）
+
+FOLDER-02/03 的状态与验证仅升至 Partial/单元，逐提交核对验收前缀未变；OPEN-05、VIEW-10、FOLDER-01 的限制已对应过滤、同输入 Retry 与首图呈现的代码边界。新增目录菜单标识均在对应行中，涉及路径及既有验证链接有效，未发现 Shipped/真机升级。OPEN-05 合并现有 UI 证据后约 202 个可见字符，提议 owner 只压缩限制，保留验收、P1/#92 链接、JPEG/加载中未验以及 P2-03 原生组合未验。
+
+这次没有检查什么：未运行测试、构建或 App，未读取审计报告或 PR 评论；未创建真机、性能、菜单/Retry/焦点、中文签名像素或 @1x/@2x 验收证据，源码与测试阅读不构成运行通过。
+
+### 2026-10-24 P2-03 OPEN-05 限制压缩复核
+
+owner 仅压缩 OPEN-05 的限制文本，全文约 165 个可见字符、两句；验收前缀、Partial/单元状态和代码路径未变。P3-01 网格/Esc、@1x 三类错误及重试的截断 PNG 证据、#92 构图/窄窗链接、截断 JPEG 与加载中未验，以及过滤后下一张、扫描中/后同图重试保留条件/权限仅单元和原生组合未验均保留；前轮长度提议已解决。
+
+这次没有检查什么：未运行测试、构建或 App，未读取审计报告或 PR 评论；本次仅复核限制压缩与生成视图，不新增行为或真机验收证据。
 
 ## 参考做法
 
