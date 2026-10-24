@@ -23,6 +23,7 @@ Use [`docs/agents/ui-parity-contract.md`](../../../../../docs/agents/ui-parity-c
 | `<manifest name>` / `<states/file.html>` | `<tree OID; HTML SHA256; manifest SHA256>` | `<width×height; light/dark; @1x/@2x>` | `<steps + deterministic input>` | `<ID / Pn-nn>` | `<specific mapped exception or 无>` | `<region/behavior/focus/a11y/zh-en checks; NOT VERIFIED items>` |
 
 Define comparison regions, measurement coordinates and any dynamic-data masks before seeing the App screenshot. Implement from the design token/component contract; do not treat browser mockup clicks as native behavior. Device evidence requires a signed sandboxed App at matching viewport/appearance and raw reference/native PNGs tied to source/build SHAs outside the repo. A visual match alone never upgrades the ledger to `Shipped`.
+List every changed reachable state and required viewport/appearance/scale/language/action as a pre-merge gate. The independent device verifier and gpt-auditor must mark each required condition `PASS` against this PR head before merge. `FAIL` or `NOT VERIFIED` blocks merge; `PENDING` requires an unreachable state and named future work package.
 
 ## WI-0 — probe the risky seam first (only if an assumption needs the device)
 <exact probe; throwaway code allowed, never committed; what to record; "if it can't be delivered, record NOT VERIFIED

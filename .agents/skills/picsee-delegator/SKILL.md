@@ -83,11 +83,16 @@ Low only. Never touch mdpro or its tmux `dtrack`.
 7. **Gardener** — `picsee-doc-gardener` (Claude subagent / Codex custom agent), mode `pr`, `base..head`. UPDATED →
    commit its diff as `docs(ledger): garden <b>..<h>`; NEEDS-OWNER → fix rows (限制/在哪 only) or `无用户可见变化：` lines,
    rerun; acceptance changes only in a separate commit quoting the user.
-8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. Push the current topic
-   with `python3 scripts/codex-rules/push-guard.py` (exact lease OID after rebasing an owned PR branch). Wait for checks
+8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. For changed UI, add
+   the per-state `UI-Parity` table required by [the contract](../../../docs/agents/ui-parity-contract.md). Before
+   merge, every changed reachable state and its required conditions need a signed App versus pinned Prototype `PASS`
+   on the PR head, independent device verification and gpt-auditor review. `FAIL`/`NOT VERIFIED` keeps the PR draft;
+   `PENDING` is only for genuinely unreachable future-work states. Recheck after any new App/design/input commit.
+   Push with `python3 scripts/codex-rules/push-guard.py` (exact lease OID after rebasing an owned PR branch). Wait for checks
    to register, `gh pr checks --watch`, then `gh pr merge --rebase` (authorised when no blocking C/H, gardener not BLOCK,
    CI green).
-9. **Device validation** — **first take the desktop GUI lock shared with mdpro**:
+9. **Device validation** — for changed UI, perform the parity capture and independent review **before step 8 merge**;
+   full feature validation and ledger promotion may still follow merge. **First take the desktop GUI lock shared with mdpro**:
    `$SK/scripts/gui-lock.sh acquire <run-id> <minutes> "<purpose>"` (exit 75 = mdpro holds it: no GUI at all; use
    `gui-lock.sh wait …` or tell the user), message mdpro-delegator at start/end, and `gui-lock.sh release <run-id>`
    only after cleanup (aborted runs too). Then macos-device-test skill + guide §6 (`scripts/device/*`,
