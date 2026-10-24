@@ -11,7 +11,7 @@
 | 东西 | 位置 | 管什么 | 不管什么 |
 |---|---|---|---|
 | 功能账簿 | [`docs/feature-ledger.md`](../feature-ledger.md) | picsee **现在有什么**：每行一项能力的状态、验证强度、代码位置、「怎么确认」（验收） | 怎么一步步操作 |
-| `macos-device-test` 技能 | `.claude/skills/macos-device-test/` | **怎么在真实 App 里验**：构建、启动、doctor 自检、按 `features/` 的步骤操作、取证、清理、结论表 | 改账簿、改代码 |
+| `macos-device-test` 技能 | `.agents/skills/macos-device-test/` | **怎么在真实 App 里验**：构建、启动、doctor 自检、按 `features/` 的步骤操作、取证、清理、结论表 | 改账簿、改代码 |
 | doc gardener | [`docs/agents/doc-gardening.md`](../agents/doc-gardening.md) | 每个 PR 前**检查账簿有没有过时或被放宽**：只做更谨慎的修改，升级一律交给你 | 跑 App、写验证记录、提交 |
 
 三者的关系：账簿里的「怎么确认」是验收标准 → 设备测试按它在 App 里操作，写进 `docs/validation/P<n>.md` →
@@ -53,8 +53,8 @@ mini 没有 HiDPI 模式。VIEW-02 有三个入口：mini 按 `1`、MacBook 按 
 2× 的行（P0-03、27 页）从 mini 使用待配置的
 `ssh macbook`，把命令送进 MacBook 自己桌面启动的 tmux 会话。签名构建和启动也必须在那个会话里执行，
 因为普通 SSH 会话读不到登录钥匙串并报 `errSecInternalComponent`。SSH 路径未配置前，@2x 一律记
-NOT VERIFIED。mini 上由 herdr 会话里的 Claude pane 执行；Codex pane 的 sandbox 会阻止 SwiftPM cache，
-不能运行 `xcodebuild`。
+NOT VERIFIED。mini 上由具备桌面与构建权限的独立验收会话执行；重任务按仓库规程使用
+`scripts/heavy-lock.sh`。
 
 ## 4. 逐步操作
 
@@ -65,7 +65,7 @@ NOT VERIFIED。mini 上由 herdr 会话里的 Claude pane 执行；Codex pane �
 > VIEW-03：触控板捏合**或**按 +/−，光标下的那个像素始终停在光标下
 > → 两个入口：`+/−`、`触控板捏合`。两个都要验；只验一个，这一行最多 `Partial`。
 
-再打开 `.claude/skills/macos-device-test/features/` 里对应的运行步骤（例如 `canvas-pixels.md`）。
+再打开 `.agents/skills/macos-device-test/features/` 里对应的运行步骤（例如 `canvas-pixels.md`）。
 **没有步骤的行先写步骤**，按 `features/README.md` 的格式：子功能、入口、操作与结果、陷阱。
 
 ### ② 写 brief
@@ -83,25 +83,27 @@ brief 是给验收会话的任务单，放在 `~/.picsee/device-briefs/brief-<�
     窗口从 @2x 拖到 @1x —— 当前没有同时具备两种倍率的机器，预期 NOT VERIFIED
   - VIEW-03：+/−；触控板捏合（用户步骤）
 - 运行步骤：features/canvas-pixels.md
-- 沙盒容器：保持现状（不删除）
+- 沙盒容器：保持现状
 - 需要用户动手的步骤：VIEW-03 触控板捏合 —— 到这一步停下来叫我
 - 报告写到：~/.picsee/device-runs/<run-id>/report.md
 ```
 
-需要“全新安装”状态（删除沙盒容器）时，在 brief 里写明并注明“用户已同意”；验收会话不会自己删。
+需要冷启动状态时，在 brief 里写明涉及的存储文件、备份和恢复步骤，并记录这次运行获得的用户同意；
+验收会话不能自行删除容器。
 
 ### ③ 开新会话跑 macos-device-test
 
-在本机 herdr 会话里开一个**新的 Claude pane**，不要用写这段代码的那个会话：实现者不能给自己出验收记录。
-开始前确认 mdpro 的 `dtrack` tmux 会话空闲；它驱动同一块屏幕，验收过程不要向它发命令或触碰它。然后输入：
+在本机开一个**独立验收会话**，不要用写这段代码的会话：实现者不能给自己出验收记录。
+先运行 `.agents/skills/picsee-delegator/scripts/gui-lock.sh status`；开始操作界面前获取共享 GUI 锁，
+被占用时不要驱动桌面，也不要触碰 mdpro 的会话。然后调用技能：
 
 ```text
-/macos-device-test 读 ~/.picsee/device-briefs/brief-2026-11-05-VIEW-02-03.md，按里面写的执行，报告写到 brief 指定的位置。brief 说需要我动手的时候停下来叫我。
+$macos-device-test 读 ~/.picsee/device-briefs/brief-2026-11-05-VIEW-02-03.md，按里面写的执行，报告写到 brief 指定的位置。brief 说需要我动手的时候停下来叫我。
 ```
 
 会话会按技能顺序做：选机器 → 检查没有别的 Picsee 在跑 → 用锁定的 Xcode 构建并检查签名团队 →
-`open -n` 启动并记录 PID → doctor 自检（每一行都要通过）→ 一次性申请 computer use 权限（只申请 brief 需要的 App，
-你点一次“本次会话允许”）→ 按运行步骤操作 → 存日志和截图 → 按 PID 清理并确认证据还在。
+`open -n` 启动并记录 PID → doctor 自检（每一行都要通过）→ 若工具要求授权，仅申请 brief 需要的 App →
+按运行步骤操作 → 存日志和截图 → 按 PID 清理、释放 GUI 锁并确认证据还在。
 
 若 brief 含 @2x，mini 上的会话改用 `ssh macbook` 把命令送进 MacBook 桌面启动的 tmux 会话；不能在普通
 SSH shell 里签名或启动。该路径未配置时不要换验收标准，直接把 @2x 项记为 NOT VERIFIED。
@@ -222,7 +224,7 @@ trailer 只是声明，真正的保证仍是流程：验收一定在新会话里
 ## 6. 相关文件
 
 - 功能账簿规则：[`docs/feature-ledger.md`](../feature-ledger.md)「验证」「防止验收被悄悄放宽」
-- 设备验收技能：`.claude/skills/macos-device-test/SKILL.md`，运行步骤在同目录 `features/`
+- 设备验收技能：`.agents/skills/macos-device-test/SKILL.md`，运行步骤在同目录 `features/`
 - gardener 规程：[`docs/agents/doc-gardening.md`](../agents/doc-gardening.md)
 - 开发计划与验收门槛：[`docs/PICSEE_DEVELOPMENT_PLAN.md`](../PICSEE_DEVELOPMENT_PLAN.md)
 - 术语：[`GLOSSARY.md`](../../GLOSSARY.md)

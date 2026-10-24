@@ -50,7 +50,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <tr><td><code>集成</code></td><td>在 App 进程或 UI 测试里跑通，但不是人在真机上操作</td><td>Test</td></tr>
 <tr><td><code>真机</code></td><td>按「怎么确认」在真实 Mac 上操作通过，<code>docs/validation/</code> 有记录</td><td>Demonstration</td></tr>
 </tbody></table></div>
-<ul><li><code>Shipped</code> 要求验证为 <code>真机</code>，且「怎么确认」里链接对应的 <code>docs/validation/</code> 记录。只有单元或集成证据的能力最多记 <code>Partial</code>，限制写「真机未验」。</li><li>涉及显示的行（1:1、缩放、Retina）要在 1× 和 2× 两种屏幕上都验证过，才算 <code>真机</code>。</li><li>性能类的行，数字写进 <code>docs/validation/</code>，本账簿只链接，不抄数字。</li><li><strong>每个入口都要验。</strong> 「怎么确认」用“或”“/”“、”列出的每个入口（按键、手势、菜单、按钮、拖入）和每个取值（如“JPEG 或 PNG”）都是验收的一部分，要分别验证。只验了一部分，最多记 <code>Partial</code>，<code>限制：</code> 写明没验的入口。没验的入口不能借另一个入口的结果算通过（例：VIEW-03 只按了 +/−、没试触控板捏合，就不是 <code>真机</code>）。</li><li><strong>保存和写出要第二次独立确认。</strong> 写着“保留”“退出重开”“记住”的行，要退出 App 再打开，在 App 里看到结果；写文件的行（导出、另存、去除元数据），要读文件本身确认（如 <code>mdls</code>、<code>exiftool</code>、<code>shasum</code>），不以 App 的成功提示为准；写着“释放”的行，以日志为准，不以窗口关了为准。</li><li><code>真机</code> 的记录按 <code>.claude/skills/macos-device-test/features/</code> 里该行的运行步骤做；还没有步骤的行，先写步骤再验证。</li></ul>
+<ul><li><code>Shipped</code> 要求验证为 <code>真机</code>，且「怎么确认」里链接对应的 <code>docs/validation/</code> 记录。只有单元或集成证据的能力最多记 <code>Partial</code>，限制写「真机未验」。</li><li>涉及显示的行（1:1、缩放、Retina）要在 1× 和 2× 两种屏幕上都验证过，才算 <code>真机</code>。</li><li>性能类的行，数字写进 <code>docs/validation/</code>，本账簿只链接，不抄数字。</li><li><strong>每个入口都要验。</strong> 「怎么确认」用“或”“/”“、”列出的每个入口（按键、手势、菜单、按钮、拖入）和每个取值（如“JPEG 或 PNG”）都是验收的一部分，要分别验证。只验了一部分，最多记 <code>Partial</code>，<code>限制：</code> 写明没验的入口。没验的入口不能借另一个入口的结果算通过（例：VIEW-03 只按了 +/−、没试触控板捏合，就不是 <code>真机</code>）。</li><li><strong>保存和写出要第二次独立确认。</strong> 写着“保留”“退出重开”“记住”的行，要退出 App 再打开，在 App 里看到结果；写文件的行（导出、另存、去除元数据），要读文件本身确认（如 <code>mdls</code>、<code>exiftool</code>、<code>shasum</code>），不以 App 的成功提示为准；写着“释放”的行，以日志为准，不以窗口关了为准。</li><li><code>真机</code> 的记录按 <code>.agents/skills/macos-device-test/features/</code> 里该行的运行步骤做；还没有步骤的行，先写步骤再验证。</li></ul>
 <h2 id="怎么写各列">怎么写各列</h2>
 <div class="table-wrap"><table><thead><tr><th scope="col">列</th><th scope="col">写法</th></tr></thead><tbody>
 <tr><td>ID</td><td><code>区域-两位序号</code>，如 <code>VIEW-03</code>。一经分配不改、不复用；删掉的能力移到「不做」并保留 ID。brief、测试名、validation 记录都用这个 ID 引用</td></tr>
@@ -294,7 +294,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>107 项能力</span><span>·</span><span>Shipped 0 · Partial 36 · Stub 0 · Absent 71 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 27ba521cc092 · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 84b59061278d · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>
