@@ -272,6 +272,10 @@ Put it at `~/.picsee/herdr/<implementer>/<item>-brief.md`. Templates that worked
 `~/.picsee/herdr/delegator/p1-brief-P1-02.md`, `p2-brief-P2-01.md`, `p2-brief-P2-02.md` (long, for Codex) and
 `~/.picsee/herdr/kimi-imple-1/issue82-brief.md` (short, for Kimi). A brief contains:
 
+For any UI change, complete the state mapping, pinned design source, native exceptions, and evidence plan in
+[`docs/agents/ui-parity-contract.md`](../../../../docs/agents/ui-parity-contract.md) before dispatch. Apply its
+signed-device comparison and independent review steps during validation; leave uncaptured states `NOT VERIFIED`.
+
 1. **Header:** who they are, worktree, exact branch command (`git fetch origin && git switch -c <branch>
    origin/main`), base SHA, issue number, tier and why.
 2. **Read first:** `AGENTS.md` (Codex loads it by itself; Kimi does not reliably do so, so tell it explicitly), the
