@@ -34,16 +34,45 @@ public struct FolderEntry: Equatable, Sendable {
 public struct FolderSnapshot: Equatable, Sendable {
     public let version: SnapshotVersion
     public let entries: [FolderEntry]
-    public let isComplete: Bool
+    public private(set) var isComplete: Bool
+    /// Keep all admitted URLs above; browse each canonical identity through its first sorted URL.
+    public let navigationEntries: [FolderEntry]
+    private let navigationIndices: [ItemID: Int]
+    public func navigationIndex(for itemID: ItemID) -> Int? { navigationIndices[itemID] }
     public init(version: SnapshotVersion, entries: [FolderEntry], isComplete: Bool) {
-        self.version = version
-        self.entries = entries.sorted {
-            let names = $0.url.lastPathComponent.localizedStandardCompare($1.url.lastPathComponent)
-            return names == .orderedSame ? $0.relativePath < $1.relativePath : names == .orderedAscending
+        self.init(version: version, orderedEntries: entries.sorted(by: Self.orderedBefore), isComplete: isComplete)
+    }
+    private init(version: SnapshotVersion, orderedEntries: [FolderEntry], isComplete: Bool) {
+        self.version = version; entries = orderedEntries; self.isComplete = isComplete
+        var unique: [FolderEntry] = [], indices: [ItemID: Int] = [:]
+        for entry in orderedEntries where indices[entry.itemID] == nil {
+            indices[entry.itemID] = unique.count
+            unique.append(entry)
         }
-        self.isComplete = isComplete
+        navigationEntries = unique; navigationIndices = indices
+    }
+    private static func orderedBefore(_ lhs: FolderEntry, _ rhs: FolderEntry) -> Bool {
+        let names = lhs.url.lastPathComponent.localizedStandardCompare(rhs.url.lastPathComponent)
+        return names == .orderedSame ? lhs.relativePath < rhs.relativePath : names == .orderedAscending
     }
     public func appending(_ batch: [FolderEntry], isComplete: Bool) -> Self {
-        Self(version: version, entries: entries + batch, isComplete: isComplete)
+        if batch.isEmpty {
+            var result = self
+            result.isComplete = isComplete
+            return result
+        }
+        let incoming = batch.sorted(by: Self.orderedBefore)
+        var ordered: [FolderEntry] = [], left = 0, right = 0
+        ordered.reserveCapacity(entries.count + incoming.count)
+        while left < entries.count && right < incoming.count {
+            if Self.orderedBefore(incoming[right], entries[left]) {
+                ordered.append(incoming[right]); right += 1
+            } else {
+                ordered.append(entries[left]); left += 1
+            }
+        }
+        ordered.append(contentsOf: entries[left...])
+        ordered.append(contentsOf: incoming[right...])
+        return Self(version: version, orderedEntries: ordered, isComplete: isComplete)
     }
 }
