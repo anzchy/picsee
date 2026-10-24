@@ -91,7 +91,14 @@ import PicseeCore
                         return
                     }
                     try Task.checkCancellation()
-                    host?.openFolderImage(first.url, rootID: rootID)
+                    // rememberFolder can yield while conditions replace or clear the first image.
+                    if currentItemID == first.itemID,
+                       currentURL?.standardizedFileURL == first.url.standardizedFileURL,
+                       snapshot?.entries.contains(where: {
+                           $0.itemID == first.itemID && $0.url.standardizedFileURL == first.url.standardizedFileURL
+                       }) == true {
+                        host?.openFolderImage(first.url, rootID: rootID)
+                    }
                 }
                 guard activeGeneration == token, !Task.isCancelled else { return }
                 activeGeneration = nil
