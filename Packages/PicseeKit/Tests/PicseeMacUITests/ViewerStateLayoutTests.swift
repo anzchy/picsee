@@ -33,7 +33,8 @@ import PicseeApplication
     #expect(heading.minY > description.maxY)
     #expect(description.minY > action.maxY)
     #expect(abs(icon.midX - scene.state.bounds.midX) < 1)
-    #expect(hint.maxY < action.minY)
+    #expect(abs(hint.minX - action.maxX - 16) <= 0.5)
+    #expect(abs(hint.midY - action.midY) <= 0.5)
     #expect(stateView("state.heading", in: scene.state)?.accessibilityLabel() == scene.state.textLines[0])
 }
 
@@ -112,7 +113,10 @@ import PicseeApplication
         try assertVisibleComposition(scene.state,
             ids: ["state.icon", "state.heading", "state.description", "state.open", "state.drop-hint"],
             expectedGaps: [("state.icon", "state.heading", 18), ("state.heading", "state.description", 9),
-                           ("state.description", "state.open", 18), ("state.open", "state.drop-hint", 9)])
+                           ("state.description", "state.open", 18)])
+        let open = try frame("state.open", in: scene.state)
+        let hint = try frame("state.drop-hint", in: scene.state)
+        #expect(abs(hint.minX - open.maxX - 16) <= 0.5)
     }
 }
 

@@ -64,8 +64,8 @@ private struct InputHintCatalog: Decodable {
     return ink
 }
 
-@Test @MainActor func inputHintActualStaticTextBelowButtonAndOutsideKeyLoop() throws {
-    for width: CGFloat in [960, 500] {
+@Test @MainActor func inputHintActualStaticTextResponsiveAndOutsideKeyLoop() throws {
+    for width: CGFloat in [960, 360] {
         let scene = StatesScene(width: width)
         defer { scene.session.closeImage(); scene.window.close() }
         scene.window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
@@ -88,7 +88,12 @@ private struct InputHintCatalog: Decodable {
         #expect(!hint.isEditable && !hint.isSelectable)
         let hintFrame = hint.accessibilityFrame(), buttonFrame = button.accessibilityFrame()
         #expect(hintFrame.width > 0 && hintFrame.height > 0)
-        #expect(hintFrame.maxY < buttonFrame.minY)
+        if width == 960 {
+            #expect(abs(hintFrame.minX - buttonFrame.maxX - 16) <= 2)
+            #expect(abs(hintFrame.midY - buttonFrame.midY) <= 2)
+        } else {
+            #expect(abs(buttonFrame.minY - hintFrame.maxY - 9) <= 2)
+        }
         let local = scene.content.convert(hint.bounds, from: hint)
         let screen = scene.window.convertToScreen(scene.content.convert(local, to: nil))
         #expect(abs(screen.minY - hintFrame.minY) <= 2 && abs(screen.maxY - hintFrame.maxY) <= 2)
