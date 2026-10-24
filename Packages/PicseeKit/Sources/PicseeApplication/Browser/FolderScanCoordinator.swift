@@ -82,6 +82,8 @@ import PicseeCore
                     trace?.end(outcome: .cancelled, generation: token)
                     return
                 }
+                snapshot = snapshot?.appending([], isComplete: true)
+                pendingDirection = nil
                 failure = error
                 trace?.end(outcome: .failed, generation: token)
                 throw error

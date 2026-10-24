@@ -484,7 +484,9 @@ extension CanvasWindowController: ViewerInputHost {
                 let services = try await operation.wait { try await accessServices.value }
                 try await folderScanner(services).begin(folder: url.deletingLastPathComponent(), rootID: rootID,
                     input: url, canPresent: { authority.isCurrent }).value
-            } catch { if operation.isCurrent { showAccessError(error) } }
+            } catch {
+                filesystemLogger.error("Background folder scan outcome=failed error=\(String(describing: error), privacy: .private)")
+            }
         }
     }
     func showInputNotice(_ notice: ViewerInputNotice) { showInputMessage(notice) }
