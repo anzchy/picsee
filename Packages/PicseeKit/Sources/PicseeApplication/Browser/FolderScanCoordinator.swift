@@ -46,7 +46,7 @@ import PicseeCore
                         snapshot = FolderSnapshot(version: version, entries: [], isComplete: false)
                         currentItemID = itemID
                     }, emit: { [self] batch in
-                        guard activeGeneration == token, !Task.isCancelled, let snapshot else { return }
+                        guard activeGeneration == token, !Task.isCancelled, retainReadingAuthority(), let snapshot else { return }
                         self.snapshot = snapshot.appending(batch, isComplete: false)
                         if !batch.isEmpty, !firstBatchTraced {
                             firstBatchTraced = true
@@ -64,7 +64,7 @@ import PicseeCore
                         advancePending()
                     })
                 try Task.checkCancellation()
-                guard activeGeneration == token, let completed = snapshot else { return }
+                guard activeGeneration == token, retainReadingAuthority(), let completed = snapshot else { return }
                 let showEmpty = input == nil && completed.entries.isEmpty && automaticPresentationAllowed?() != false
                 activeGeneration = nil
                 activeFolder = nil
@@ -77,6 +77,7 @@ import PicseeCore
                 if showEmpty { host?.showEmptyFolder() }
             } catch {
                 guard activeGeneration == token else { return }
+                if !Task.isCancelled, !retainReadingAuthority() { return }
                 activeGeneration = nil
                 activeFolder = nil
                 isReadingFolder = false
@@ -109,6 +110,11 @@ import PicseeCore
     }
     public func cancel() { end() }
     public func end() { stop(.cancelled) }
+    private func retainReadingAuthority() -> Bool {
+        guard isReadingFolder, automaticPresentationAllowed?() == false else { return true }
+        stop(.replaced)
+        return false
+    }
     private func stop(_ outcome: FolderScanOutcome) {
         let ending = activeGeneration
         activeGeneration = nil

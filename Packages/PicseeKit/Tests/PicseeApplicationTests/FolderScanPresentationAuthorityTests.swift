@@ -75,7 +75,8 @@ private actor FolderAuthorityBarrier {
     if effect != "empty" { try await fixture.scanner.deliver(["img1.png", "img2.png"]) }
     await fixture.scanner.finish(); try await task.value
     #expect(host.opens.isEmpty && host.remembered.isEmpty && host.rememberAttempts == 0 && host.emptyCount == 0)
-    #expect(fixture.coordinator.snapshot?.isComplete == true)
+    // Fix round 1: the authorized foreground policy is replaced, not silently completed.
+    #expect(fixture.coordinator.snapshot?.isComplete == (effect == "pending" ? true : nil))
     #expect(await fixture.access.balance == [1, 1])
     if effect == "pending" {
         #expect(fixture.coordinator.move(.next))
