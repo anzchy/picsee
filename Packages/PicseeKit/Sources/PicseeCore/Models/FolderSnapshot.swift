@@ -19,8 +19,13 @@ public struct FolderEntry: Equatable, Sendable {
     public let url: URL
     public let itemID: ItemID
     public let relativePath: String
-    public init(url: URL, root: ItemIdentityRoot) {
+    public let modificationDate: Date?
+    public let fileSize: Int64?
+    public var normalizedExtension: String { url.pathExtension.lowercased() }
+    public init(url: URL, root: ItemIdentityRoot, modificationDate: Date? = nil, fileSize: Int64? = nil) {
         self.url = url
+        self.modificationDate = modificationDate
+        self.fileSize = fileSize
         let boundary = root.url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
         let target = url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
         let displayPath = url.standardizedFileURL.deletingLastPathComponent().resolvingSymlinksInPath()
@@ -42,7 +47,7 @@ public struct FolderSnapshot: Equatable, Sendable {
     public init(version: SnapshotVersion, entries: [FolderEntry], isComplete: Bool) {
         self.init(version: version, orderedEntries: entries.sorted(by: Self.orderedBefore), isComplete: isComplete)
     }
-    private init(version: SnapshotVersion, orderedEntries: [FolderEntry], isComplete: Bool) {
+    init(version: SnapshotVersion, orderedEntries: [FolderEntry], isComplete: Bool) {
         self.version = version; entries = orderedEntries; self.isComplete = isComplete
         var unique: [FolderEntry] = [], indices: [ItemID: Int] = [:]
         for entry in orderedEntries where indices[entry.itemID] == nil {
@@ -52,7 +57,7 @@ public struct FolderSnapshot: Equatable, Sendable {
         navigationEntries = unique; navigationIndices = indices
     }
     private static func orderedBefore(_ lhs: FolderEntry, _ rhs: FolderEntry) -> Bool {
-        let names = lhs.url.lastPathComponent.localizedStandardCompare(rhs.url.lastPathComponent)
+        let names = folderNaturalNameCompare(lhs, rhs)
         return names == .orderedSame ? lhs.relativePath < rhs.relativePath : names == .orderedAscending
     }
     public func appending(_ batch: [FolderEntry], isComplete: Bool) -> Self {

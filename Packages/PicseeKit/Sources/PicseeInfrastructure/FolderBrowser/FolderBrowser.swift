@@ -21,9 +21,11 @@ public actor FolderBrowser: FolderScanning {
             try Task.checkCancellation()
             // Resolve/check before metadata lookup; outward links are never inspected here.
             guard AccessBoundary.contains(file, in: root.url) else { continue }
-            let values = try file.resolvingSymlinksInPath().resourceValues(forKeys: [.isRegularFileKey, .contentTypeKey])
+            let values = try file.resolvingSymlinksInPath().resourceValues(forKeys: [
+                .isRegularFileKey, .contentTypeKey, .contentModificationDateKey, .fileSizeKey])
             guard values.isRegularFile == true, values.contentType?.conforms(to: .image) == true else { continue }
-            batch.append(FolderEntry(url: file, root: root))
+            batch.append(FolderEntry(url: file, root: root, modificationDate: values.contentModificationDate,
+                fileSize: values.fileSize.map(Int64.init)))
             if batch.count == limit {
                 try await emit(batch)
                 try Task.checkCancellation()

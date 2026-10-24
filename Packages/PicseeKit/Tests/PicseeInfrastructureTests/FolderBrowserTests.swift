@@ -139,3 +139,18 @@ private struct FolderBrowserDeliveryError: Error {}
     #expect(failed)
     #expect(await collected.batches.map(\.count) == [64])
 }
+
+@Test func folderBrowserCollectsSortMetadata() async throws {
+    let fixture = try FolderBrowserTree()
+    defer { fixture.remove() }
+    let file = fixture.folder.appendingPathComponent("metadata.JpG")
+    try Data(repeating: 7, count: 37).write(to: file)
+    let modified = Date(timeIntervalSince1970: 1_234_567)
+    try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: file.path)
+    let collected = FolderBrowserBatches()
+    try await FolderBrowser().scan(in: fixture.folder, root: fixture.root) { await collected.append($0) }
+    let entry = try #require(await collected.batches.flatMap { $0 }.first)
+    #expect(entry.fileSize == 37)
+    #expect(entry.modificationDate == modified)
+    #expect(entry.normalizedExtension == "jpg")
+}
