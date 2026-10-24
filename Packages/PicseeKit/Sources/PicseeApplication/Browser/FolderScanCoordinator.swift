@@ -25,6 +25,7 @@ import PicseeCore
         return true
     }
     public func setConditions(_ value: FolderViewConditions) {
+        presentationRevision &+= 1
         conditions = value
         projectSource()
     }
@@ -43,6 +44,7 @@ import PicseeCore
     private let trace: (any FolderScanTracing)?
     private var firstBatchTraced = false
     private var noMatchesPresented = false
+    var presentationRevision: UInt64 = 0
     private var scanTask: Task<Void, any Error>?
     private var activeGeneration: UInt64?
     private var activeFolder: (url: URL, rootID: AccessRootID)?
@@ -94,6 +96,7 @@ import PicseeCore
                 presentNoMatchesIfNeeded()
                 if let first, automaticPresentationAllowed?() != false {
                     currentItemID = first.itemID; currentURL = first.url
+                    let initialPresentationRevision = presentationRevision
                     try await host?.rememberFolder(folder, rootID: rootID)
                     guard activeGeneration == token else { return }
                     guard automaticPresentationAllowed?() != false else {
@@ -102,7 +105,8 @@ import PicseeCore
                     }
                     try Task.checkCancellation()
                     // rememberFolder can yield while conditions replace or clear the first image.
-                    if currentItemID == first.itemID,
+                    if presentationRevision == initialPresentationRevision,
+                       currentItemID == first.itemID,
                        currentURL?.standardizedFileURL == first.url.standardizedFileURL,
                        snapshot?.entries.contains(where: {
                            $0.itemID == first.itemID && $0.url.standardizedFileURL == first.url.standardizedFileURL

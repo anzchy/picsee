@@ -28,6 +28,7 @@ extension FolderScanCoordinator {
         }
         pendingDirection = nil
         if let entry = neighbor(in: navigation, direction: direction) {
+            presentationRevision &+= 1
             currentItemID = entry.itemID
             self.currentURL = entry.url
             host?.openFolderImage(entry.url, rootID: snapshot.version.rootID)
