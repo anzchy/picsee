@@ -22,12 +22,14 @@ extension FolderScanCoordinator {
     /// Nil lets a nonmember use the existing native grant/navigation path.
     public func canMove(_ direction: NavigationDirection, currentURL: URL? = nil) -> Bool? {
         if hasNoMatches { return false }
+        if snapshot?.isComplete == true, snapshot?.navigationEntries.isEmpty == true { return false }
         guard let navigation = navigation(matching: currentURL), let snapshot else { return nil }
         return !snapshot.isComplete || neighbor(in: navigation, direction: direction) != nil
     }
     /// A member endpoint is handled, including a provisional endpoint's enabled no-op.
     @discardableResult public func move(_ direction: NavigationDirection, currentURL: URL? = nil) -> Bool {
         if hasNoMatches { return true }
+        if snapshot?.isComplete == true, snapshot?.navigationEntries.isEmpty == true { return true }
         guard let navigation = navigation(matching: currentURL), let snapshot else {
             guard let currentURL else { return false }
             return queueNavigation(direction, folder: currentURL.deletingLastPathComponent(), input: currentURL)

@@ -108,7 +108,7 @@ import PicseeCore
         await #expect(throws: FolderScanTestError.expected) { try await task.value }
         #expect(host.opens.isEmpty && host.remembered.isEmpty && host.emptyCount == 0)
         #expect(fixture.coordinator.failure is FolderScanTestError)
-        #expect(fixture.coordinator.snapshot?.isComplete == true)
+        #expect(fixture.coordinator.snapshot?.isComplete == false)
         #expect(fixture.coordinator.snapshot?.entries.map(\.url.lastPathComponent) == ["img-0040.png"])
         #expect(!fixture.coordinator.isReadingFolder)
         #expect(await fixture.access.balance == [1, 1])

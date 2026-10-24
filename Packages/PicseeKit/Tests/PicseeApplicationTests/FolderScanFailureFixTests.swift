@@ -12,7 +12,7 @@ import PicseeCore
 }
 
 @Test(arguments: [0, 1, 3])
-@MainActor func folderFixFailureFinalizesEndpoints(count: Int) async throws {
+@MainActor func folderFixFailureKeepsPartialEndpointsRecoverable(count: Int) async throws {
     let fixture = FolderScanFixture(), host = FolderNavigationHost(), trace = FolderFixTrace()
     let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, trace: trace)
     let session = ViewerSession(host: host), imageHost = LoadHost(), pipeline = LoadPipeline(), leases = LoadLeases()
@@ -31,12 +31,14 @@ import PicseeCore
     await fixture.scanner.finish(failing: true)
     await #expect(throws: FolderScanTestError.expected) { try await task.value }
     #expect(coordinator.failure is FolderScanTestError)
-    #expect(coordinator.snapshot?.isComplete == true)
+    #expect(coordinator.snapshot?.isComplete == false)
     #expect(coordinator.pendingDirection == nil && !coordinator.isReadingFolder)
-    #expect(coordinator.canMove(.next) == (count == 0 ? nil : count == 3))
-    #expect(coordinator.canMove(.previous) == (count == 0 ? nil : count == 3))
+    #expect(coordinator.canMove(.next) == (count == 0 ? nil : true))
+    #expect(coordinator.canMove(.previous) == (count == 0 ? nil : true))
     #expect(coordinator.snapshot?.entries.count == count)
-    #expect(session.imageStatus == .showing && session.imageLoader.presented?.key == presented)
+    #expect(session.imageStatus == .folderScanFailed("Folder scan failed", count))
+    #expect(!session.isEnabled(.next) && !session.isEnabled(.previous))
+    #expect(session.imageLoader.presented?.key == presented)
     #expect(session.imageLoader.fileURL == file && host.opens.isEmpty)
     #expect(trace.events == (count == 0 ? ["begin-1", "failed-1"] : ["begin-1", "first-\(count)", "failed-1"]))
     #expect(await fixture.access.balance == [1, 1])

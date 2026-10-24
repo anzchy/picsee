@@ -766,6 +766,9 @@ extension CanvasWindowController: FolderScanHost {
             os_signpost(.event, log: log, name: "scan_complete", "count=%{public}ld generation=%{public}llu", count, generation)
             logger.notice("scan_complete count=\(count, privacy: .public) generation=\(generation, privacy: .public)")
         }
+        func failure(_ error: any Error, generation: UInt64) {
+            logger.error("FolderScan failure generation=\(generation, privacy: .public) error=\(String(describing: error), privacy: .private)")
+        }
         func end(outcome: FolderScanOutcome, generation: UInt64) {
             guard let id = ids.removeValue(forKey: generation) else { return }
             os_signpost(.end, log: log, name: "FolderScan", signpostID: id,

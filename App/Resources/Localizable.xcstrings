@@ -2030,6 +2030,13 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "文件夹访问被拒绝" } }
       }
     },
+    "Folder scan failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Folder scan failed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "文件夹读取失败" } }
+      }
+    },
     "Unable to finish reading folder": {
       "extractionState": "manual",
       "localizations": {
