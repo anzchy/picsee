@@ -84,7 +84,8 @@ Queueing a follow-up while a Codex agent works: `send-text`, then `send-keys Tab
 ### Status is unreliable for Codex
 
 herdr's `agent_status` can be stale for Codex. For a Codex task with a unique report, use the report-aware
-listener mode below. It requires both a fresh report carrying this round's task ID and `herdr` idle/done; a scrolled
+listener mode below. It requires both a fresh report with exactly one `Report-Task: <task ID>` line and
+`herdr` idle/done; a scrolled
 pane showing old activity cannot prevent detection. The older screen poller remains available for tasks without a
 report. Run
 `.agents/skills/picsee-delegator/scripts/poll-idle.sh <agent> [interval] [max_min]` in the background. It prints
@@ -108,8 +109,8 @@ log. Immediately after every implementation, fix, audit or confirm dispatch, sta
 active delegator Codex thread UUID literally; never derive it from cached `herdr agent_session` data, which has been
 observed to point at a stale, wrong session. The helper uses argv throughout and never types into the desktop UI.
 
-One complete Codex implementation-round command is (the agent must put `issue90-implementation-r1` in its unique
-report):
+One complete Codex implementation-round command is (the agent must put the line
+`Report-Task: issue90-implementation-r1` in its unique report):
 
 ```sh
 python3 .agents/skills/picsee-delegator/scripts/listen-notify.py start \
@@ -127,7 +128,9 @@ python3 .agents/skills/picsee-delegator/scripts/listen-notify.py start \
 
 Use `--poll handoff` for Kimi/Claude and add `--handoff-marker '## Fix round 1'` when a report is appended or
 reused. `--poll idle` remains available where no unique report can be required. Report mode checks the expected
-file's modification time against listener registration and requires its content to include the exact `--task` ID.
+file's modification time against listener registration and requires exactly one line formatted
+`Report-Task: <task ID>`, with the whole ID equal to both non-empty `--task` and `--handoff-marker`.
+`Report-Task: issue90-r10` does not identify `issue90-r1`; duplicate identity lines are stale evidence.
 It completes only on fresh report plus idle/done. If idle/done persists without a fresh report for the configured
 grace period, it queues `missing-handoff` for reconciliation. A blocked status queues immediately. Working with
 an old report stays pending until a status change or the bounded deadline. Neither idle nor a report alone means

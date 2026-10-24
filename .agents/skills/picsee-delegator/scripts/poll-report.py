@@ -21,12 +21,22 @@ def _status(agent):
 
 
 def _fresh_report(report, created_at, marker):
+    return report_evidence(report, created_at, marker) == "ready"
+
+
+def report_evidence(report, created_at, marker):
+    """Require one exact `Report-Task: <task ID>` line in a fresh report."""
     try:
+        report = Path(report)
+        if not report.is_file():
+            return "missing"
         if report.stat().st_mtime < created_at:
-            return False
-        return marker in report.read_text(errors="replace")
+            return "stale"
+        identities = [line for line in report.read_text(errors="replace").splitlines()
+                      if line.startswith("Report-Task:")]
+        return "ready" if identities == ["Report-Task: " + marker] else "stale"
     except FileNotFoundError:
-        return False
+        return "missing"
 
 
 def watch(agent, report, created_at, marker, interval, max_minutes, idle_grace_seconds,

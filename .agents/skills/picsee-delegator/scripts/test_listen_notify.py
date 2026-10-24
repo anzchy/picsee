@@ -240,8 +240,81 @@ class ListenerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "handoff_marker"):
             listen_notify._validate_config(dict(config, handoff_marker="DONE"))
 
+    def test_report_mode_rejects_blank_identity_at_cli_and_persisted_boundaries(self):
+        parser = listen_notify._build_parser()
+        for task, marker in (("", ""), ("   ", "   "), ("issue90-r1", "  ")):
+            with self.subTest(task=task, marker=marker):
+                args = parser.parse_args([
+                    "start", "--event", "blank-round", "--task", task,
+                    "--thread", self.config["thread"], "--agent", "gpt-auditor",
+                    "--handoff", str(self.handoff), "--poll", "report",
+                    "--handoff-marker", marker,
+                ])
+                with self.assertRaisesRegex(ValueError, "non-empty"):
+                    listen_notify._config_from_args(args)
+                persisted = dict(self.config, task=task, handoff_marker=marker,
+                                 poll=[str(REPORT_SCRIPT), "gpt-auditor", str(self.handoff)])
+                (self.event_dir / "config.json").write_text(json.dumps(persisted))
+                with self.assertRaisesRegex(ValueError, "non-empty"):
+                    listen_notify.run_event(self.event_dir, run=lambda *_args, **_kwargs: self.fail("must not poll"))
+
+    def test_idle_with_old_matching_report_waits_for_fresh_report(self):
+        self.handoff.write_text("Report-Task: issue90-r1\n")
+        os.utime(self.handoff, (1_799_999_999, 1_799_999_999))
+        observations = []
+
+        def status(_agent):
+            observations.append("idle")
+            return "idle"
+
+        def advance(_seconds):
+            if len(observations) == 2:
+                os.utime(self.handoff, (1_800_000_001, 1_800_000_001))
+
+        result = poll_report.watch(
+            "gpt-auditor", self.handoff, 1_800_000_000, "issue90-r1",
+            interval=1, max_minutes=1, idle_grace_seconds=5,
+            get_status=status, sleep=advance,
+            monotonic=iter([0, 0, 1, 2]).__next__,
+        )
+        self.assertEqual(result, "done")
+        self.assertEqual(len(observations), 3, "old report must not stop polling")
+
+    def test_done_with_fresh_wrong_identity_waits_for_correct_report(self):
+        self.handoff.write_text("Report-Task: issue90-r10\n")
+        os.utime(self.handoff, (1_800_000_001, 1_800_000_001))
+        observations = []
+
+        def status(_agent):
+            observations.append("done")
+            return "done"
+
+        def advance(_seconds):
+            if len(observations) == 2:
+                self.handoff.write_text("Report-Task: issue90-r1\n")
+                os.utime(self.handoff, (1_800_000_002, 1_800_000_002))
+
+        result = poll_report.watch(
+            "gpt-auditor", self.handoff, 1_800_000_000, "issue90-r1",
+            interval=1, max_minutes=1, idle_grace_seconds=5,
+            get_status=status, sleep=advance,
+            monotonic=iter([0, 0, 1, 2]).__next__,
+        )
+        self.assertEqual(result, "done")
+        self.assertEqual(len(observations), 3, "wrong task must not stop polling")
+
+    def test_report_identity_field_must_be_unique_and_poll_path_must_match_config(self):
+        self.handoff.write_text("Report-Task: issue90-r1\nReport-Task: issue90-r1\n")
+        os.utime(self.handoff, (1_800_000_001, 1_800_000_001))
+        self.assertFalse(poll_report._fresh_report(self.handoff, 1_800_000_000, "issue90-r1"))
+        config = dict(self.config, task="issue90-r1", handoff_marker="issue90-r1",
+                      poll=[str(REPORT_SCRIPT), "gpt-auditor", str(self.root / "other.md"),
+                            str(self.event_dir / "config.json"), "issue90-r1", "1", "1", "1"])
+        with self.assertRaisesRegex(ValueError, "report path"):
+            listen_notify._validate_config(config)
+
     def test_report_poll_finds_fresh_report_at_idle_despite_scrolled_viewport(self):
-        self.handoff.write_text("# issue90-confirm3\nDONE\n")
+        self.handoff.write_text("Report-Task: issue90-confirm3\nDONE\n")
         os.utime(self.handoff, (1_800_000_001, 1_800_000_001))
         statuses = iter(["working", "idle"])
         screens = ["Back to bottom; older activity", "Back to bottom; older activity"]
@@ -308,7 +381,7 @@ class ListenerTests(unittest.TestCase):
             "--state-root", str(self.event_dir.parent),
         ])
         config = listen_notify._config_from_args(args)
-        self.handoff.write_text("# issue90-report-test\nCompleted\n")
+        self.handoff.write_text("Report-Task: issue90-report-test\nCompleted\n")
         (self.event_dir / "config.json").write_text(json.dumps(config))
         environment = dict(os.environ, CAPTURED_MESSAGE=str(captured))
         environment["PATH"] = str(fake_bin) + os.pathsep + environment["PATH"]
@@ -321,6 +394,49 @@ class ListenerTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "done")
         self.assertEqual(result["handoff_evidence"], "ready")
         self.assertIn("issue90-report-test", captured.read_text())
+
+    def test_real_report_worker_rejects_prefix_collision_and_blank_config(self):
+        fake_bin = self.root / "fake-identity-bin"
+        fake_bin.mkdir()
+        herdr = fake_bin / "herdr"
+        herdr.write_text("#!/bin/sh\nprintf '%s\\n' '{\"agent_status\":\"idle\"}'\n")
+        herdr.chmod(0o755)
+        codex = fake_bin / "codex"
+        codex.write_text("#!/bin/sh\nprintf 'scratch queued\\n'\n")
+        codex.chmod(0o755)
+        environment = dict(os.environ)
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment["PATH"]
+        args = listen_notify._build_parser().parse_args([
+            "start", "--event", self.event_dir.name, "--task", "issue90-r1",
+            "--thread", self.config["thread"], "--agent", "gpt-auditor",
+            "--handoff", str(self.handoff), "--handoff-marker", "issue90-r1",
+            "--poll", "report", "--interval", "1", "--max-minutes", "1",
+            "--idle-grace-seconds", "1", "--state-root", str(self.event_dir.parent),
+        ])
+        config = listen_notify._config_from_args(args)
+        self.handoff.write_text("Report-Task: issue90-r10\n")
+        os.utime(self.handoff, (config["created_at"] + 1, config["created_at"] + 1))
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "run", "--event-dir", str(self.event_dir)],
+            capture_output=True, text=True, env=environment, timeout=5,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads((self.event_dir / "poll-result.json").read_text())
+        self.assertEqual(result["outcome"], "missing-handoff")
+        self.assertEqual(result["handoff_evidence"], "stale")
+        self.assertTrue((self.event_dir / "queue-receipt.json").exists())
+
+        blank_dir = self.root / "blank-worker"
+        blank_dir.mkdir()
+        (blank_dir / "config.json").write_text(json.dumps(dict(config, task="", handoff_marker="")))
+        blank = subprocess.run(
+            [sys.executable, str(SCRIPT), "run", "--event-dir", str(blank_dir)],
+            capture_output=True, text=True, env=environment, timeout=5,
+        )
+        self.assertNotEqual(blank.returncode, 0)
+        self.assertIn("non-empty", blank.stderr)
+        self.assertFalse((blank_dir / "queue-receipt.json").exists())
 
     def test_detached_start_uses_argv_writes_pid_and_does_not_shell_interpolate(self):
         launches = []
