@@ -21,6 +21,11 @@ class ProcessQueryTests(unittest.TestCase):
         with self.query(0, '42\n9001\n'):
             self.assertEqual(d.running(), [42, 9001])
 
+    def test_success_status_with_diagnostic_stderr_fails_closed(self):
+        with self.query(0, '42\n', 'permission denied'):
+            with self.assertRaisesRegex(RuntimeError, 'pgrep'):
+                d.running()
+
     def test_exit_one_with_no_output_means_no_match(self):
         with self.query(1, ''):
             self.assertEqual(d.running(), [])
@@ -34,7 +39,8 @@ class ProcessQueryTests(unittest.TestCase):
     def test_malformed_or_contradictory_results_are_explicit(self):
         for status, output in ((0, ''), (1, '42\n'), (0, 'abc\n'),
                                (0, '42\nnot-a-pid\n'), (0, '0\n'),
-                               (0, '1\n'), (0, '42\n42\n'),
+                               (0, '1\n'), (0, '-42\n'),
+                               (0, '42\n42\n'),
                                (0, '042\n42\n')):
             with self.subTest(status=status, output=output), self.query(status, output):
                 with self.assertRaisesRegex(RuntimeError, 'pgrep'):
@@ -47,11 +53,17 @@ class ProcessQueryTests(unittest.TestCase):
         with patch.object(d, 'command', side_effect=OSError('pgrep unavailable')):
             with self.assertRaisesRegex(RuntimeError, 'pgrep'):
                 d.running()
+        with patch.object(d, 'command', side_effect=subprocess.TimeoutExpired('pgrep', 30)):
+            with self.assertRaisesRegex(RuntimeError, 'pgrep'):
+                d.running()
 
     def test_launch_stops_before_open_when_enumeration_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             run = Path(directory)
-            with self.query(3, '', 'query unavailable'), patch.object(d, 'checked') as checked:
+            (run / 'bundle.path').write_text(str(run / 'Picsee.app') + '\n')
+            (run / 'build.json').write_text('{"sha":"abcdefg"}\n')
+            with self.query(3, '', 'query unavailable'), \
+                    patch.object(d, 'checked', side_effect=AssertionError('open must not run')) as checked:
                 with self.assertRaisesRegex(RuntimeError, 'pgrep'):
                     d.launch(run)
                 checked.assert_not_called()
