@@ -130,6 +130,20 @@ public final class ChromeToolView: NSView {
     }
 }
 
+private final class ChromeFloatingGroupView: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 5.5, yRadius: 5.5)
+            DesignColor.popoverBackground.nsColor.setFill()
+            outline.fill()
+            let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            NSColor.black.withAlphaComponent(dark ? 0.28 : 0.16).setStroke()
+            outline.lineWidth = 1
+            outline.stroke()
+        }
+    }
+}
+
 public final class ViewerChromeOverlay: NSView {
     private var session: ViewerSession?
     public private(set) var tools: [ChromeToolView] = []
@@ -137,6 +151,18 @@ public final class ViewerChromeOverlay: NSView {
     public private(set) var filename: String?
     public private(set) var position: String?
     private let fileLabel = NSTextField(labelWithString: "")
+    public override func draw(_ dirtyRect: NSRect) {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            NSColor.black.withAlphaComponent(dark ? 0.18 : 0.12).setStroke()
+            for group in groups where !group.isHidden {
+                let outline = NSBezierPath(roundedRect: group.frame.insetBy(dx: 0.5, dy: 0.5),
+                    xRadius: 5.5, yRadius: 5.5)
+                outline.lineWidth = 2
+                outline.stroke()
+            }
+        }
+    }
     public convenience init(frame: NSRect, session: ViewerSession, motionPolicy: MotionPolicy? = nil) {
         self.init(frame: frame)
         self.session = session
@@ -146,7 +172,7 @@ public final class ViewerChromeOverlay: NSView {
             NSRect(x: bounds.width - 212, y: 14, width: 196, height: 38)]
         let positions: [[CGFloat]] = [[5, 37], [5, 39], [5, 37, 161]]
         for index in 0..<3 {
-            let group = NSView(frame: frames[index])
+            let group = ChromeFloatingGroupView(frame: frames[index])
             group.wantsLayer = true; group.layer?.cornerRadius = DesignMetrics.radii["control"]!
             addSubview(group); groups.append(group)
             for (offset, command) in commands[index].enumerated() {
@@ -170,6 +196,7 @@ public final class ViewerChromeOverlay: NSView {
         updateGroupColors()
     }
     private func updateGroupColors() {
+        needsDisplay = true
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         effectiveAppearance.performAsCurrentDrawingAppearance {
             for group in groups {
@@ -180,6 +207,7 @@ public final class ViewerChromeOverlay: NSView {
                 layer.shadowRadius = 6
                 layer.shadowOffset = CGSize(width: 0, height: -2)
                 layer.masksToBounds = false
+                group.needsDisplay = true
             }
         }
     }
@@ -191,8 +219,8 @@ public final class ViewerChromeOverlay: NSView {
         guard groups.count == 3 else { return }
         // Measure the actual label, then cap it for middle truncation. The side groups
         // keep their 30×28 command targets when compact windows require wrapping.
-        let font = DesignMetrics.font("uiSmall")
-        let labelWidth = ceil((fileLabel.stringValue as NSString).size(withAttributes: [.font: font]).width)
+        // NSTextFieldCell includes its text drawing inset; raw NSString width does not.
+        let labelWidth = ceil(fileLabel.cell!.cellSize.width)
         let width = min(260, max(74, min(bounds.width - 32, labelWidth + 74)))
         let rightX = bounds.width - 212
         let singleRow = bounds.width >= width + 316
@@ -207,6 +235,7 @@ public final class ViewerChromeOverlay: NSView {
         for group in groups {
             group.layer?.shadowPath = CGPath(roundedRect: group.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
         }
+        needsDisplay = true
     }
     public static let edgeBandHeight: CGFloat = 32
     public func pointerMoved(_ point: NSPoint) {
@@ -236,6 +265,7 @@ public final class ViewerChromeOverlay: NSView {
     }
     public func setToolsVisible(_ visible: Bool) {
         for view in groups + tools { view.isHidden = !visible }
+        needsDisplay = true
         updateAccessibilityChildren(visible: visible)
         if let canvas { linkKeyViews(to: canvas) }
     }
