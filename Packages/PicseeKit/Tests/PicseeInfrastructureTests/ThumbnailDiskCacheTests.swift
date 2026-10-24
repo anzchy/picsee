@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import SQLite3
 import Testing
 import UniformTypeIdentifiers
 import PicseeCore
@@ -130,4 +131,68 @@ import PicseeCore
     let rejectedDirectory = folder.appendingPathComponent("rejected-cache")
     try await ThumbnailDiskCache(directory: rejectedDirectory).store(decoded, for: ticket)
     #expect(!FileManager.default.fileExists(atPath: rejectedDirectory.path))
+}
+
+@Test func p303SourceChangedDuringPayloadPublicationLeavesNoIndexedImage() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let file = folder.appendingPathComponent("image.tiff")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let time = Date(timeIntervalSince1970: 1_000_000)
+    try Data(contentsOf: fixture("orientation-1.tiff")).write(to: file)
+    try FileManager.default.setAttributes([.modificationDate: time], ofItemAtPath: file.path)
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+    let decoded = try await pipeline.image(for: request)
+    let cache = ThumbnailDiskCache(directory: cacheDirectory, afterPayloadWrite: {
+        try Data(contentsOf: fixture("orientation-2.tiff")).write(to: file, options: .atomic)
+        try FileManager.default.setAttributes([.modificationDate: time], ofItemAtPath: file.path)
+    })
+    let ticket = try #require(try await cache.prepare(request))
+    try await cache.store(decoded, for: ticket)
+    #expect(!FileManager.default.fileExists(atPath: cacheDirectory.appendingPathComponent(ticket.key.filename + ".png").path))
+    #expect(!FileManager.default.fileExists(atPath: cacheDirectory.appendingPathComponent("index.sqlite3").path))
+}
+
+@Test func p303UnopenableIndexCannotDeliverPixels() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let file = folder.appendingPathComponent("image.tiff")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+    let decoded = try await pipeline.image(for: request)
+    let cache = ThumbnailDiskCache(directory: cacheDirectory)
+    let ticket = try #require(try await cache.prepare(request))
+    try FileManager.default.createDirectory(at: cacheDirectory.appendingPathComponent("index.sqlite3"),
+        withIntermediateDirectories: true)
+    await #expect(throws: Error.self) { try await cache.store(decoded, for: ticket) }
+    #expect(try await cache.load(ticket).map { _ in true } == nil)
+}
+
+@Test func p303DamagedIndexDimensionsCannotAlterDeliveredSourceSize() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let file = folder.appendingPathComponent("image.tiff")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+    let decoded = try await pipeline.image(for: request)
+    let cache = ThumbnailDiskCache(directory: cacheDirectory)
+    let ticket = try #require(try await cache.prepare(request))
+    try await cache.store(decoded, for: ticket)
+    var db: OpaquePointer?
+    #expect(sqlite3_open_v2(cacheDirectory.appendingPathComponent("index.sqlite3").path,
+                            &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK)
+    defer { if let db { sqlite3_close(db) } }
+    #expect(sqlite3_exec(db, "UPDATE thumbnails SET source_width=999", nil, nil, nil) == SQLITE_OK)
+    #expect(try await cache.load(ticket).map { _ in true } == nil)
 }

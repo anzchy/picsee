@@ -41,7 +41,14 @@ public actor AccessImageSource {
                     catch { ticket = nil } // Re-creatable cache failure cannot block source decoding.
                     if let ticket {
                         do {
-                            if let cached = try await thumbnailCache.load(ticket) {
+                            if let cached = try await thumbnailCache.load(ticket),
+                               let key = request.renderKey,
+                               cached.itemID == key.itemID, cached.revision == key.revision,
+                               cached.image.width > 0, cached.image.height > 0,
+                               cached.image.width <= maximumPixelSize,
+                               cached.image.height <= maximumPixelSize,
+                               cached.sourcePixelSize.width > 0, cached.sourcePixelSize.height > 0,
+                               cached.sourcePixelSize.width.isFinite, cached.sourcePixelSize.height.isFinite {
                                 try Task.checkCancellation()
                                 return (request, cached)
                             }
