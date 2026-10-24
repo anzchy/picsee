@@ -366,3 +366,27 @@ private actor P304ReadGate {
     await gate.release()
     #expect(try await pending.value == true)
 }
+
+@Test func p304CorruptIndexRebuildsFromUnchangedSource() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let file = folder.appendingPathComponent("image.tiff")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+    let sourceBytes = try Data(contentsOf: file)
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+    let decoded = try await pipeline.image(for: request)
+    let cache = ThumbnailDiskCache(directory: cacheDirectory)
+    let ticket = try #require(try await cache.prepare(request))
+    try await cache.store(decoded, for: ticket)
+    let index = cacheDirectory.appendingPathComponent("index.sqlite3")
+    try Data("broken database".utf8).write(to: index)
+    let reopened = ThumbnailDiskCache(directory: cacheDirectory)
+    #expect(try await reopened.load(ticket).map { _ in true } == nil)
+    try await reopened.store(decoded, for: ticket)
+    #expect(try await reopened.load(ticket).map { _ in true } == true)
+    #expect(try Data(contentsOf: file) == sourceBytes)
+}
