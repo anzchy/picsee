@@ -64,7 +64,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
-        window.title = "Picsee"
+        WindowImageTitle.apply(to: window, imageURL: nil)
         window.titlebarAppearsTransparent = true
         window.acceptsMouseMovedEvents = true
         window.autorecalculatesKeyViewLoop = false
@@ -214,6 +214,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         accessIntent.invalidate()
         session.closeImage()
         fileURL = nil
+        WindowImageTitle.apply(to: window, imageURL: nil)
         navigationTask?.cancel()
     }
 
@@ -584,18 +585,18 @@ extension CanvasWindowController: ViewerChromeHost {
 // The package owns generation, identity, tier and lease decisions; these are native effects.
 extension CanvasWindowController: ViewerImageHost {
     func beginImageOpening() {
-        window?.title = "Picsee"
+        WindowImageTitle.apply(to: window, imageURL: nil)
         canvas.beginOpening()
         stateHost.refresh()
     }
     func installImage(_ image: DecodedImage, fileURL: URL) {
         canvas.install(image)
-        window?.title = fileURL.lastPathComponent
+        WindowImageTitle.apply(to: window, imageURL: fileURL)
         stateHost.refresh()
     }
     func imageLoadFailed(_ error: any Error) {
         canvas.showFailure()
-        window?.title = "Picsee"
+        WindowImageTitle.apply(to: window, imageURL: nil)
         let cancelled = session.dismissCancelledImageFailure(error)
         stateHost.refresh()
         if cancelled { return }
@@ -729,6 +730,7 @@ extension CanvasWindowController: FolderScanHost {
         fileURL = nil
         session.closeImage()
         canvas.showFailure()
+        WindowImageTitle.apply(to: window, imageURL: nil)
     }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws {
         let operation = accessIntent.current
