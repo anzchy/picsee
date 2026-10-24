@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -46,6 +47,32 @@ class ListenerTests(unittest.TestCase):
     @staticmethod
     def completed(argv, returncode=0, stdout="", stderr=""):
         return subprocess.CompletedProcess(argv, returncode, stdout, stderr)
+
+    def test_status_reads_real_herdr_envelope_and_rejects_wrong_agent(self):
+        for status in ("working", "idle", "done", "blocked"):
+            payload = {"id": "cli:agent:get", "result": {"type": "agent_info",
+                       "agent": {"name": "gpt-auditor", "agent_status": status}}}
+            with self.subTest(status=status), patch.object(poll_report.subprocess, "run",
+                    return_value=self.completed([], stdout=json.dumps(payload))):
+                try:
+                    observed = poll_report._status("gpt-auditor")
+                except Exception as error:
+                    observed = type(error).__name__
+                self.assertEqual(observed, status)
+        payload["result"]["agent"]["name"] = "other-agent"
+        with patch.object(poll_report.subprocess, "run",
+                return_value=self.completed([], stdout=json.dumps(payload))):
+            with self.assertRaises(ValueError):
+                poll_report._status("gpt-auditor")
+
+    def test_status_rejects_malformed_envelopes(self):
+        for payload in ({}, {"agent_status": "idle"}, {"result": []},
+                        {"result": {"type": "error", "agent": {"agent_status": "idle"}}},
+                        {"result": {"type": "agent_info", "agent": {"agent_status": "unknown"}}}):
+            with self.subTest(payload=payload), patch.object(poll_report.subprocess, "run",
+                    return_value=self.completed([], stdout=json.dumps(payload))):
+                with self.assertRaises(ValueError):
+                    poll_report._status("gpt-auditor")
 
     def test_routes_to_exact_thread_and_successful_repeat_does_not_queue_again(self):
         self.handoff.write_text("DONE\n")
@@ -363,7 +390,7 @@ class ListenerTests(unittest.TestCase):
         fake_bin.mkdir()
         captured = self.root / "report-message.txt"
         herdr = fake_bin / "herdr"
-        herdr.write_text("#!/bin/sh\nprintf '%s\\n' '{\"agent_status\":\"idle\"}'\n")
+        herdr.write_text("#!/bin/sh\nprintf '%s\\n' '{\"id\":\"cli:agent:get\",\"result\":{\"type\":\"agent_info\",\"agent\":{\"name\":\"gpt-auditor\",\"agent_status\":\"idle\"}}}'\n")
         herdr.chmod(0o755)
         codex = fake_bin / "codex"
         codex.write_text(
@@ -399,7 +426,7 @@ class ListenerTests(unittest.TestCase):
         fake_bin = self.root / "fake-identity-bin"
         fake_bin.mkdir()
         herdr = fake_bin / "herdr"
-        herdr.write_text("#!/bin/sh\nprintf '%s\\n' '{\"agent_status\":\"idle\"}'\n")
+        herdr.write_text("#!/bin/sh\nprintf '%s\\n' '{\"id\":\"cli:agent:get\",\"result\":{\"type\":\"agent_info\",\"agent\":{\"name\":\"gpt-auditor\",\"agent_status\":\"idle\"}}}'\n")
         herdr.chmod(0o755)
         codex = fake_bin / "codex"
         codex.write_text("#!/bin/sh\nprintf 'scratch queued\\n'\n")

@@ -14,7 +14,14 @@ def _status(agent):
     )
     if result.returncode:
         raise RuntimeError("herdr agent get failed: " + (result.stderr.strip() or str(result.returncode)))
-    status = json.loads(result.stdout)["agent_status"]
+    payload = json.loads(result.stdout)
+    envelope = payload.get("result") if isinstance(payload, dict) else None
+    if not isinstance(envelope, dict) or envelope.get("type") != "agent_info":
+        raise ValueError("herdr agent get returned an invalid agent_info envelope")
+    record = envelope.get("agent")
+    if not isinstance(record, dict) or record.get("name") != agent:
+        raise ValueError("herdr agent get returned a missing or mismatched agent identity")
+    status = record.get("agent_status")
     if status not in ("working", "idle", "done", "blocked"):
         raise ValueError("unexpected agent_status: " + str(status))
     return status
