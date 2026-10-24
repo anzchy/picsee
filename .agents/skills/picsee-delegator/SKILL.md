@@ -52,8 +52,11 @@ Low only. Never touch mdpro or its tmux `dtrack`.
 8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. Wait for checks to
    register, `gh pr checks --watch`, then `gh pr merge --rebase` (authorised when no blocking C/H, gardener not BLOCK,
    CI green).
-9. **Device validation** — macos-device-test skill + guide §6 (`scripts/device/*`, `$SK/scripts/panel-choose.sh`,
-   `drag2.sh`, `menus.sh`). Record in `docs/validation/P<n>.md` with `Validated-by: picsee-delegator run=<id>`;
+9. **Device validation** — **first take the desktop GUI lock shared with mdpro**:
+   `$SK/scripts/gui-lock.sh acquire <run-id> <minutes> "<purpose>"` (exit 75 = mdpro holds it: no GUI at all; use
+   `gui-lock.sh wait …` or tell the user), message mdpro-delegator at start/end, and `gui-lock.sh release <run-id>`
+   only after cleanup (aborted runs too). Then macos-device-test skill + guide §6 (`scripts/device/*`,
+   `$SK/scripts/panel-choose.sh`, `drag2.sh`, `menus.sh`). Record in `docs/validation/P<n>.md` with `Validated-by: picsee-delegator run=<id>`;
    garden; PR. Defect found → issue + FAIL limit + fix brief + re-validate.
 10. **Log** — update `~/.picsee/timeline.json` and append the handoff log; record user decisions verbatim.
 
