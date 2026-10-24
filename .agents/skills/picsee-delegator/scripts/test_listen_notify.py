@@ -15,6 +15,10 @@ SCRIPT = Path(__file__).with_name("listen-notify.py")
 SPEC = importlib.util.spec_from_file_location("listen_notify", SCRIPT)
 listen_notify = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(listen_notify)
+REPORT_SCRIPT = Path(__file__).with_name("poll-report.py")
+REPORT_SPEC = importlib.util.spec_from_file_location("poll_report", REPORT_SCRIPT)
+poll_report = importlib.util.module_from_spec(REPORT_SPEC)
+REPORT_SPEC.loader.exec_module(poll_report)
 
 
 class ListenerTests(unittest.TestCase):
@@ -211,6 +215,112 @@ class ListenerTests(unittest.TestCase):
         listen_notify.run_event(stale_dir, run=stale_run)
         result = json.loads((stale_dir / "poll-result.json").read_text())
         self.assertEqual(result["handoff_evidence"], "stale")
+
+    def test_report_mode_requires_round_marker_and_binds_it_to_event_identity(self):
+        parser = listen_notify._build_parser()
+        args = parser.parse_args([
+            "start", "--event", "new-round", "--task", "issue90-confirm3",
+            "--thread", self.config["thread"], "--agent", "gpt-auditor",
+            "--handoff", str(self.handoff), "--poll", "report",
+            "--handoff-marker", "issue90-confirm3", "--interval", "2",
+            "--max-minutes", "10",
+        ])
+        config = listen_notify._config_from_args(args)
+        self.assertEqual(Path(config["poll"][0]).name, "poll-report.py")
+        self.assertIn("issue90-confirm3", config["poll"])
+        self.assertEqual(config["handoff_marker"], "issue90-confirm3")
+        report_event_dir = self.root / "report-repeat"
+        listen_notify.register_event(report_event_dir, config)
+        self.assertEqual(
+            listen_notify.register_event(report_event_dir, listen_notify._config_from_args(args)),
+            "already-registered",
+        )
+        with self.assertRaisesRegex(ValueError, "handoff_marker"):
+            listen_notify._validate_config(dict(config, handoff_marker=None))
+        with self.assertRaisesRegex(ValueError, "handoff_marker"):
+            listen_notify._validate_config(dict(config, handoff_marker="DONE"))
+
+    def test_report_poll_finds_fresh_report_at_idle_despite_scrolled_viewport(self):
+        self.handoff.write_text("# issue90-confirm3\nDONE\n")
+        os.utime(self.handoff, (1_800_000_001, 1_800_000_001))
+        statuses = iter(["working", "idle"])
+        screens = ["Back to bottom; older activity", "Back to bottom; older activity"]
+        result = poll_report.watch(
+            "gpt-auditor", self.handoff, 1_800_000_000, "issue90-confirm3",
+            interval=2, max_minutes=10, idle_grace_seconds=4,
+            get_status=lambda _: next(statuses), sleep=lambda _: screens.pop(),
+            monotonic=iter([0, 0, 2]).__next__,
+        )
+        self.assertEqual(result, "done")
+
+    def test_old_report_does_not_complete_new_working_task(self):
+        self.handoff.write_text("# issue90-old-round\nDONE\n")
+        os.utime(self.handoff, (1_799_999_999, 1_799_999_999))
+        times = iter([0, 0, 2, 4, 6])
+        result = poll_report.watch(
+            "gpt-auditor", self.handoff, 1_800_000_000, "issue90-new-round",
+            interval=2, max_minutes=0.1, idle_grace_seconds=4,
+            get_status=lambda _: "working", sleep=lambda _: None,
+            monotonic=times.__next__,
+        )
+        self.assertEqual(result, "timeout")
+
+    def test_idle_without_report_surfaces_missing_handoff_after_grace(self):
+        times = iter([0, 0, 2, 4])
+        result = poll_report.watch(
+            "gpt-auditor", self.handoff, 1_800_000_000, "issue90-new-round",
+            interval=2, max_minutes=10, idle_grace_seconds=4,
+            get_status=lambda _: "idle", sleep=lambda _: None,
+            monotonic=times.__next__,
+        )
+        self.assertEqual(result, "missing-handoff")
+        self.assertEqual(listen_notify._classify_poll(0, "gpt-auditor missing-handoff"), "missing-handoff")
+
+    def test_blocked_without_report_surfaces_immediately(self):
+        result = poll_report.watch(
+            "gpt-auditor", self.handoff, 1_800_000_000, "issue90-new-round",
+            interval=2, max_minutes=10, idle_grace_seconds=4,
+            get_status=lambda _: "blocked", sleep=lambda _: self.fail("blocked must not sleep"),
+            monotonic=iter([0, 0]).__next__,
+        )
+        self.assertEqual(result, "blocked")
+
+    def test_report_mode_worker_uses_fake_herdr_and_queue_without_viewport(self):
+        fake_bin = self.root / "fake-report-bin"
+        fake_bin.mkdir()
+        captured = self.root / "report-message.txt"
+        herdr = fake_bin / "herdr"
+        herdr.write_text("#!/bin/sh\nprintf '%s\\n' '{\"agent_status\":\"idle\"}'\n")
+        herdr.chmod(0o755)
+        codex = fake_bin / "codex"
+        codex.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os, sys\n"
+            "open(os.environ['CAPTURED_MESSAGE'], 'w').write(sys.argv[-1])\n"
+            "print('scratch queued')\n"
+        )
+        codex.chmod(0o755)
+        args = listen_notify._build_parser().parse_args([
+            "start", "--event", self.event_dir.name, "--task", "issue90-report-test",
+            "--thread", self.config["thread"], "--agent", "gpt-auditor",
+            "--handoff", str(self.handoff), "--handoff-marker", "issue90-report-test",
+            "--poll", "report", "--interval", "1", "--max-minutes", "1",
+            "--state-root", str(self.event_dir.parent),
+        ])
+        config = listen_notify._config_from_args(args)
+        self.handoff.write_text("# issue90-report-test\nCompleted\n")
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        environment = dict(os.environ, CAPTURED_MESSAGE=str(captured))
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment["PATH"]
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "run", "--event-dir", str(self.event_dir)],
+            capture_output=True, text=True, env=environment, timeout=5,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads((self.event_dir / "poll-result.json").read_text())
+        self.assertEqual(result["outcome"], "done")
+        self.assertEqual(result["handoff_evidence"], "ready")
+        self.assertIn("issue90-report-test", captured.read_text())
 
     def test_detached_start_uses_argv_writes_pid_and_does_not_shell_interpolate(self):
         launches = []

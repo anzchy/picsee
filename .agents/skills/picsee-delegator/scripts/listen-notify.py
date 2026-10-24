@@ -66,6 +66,8 @@ def _validate_config(config):
     poll = config["poll"]
     if not isinstance(poll, list) or not poll or not all(isinstance(item, str) for item in poll):
         raise ValueError("poll must be a non-empty argv list")
+    if Path(poll[0]).name == "poll-report.py" and config.get("handoff_marker") != config["task"]:
+        raise ValueError("report polling requires handoff_marker equal to task identity")
     attempts = config.get("max_delivery_attempts", 5)
     backoff = config.get("initial_backoff_seconds", 5)
     if not isinstance(attempts, int) or attempts < 1 or attempts > 10:
@@ -131,7 +133,7 @@ def _classify_poll(returncode, output):
     lowered = output.lower()
     if returncode != 0:
         return "timeout" if re.search(r"\btimeout\b", lowered) else "poll-error"
-    for outcome in ("question", "blocked", "timeout", "idle", "done"):
+    for outcome in ("missing-handoff", "question", "blocked", "timeout", "idle", "done"):
         if re.search(r"\b" + outcome + r"\b", lowered):
             return outcome
     return "poll-error"
@@ -151,6 +153,11 @@ def _poll_deadline_seconds(config):
             if minutes > 0 and interval > 0:
                 return minutes * 60 + interval + 10
         except ValueError:
+            pass
+    if name == "poll-report.py" and len(poll) >= 7:
+        try:
+            return float(poll[6]) * 60 + float(poll[5]) + 10
+        except (IndexError, ValueError):
             pass
     return 600 * 60 + 70
 
@@ -395,10 +402,12 @@ def _build_parser():
     start.add_argument("--thread", required=True, help="exact delegator Codex thread UUID")
     start.add_argument("--agent", required=True)
     start.add_argument("--handoff", required=True, help="absolute expected handoff or report path")
-    start.add_argument("--poll", required=True, choices=("idle", "handoff"))
+    start.add_argument("--poll", required=True, choices=("idle", "handoff", "report"))
     start.add_argument("--interval", type=_positive_int, default=120, help="poll-idle interval seconds")
     start.add_argument("--max-minutes", type=_positive_int, default=600)
     start.add_argument("--handoff-marker", help="fresh round marker required in a handoff")
+    start.add_argument("--idle-grace-seconds", type=_positive_int, default=180,
+                       help="report mode: time to surface idle without a fresh report")
     start.add_argument("--max-delivery-attempts", type=_positive_int, default=5)
     start.add_argument("--initial-backoff-seconds", type=float, default=5)
     start.add_argument(
@@ -416,10 +425,18 @@ def _config_from_args(args):
     handoff = str(Path(args.handoff).expanduser().resolve())
     if args.poll == "idle":
         poll = [str(script_dir / "poll-idle.sh"), args.agent, str(args.interval), str(args.max_minutes)]
-    else:
+    elif args.poll == "handoff":
         poll = [str(script_dir / "poll-handoff.sh"), args.agent, handoff, str(args.max_minutes)]
         if args.handoff_marker:
             poll.append(args.handoff_marker)
+    else:
+        if args.handoff_marker != args.task:
+            raise ValueError("report polling requires --handoff-marker equal to --task")
+        config_path = str(args.state_root.expanduser().resolve() / args.event / "config.json")
+        poll = [str(script_dir / "poll-report.py"), args.agent, handoff,
+                config_path, args.handoff_marker, str(args.interval),
+                str(args.max_minutes), str(args.idle_grace_seconds)]
+    created_at = time.time()
     return {
         "schema": 1,
         "event": args.event,
@@ -429,8 +446,8 @@ def _config_from_args(args):
         "handoff": handoff,
         "handoff_marker": args.handoff_marker,
         "poll": poll,
-        "poll_deadline_seconds": args.max_minutes * 60 + (args.interval if args.poll == "idle" else 60) + 10,
-        "created_at": time.time(),
+        "poll_deadline_seconds": args.max_minutes * 60 + (args.interval if args.poll in ("idle", "report") else 60) + 10,
+        "created_at": created_at,
         "max_delivery_attempts": args.max_delivery_attempts,
         "initial_backoff_seconds": args.initial_backoff_seconds,
     }
