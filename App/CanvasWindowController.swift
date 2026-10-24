@@ -5,6 +5,7 @@ import PicseeApplication
 import PicseeMacUI
 import PicseeInfrastructure
 import SwiftUI
+import Observation
 
 /// Window intent is isolated; decode admission and buffers are shared by the pipeline.
 @MainActor
@@ -25,6 +26,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var chromeEvents: ChromeEventBridge?
     private var chromeGeneration: UUID?
     private var chromeHasImage = false
+    private var gridProjection = FolderGridProjection()
+    private var gridView: GridBrowserView!
+    private var gridFolderRoot: AccessRootID?
     let session: ViewerSession
     private let inspector: InspectorModel
     private let router = CommandRouter()
@@ -98,6 +102,16 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         chromeOverlay.autoresizingMask = [.width, .height]
         chromeOverlay.setAccessibilityIdentifier("chrome.tools")
         content.addSubview(chromeOverlay)
+        gridView = GridBrowserView(frame: NSRect(x: 0, y: 0, width: content.bounds.width,
+                                                  height: content.bounds.height - 28))
+        gridView.autoresizingMask = [.width, .height]
+        gridView.isHidden = true
+        gridView.setAccessibilityHidden(true)
+        gridView.onSelect = { [weak self] id in
+            self?.gridProjection.select(id)
+            self?.session.select(id)
+        }
+        content.addSubview(gridView)
         window.contentView = content
         chromeOverlay.linkKeyViews(to: canvas)
         stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
@@ -142,6 +156,16 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
 
     func open(_ url: URL, accessRequest: AccessRequest? = nil, fromFolderScan: Bool = false) {
+        if !fromFolderScan {
+            session.leaveBrowsing()
+            gridFolderRoot = nil
+            gridView.isHidden = true
+            gridView.setAccessibilityHidden(true)
+            canvas.isHidden = false
+            chromeOverlay.isHidden = false
+            stateHost.isHidden = false
+            stateHost.setAccessibilityHidden(false)
+        }
         retryIntent = ViewerRetryIntent(fileURL: url, accessRequest: accessRequest)
         retryFromFolderScan = fromFolderScan
         if !fromFolderScan { _ = accessIntent.begin() }
@@ -168,6 +192,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        gridFolderRoot = nil
         endInput()
         session.endFolderScan()
         accessIntent.invalidate()
@@ -224,6 +249,15 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private func openFolder(_ folder: URL, rootID: AccessRootID) {
         let operation = accessIntent.begin()
+        gridFolderRoot = rootID
+        gridProjection = FolderGridProjection()
+        let pending = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: 0),
+            entries: [], isComplete: false)
+        _ = gridProjection.apply(pending)
+        gridView.display(pending, selectedItemID: nil)
+        session.beginBrowsing(items: [], sourceVersion: .init(0), scrollAnchor: nil)
+        showGrid()
+        window?.title = folder.lastPathComponent
         refreshRecents()
         navigationTask?.cancel()
         let current = generation
@@ -341,6 +375,12 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     @discardableResult
     func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
+        if !gridView.isHidden && (command == .preview || command == .enter) {
+            session.beginBrowsing(items: gridProjection.snapshot?.navigationEntries.map(\.itemID) ?? [],
+                sourceVersion: .init(gridProjection.snapshot?.version.generation ?? 0),
+                scrollAnchor: gridView.firstVisibleItemID())
+            if let selected = gridProjection.selectedItemID { session.select(selected) }
+        }
         session.updateFocus(focusContext)
         session.setMenuTracking(menuTracking())
         return router.route(command, from: entry, to: session)
@@ -360,7 +400,44 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         guard focus == .canvas else { return }
         window?.makeFirstResponder(canvas)
     }
+    func presentGridItem(_ id: ItemID) {
+        guard let entry = gridProjection.entry(for: id), let rootID = gridFolderRoot,
+              gridProjection.snapshot?.version.rootID == rootID else { return }
+        gridView.isHidden = true
+        gridView.setAccessibilityHidden(true)
+        canvas.isHidden = false
+        stateHost.isHidden = false
+        stateHost.setAccessibilityHidden(false)
+        chromeOverlay.isHidden = false
+        open(entry.url, accessRequest: .root(rootID, file: entry.url), fromFolderScan: true)
+    }
+    func returnToGrid() {
+        guard gridFolderRoot != nil else { return }
+        session.setInspectorVisible(false)
+        session.closeImage()
+        canvas.showFailure()
+        fileURL = nil
+        showGrid()
+        if let snapshot = gridProjection.snapshot {
+            gridView.display(snapshot, selectedItemID: session.selection.currentItemID)
+            if let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }
+        }
+    }
+    private func showGrid() {
+        canvas.isHidden = true
+        stateHost.isHidden = true
+        stateHost.setAccessibilityHidden(true)
+        chromeOverlay.isHidden = true
+        inspectorHost.isHidden = true
+        gridView.isHidden = false
+        gridView.setAccessibilityHidden(false)
+        window?.makeFirstResponder(gridView.collectionView)
+    }
     private func consumePanelKey(_ event: NSEvent) -> Bool {
+        if !gridView.isHidden, event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+            if event.keyCode == 49 { return route(.preview, from: .key) }
+            if event.keyCode == 36 || event.keyCode == 76 { return route(.enter, from: .key) }
+        }
         guard !menuTracking(), inspectorVisible, focusContext != .canvas else { return false }
         if event.keyCode == 53 { return route(.escape, from: .key) }
         if event.keyCode == 48 && (focusContext == .tools || event.modifierFlags.contains(.shift)) {
@@ -371,6 +448,10 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     func windowDidUpdate(_ notification: Notification) {
         stateHost.refresh()
+        if !gridView.isHidden {
+            stateHost.isHidden = true
+            stateHost.setAccessibilityHidden(true)
+        }
         if inspector.hasImage != canvas.hasImage { inspector.hasImage = canvas.hasImage }
         if chromeGeneration != generation || chromeHasImage != canvas.hasImage {
             let opened = chromeGeneration != generation
@@ -507,9 +588,29 @@ extension CanvasWindowController: FolderScanHost {
         let scan = FolderScanCoordinator(access: services.files, scanner: services.browser, trace: NativeFolderScanTrace())
         scan.host = self
         session.folderScan = scan
+        observeGridSnapshot(scan)
         return scan
     }
+    private func observeGridSnapshot(_ scan: FolderScanCoordinator) {
+        withObservationTracking {
+            if let snapshot = scan.snapshot, gridFolderRoot == snapshot.version.rootID,
+               gridProjection.apply(snapshot) {
+                let anchor = gridView.firstVisibleItemID() ?? gridProjection.scrollAnchor
+                gridProjection.setScrollAnchor(anchor)
+                session.updateItems(snapshot.navigationEntries.map(\.itemID),
+                    sourceVersion: .init(snapshot.version.generation))
+                gridView.display(snapshot, selectedItemID: session.selection.currentItemID)
+                if let anchor = gridProjection.scrollAnchor { gridView.scrollTo(anchor) }
+            }
+        } onChange: { [weak self, weak scan] in
+            Task { @MainActor [weak self, weak scan] in
+                guard let self, let scan, self.session.folderScan === scan else { return }
+                self.observeGridSnapshot(scan)
+            }
+        }
+    }
     func openFolderImage(_ url: URL, rootID: AccessRootID) {
+        if gridFolderRoot == rootID { return }
         // A scan-owned move must not revoke the authority that admits its later batches.
         open(url, accessRequest: .root(rootID, file: url), fromFolderScan: true)
     }

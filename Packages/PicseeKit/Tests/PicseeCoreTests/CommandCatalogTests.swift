@@ -8,7 +8,7 @@ import PicseeCore
         (.actualPixels, "1", false), (.zoomIn, "+", false), (.zoomOut, "-", false),
         (.search, "f", true), (.open, "o", true), (.inspector, "i", true)
     ]
-    let implemented: Set<CommandID> = [.previous, .next, .escape, .fit, .actualPixels, .zoomIn, .zoomOut, .open, .inspector]
+    let implemented: Set<CommandID> = [.preview, .enter, .previous, .next, .escape, .fit, .actualPixels, .zoomIn, .zoomOut, .open, .inspector]
     #expect(CommandID.allCases.count == 12)
     #expect(Set(CommandID.allCases.map(\.rawValue)).count == 12)
     #expect(Set(CommandID.menuCommands) == implemented)

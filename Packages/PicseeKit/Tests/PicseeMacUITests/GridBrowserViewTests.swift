@@ -30,3 +30,33 @@ import PicseeCore
     #expect(grid.index(for: b.itemID) == 2)
     #expect(grid.collectionView.selectionIndexPaths == [IndexPath(item: 2, section: 0)])
 }
+
+@Test @MainActor func gridViewSelectionAndScrollUseCurrentIdentity() throws {
+    _ = NSApplication.shared
+    let folder = URL(fileURLWithPath: "/tmp/picsee-grid-secondary")
+    let rootID = AccessRootID(rawValue: UUID())
+    let entry = FolderEntry(url: folder.appendingPathComponent("Current.heic"),
+        root: .init(id: rootID, url: folder))
+    let snapshot = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: 1),
+        entries: [entry], isComplete: true)
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+        styleMask: [], backing: .buffered, defer: false)
+    window.contentView = grid
+    grid.display(snapshot, selectedItemID: nil)
+    grid.layoutSubtreeIfNeeded()
+    grid.collectionView.layoutSubtreeIfNeeded()
+    #expect(grid.collectionView.selectionIndexPaths.isEmpty)
+    #expect(grid.entry(for: entry.itemID) == entry)
+    #expect(grid.itemID(at: 9) == nil)
+    var selected: ItemID?
+    grid.onSelect = { selected = $0 }
+    grid.collectionView(grid.collectionView, didSelectItemsAt: [IndexPath(item: 0, section: 0)])
+    #expect(selected == entry.itemID)
+    let item = grid.collectionView(grid.collectionView, itemForRepresentedObjectAt: IndexPath(item: 0, section: 0))
+    #expect((item as? GridPhotoItem)?.filename == "Current.heic")
+    grid.scrollTo(entry.itemID)
+    #expect(grid.firstVisibleItemID() == entry.itemID)
+    grid.scrollTo(.ephemeral(UUID()))
+    #expect(GridBrowserView(coder: NSCoder()) == nil)
+}

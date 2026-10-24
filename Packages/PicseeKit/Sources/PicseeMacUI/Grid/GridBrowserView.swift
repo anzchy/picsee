@@ -50,7 +50,6 @@ import PicseeCore
 @MainActor public final class GridBrowserView: NSView, NSCollectionViewDataSource, NSCollectionViewDelegate {
     public private(set) var collectionView = NSCollectionView()
     public var onSelect: ((ItemID) -> Void)?
-    public var onOpen: ((ItemID) -> Void)?
     private let scrollView = NSScrollView()
     private var entries: [FolderEntry] = []
     private var indices: [ItemID: Int] = [:]
@@ -99,9 +98,8 @@ import PicseeCore
         collectionView.scrollToItems(at: [IndexPath(item: index, section: 0)], scrollPosition: .top)
     }
     public func firstVisibleItemID() -> ItemID? {
-        collectionView.visibleItems().compactMap { item in
-            collectionView.indexPath(for: item).flatMap { itemID(at: $0.item) }
-        }.first
+        collectionView.visibleItems().compactMap { item in collectionView.indexPath(for: item)?.item }
+            .min().flatMap { itemID(at: $0) }
     }
     public func numberOfSections(in collectionView: NSCollectionView) -> Int { 1 }
     public func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int { entries.count }
@@ -113,9 +111,5 @@ import PicseeCore
     public func collectionView(_ collectionView: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>) {
         guard !updating, let index = indexPaths.first?.item, let id = itemID(at: index) else { return }
         onSelect?(id)
-    }
-    public func collectionView(_ collectionView: NSCollectionView, didDoubleClickItemsAt indexPaths: Set<IndexPath>) {
-        guard let index = indexPaths.first?.item, let id = itemID(at: index) else { return }
-        onOpen?(id)
     }
 }
