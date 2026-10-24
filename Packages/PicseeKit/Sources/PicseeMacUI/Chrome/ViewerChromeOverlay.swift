@@ -141,21 +141,21 @@ public final class ViewerChromeOverlay: NSView {
         self.init(frame: frame)
         self.session = session
         let commands: [[CommandID]] = [[.open, .inspector], [.previous, .next], [.zoomOut, .actualPixels, .zoomIn]]
-        let frames = [NSRect(x: 16, y: 16, width: 80, height: 40),
-            NSRect(x: bounds.midX - 130, y: 16, width: 260, height: 40),
-            NSRect(x: bounds.width - 222, y: 16, width: 206, height: 40)]
-        let positions: [[CGFloat]] = [[8, 42], [8, 222], [8, 42, 168]]
+        let frames = [NSRect(x: 16, y: 14, width: 72, height: 38),
+            NSRect(x: bounds.midX - 37, y: 14, width: 74, height: 38),
+            NSRect(x: bounds.width - 212, y: 14, width: 196, height: 38)]
+        let positions: [[CGFloat]] = [[5, 37], [5, 39], [5, 37, 161]]
         for index in 0..<3 {
             let group = NSView(frame: frames[index])
-            group.wantsLayer = true; group.layer?.cornerRadius = DesignMetrics.radii["popover"]!
+            group.wantsLayer = true; group.layer?.cornerRadius = DesignMetrics.radii["control"]!
             addSubview(group); groups.append(group)
             for (offset, command) in commands[index].enumerated() {
-                let tool = ChromeToolView(frame: NSRect(x: positions[index][offset], y: 6,
+                let tool = ChromeToolView(frame: NSRect(x: positions[index][offset], y: 5,
                     width: command == .actualPixels ? 122 : 30, height: 28), session: session, command: command, motionPolicy: motionPolicy)
                 group.addSubview(tool); tools.append(tool)
             }
         }
-        fileLabel.frame = NSRect(x: 44, y: 11, width: 172, height: 18)
+        fileLabel.frame = NSRect(x: 37, y: 10, width: 0, height: 18)
         fileLabel.setAccessibilityElement(true); fileLabel.setAccessibilityRole(.staticText)
         fileLabel.setAccessibilityIdentifier("chrome.filename")
         fileLabel.lineBreakMode = .byTruncatingMiddle
@@ -171,7 +171,7 @@ public final class ViewerChromeOverlay: NSView {
     }
     private func updateGroupColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            for group in groups { group.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor }
+            for group in groups { group.layer?.backgroundColor = DesignColor.popoverBackground.nsColor.cgColor }
         }
     }
     public override func resizeSubviews(withOldSize oldSize: NSSize) {
@@ -180,15 +180,21 @@ public final class ViewerChromeOverlay: NSView {
     }
     private func arrangeGroups() {
         guard groups.count == 3 else { return }
-        // Keep command hit areas intact; narrow windows wrap groups above one another.
-        let width = min(260, bounds.width - 32)
-        let singleRow = bounds.width >= 610
-        groups[0].frame = NSRect(x: 16, y: bounds.width < 334 ? 112 : 16, width: 80, height: 40)
-        groups[2].frame = NSRect(x: bounds.width - 222, y: 16, width: 206, height: 40)
-        groups[1].frame = NSRect(x: singleRow ? min(bounds.midX - 130, bounds.width - 238 - width) : (bounds.width - width) / 2,
-            y: singleRow ? 16 : 64, width: width, height: 40)
-        tools[3].setFrameOrigin(NSPoint(x: width - 38, y: 6))
-        fileLabel.frame = NSRect(x: 44, y: 11, width: width - 88, height: 18)
+        // Measure the actual label, then cap it for middle truncation. The side groups
+        // keep their 30×28 command targets when compact windows require wrapping.
+        let font = DesignMetrics.font("uiSmall")
+        let labelWidth = ceil((fileLabel.stringValue as NSString).size(withAttributes: [.font: font]).width)
+        let width = min(260, max(74, min(bounds.width - 32, labelWidth + 74)))
+        let rightX = bounds.width - 212
+        let singleRow = bounds.width >= width + 316
+        let sideBySide = rightX >= 96
+        groups[0].frame = NSRect(x: 16, y: sideBySide ? 14 : 106, width: 72, height: 38)
+        groups[2].frame = NSRect(x: rightX, y: 14, width: 196, height: 38)
+        let centeredX = (bounds.width - width) / 2
+        let centerX = singleRow ? min(max(centeredX, 96), rightX - 8 - width) : centeredX
+        groups[1].frame = NSRect(x: centerX, y: singleRow ? 14 : 60, width: width, height: 38)
+        tools[3].setFrameOrigin(NSPoint(x: width - 35, y: 5))
+        fileLabel.frame = NSRect(x: 37, y: 10, width: max(0, width - 74), height: 18)
     }
     public static let edgeBandHeight: CGFloat = 32
     public func pointerMoved(_ point: NSPoint) {
@@ -234,6 +240,7 @@ public final class ViewerChromeOverlay: NSView {
     public func refresh(filename: String? = nil, position: String? = nil) {
         self.filename = filename; self.position = position
         fileLabel.stringValue = [filename, position].compactMap { $0 }.joined(separator: " · ")
+        arrangeGroups()
         fileLabel.setAccessibilityValue(filename ?? "")
         for tool in tools { tool.refresh() }
         updateAccessibilityChildren(visible: groups.first?.isHidden == false)
