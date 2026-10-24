@@ -245,3 +245,40 @@ private func pngPaddedToExactLength(_ source: Data, targetLength: Int) throws ->
     #expect(sqlite3_exec(db, "UPDATE thumbnails SET source_width=999", nil, nil, nil) == SQLITE_OK)
     #expect(try await cache.load(ticket).map { _ in true } == nil)
 }
+
+@Test func p304NextAccessRepairsOrphanAndDamagedRowWithoutChangingSource() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let file = folder.appendingPathComponent("image.tiff")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+    let sourceBytes = try Data(contentsOf: file)
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+    let decoded = try await pipeline.image(for: request)
+    let cache = ThumbnailDiskCache(directory: cacheDirectory)
+    let ticket = try #require(try await cache.prepare(request))
+    try await cache.store(decoded, for: ticket)
+    let payload = cacheDirectory.appendingPathComponent(ticket.key.filename + ".png")
+    let orphan = cacheDirectory.appendingPathComponent(String(repeating: "a", count: 64) + ".png")
+    try Data(contentsOf: payload).write(to: orphan)
+    try Data("bad PNG".utf8).write(to: payload)
+
+    let reopened = ThumbnailDiskCache(directory: cacheDirectory)
+    #expect(try await reopened.load(ticket).map { _ in true } == nil)
+    #expect(!FileManager.default.fileExists(atPath: orphan.path))
+    #expect(!FileManager.default.fileExists(atPath: payload.path))
+    var db: OpaquePointer?
+    #expect(sqlite3_open_v2(cacheDirectory.appendingPathComponent("index.sqlite3").path,
+                            &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK)
+    defer { if let db { sqlite3_close(db) } }
+    var statement: OpaquePointer?
+    #expect(sqlite3_prepare_v2(db, "SELECT count(*) FROM thumbnails", -1, &statement, nil) == SQLITE_OK)
+    defer { sqlite3_finalize(statement) }
+    #expect(sqlite3_step(statement) == SQLITE_ROW)
+    #expect(sqlite3_column_int(statement, 0) == 0)
+    #expect(try Data(contentsOf: file) == sourceBytes)
+    #expect(try await reopened.load(ticket).map { _ in true } == nil)
+}
