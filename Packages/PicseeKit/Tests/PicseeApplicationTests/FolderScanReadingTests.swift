@@ -184,7 +184,7 @@ import PicseeCore
 
 private struct FolderReadingOneBatchScanner: FolderScanning {
     func scan(in folder: URL, root: ItemIdentityRoot,
-        emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
+        options: FolderScanOptions, emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
         try await emit([FolderEntry(url: folder.appendingPathComponent("img2.png"), root: root)])
     }
 }
