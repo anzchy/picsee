@@ -128,7 +128,9 @@ under `~/.picsee/herdr/delegator/listeners/<event>/`: `config.json`, `pid`, `lis
 `poll-result.json`, and, only after a successful `codex queue` response, `queue-receipt.json`. The shipped pollers
 have a listener-enforced overall deadline of `--max-minutes` plus one poll interval and 10 seconds. If a poller
 hangs inside `herdr`, the listener terminates its private poller process group, records `timeout` in
-`poll-result.json`, and continues to queue a **needs inspection** message. Queue delivery uses finite 30-second
+`poll-result.json`, and continues to queue a **needs inspection** message. The private group leader remains alive
+until cleanup after either a normal poller exit or a deadline, so a poller cannot leave a same-group child running after
+its result is recorded; failed cleanup records a poll error for inspection. Queue delivery uses finite 30-second
 attempts and bounded exponential backoff. No heavy lock is taken. A nonzero poller exit, timeout, blocker,
 question, or missing/stale report is still queued as **needs inspection** and is never labelled successful or accepted.
 

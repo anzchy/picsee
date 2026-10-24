@@ -157,28 +157,61 @@ def _poll_deadline_seconds(config):
 
 def _run_poll_process(argv, deadline):
     # A file avoids waiting forever on a pipe still held open by a hung descendant.
-    with tempfile.TemporaryFile(mode="w+t") as output:
+    with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryFile(mode="w+t") as output:
+        status = Path(temporary) / "poll-exit-code"
+        # Keep the private group leader alive after the poller exits. Its PID stays
+        # reserved until cleanup, so a reused process group can never be signalled.
         process = subprocess.Popen(
-            argv, stdout=output, stderr=subprocess.STDOUT, text=True, start_new_session=True
+            [sys.executable, str(Path(__file__).resolve()), "__poll_supervisor", str(status), *argv],
+            stdin=subprocess.PIPE, stdout=output, stderr=subprocess.STDOUT,
+            start_new_session=True,
         )
+        expired = False
+        cleanup_error = None
         try:
-            process.wait(timeout=deadline)
-        except subprocess.TimeoutExpired:
-            # start_new_session made this process the leader of a private group.
-            # Signal only that group, including children which ignore their parent.
+            end = time.monotonic() + deadline
+            while not status.exists():
+                remaining = end - time.monotonic()
+                if remaining <= 0:
+                    expired = True
+                    break
+                time.sleep(min(0.01, remaining))
+        finally:
+            # The supervisor is still running (or an unreaped zombie), pinning its
+            # PID throughout both signals. Never inspect/reap it before this point.
             try:
                 os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+            except OSError as error:
+                cleanup_error = error
             time.sleep(0.2)
             try:
                 os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait(timeout=1)
-            raise
+            except OSError as error:
+                cleanup_error = cleanup_error or error
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired as error:
+                cleanup_error = cleanup_error or error
+            if process.stdin:
+                process.stdin.close()
+        if cleanup_error is not None:
+            raise RuntimeError("poll process group cleanup failed: " + str(cleanup_error))
+        if expired:
+            raise subprocess.TimeoutExpired(argv, deadline)
+        if not status.exists():
+            raise RuntimeError("poll supervisor exited without a result")
         output.seek(0)
-        return subprocess.CompletedProcess(argv, process.returncode, output.read(65536), "")
+        return subprocess.CompletedProcess(argv, int(status.read_text()), output.read(65536), "")
+
+
+def _poll_supervisor(status, argv):
+    # A caught handler is reset by exec in the child, while the supervisor stays
+    # alive through TERM until its owner finishes the group with KILL.
+    signal.signal(signal.SIGTERM, lambda _signum, _frame: None)
+    child = subprocess.Popen(argv, stdin=subprocess.DEVNULL)
+    code = child.wait()
+    Path(status).write_text(str(code))
+    sys.stdin.buffer.read()
 
 
 def _run_poll(event_dir, config, run):
@@ -432,4 +465,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if len(sys.argv) > 3 and sys.argv[1] == "__poll_supervisor":
+        _poll_supervisor(sys.argv[2], sys.argv[3:])
+    else:
+        raise SystemExit(main())
