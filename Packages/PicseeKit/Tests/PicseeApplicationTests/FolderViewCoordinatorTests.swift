@@ -13,6 +13,36 @@ import PicseeCore
     func clearFolderImageForNoMatches() { cleared += 1 }
 }
 
+@Test(arguments: [false, true])
+@MainActor func folderViewSameExplicitInputRetryKeepsScanAndFilterAuthority(completed: Bool) async throws {
+    let fixture = FolderScanFixture(), host = FolderViewTestHost(), coordinator = fixture.coordinator
+    let accessIntent = AccessIntent(), operation = accessIntent.current
+    let input = fixture.folder.appendingPathComponent("a.jpg")
+    coordinator.host = host
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id, input: input,
+        canPresent: { operation.isCurrent })
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    if completed { await fixture.scanner.finish(); try await task.value }
+    let request = AccessRequest.root(fixture.id, file: input)
+    #expect(coordinator.preservesPresentationAuthorityForRetry(input, accessRequest: request))
+    #expect(!coordinator.preservesPresentationAuthorityForRetry(fixture.folder.appendingPathComponent("other.jpg"), accessRequest: request))
+    #expect(!coordinator.preservesPresentationAuthorityForRetry(input, accessRequest: .fileGrant(input)))
+    if !coordinator.preservesPresentationAuthorityForRetry(input, accessRequest: request) {
+        _ = accessIntent.begin() // ordinary native open would revoke the scan's captured operation
+    }
+    coordinator.setConditions(.init(selectedExtensions: ["png"]))
+    #expect(host.opens.map(\.lastPathComponent) == ["b.png"])
+    #expect(coordinator.currentURL?.lastPathComponent == "b.png")
+    coordinator.setConditions(.init(selectedExtensions: ["tiff"]))
+    #expect(coordinator.hasNoMatches && host.cleared == 1 && coordinator.currentURL == nil)
+    coordinator.setConditions(.init())
+    #expect(coordinator.currentURL?.lastPathComponent == "a.jpg")
+    #expect(coordinator.move(.next))
+    #expect(host.opens.last?.lastPathComponent == "b.png")
+    if !completed { await fixture.scanner.finish(); try await task.value }
+}
+
 @Test @MainActor func folderViewFiltersNavigationAndRestoresSource() async throws {
     let fixture = FolderScanFixture(), host = FolderViewTestHost()
     let coordinator = fixture.coordinator
