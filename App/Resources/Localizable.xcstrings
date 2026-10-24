@@ -2009,6 +2009,13 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "扫描停止前找到图片：%lld 张" } }
       }
     },
+    "Reading…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reading…" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在读取…" } }
+      }
+    },
     "Scan limit reached": {
       "extractionState": "manual",
       "localizations": {
