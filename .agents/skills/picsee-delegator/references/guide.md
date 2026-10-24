@@ -320,6 +320,26 @@ gh pr checks $P --watch --interval 30; gh pr merge $P --rebase; git pull --ff-on
 The validation role belongs to someone other than the implementer; the delegator has been doing it. Read
 `.claude/skills/macos-device-test/SKILL.md` and `features/*.md`. Device runs happen only on the mini.
 
+### Desktop GUI lock (shared with mdpro — agreed 2026-10-24)
+
+The mini has one desktop, and mdpro's device tester drives it too. Two drivers at once steal focus, send keys to the
+wrong app and corrupt each other's screenshots. A picsee run once overlapped mdpro's batch B6b because picsee didn't
+know about the lock. Both projects use mdpro's ADR-0134 decision 6 lock:
+
+- **The lock:** the directory `~/.cache/desktop-gui.lock/` (`mkdir` acquires it) holds an `owner` file of key=value
+  lines, and that file is the one that counts. picsee writes `project=picsee`, `session`, `batch=<run-id>`, `start`,
+  `pid`, `expected_minutes` and `purpose`.
+- **When to take it:** before the **first GUI-driving action** of a run: launching the app, panels, keystrokes,
+  mouse, drags, `screencapture`, app activation. Keep it across relaunch sub-runs.
+- **When to release it:** only after the app has quit (after `cleanup.sh`), including aborted runs. Builds, log
+  reads and shell work don't need it; builds use the heavy lock.
+- **Helper:** `.agents/skills/picsee-delegator/scripts/gui-lock.sh acquire|wait|release|status`. It exits 75 when the
+  lock is busy, and `release` refuses a lock that isn't picsee's with the same batch.
+- **If it's held:** no GUI at all. Poll every 60 s (`wait`). After the holder's `expected_minutes` + 15, stop and
+  tell the user. Never remove another project's lock; report a stale-looking lock to the user instead.
+- **Courtesy:** message mdpro-delegator (`SendMessage` / cross-session) when a run starts and ends, and check with
+  them before each mini GUI run. mdpro does the same.
+
 ```sh
 RUN_DIR="$HOME/.picsee/device-runs/$(date +%Y%m%d-%H%M%S)-<ledger-ids>"
 scripts/device/build.sh "$RUN_DIR"          # signed Debug of HEAD; refuses dirty or untracked inputs
