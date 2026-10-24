@@ -161,8 +161,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = ticket.key.filename + ".png"
         guard let url = payloadURL(forKey: ticket.key.filename) else { return }
-        guard PayloadLeaseRegistry.shared.acquire(url.path) else { return }
-        defer { PayloadLeaseRegistry.shared.release(url.path) }
+        guard PayloadLeaseRegistry.shared.acquireWrite(url.path) else { return }
+        defer { PayloadLeaseRegistry.shared.releaseWrite(url.path) }
         try payload.write(to: url, options: .atomic)
         try afterPayloadWrite?()
         // Catch a source mutation during payload publication before indexing the bytes.
@@ -507,15 +507,16 @@ private final class CacheIndexLocks: @unchecked Sendable {
 private final class PayloadLeaseRegistry: @unchecked Sendable {
     static let shared = PayloadLeaseRegistry()
     private let lock = NSLock()
-    private var readers: [String: Int] = [:]
+    // Positive values count readers; -1 is the sole writer.
+    private var claims: [String: Int] = [:]
     private var deleting = Set<String>()
 
     func acquire(_ path: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         let key = URL(fileURLWithPath: path).standardizedFileURL.path
-        guard !deleting.contains(key) else { return false }
-        readers[key, default: 0] += 1
+        guard !deleting.contains(key), claims[key, default: 0] >= 0 else { return false }
+        claims[key, default: 0] += 1
         return true
     }
 
@@ -524,16 +525,34 @@ private final class PayloadLeaseRegistry: @unchecked Sendable {
         defer { lock.unlock() }
         let key = URL(fileURLWithPath: path).standardizedFileURL.path
         // Every release follows a successful acquire; fail fast on an unbalanced lease.
-        let count = readers[key]!
-        if count <= 1 { readers.removeValue(forKey: key) }
-        else { readers[key] = count - 1 }
+        let count = claims[key]!
+        precondition(count > 0)
+        if count == 1 { claims.removeValue(forKey: key) }
+        else { claims[key] = count - 1 }
+    }
+
+    func acquireWrite(_ path: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = URL(fileURLWithPath: path).standardizedFileURL.path
+        guard claims[key] == nil, !deleting.contains(key) else { return false }
+        claims[key] = -1
+        return true
+    }
+
+    func releaseWrite(_ path: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = URL(fileURLWithPath: path).standardizedFileURL.path
+        precondition(claims[key] == -1)
+        claims.removeValue(forKey: key)
     }
 
     func beginDeletion(_ path: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         let key = URL(fileURLWithPath: path).standardizedFileURL.path
-        guard readers[key, default: 0] == 0, !deleting.contains(key) else { return false }
+        guard claims[key] == nil, !deleting.contains(key) else { return false }
         deleting.insert(key)
         return true
     }

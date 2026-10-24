@@ -197,3 +197,34 @@ private actor P304AuditGate {
     let warm = try await ThumbnailDiskCache(directory: cacheDirectory).load(tickets[1])
     #expect(try warm.map { try rgba($0.image) } == rgba(images[1].image))
 }
+
+@Test func p304AuditCancelledSameKeyWriterCannotDeleteHeldReaderPayload() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let file = folder.appendingPathComponent("image.tiff")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+    let decoded = try await pipeline.image(for: request)
+    let expected = try rgba(decoded.image)
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    let ticket = try #require(try await seed.prepare(request))
+    try await seed.store(decoded, for: ticket)
+    let gate = P304AuditGate()
+    let reader = ThumbnailDiskCache(directory: cacheDirectory, afterReadLeaseAcquired: { await gate.pause() })
+    let pending = Task { try await reader.load(ticket).map { try rgba($0.image) } }
+    await gate.waitForEntry()
+    let writer = ThumbnailDiskCache(directory: cacheDirectory, afterPayloadWrite: {
+        withUnsafeCurrentTask { $0?.cancel() }
+    })
+    let work = Task { try await writer.store(decoded, for: ticket) }
+    let outcome = await work.result
+    if case .failure(let error) = outcome { #expect(error is CancellationError) }
+    await gate.release()
+    #expect(try await pending.value == expected)
+    let warm = try await ThumbnailDiskCache(directory: cacheDirectory).load(ticket)
+    #expect(try warm.map { try rgba($0.image) } == expected)
+}
