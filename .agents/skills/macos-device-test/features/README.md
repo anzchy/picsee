@@ -78,3 +78,5 @@ Record here what a real run found out about the tools, so the next run doesn't r
   priority.
 - [Chrome show, hide and interaction locks](./chrome-show-hide.md) covers immersive toolbar/window chrome,
   edge and Tab recall, lock states, responsive layout, and window closing.
+- [Recursive folder scan and honest progress](./recursive-folder-scan.md) covers P2-04 nested browsing,
+  cycle boundaries, indeterminate reading, completed counts, and page 24 Prototype comparison.
