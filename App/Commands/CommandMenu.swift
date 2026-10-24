@@ -39,6 +39,9 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     private(set) var isTracking = false
     private let recentFolders = NSMenu(title: String(localized: "Open Recent"))
     private let recentTarget = RecentFolderMenuTarget()
+    private let extensionMenu = NSMenu(title: String(localized: "Extensions"))
+    private weak var folderViewMenu: NSMenu?
+    private var folderSubmenuItems: [NSMenuItem] = []
 
     init(preferencesStore: any DisplayPreferencesStore, openWithoutWindow: @escaping () -> Void) {
         self.preferencesStore = preferencesStore
@@ -73,6 +76,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             edit.addItem(withTitle: String(localized: String.LocalizationValue(title)), action: NSSelectorFromString(action), keyEquivalent: key)
         }
         let view = submenu(String(localized: "View"))
+        folderViewMenu = view
         for id in CommandID.menuCommands {
             let item = NSMenuItem(title: id.menuTitle, action: #selector(invoke(_:)), keyEquivalent: id.defaultKey)
             item.keyEquivalentModifierMask = id.usesCommand ? [.command] : []
@@ -99,6 +103,29 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             item.representedObject = appearance.rawValue
             item.setAccessibilityIdentifier("prefs.appearance.\(appearance.rawValue).menu")
         }
+        let sortMenu = NSMenu(title: String(localized: "Sort By"))
+        sortMenu.delegate = self
+        let sortItem = NSMenuItem(title: sortMenu.title, action: nil, keyEquivalent: "")
+        sortItem.submenu = sortMenu
+        sortItem.setAccessibilityIdentifier("folder.sort.menu")
+        view.addItem(sortItem)
+        folderSubmenuItems.append(sortItem)
+        for key in FolderSortKey.allCases { addFolderItem(.sort(key), to: sortMenu) }
+        let orderMenu = NSMenu(title: String(localized: "Sort Order"))
+        orderMenu.delegate = self
+        let orderItem = NSMenuItem(title: orderMenu.title, action: nil, keyEquivalent: "")
+        orderItem.submenu = orderMenu
+        orderItem.setAccessibilityIdentifier("folder.order.menu")
+        view.addItem(orderItem)
+        folderSubmenuItems.append(orderItem)
+        for direction in FolderSortDirection.allCases { addFolderItem(.direction(direction), to: orderMenu) }
+        extensionMenu.delegate = self
+        let extensionItem = NSMenuItem(title: extensionMenu.title, action: nil, keyEquivalent: "")
+        extensionItem.submenu = extensionMenu
+        extensionItem.setAccessibilityIdentifier("folder.extensions.menu")
+        view.addItem(extensionItem)
+        folderSubmenuItems.append(extensionItem)
+        addFolderItem(.loop, to: view)
         view.addItem(.separator())
         let fullScreen = view.addItem(withTitle: String(localized: "Enter Full Screen"),
             action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
@@ -152,7 +179,35 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         guard let raw = item.representedObject as? String, let appearance = DisplayAppearance(rawValue: raw) else { return }
         preferencesStore.value.appearance = appearance
     }
+    private func addFolderItem(_ action: FolderMenuAction, to menu: NSMenu) {
+        let title: String
+        if case .extensionType(let value) = action, !value.isEmpty { title = value.uppercased() }
+        else { title = String(localized: String.LocalizationValue(action.titleKey)) }
+        let item = menu.addItem(withTitle: title, action: #selector(invokeFolder(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = action
+        item.setAccessibilityIdentifier(action.accessibilityIdentifier)
+    }
+    @objc private func invokeFolder(_ item: NSMenuItem) {
+        guard let action = item.representedObject as? FolderMenuAction,
+              let session = (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session,
+              session.hasFolderSource, session.filePreviewSet == nil, session.previewSet == nil else { return }
+        let selection = FolderMenuSelection(conditions: session.folderConditions, loopEnabled: session.folderLoopEnabled)
+        let changed = FolderMenuPolicy.applying(action, to: selection)
+        session.setFolderConditions(changed.conditions)
+        session.setFolderLoopEnabled(changed.loopEnabled)
+    }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if let action = item.representedObject as? FolderMenuAction {
+            let session = (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session
+            let selection = FolderMenuSelection(conditions: session?.folderConditions ?? .init(),
+                loopEnabled: session?.folderLoopEnabled ?? false)
+            let state = FolderMenuPolicy.state(for: action, selection: selection,
+                hasFolderSource: session?.hasFolderSource == true,
+                previewActive: session?.filePreviewSet != nil || session?.previewSet != nil)
+            item.state = state.checked ? .on : .off
+            return state.enabled
+        }
         if item.action == #selector(selectAppearance(_:)),
            let raw = item.representedObject as? String, let appearance = DisplayAppearance(rawValue: raw) {
             item.state = preferencesStore.value.appearance == appearance ? .on : .off
@@ -167,7 +222,25 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         if id == .inspector { item.title = target?.inspectorVisible == true ? String(localized: "Hide Inspector") : String(localized: "Show Inspector") }
         return target?.session.isEnabled(id) ?? (id == .open)
     }
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === folderViewMenu { updateFolderSubmenus() }
+        guard menu === extensionMenu else { return }
+        extensionMenu.removeAllItems()
+        addFolderItem(.clearFilter, to: extensionMenu)
+        extensionMenu.addItem(.separator())
+        let session = (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session
+        let available = (session?.folderAvailableExtensions ?? []) + Array(session?.folderConditions.selectedExtensions ?? [])
+        for value in FolderMenuPolicy.extensionChoices(available: available) {
+            addFolderItem(.extensionType(value), to: extensionMenu)
+        }
+    }
+    private func updateFolderSubmenus() {
+        let session = (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session
+        let enabled = session?.hasFolderSource == true && session?.filePreviewSet == nil && session?.previewSet == nil
+        for item in folderSubmenuItems { item.isEnabled = enabled }
+    }
     func menuWillOpen(_ menu: NSMenu) {
+        if menu === folderViewMenu { updateFolderSubmenus() }
         trackingMenus.insert(ObjectIdentifier(menu))
         isTracking = true
         (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session.setMenuTracking(true)
