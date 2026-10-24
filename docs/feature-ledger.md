@@ -153,7 +153,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| FOLDER-01 | 边扫描边浏览 | Partial | 单元 | P2-02 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FolderBrowser/`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/`、`Packages/PicseeKit/Sources/PicseeCore/Models/`、`Packages/PicseeKit/Sources/PicseeMacUI/States/ViewerStateHost.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/FolderScanning.swift` | 打开 S2（5000 项）：首批出现前显示 24 页读取状态，可取消；首批出现后即可翻图，扫描在后台继续（时间见 `docs/validation/P2.md`）。限制：仅单层（需 P2-04）；扫描中顺序临时，首张取自首批；读取页后无扫描状态与取消（P2-09）；24 页读取与取消真机未验（[@1x 记录](validation/P2.md#p2-02分批扫描取消与快照导航)）。 |
+| FOLDER-01 | 边扫描边浏览 | Partial | 单元 | P2-02 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FolderBrowser/`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/`、`Packages/PicseeKit/Sources/PicseeCore/Models/`、`Packages/PicseeKit/Sources/PicseeMacUI/States/ViewerStateHost.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/FolderScanning.swift` | 打开 S2（5000 项）：首批出现前显示 24 页读取状态，可取消；首批出现后即可翻图，扫描在后台继续（时间见 `docs/validation/P2.md`）。限制：仅单层（需 P2-04）；扫描中顺序临时；读取页后无扫描状态与取消（P2-09）；24 页读取与取消真机未验（[@1x 记录](validation/P2.md#p2-02分批扫描取消与快照导航)）。 |
 | FOLDER-02 | 排序 | Absent | 无 | P2-03 | — | 按名称自然排序（img2 排在 img10 前）、修改日期、类型、大小，升降序都能切换 |
 | FOLDER-03 | 扩展名过滤 | Absent | 无 | P2-03 | — | 只勾选 PNG，列表与翻图都只剩 PNG；取消过滤后恢复，当前图合理保留 |
 | FOLDER-04 | 子目录递归 | Absent | 无 | P2-04 | — | 打开递归，嵌套目录的图片出现；含循环符号链接的目录扫描能结束，不重复列出 |
