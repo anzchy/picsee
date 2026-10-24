@@ -4,7 +4,8 @@
 `macos-device-test` 技能在真实 App 里验收，再用 doc gardener 检查功能账簿，最后带着证据开 PR。
 只有 @2x 验收例外：从 mini 经 SSH 驱动 MacBook Pro，并把命令送进 MacBook 桌面启动的 tmux 会话。
 
-> **当前状态（2026-10-22）**：签名版 Picsee.app 已可构建并启动；技能 §15 的 `scripts/device/` 脚本按本指南执行真机验收流程；目前尚无账簿行达到「真机」。
+设备脚本的完整契约见 [device runbook §15](../../.agents/skills/macos-device-test/references/device-runbook.md)；
+已实现和已验收状态以[功能账簿](../feature-ledger.md)为准。
 
 ## 1. 三件东西各管什么
 
@@ -24,7 +25,7 @@
   │
   ├─ ① 找出要验的账簿行和每个入口
   ├─ ② 写 brief
-  ├─ ③ 在 herdr 会话中新开 Claude pane，跑 macos-device-test（本机 mini）
+  ├─ ③ 在独立验收会话中跑 macos-device-test（本机 mini）
   ├─ ④ 读结论表，写/提交 docs/validation/P<n>.md
   ├─ ⑤ 你按记录更新账簿行，运行 npm run ledger:build，把 Markdown 与 HTML 一起提交
   ├─ ⑥ 跑 picsee-doc-gardener（pr 模式）
@@ -43,10 +44,10 @@
 | Xcode | 锁定 **Xcode 26.6（build 17F113）**。脚本依次检查 `/Applications/Xcode-26.6.app`、`/Applications/Xcode.app`；`PICSEE_XCODE` 可显式覆盖 | 选中路径的 `Contents/Developer/usr/bin/xcodebuild -version` 输出 `Build version 17F113` |
 | XcodeGen | 本机已装（`/opt/homebrew/bin/xcodegen`） | `xcodegen --version` |
 | 签名 | 钥匙串里已有团队 `GRT84NAK4T` 的 Apple Development 证书（2027-01-31 到期） | `security find-identity -v -p codesigning` 里能看到它 |
-| 终端权限 | 系统设置 → 隐私与安全性：给运行 Claude Code 的终端 App 打开**屏幕录制**和**辅助功能** | computer use 截图能看到桌面 |
+| 终端权限 | 运行验收会话的终端 App 已获所需的**屏幕录制**和**辅助功能**权限；验收时不自行更改隐私设置 | computer use 截图能看到桌面 |
 | 输入法 | 验收前切到 **ABC** | 菜单栏输入法图标 |
 | 运行目录 | `mkdir -p ~/.picsee/device-runs` | 目录存在 |
-| 已安装的 Picsee | `/Applications` 里不要有旧的 Picsee，或验收时它不在运行 | `pgrep -fl Picsee` 没有输出 |
+| 已安装的 Picsee | 用户自己的 Picsee 可保留安装，但验收时不能运行 | `pgrep -fl Picsee` 没有输出 |
 
 本机 mini 是 1920×1080 @1x，也是计划 §10.1 的性能基准；除 @2x 外，所有真机验收都只在这里跑。
 mini 没有 HiDPI 模式。VIEW-02 有三个入口：mini 按 `1`、MacBook 按 `1`、从 2× 拖到 1×；账簿里涉及
@@ -101,6 +102,8 @@ brief 是给验收会话的任务单，放在 `~/.picsee/device-briefs/brief-<�
 $macos-device-test 读 ~/.picsee/device-briefs/brief-2026-11-05-VIEW-02-03.md，按里面写的执行，报告写到 brief 指定的位置。brief 说需要我动手的时候停下来叫我。
 ```
 
+Claude Code 使用同一份 brief，调用 `/macos-device-test`。
+
 会话会按技能顺序做：选机器 → 检查没有别的 Picsee 在跑 → 用锁定的 Xcode 构建并检查签名团队 →
 `open -n` 启动并记录 PID → doctor 自检（每一行都要通过）→ 若工具要求授权，仅申请 brief 需要的 App →
 按运行步骤操作 → 存日志和截图 → 按 PID 清理、释放 GUI 锁并确认证据还在。
@@ -141,12 +144,12 @@ gardener 靠这些 ID 把记录对应到行。单独提交：
 ```text
 docs(validation): P0-03 device run VIEW-02, VIEW-03 on Mac mini @1x
 
-Validated-by: claude-imple-1 run=20261105-143012-VIEW-02-03
+Validated-by: <设备测试角色> run=20261105-143012-VIEW-02-03
 ```
 
 这次提交只改 `docs/` 下的文件，不能夹带代码。最后的 `Validated-by:` trailer 必须有：gardener 靠它确认记录来自设备测试角色、
 而不是实现者，缺了它，这条记录不能让任何账簿行升级。对应地，实现代码的提交带 `Implemented-by: <角色>`
-（例如 `Implemented-by: gpt-imple-1`；在主对话里直接实现时写 `Implemented-by: claude-main`）。
+（例如 `Implemented-by: gpt-imple-1`；在主对话里直接实现时写实际角色）。
 
 ### ⑤ 你更新账簿行（单独提交）
 
@@ -172,7 +175,8 @@ Validated-by: claude-imple-1 run=20261105-143012-VIEW-02-03
 
 ### ⑥ 跑 doc gardener
 
-PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 里说：
+PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 调用 `picsee-doc-gardener` subagent，
+或在 Codex 调用同名 custom agent，提供这些参数：
 
 ```text
 用 picsee-doc-gardener 跑 pr 模式：worktree <路径>，base $(git merge-base main HEAD)，head <HEAD SHA>，分支 p0-03-canvas。
@@ -194,12 +198,13 @@ PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 里说�
 ## 5. 常见问题
 
 **本地 mini 验和远端 MacBook 验有什么不同？**
-本机就是 Mac mini：@1x、16 GiB，是唯一的本地真机测试机和性能基准，验收从 herdr 会话里的 Claude pane
-运行；开始前只确认 mdpro 的 `dtrack` 空闲，绝不触碰它。MacBook 只承担 @2x：从 mini 经 `ssh macbook`
+本机就是 Mac mini：@1x、16 GiB，是唯一的本地真机测试机和性能基准，验收从独立会话运行。
+任何界面操作前先查共享 GUI 锁状态，运行时获取并持有本次锁；不触碰 mdpro 的会话。MacBook 只承担 @2x：从 mini 经 `ssh macbook`
 把命令送进 MacBook 桌面启动的 tmux 会话。SSH 未设置好时，@2x 记 NOT VERIFIED。记录里永远写清楚是哪台机器。
 
 **computer use 做不到的操作怎么办？**
-触控板捏合、可能还有 Esc（原生 App 能不能收到还没验证过），在 brief 里预先标成“用户步骤”。
+触控板捏合等工具不能完成的入口，在 brief 里预先标成“用户步骤”。原生 Esc 可用 `kc.sh 53`；
+computer-use 的直接 Escape 路径仍未验证。
 你不在的时候，这一项记 NOT VERIFIED（工具限制），不能记 FAIL，也不能记 pass。第一次真实运行查清 Esc 后，
 结论写进 `features/README.md` 的「已知工具行为」。
 

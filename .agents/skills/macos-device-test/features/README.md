@@ -10,11 +10,11 @@ differs, and record the deviation.
 
 ## Baseline preconditions
 
-- Machine and display as the brief names (SKILL.md §2): @1x runs locally on the mini; @2x rows run on the
+- Machine and display as the brief names ([runbook](../references/device-runbook.md) §2): @1x runs locally on the mini; @2x rows run on the
   MacBook over SSH through its desktop-started tmux session, or are NOT VERIFIED until that path is set up.
-- A fresh build of the code under test, signed by team `GRT84NAK4T`, launched by this run (SKILL.md §4–§5).
-- Doctor passes every line (SKILL.md §6).
-- No Picsee instance this run didn't start; the desktop's other computer-use driver idle (SKILL.md §3).
+- A fresh build of the code under test, signed by team `GRT84NAK4T`, launched by this run ([runbook](../references/device-runbook.md) §4–5).
+- Doctor passes every line ([runbook](../references/device-runbook.md) §6).
+- No Picsee instance this run didn't start; the shared desktop GUI lock belongs to this run ([runbook](../references/device-runbook.md) §3).
 - Fixtures copied from `TestAssets/` into `$RUN_DIR/fixtures/` and hash-checked against the manifest.
 - Sandbox container state as the brief says: either "existing" (left alone) or "fresh" (deleted with the
   user's approval, recorded).

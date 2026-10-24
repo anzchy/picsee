@@ -35,9 +35,9 @@ Preconditions:
   scales, so record this entry as NOT VERIFIED.
 - Fixtures: the 1-px checkerboard and labelled coordinate grid from S1, plus tier-①
   `synthetic/landscape-3x2.png`, `synthetic/portrait-2x3.png` and
-  `synthetic/pan-grid-4096x3072.png`. Copy and hash-check them as SKILL.md §8 requires.
+  `synthetic/pan-grid-4096x3072.png`. Copy and hash-check them as the [runbook](../references/device-runbook.md) §8 requires.
 
-- **Open the checkerboard.** Launch with the checkerboard fixture (SKILL.md §5). The image appears fitted to
+- **Open the checkerboard.** Launch with the checkerboard fixture ([runbook](../references/device-runbook.md) §5). The image appears fitted to
   the window.
 - **Additional actual-pixels evidence at @1x.** On the local mini, press `1`. A zoomed screenshot of the image
   centre shows crisp alternating black and white pixels, with no grey or moiré. This does not exercise the
