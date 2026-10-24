@@ -246,13 +246,14 @@ public final class ViewerStateHost: NSView {
         let hint = failure ? nil : stateLabels[2]
         let buttonWidth: CGFloat = failure ? 80 : max(180, ceil(buttons[0].intrinsicContentSize.width))
         let buttonHeight: CGFloat = 32
-        let naturalHintWidth = hint.map {
-            ceil(($0.stringValue as NSString).size(withAttributes: [.font: $0.font!]).width) + 4
-        } ?? 0
+        let naturalHintWidth = hint.map { ceil($0.cell!.cellSize.width) } ?? 0
         let rowWidth = buttonWidth + 16 + naturalHintWidth
         let inlineHint = !failure && rowWidth <= textWidth
         let hintWidth = inlineHint ? naturalHintWidth : textWidth
-        let hintHeight = hint.map { measure($0, width: hintWidth) } ?? 0
+        let hintHeight = hint.map {
+            ceil($0.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: hintWidth,
+                                                   height: .greatestFiniteMagnitude)).height)
+        } ?? 0
         let actionHeight = inlineHint ? max(buttonHeight, hintHeight) : buttonHeight + (failure ? 0 : 9 + hintHeight)
         let contentHeight: CGFloat = 32 + 18 + headingHeight + 9 +
             (failure ? filenameHeight + 9 + reasonHeight : descriptionHeight) + 18 + actionHeight
