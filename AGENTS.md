@@ -40,7 +40,7 @@ picsee 是一个 macOS 原生看图应用（Swift 6 + SwiftUI + AppKit，最低 
 | 你要做的事 | 先读 |
 |---|---|
 | 任何实现工作 | [开发计划](docs/PICSEE_DEVELOPMENT_PLAN.md) 里对应的工作包与验收；[架构](docs/PICSEE_ARCHITECTURE.md) 里的 target 分工 |
-| UI、颜色、间距、组件 | [`design/DESIGN.md`](design/DESIGN.md)、[原生映射](design/picsee-ui-system/native/README.md)、[状态稿](design/prototypes/picsee-browser/states/README.md)（20 页 mockup，开发计划 §1.3 有页面到工作包的映射） |
+| UI、颜色、间距、组件 | [`design/DESIGN.md`](design/DESIGN.md)、[原生映射](design/picsee-ui-system/native/README.md)、[状态稿](design/prototypes/picsee-browser/states/README.md)、[UI 对照契约](docs/agents/ui-parity-contract.md)（20 页 mockup，开发计划 §1.3 有页面到工作包的映射） |
 | 参考 Picview 的某个功能 | 功能清单 `docs/PICVIEW_FEATURES.md`、技术分析 `docs/PICVIEW_ANALYSIS.md`（本地研究资料，不在公开仓库）。这些只是静态证据，不是已测行为 |
 | 多 agent 协作、brief、审计 | [迁移计划](docs/plans/20261021-herdr-roster-migration-plan.md)；接手 delegator 先用 skill [`picsee-delegator`](.agents/skills/picsee-delegator/SKILL.md)（`.claude/skills/` 下为指向它的软链接）。协作规则 `.claude/rules/70-herdr-roster.md` 尚未写成 |
 | 功能做完后在真机验收、更新账簿、跑 gardener | [功能验收指南](docs/guide/feature-verification-guide.md) |

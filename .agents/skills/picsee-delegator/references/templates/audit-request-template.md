@@ -16,18 +16,14 @@ Inputs:
 - receipts (Codex implementers): `node ~/.claude/plugins/cache/xiaolai/tdd-guardian/0.10.2/scripts/tdd-guardian/receipt.js show`
   from the implementer worktree. (Kimi: no receipts — judge the pasted RED/GREEN in the handoff.)
 
+UI review when this range changes visible UI (otherwise state `无 UI 变化`):
+- Read [`docs/agents/ui-parity-contract.md`](../../../../../docs/agents/ui-parity-contract.md), the exact manifest/HTML, `design/DESIGN.md`, native mapping, plan §1.3, ledger rows, and the implementer brief's pinned design hashes. Check source SHA drift and any new native exception against its design authority.
+- List affected states one by one with viewport, appearance, backing scale, real native entry and verdict: `PASS`, `FAIL`, `PENDING` (unimplemented), or `NOT VERIFIED` (uncaptured/blocked). A static HTML page does not prove native behavior.
+- Review raw signed-App and HTTP-rendered HTML window screenshots with build/design provenance; compare measured regions (points versus backing pixels), spacing, typography/cropping, colors, icon/state changes, and declared masks. Reject post-hoc masks or an uncited system-control exception. If you cannot independently drive the device, say whose captures you inspected and keep that limit explicit.
+- Check relevant actions, resize, light/dark, keyboard/focus, accessibility and zh/en text separately. Retake affected states from the fixed build and audit its new SHA. Do not clear all 20 pages or @2x based on a smaller sample; no `Shipped` upgrade from pixel resemblance alone.
+
 Beyond the dimensions, judge these specifically:
 - <5–10 bullets on the risky points: correctness traces, cancellation/generations, fences held, ledger honesty,
   tests discriminate, RED genuine, size rule>
 
-<!-- opus version: -->
-Do not launch the app or run device scripts. Tests you may run, once: `scripts/heavy-lock.sh swift test --package-path
-Packages/PicseeKit` in the implementer worktree (HEAD <head7>); change no tracked file; scratch replays must not write
-into any worktree.
-Write your report to ~/.picsee/herdr/opus-auditor/<item>-r1.md and end your final message with the
-VERDICT / COVERAGE / COUNT block. <New implementer: add a short "Implementer assessment" paragraph.>
-
-<!-- gpt version (replace the two paragraphs above): -->
-Do not launch the app or run device scripts. Do not run swift test (your sandbox cannot take the shared heavy lock);
-judge from source and the supplied gate evidence; the second auditor reruns the suite under the lock.
-Write ~/.picsee/herdr/gpt-auditor/<item>-r1.md. Your final message is the report shape's VERDICT block.
+Until the user explicitly restores Opus, use the sole independent `gpt-auditor` route. Do not launch the app or run device scripts. Do not run Swift tests in the auditor pane; judge code, original evidence and supplied gate outputs, and identify where a signed device run is still needed. Write ~/.picsee/herdr/gpt-auditor/<item>-r1.md with the report shape's VERDICT / COVERAGE / COUNT block. The delegator reruns owner gates; poll completion is not audit acceptance.
