@@ -32,12 +32,15 @@ extension ImageCacheObservationTests {
 
 /// Holds scheduling only; identities still come from the production filesystem resolver.
 private actor ObservationIdentityGate: ItemIdentityResolving {
-    private let resolver = FileItemIdentityResolver()
+    private let resolver: FileItemIdentityResolver
     nonisolated let started: AsyncStream<Void>
     private let signal: AsyncStream<Void>.Continuation
     private var armed = false
     private var continuation: CheckedContinuation<Void, Never>?
-    init() { (started, signal) = AsyncStream.makeStream() }
+    init(root: ItemIdentityRoot? = nil) {
+        resolver = FileItemIdentityResolver(root: root)
+        (started, signal) = AsyncStream.makeStream()
+    }
     func holdNext() { armed = true }
     func release() { continuation?.resume(); continuation = nil }
     func identity(for fileURL: URL) async throws -> ItemID {
@@ -194,15 +197,19 @@ private enum ObservationFailure: Error { case expected }
     }
 
     @Test(.timeLimit(.minutes(1))) func cachePipelineObservationPrecedesHeaderWithoutOldEntry() async throws {
-        let cache = ImageMemoryCache(capacity: 100_000), resolver = ObservationIdentityGate()
+        let tree = try IdentityTree(); defer { tree.remove() }
+        try Data(contentsOf: fixture("orientation-1.tiff")).write(to: tree.file)
+        let cache = ImageMemoryCache(capacity: 100_000), resolver = ObservationIdentityGate(root: tree.scope)
         let pipeline = ImageIOPipeline(identityResolver: resolver, cache: cache)
-        let request = try await pipeline.request(for: fixture("coordinate-grid.png"), maximumPixelSize: 16)
-        let old = try #require(request.renderKey), new = observationKey(old, token: "R2")
+        let request = try await pipeline.request(for: tree.file, maximumPixelSize: 16)
+        let old = try #require(request.renderKey)
         let p2 = try cachePixels(marker: 2)
         await resolver.holdNext()
         let delayed = Task { try await pipeline.image(for: request) }
         var starts = resolver.started.makeAsyncIterator()
         _ = await starts.next()
+        try Data(contentsOf: fixture("orientation-2.tiff")).write(to: tree.file, options: .atomic)
+        let new = try #require(try await pipeline.request(for: tree.file, maximumPixelSize: 16).renderKey)
         let writer = await cache.lookup(new)
         await resolver.release()
         await #expect(performing: { try await delayed.value }, throws: loadError(.sourceChanged))
