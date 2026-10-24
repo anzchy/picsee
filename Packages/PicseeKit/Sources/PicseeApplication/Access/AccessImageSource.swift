@@ -26,6 +26,7 @@ public actor AccessImageSource {
         let file: URL
         switch request { case .fileGrant(let url), .root(_, let url): file = url }
         let pipeline = pipeline
+        let thumbnailCache = (pipeline as? any ThumbnailCacheProviding)?.thumbnailCache
         do {
             let result = try await access.withLease(request) { lease in
                 let root = lease.rootID.map { ItemIdentityRoot(id: $0, url: lease.url) }
@@ -33,7 +34,29 @@ public actor AccessImageSource {
                 try Task.checkCancellation()
                 let request = ImageDecodeRequest(fileURL: file, maximumPixelSize: maximumPixelSize,
                                                  renderKey: prepared.renderKey, isPreview: isPreview, identityRoot: root)
+                var ticket: ThumbnailCacheTicket?
+                if let thumbnailCache {
+                    do { ticket = try await thumbnailCache.prepare(request) }
+                    catch is CancellationError { throw CancellationError() }
+                    catch { ticket = nil } // Re-creatable cache failure cannot block source decoding.
+                    if let ticket {
+                        do {
+                            if let cached = try await thumbnailCache.load(ticket) {
+                                try Task.checkCancellation()
+                                return (request, cached)
+                            }
+                        } catch is CancellationError { throw CancellationError() }
+                        catch { /* Source decoding remains authoritative on cache failure. */ }
+                    }
+                }
+                try Task.checkCancellation()
                 let image = try await pipeline.image(for: request)
+                try Task.checkCancellation()
+                if let thumbnailCache, let ticket {
+                    do { try await thumbnailCache.store(image, for: ticket) }
+                    catch is CancellationError { throw CancellationError() }
+                    catch { /* The decoded source remains deliverable. */ }
+                }
                 try Task.checkCancellation()
                 return (request, image)
             }

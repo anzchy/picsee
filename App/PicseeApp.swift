@@ -9,7 +9,8 @@ import PicseeMacUI
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let imagePipeline = ImageIOPipeline(cacheTrace: UntestedNativeResourceSnapshotTrace())
+    private let imagePipeline = ImageIOPipeline(cacheTrace: UntestedNativeResourceSnapshotTrace(),
+                                                thumbnailCache: ThumbnailDiskCache())
     private lazy var memoryPressure = UntestedNativeMemoryPressureForwarder(pipeline: imagePipeline)
     private let displayPreferences = UserDefaultsDisplayPreferencesStore(defaults: .standard)
     private lazy var appearanceAdapter = WindowAppearanceAdapter(preferencesStore: displayPreferences)

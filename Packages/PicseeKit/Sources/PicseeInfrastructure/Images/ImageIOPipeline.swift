@@ -50,7 +50,7 @@ public struct ImageIODecoder: ImageDecoding {
     }
 }
 
-public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sendable {
+public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, ThumbnailCacheProviding, Sendable {
     private let configuration: DecodeConfiguration
     private let rootResolvers = RootIdentityResolvers()
     private let identityResolver: any ItemIdentityResolving
@@ -58,14 +58,17 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Sen
     private let admission: DecodeAdmission
     private let cache: ImageMemoryCache
     private let cacheTrace: (any ResourceSnapshotTracing)?
+    package let thumbnailCache: (any ThumbnailCaching)?
     public init(decoder: any ImageDecoding = ImageIODecoder(), configuration: DecodeConfiguration = DecodeConfiguration(),
                 identityResolver: any ItemIdentityResolving = FileItemIdentityResolver(),
                 cache: ImageMemoryCache? = nil, cacheTrace: (any ResourceSnapshotTracing)? = nil,
+                thumbnailCache: (any ThumbnailCaching)? = nil,
                 pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.configuration = configuration
         self.cache = cache ?? ImageMemoryCache(capacity: configuration.cacheCapacity,
             pressureRecoveryDelay: configuration.pressureRecoveryDelay, pressureClock: pressureClock)
         self.cacheTrace = cacheTrace
+        self.thumbnailCache = thumbnailCache
         self.identityResolver = identityResolver
         let executor = OperationDecodeExecutor(workers: configuration.workers)
         self.executor = executor
