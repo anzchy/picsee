@@ -13,7 +13,7 @@ let package = Package(
     targets: [
         .target(name: "PicseeCore"),
         .target(name: "PicseeApplication", dependencies: ["PicseeCore"]),
-        .target(name: "PicseeInfrastructure", dependencies: ["PicseeCore"]),
+        .target(name: "PicseeInfrastructure", dependencies: ["PicseeCore"], linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "PicseeMacUI", dependencies: ["PicseeCore", "PicseeApplication"]),
         .testTarget(name: "PicseeApplicationTests", dependencies: ["PicseeCore", "PicseeApplication"]),
         .testTarget(name: "PicseeMacUITests", dependencies: ["PicseeMacUI"]),
