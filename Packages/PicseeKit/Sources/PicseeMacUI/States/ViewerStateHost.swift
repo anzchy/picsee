@@ -110,6 +110,14 @@ public final class ViewerStateHost: NSView {
             textLines = [String(format: String(localized: "Opening %@…"), name)]
             actions = [(String(localized: "Cancel"), "state.cancel")]
         case .readingFolder:
+            // Page 24 uses the canvas surface; keep the prior image intact underneath for Cancel.
+            let surface = NSBox(frame: bounds)
+            surface.boxType = .custom; surface.borderType = .noBorder
+            surface.titlePosition = .noTitle; surface.cornerRadius = 0
+            surface.fillColor = DesignColor.canvasBackground.nsColor
+            surface.autoresizingMask = [.width, .height]
+            surface.setAccessibilityElement(false)
+            addSubview(surface)
             showsProgress = true
             textLines = [String(localized: "Reading Folder…"),
                 String(localized: "Looking for images to browse. Please wait.")]
