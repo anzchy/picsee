@@ -7,36 +7,14 @@ import PicseeApplication
 private struct StateText: View {
     let lines: [String]
     let isLoading: Bool
-    let isFailure: Bool
     let isNotice: Bool
-    private struct DropHint: NSViewRepresentable {
-        let line: String
-        func makeNSView(context: Context) -> NSTextField {
-            let field = NSTextField(labelWithString: line)
-            field.font = DesignMetrics.font("uiSmall")
-            field.textColor = DesignColor.textSecondary.nsColor
-            field.alignment = .center
-            field.setAccessibilityIdentifier("state.drop-hint")
-            field.setAccessibilityRole(.staticText)
-            return field
-        }
-        func updateNSView(_ field: NSTextField, context: Context) {
-            field.stringValue = line
-            field.setAccessibilityLabel(line)
-        }
-    }
     var body: some View {
         VStack(spacing: 12) {
             if isLoading { IndeterminateProgressRow(label: lines[0]) }
             else {
                 ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                    if !isFailure && index == 2 {
-                        DropHint(line: line).fixedSize().offset(y: 80)
-                    } else {
-                        Text(line).font(Font(DesignMetrics.font(isNotice ? "uiSmall" : index == 0 ? "title" : "ui")))
-                            .foregroundStyle(isFailure && index == 2 ? DesignColor.errorText.color :
-                                index == 0 ? DesignColor.textPrimary.color : DesignColor.textSecondary.color)
-                    }
+                    Text(line).font(Font(DesignMetrics.font(isNotice ? "uiSmall" : index == 0 ? "title" : "ui")))
+                        .foregroundStyle(index == 0 ? DesignColor.textPrimary.color : DesignColor.textSecondary.color)
                 }
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -53,6 +31,9 @@ public final class ViewerStateHost: NSView {
     private weak var keyChrome: ViewerChromeOverlay?
     private var displayedStatus: ViewerImageStatus?
     private var displayedNextEnabled = false
+    private var composedState: ViewerImageStatus?
+    private var stateIcon: NSImageView?
+    private var stateLabels: [NSTextField] = []
     public func linkKeyViews(to canvas: NSView, chrome: ViewerChromeOverlay) {
         keyCanvas = canvas; keyChrome = chrome
         ViewerStateFocus.link(canvas: canvas, state: self, chrome: chrome)
@@ -96,6 +77,7 @@ public final class ViewerStateHost: NSView {
             $0.removeFromSuperview()
         }
         buttons = []; textLines = []; showsProgress = false
+        composedState = nil; stateIcon = nil; stateLabels = []
         var actions: [(String, String)] = []
         var failure = false
         let notice = status == .detailLimited
@@ -151,8 +133,16 @@ public final class ViewerStateHost: NSView {
         case .detailLimited: textLines = [String(localized: "Showing reduced detail")]
         case .showing: return
         }
+        if case .empty = status {
+            composeState(status, actions: actions)
+            return
+        }
+        if failure {
+            composeState(status, actions: actions)
+            return
+        }
         let text = NSHostingView(rootView: StateText(lines: textLines, isLoading: showsProgress,
-            isFailure: failure, isNotice: notice))
+            isNotice: notice))
         let center = max(160, bounds.midY)
         text.frame = NSRect(x: 16, y: notice ? bounds.height - 84 : center,
             width: max(0, bounds.width - 32), height: notice ? 32 : failure ? 160 : 80)
@@ -172,6 +162,106 @@ public final class ViewerStateHost: NSView {
             addSubview(button); buttons.append(button)
         }
         setAccessibilityChildren([text as NSView] + buttons)
+    }
+
+    private func composeState(_ status: ViewerImageStatus, actions: [(String, String)]) {
+        composedState = status
+        let failure: Bool
+        if case .failed = status { failure = true } else { failure = false }
+        let image = NSImageView(image: failure
+            ? NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Unreadable image")!
+            : DesignSymbol.folder.image())
+        image.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 28, weight: .regular)
+        image.imageScaling = .scaleProportionallyDown
+        image.setAccessibilityIdentifier("state.icon")
+        image.setAccessibilityRole(.image)
+        image.setAccessibilityLabel(failure ? "Unreadable image" : "Open folder")
+        addSubview(image); stateIcon = image
+        for (index, line) in textLines.enumerated() {
+            let field = NSTextField(labelWithString: line)
+            field.font = index == 0 ? .systemFont(ofSize: 16, weight: .medium) : DesignMetrics.font("ui")
+            field.textColor = failure && index == 2 ? DesignColor.errorText.nsColor :
+                index == 0 ? DesignColor.textPrimary.nsColor : DesignColor.textSecondary.nsColor
+            field.alignment = .center
+            field.cell?.wraps = true
+            field.cell?.usesSingleLineMode = false
+            field.maximumNumberOfLines = 0
+            let id = index == 0 ? "state.heading" : failure
+                ? (index == 1 ? "state.filename" : "state.reason")
+                : (index == 1 ? "state.description" : "state.drop-hint")
+            field.setAccessibilityIdentifier(id)
+            field.setAccessibilityRole(.staticText)
+            field.setAccessibilityLabel(line)
+            addSubview(field); stateLabels.append(field)
+        }
+        for action in actions {
+            let button = ViewerStateButton(title: action.0, target: self, action: #selector(activate(_:)))
+            button.session = session
+            button.bezelStyle = .rounded; button.focusRingType = .exterior
+            button.identifier = NSUserInterfaceItemIdentifier(action.1)
+            button.setAccessibilityIdentifier(action.1)
+            addSubview(button); buttons.append(button)
+        }
+        setAccessibilityChildren([image] + stateLabels + buttons)
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
+
+    public override func layout() {
+        super.layout()
+        guard let status = composedState, let icon = stateIcon else { return }
+        let failure: Bool
+        if case .failed = status { failure = true } else { failure = false }
+        let available = max(0, bounds.width - 32)
+        let textWidth = min(640, available)
+        func measure(_ field: NSTextField, width: CGFloat) -> CGFloat {
+            let rect = (field.stringValue as NSString).boundingRect(
+                with: NSSize(width: width, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: field.font!])
+            return ceil(rect.height) + 2
+        }
+        let heading = stateLabels[0], description = stateLabels[1]
+        let headingHeight = measure(heading, width: textWidth)
+        let descriptionHeight = measure(description, width: textWidth)
+        let filenameHeight = failure ? descriptionHeight : 0
+        let reasonHeight = failure ? measure(stateLabels[2], width: textWidth) : 0
+        let hint = failure ? nil : stateLabels[2]
+        let buttonWidth: CGFloat = failure ? 80 : 180
+        let buttonHeight: CGFloat = 32
+        let hintHeight = hint.map { measure($0, width: textWidth) } ?? 0
+        let actionHeight = buttonHeight + (failure ? 0 : 9 + hintHeight)
+        let contentHeight: CGFloat = 32 + 18 + headingHeight + 9 +
+            (failure ? filenameHeight + 9 + reasonHeight : descriptionHeight) + 18 + actionHeight
+        var top = bounds.midY + contentHeight / 2
+        icon.frame = NSRect(x: bounds.midX - 16, y: top - 32, width: 32, height: 32)
+        top -= 32 + 18
+        heading.frame = NSRect(x: bounds.midX - textWidth / 2, y: top - headingHeight,
+                               width: textWidth, height: headingHeight)
+        top -= headingHeight + 9
+        description.frame = NSRect(x: bounds.midX - textWidth / 2, y: top - descriptionHeight,
+                                   width: textWidth, height: descriptionHeight)
+        top -= descriptionHeight
+        if failure {
+            top -= 9
+            stateLabels[2].frame = NSRect(x: bounds.midX - textWidth / 2, y: top - reasonHeight,
+                                          width: textWidth, height: reasonHeight)
+            top -= reasonHeight
+        }
+        top -= 18
+        if failure {
+            let total = CGFloat(buttons.count) * buttonWidth + CGFloat(max(0, buttons.count - 1)) * 12
+            for (index, button) in buttons.enumerated() {
+                button.frame = NSRect(x: bounds.midX - total / 2 + CGFloat(index) * (buttonWidth + 12),
+                                      y: top - buttonHeight, width: buttonWidth, height: buttonHeight)
+            }
+        } else if let button = buttons.first, let hint {
+            button.frame = NSRect(x: bounds.midX - buttonWidth / 2, y: top - buttonHeight,
+                                  width: buttonWidth, height: buttonHeight)
+            hint.frame = NSRect(x: bounds.midX - textWidth / 2,
+                                y: top - buttonHeight - 9 - hintHeight,
+                                width: textWidth, height: hintHeight)
+        }
     }
     @objc private func activate(_ sender: NSButton) {
         guard !isHiddenOrHasHiddenAncestor, sender.isEnabled, !sender.isHiddenOrHasHiddenAncestor,
