@@ -7,6 +7,7 @@ import PicseeCore
     var opens: [URL] = []
     var remembered: [(URL, AccessRootID)] = []
     var emptyCount = 0
+    var cleared = 0
     var onRemember: (() async throws -> Void)?
     var onOpen: (() -> Void)?
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opens.append(url); onOpen?() }
@@ -14,6 +15,29 @@ import PicseeCore
         remembered.append((folder, rootID)); try await onRemember?()
     }
     func showEmptyFolder() { emptyCount += 1 }
+    func clearFolderImageForNoMatches() { cleared += 1 }
+}
+
+@Test(arguments: ["png", "none"])
+@MainActor func folderReadingConditionChangeDuringRememberDoesNotReopenExcludedFirst(selection: String) async throws {
+    let fixture = FolderScanFixture(), host = FolderReadingHost(), coordinator = fixture.coordinator
+    coordinator.host = host
+    host.onRemember = {
+        coordinator.setConditions(.init(selectedExtensions: selection == "png" ? ["png"] : ["tiff"]))
+    }
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await task.value
+    if selection == "png" {
+        #expect(host.opens.map(\.lastPathComponent) == ["b.png"])
+        #expect(coordinator.currentURL?.lastPathComponent == "b.png")
+        #expect(host.cleared == 0)
+    } else {
+        #expect(host.opens.isEmpty)
+        #expect(coordinator.currentURL == nil && coordinator.hasNoMatches)
+        #expect(host.cleared == 1)
+    }
 }
 
 @Test @MainActor func folderReadingCompletedSnapshotOpensNameFirstOnce() async throws {
