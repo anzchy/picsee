@@ -168,14 +168,15 @@ public final class ViewerStateHost: NSView {
         composedState = status
         let failure: Bool
         if case .failed = status { failure = true } else { failure = false }
-        let image = NSImageView(image: failure
-            ? NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Unreadable image")!
-            : DesignSymbol.folder.image())
+        let iconLabel = Self.stateIconLabel(failure: failure)
+        let image = NSImageView(image: NSImage(systemSymbolName: failure
+            ? "exclamationmark.triangle" : DesignSymbol.folder.name,
+            accessibilityDescription: iconLabel)!)
         image.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 28, weight: .regular)
         image.imageScaling = .scaleProportionallyDown
         image.setAccessibilityIdentifier("state.icon")
         image.setAccessibilityRole(.image)
-        image.setAccessibilityLabel(failure ? "Unreadable image" : "Open folder")
+        image.setAccessibilityLabel(iconLabel)
         addSubview(image); stateIcon = image
         for (index, line) in textLines.enumerated() {
             let field = NSTextField(labelWithString: line)
@@ -205,6 +206,18 @@ public final class ViewerStateHost: NSView {
         setAccessibilityChildren([image] + stateLabels + buttons)
         needsLayout = true
         layoutSubtreeIfNeeded()
+    }
+
+    static func stateIconLabel(failure: Bool, bundle: Bundle = .main, locale: Locale? = nil) -> String {
+        if let locale {
+            let localizedBundle = bundle.path(forResource: locale.identifier, ofType: "lproj")
+                .flatMap(Bundle.init(path:)) ?? bundle
+            return localizedBundle.localizedString(forKey: failure ? "Unreadable image" : "Open folder",
+                                                   value: nil, table: nil)
+        }
+        return failure
+            ? String(localized: "Unreadable image", bundle: bundle)
+            : String(localized: "Open folder", bundle: bundle)
     }
 
     public override func layout() {
@@ -250,9 +263,10 @@ public final class ViewerStateHost: NSView {
         }
         top -= 18
         if failure {
-            let total = CGFloat(buttons.count) * buttonWidth + CGFloat(max(0, buttons.count - 1)) * 12
+            let gap: CGFloat = 16
+            let total = CGFloat(buttons.count) * buttonWidth + CGFloat(max(0, buttons.count - 1)) * gap
             for (index, button) in buttons.enumerated() {
-                button.frame = NSRect(x: bounds.midX - total / 2 + CGFloat(index) * (buttonWidth + 12),
+                button.frame = NSRect(x: bounds.midX - total / 2 + CGFloat(index) * (buttonWidth + gap),
                                       y: top - buttonHeight, width: buttonWidth, height: buttonHeight)
             }
         } else if let button = buttons.first, let hint {
