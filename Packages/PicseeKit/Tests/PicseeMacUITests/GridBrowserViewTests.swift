@@ -60,3 +60,28 @@ import PicseeCore
     grid.scrollTo(.ephemeral(UUID()))
     #expect(GridBrowserView(coder: NSCoder()) == nil)
 }
+
+@Test @MainActor func gridSelectedCellUsesSemanticAccentAndFilenameFillAcrossAppearances() throws {
+    _ = NSApplication.shared
+    let folder = URL(fileURLWithPath: "/tmp/picsee-grid-colors")
+    let id = AccessRootID(rawValue: UUID())
+    let entry = FolderEntry(url: folder.appendingPathComponent("A.jpg"), root: .init(id: id, url: folder))
+    let cell = GridPhotoItem()
+    cell.configure(entry)
+    cell.view.appearance = NSAppearance(named: .aqua)
+    cell.isSelected = true
+    let filename = try #require(cell.view.subviews.compactMap { $0 as? NSTextField }
+        .first { $0.stringValue == "A.jpg" })
+    func rgba(_ color: CGColor?) -> [CGFloat] { color?.components ?? [] }
+    let lightBorder = rgba(cell.view.layer?.borderColor)
+    let lightFill = rgba(filename.layer?.backgroundColor)
+    #expect(lightBorder == DesignColor.accent.components(.light).map { CGFloat($0) })
+    #expect(lightFill == DesignColor.selectionFill.components(.light).map { CGFloat($0) })
+    cell.view.appearance = NSAppearance(named: .darkAqua)
+    let darkBorder = rgba(cell.view.layer?.borderColor)
+    let darkFill = rgba(filename.layer?.backgroundColor)
+    #expect(darkBorder == DesignColor.accent.components(.dark).map { CGFloat($0) })
+    #expect(darkFill == DesignColor.selectionFill.components(.dark).map { CGFloat($0) })
+    #expect(lightBorder != darkBorder && lightFill != darkFill)
+    #expect(cell.isSelected && cell.view.window?.firstResponder !== cell.view)
+}
