@@ -70,3 +70,6 @@ DerivedData/
 /TestAssets/S3/
 /TestAssets/photos/
 /TestAssets/generated/
+
+# Machine/worktree-specific Codex role, installed before agent launch
+.codex/rules/picsee-role.rules

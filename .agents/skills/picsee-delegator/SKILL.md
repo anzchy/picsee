@@ -12,6 +12,16 @@ Full reference: [references/guide.md](references/guide.md) — read it once befo
 
 ## Start of a session
 
+Before launching Codex in any new worktree, install its local role overlay:
+`python3 scripts/codex-rules/install-role.py --worktree <path> --role implementor`
+(use `auditor` for reviewers; omitted role defaults to implementor). Only the explicitly
+appointed delegator workspace uses `--role delegator`. Do not infer role from a pane title
+or prompt. Check `.codex/rules/picsee-role.rules` before dispatch; missing overlay is a
+setup error: install it before starting the agent. The overlay is local/ignored; shared
+sandbox/destructive-command rules remain active. Existing sessions may need a restart to
+reload changed rules; verify with a normal `git push --dry-run`, never a wrapper bypass.
+
+
 1. Read the latest entries of `~/.picsee/handoff/20261022-migrate-to-mini.md`, then `gh pr list`, `gh issue list`,
    `herdr pane list`, and each busy pane's screen (`herdr pane read <pane> | tail -30`; `herdr pane zoom` if empty).
 2. Install the auditors' rules file if missing: `cp $SK/references/templates/audit-brief.md ~/.picsee/herdr/delegator/`.

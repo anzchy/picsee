@@ -12,9 +12,9 @@ const key = 'com.apple.security.app-sandbox';
 // A literal dot in plutil keypaths must reach execpolicy as backslash + dot.
 const escapedKey = String.raw`com\.apple\.security\.app-sandbox`;
 
-function decision(argv) {
+function decision(argv, restricted = false) {
   // Only execpolicy runs; argv is data, never executed or passed through a shell.
-  const result = spawnSync('codex', ['execpolicy', 'check', '--rules', rules, '--', ...argv], {
+  const result = spawnSync('codex', ['execpolicy', 'check', '--rules', rules, ...(restricted ? ['--rules', 'scripts/codex-rules/restricted-role.rules'] : []), '--', ...argv], {
     cwd: root, encoding: 'utf8', timeout: 10_000,
   });
   assert.ifError(result.error);
@@ -129,7 +129,7 @@ const legacyAllowed = [
 for (const [expectedForbidden, cases] of [[true, legacyForbidden], [false, legacyAllowed]]) {
   for (const argv of cases) {
     test(`legacy ${expectedForbidden ? 'forbidden' : 'allowed'}: ${JSON.stringify(argv)}`, () => {
-      assert.equal(decision(argv).decision === 'forbidden', expectedForbidden);
+      assert.equal(decision(argv, true).decision === 'forbidden', expectedForbidden);
     });
   }
 }

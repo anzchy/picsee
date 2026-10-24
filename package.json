@@ -10,7 +10,7 @@
   "scripts": {
     "ledger:build": "node scripts/ledger/build.mjs",
     "ledger:html-check": "node scripts/ledger/build.mjs --check",
-    "rules:check": "node --test scripts/codex-rules/rules.test.mjs",
+    "rules:check": "node --test scripts/codex-rules/*.test.mjs",
     "rea": "rea",
     "analyze": "python3 scripts/analyze_picview.py",
     "stitch": "node scripts/stitch.mjs",

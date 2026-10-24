@@ -1,0 +1,16 @@
+# Implementor/auditor role overlay. Installed before starting Codex.
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "Roster: only the delegator pushes. Commit on your branch and hand the SHA to the delegator.",
+    match = ["git push", "git push -f origin main", "git push origin p0-01/x"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["merge", "create", "close"]],
+    decision = "forbidden",
+    justification = "Roster: the delegator opens, merges and closes PRs.",
+    match = ["gh pr merge 12", "gh pr create"],
+    not_match = ["gh pr view 12", "gh pr diff 12"],
+)
