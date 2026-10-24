@@ -344,6 +344,75 @@ class ListenerTests(unittest.TestCase):
                 bystander.kill()
             bystander.wait(timeout=2)
 
+    def test_exited_poller_reaps_inherited_output_child_before_delivery(self):
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        captured = self.root / "captured-argv.json"
+        codex = fake_bin / "codex"
+        codex.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "open(os.environ['CAPTURED_ARGV'], 'w').write(json.dumps(sys.argv[1:]))\n"
+            "print('scratch queue receipt')\n"
+        )
+        codex.chmod(0o755)
+        child_pid_path = self.root / "child.pid"
+        poller = self.root / "exiting-poll.py"
+        poller.write_text(
+            "import subprocess, sys\n"
+            "child = subprocess.Popen([sys.executable, '-c', "
+            "'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'])\n"
+            "open(sys.argv[1], 'w').write(str(child.pid))\n"
+            "print('gpt-imple-3 idle 12:00:00', flush=True)\n"
+        )
+        self.config["poll"] = [sys.executable, str(poller), str(child_pid_path)]
+        self.config["poll_deadline_seconds"] = 0.5
+        self.handoff.write_text("DONE\n")
+        os.utime(self.handoff, (1_800_000_001, 1_800_000_001))
+        (self.event_dir / "config.json").write_text(json.dumps(self.config))
+        environment = dict(os.environ)
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment["PATH"]
+        environment["CAPTURED_ARGV"] = str(captured)
+        worker = subprocess.Popen(
+            [sys.executable, str(SCRIPT), "run", "--event-dir", str(self.event_dir)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=environment,
+            start_new_session=True,
+        )
+        bystander = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(5)"], start_new_session=True
+        )
+        try:
+            stdout, stderr = worker.communicate(timeout=3)
+            self.assertEqual(worker.returncode, 0, stderr)
+            self.assertEqual(stdout.strip(), "delivered")
+            result = json.loads((self.event_dir / "poll-result.json").read_text())
+            self.assertEqual(result["outcome"], "idle")
+            self.assertEqual(result["handoff_evidence"], "ready")
+            self.assertIsNone(bystander.poll())
+            argv = json.loads(captured.read_text())
+            self.assertIn("idle", argv[-1].lower())
+            child_pid = int(child_pid_path.read_text())
+            for _ in range(20):
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail("exited poller left its inherited-output child alive")
+        finally:
+            if child_pid_path.exists():
+                try:
+                    os.kill(int(child_pid_path.read_text()), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if worker.poll() is None:
+                os.killpg(worker.pid, signal.SIGKILL)
+                worker.communicate(timeout=2)
+            if bystander.poll() is None:
+                bystander.kill()
+            bystander.wait(timeout=2)
+
 
 if __name__ == "__main__":
     unittest.main()
