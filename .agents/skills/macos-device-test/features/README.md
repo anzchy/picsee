@@ -4,10 +4,9 @@ The run recipes for device-testing Picsee, one file per feature, keyed by featur
 (`docs/feature-ledger.md`) says **whether** a capability works and what proves it; these files say **how to
 drive it** to get that proof. Read this index before a run, then use the matching feature file.
 
-**Status: seeded from the plan, not yet driven.** The P0 recipes below were written before Picsee.app
-existed. Their steps name user actions and observable results; the exact handles (accessibility
-identifiers, menu titles) are filled in when P0-01 builds the UI, and each recipe is corrected on its first
-real run.
+These recipes began as plan drafts. Some paths have since been exercised; check the relevant
+`docs/validation/` record and the current UI before a run. Correct a stale recipe when the real app
+differs, and record the deviation.
 
 ## Baseline preconditions
 
@@ -25,7 +24,8 @@ real run.
 
 - Start every recipe from the baseline unless its preconditions say otherwise.
 - Prefer keyboard shortcuts, then accessibility identifiers, then menu titles; coordinates last.
-- Accessibility identifier convention: set in P0-01 and recorded here. (Pending.)
+- Prefer a verified accessibility identifier when one exists; otherwise use the current menu or a
+  documented keyboard command.
 - Treat every key and menu name in a recipe as literal.
 - Use `key.sh` only for one printable character. Named keys go through `kc.sh`: Tab `48`, Esc `53`, Return
   `36`, Left/Right/Down/Up `123`–`126`, and Space `49`.

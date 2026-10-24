@@ -1,18 +1,8 @@
----
-name: macos-device-test
-description: Run empirical device acceptance for picsee by driving the real, built Picsee.app with computer use, and write the docs/validation record that lets a feature-ledger row reach 真机. Use when a work item's acceptance depends on real windows, pixels, input or the sandbox — Retina backing pixels, cursor-anchored zoom, C chrome show/hide timing, focus, powerbox folder grants, bookmark restore after relaunch, light/dark, Filmstrip — and unit tests or XCUITest can't prove it. Covers machine choice, build, launch, doctor, the per-feature recipes in features/, evidence, cleanup and the verdict table.
----
-
 # macOS Device Test (computer use) — picsee
 
-Ported from mdpro's `macos-device-test` on 2026-10-21, rewritten for a native Swift app, and extended with
-the structure of pstack's `create-verification-skill` (doctor, isolation, proof standards, cleanup, helpers,
-a feature map, and a proof run of the skill itself).
-
-This is the lane of last resort: slow, and it puts a real desktop on screen. Use it only for obligations the
-automated lanes provably can't discharge. In the herdr roster it belongs to the device tester
-(`claude-imple-1`), who is never the implementer of the work under test: a `Shipped` row whose validation
-record was written by the implementer is self-certification, and the doc gardener flags it.
+This runbook supplies the exact helper contracts and proof standards for a real Picsee device run.
+The device tester must be independent of the implementer: the doc gardener flags self-certified
+`Shipped` rows.
 
 **Automation policy: automate every step that can be automated; bring in the user only where automation
 truly can't work.**
@@ -52,7 +42,7 @@ timing and permissions feeding those tested modules are real.
 | Mac mini (M4, 16 GiB, macOS 26.4, 1920×1080 @1x) | the local device-test machine; the plan §10 performance baseline and every check that doesn't need @2x | Retina criteria: record NOT VERIFIED (no @2x display) |
 | MacBook Pro (M4, 24 GiB, macOS 27.0.1, Retina @2x) | @2x criteria only (P0-03, P1-03, state page 27), reached from the mini with the to-be-configured `ssh macbook` alias | baseline performance numbers (not the §10.1 baseline) |
 
-On the mini, run from a Claude pane in the herdr session. For @2x, send commands over `ssh macbook` into a
+On the mini, run from an agent session with access to the local desktop. For @2x, send commands over `ssh macbook` into a
 tmux session started on the MacBook's own desktop. Signed builds and launches must run inside that desktop-started
 session because a plain SSH session cannot reach the login keychain (`errSecInternalComponent`). Until the SSH alias
 and that session are available, record every @2x criterion as NOT VERIFIED. Every record names the machine, chip,
@@ -137,15 +127,15 @@ Opening a file this way is a **File Grant**: the sandboxed app can read that fil
 must become an **Access Root** through the powerbox (`NSOpenPanel`), driven with computer use. Never work
 around the powerbox: no Full Disk Access, no entitlement change, no copying files into the container.
 
-**Ready means usable, not just "a process exists":** exactly one accessibility window titled `Picsee` is
-present, its PID has an on-screen layer-0 CGWindow, and the public launch log with the expected build SHA
-has appeared. The P0 skeleton is an empty window; future recipes also confirm their fixture is displayed.
+**Ready means usable, not just "a process exists":** exactly one accessibility window titled `Picsee`
+or the verified fixture basename is present, its PID has an on-screen layer-0 CGWindow, and the public
+launch log with the expected build SHA has appeared. The P0 skeleton is an empty window; future recipes also confirm their fixture is displayed.
 Time out after 30 s and report what was missing. An Automation/Accessibility failure stops immediately;
 an interactive prompt is a blocker to report, never something to dismiss automatically.
 
-**First-launch state.** To test a fresh install (no bookmarks, no preferences), the app's sandbox container
-has to go. Deleting `~/Library/Containers/io.github.anzchy.picsee` is a destructive `rm -r`: do it only when
-the brief lists it as a step the user approved, on the machine named, and record it.
+**First-launch state.** A cold-start test changes the app's shared sandbox state. Get the user's
+approval for the named run before moving or editing any container/store file; record an intact backup
+and its restoration. Never remove the container as a routine setup step.
 
 ## 6. Doctor: is this instance worth driving?
 
@@ -346,7 +336,7 @@ changes no runtime helpers. The post-build metadata-only re-sign branch is cover
 failure and clean-stamp bypass; that branch is still not live-proven. Earlier runs and RED/GREEN outputs
 remain in the issue #4 handoff. This is helper proof, not independent feature-ledger acceptance.
 
-On 2026-10-22, a delegator ran `20261022-204006-VIEW-02-03-1x-mini` from a Claude pane in the herdr session
+On 2026-10-22, a delegator ran `20261022-204006-VIEW-02-03-1x-mini` from an agent pane in the herdr session
 on the Mac mini, at main `8a007b3`. Signed `build.sh` → `launch.sh` → `doctor.sh` (12 PASS, including
 `machine` and `fixtures` with manifest-verified copies) → `shot.sh` (960×672 px for a 960×672 pt window,
 @1x) → `key.sh` (`1`, `=`, `-`) → `cleanup.sh` passed. This was a P0-03 @1x feature run, not a full §14
@@ -404,7 +394,7 @@ inside `.build/device-<run-id>/`. Heavy jobs use `scripts/heavy-lock.sh`: picsee
   ```text
   docs(validation): P0-03 device run VIEW-02, VIEW-03 on Mac mini @1x
 
-  Validated-by: claude-imple-1 run=<run-id>
+  Validated-by: <device-tester-role> run=<run-id>
   ```
 
   The gardener reads this trailer to rule out self-certification; a record without it can't lift a row.

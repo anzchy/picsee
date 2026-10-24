@@ -384,7 +384,7 @@ gh pr checks $P --watch --interval 30; gh pr merge $P --rebase; git pull --ff-on
 ## 6. Device validation (macos-device-test)
 
 The validation role belongs to someone other than the implementer; the delegator has been doing it. Read
-`.claude/skills/macos-device-test/SKILL.md` and `features/*.md`. Device runs happen only on the mini.
+`.agents/skills/macos-device-test/SKILL.md` and `features/*.md`. Device runs happen only on the mini.
 
 ### Desktop GUI lock (shared with mdpro — agreed 2026-10-24)
 
