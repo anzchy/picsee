@@ -23,7 +23,7 @@ class PushGuardTests(unittest.TestCase):
         self.overlay = self.root / '.codex/rules/picsee-role.rules'
         self.overlay.write_text('# Local picsee role: delegator\n')
         self.branch = 'fix/topic'
-        self.remote = 'https://github.com/anzchy/picsee.git'
+        self.remotes = ['https://github.com/anzchy/picsee.git']
 
     def invoke(self, *args):
         def fake_git(*argv):
@@ -32,7 +32,9 @@ class PushGuardTests(unittest.TestCase):
             if argv == ('symbolic-ref', '--quiet', '--short', 'HEAD'):
                 return self.branch
             if argv == ('remote', 'get-url', '--push', 'origin'):
-                return self.remote
+                return self.remotes[0]
+            if argv == ('remote', 'get-url', '--push', '--all', 'origin'):
+                return '\n'.join(self.remotes)
             raise AssertionError(argv)
 
         with patch.object(guard, '__file__', str(self.root / 'scripts/codex-rules/push-guard.py')):
@@ -45,7 +47,7 @@ class PushGuardTests(unittest.TestCase):
     def test_ordinary_push_is_current_topic_branch_only(self):
         result, run = self.invoke('--dry-run')
         self.assertEqual(result, 0)
-        run.assert_called_once_with(['git', 'push', '--dry-run', '-u', 'origin',
+        run.assert_called_once_with(['git', 'push', '--dry-run', self.remotes[0],
                                      'HEAD:refs/heads/fix/topic'], check=False)
 
     def test_rebased_push_requires_exact_lease_oid(self):
@@ -54,17 +56,17 @@ class PushGuardTests(unittest.TestCase):
         self.assertEqual(result, 0)
         run.assert_called_once_with(['git', 'push',
                                      f'--force-with-lease=refs/heads/fix/topic:{oid}',
-                                     '-u', 'origin', 'HEAD:refs/heads/fix/topic'], check=False)
+                                     self.remotes[0], 'HEAD:refs/heads/fix/topic'], check=False)
 
     def test_rejects_restricted_role_main_and_wrong_remote(self):
         for setup in [
             lambda: self.overlay.write_text('# Local picsee role: implementor\n'),
             lambda: setattr(self, 'branch', 'main'),
-            lambda: setattr(self, 'remote', 'https://example.com/other.git'),
+            lambda: setattr(self, 'remotes', ['https://example.com/other.git']),
         ]:
             self.overlay.write_text('# Local picsee role: delegator\n')
             self.branch = 'fix/topic'
-            self.remote = 'https://github.com/anzchy/picsee.git'
+            self.remotes = ['https://github.com/anzchy/picsee.git']
             setup()
             with self.assertRaises(SystemExit):
                 self.invoke()
@@ -72,6 +74,11 @@ class PushGuardTests(unittest.TestCase):
     def test_rejects_malformed_lease(self):
         with self.assertRaises(SystemExit):
             self.invoke('--expected-remote-oid', 'not-an-oid')
+
+    def test_rejects_second_push_destination_before_running_push(self):
+        self.remotes.append('https://example.invalid/unapproved.git')
+        with self.assertRaises(SystemExit):
+            self.invoke()
 
 
 if __name__ == '__main__':
