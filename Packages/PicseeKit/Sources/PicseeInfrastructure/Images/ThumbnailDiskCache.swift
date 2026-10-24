@@ -13,6 +13,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     public static let maximumPayloadBytes = 8 * 1024 * 1024
     public static let maximumPixelEdge = 1024
     private static let cacheVersion = 2
+    private static let encoderVersion = 2
     private let directory: URL
     private let afterPayloadWrite: (@Sendable () throws -> Void)?
 
@@ -39,14 +40,16 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
               request.fileURL.isFileURL else { return nil }
         let digest = try? fingerprint(request.fileURL, expected: render.revision)
         try Task.checkCancellation()
-        guard let digest, let key = DurableThumbnailKey(renderKey: render, sourceSHA256: digest) else { return nil }
+        guard let digest, let key = DurableThumbnailKey(renderKey: render, sourceSHA256: digest,
+                                                       encoderVersion: Self.encoderVersion) else { return nil }
         return ThumbnailCacheTicket(request: request, key: key, sourceSHA256: digest)
     }
 
     public func load(_ ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
         try Task.checkCancellation()
         guard let render = ticket.request.renderKey,
-              let expectedKey = DurableThumbnailKey(renderKey: render, sourceSHA256: ticket.sourceSHA256),
+              let expectedKey = DurableThumbnailKey(renderKey: render, sourceSHA256: ticket.sourceSHA256,
+                                                    encoderVersion: Self.encoderVersion),
               expectedKey == ticket.key,
               try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256 else { return nil }
         guard let row = readRow(ticket), row.byteCount > 0, row.byteCount <= Self.maximumPayloadBytes,
@@ -75,9 +78,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     public func store(_ image: DecodedImage, for ticket: ThumbnailCacheTicket) async throws {
         try Task.checkCancellation()
         guard let render = ticket.request.renderKey,
-              let expectedKey = DurableThumbnailKey(renderKey: render, sourceSHA256: ticket.sourceSHA256),
+              let expectedKey = DurableThumbnailKey(renderKey: render, sourceSHA256: ticket.sourceSHA256,
+                                                    encoderVersion: Self.encoderVersion),
               expectedKey == ticket.key,
-              image.itemID == render.itemID, image.revision == render.revision,
               image.image.width > 0, image.image.height > 0,
               image.image.bitsPerComponent == 8,
               image.image.width <= ticket.request.maximumPixelSize,
@@ -86,6 +89,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
               image.sourcePixelSize.width.isFinite, image.sourcePixelSize.height.isFinite,
               image.sourcePixelSize.width <= Double(Int32.max),
               image.sourcePixelSize.height <= Double(Int32.max) else { return }
+        guard image.itemID == render.itemID, image.revision == render.revision else {
+            throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: image.revision)
+        }
         let bytes = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(bytes, UTType.png.identifier as CFString, 1, nil) else { return }
         CGImageDestinationAddImage(destination, image.image, nil) // No original EXIF/GPS metadata.
@@ -93,7 +99,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let payload = bytes as Data
         guard payload.count > 0, payload.count <= Self.maximumPayloadBytes else { return }
         // Re-read after decode and encoding. Metadata alone cannot prove same-inode writes.
-        guard try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256 else { return }
+        guard try sourceMatches(ticket, render: render) else {
+            throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
+        }
         try Task.checkCancellation()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = ticket.key.filename + ".png"
@@ -101,14 +109,30 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try payload.write(to: url, options: .atomic)
         try afterPayloadWrite?()
         // Catch a source mutation during payload publication before indexing the bytes.
-        guard try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256 else {
+        let unchanged: Bool
+        do { unchanged = try sourceMatches(ticket, render: render) }
+        catch {
             try? FileManager.default.removeItem(at: url)
-            return
+            throw error
+        }
+        guard unchanged else {
+            try? FileManager.default.removeItem(at: url)
+            throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
         }
         try Task.checkCancellation()
         try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
                      payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
                      sourceHeight: Int(image.sourcePixelSize.height))
+    }
+
+    private func sourceMatches(_ ticket: ThumbnailCacheTicket, render: RenderKey) throws -> Bool {
+        do {
+            return try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
+        }
     }
 
     private func fingerprint(_ url: URL, expected: FileRevision) throws -> String? {

@@ -43,3 +43,11 @@ Swift RED receipts `P3-03-WI-1`, `P3-03-WI-1-STORAGE`, `P3-03-WI-2`, `P3-03-WI-1
 ## Consequences
 
 The r2 amendment authorizes the lease-bound seam. Keep this ADR proposed pending independent review and device evidence. End-to-end unit evidence supports `CACHE-02` Partial with explicit limits; `ACCESS-04` remains Absent. P3-04 still owns repair, eviction, and read/write leases; P3-05 owns clear generation; P3-08 owns scale and device evidence.
+
+## Audit fix round `p303-fix-r1`
+
+The independent audit found that a same-inode, equal-byte-count, restored-mtime in-place rewrite could keep the session `RenderKey` while changing the durable content digest. A disk miss for B then reused memory or in-flight pixels A and could persist A under B's digest. Eligible disk misses now request a fresh decode through the existing bounded admission queue, bypassing session memory lookup and keyed in-flight reuse. The store still verifies the source digest before and after payload publication. The cache's encoder key version is 2, so entries written before this correction cannot be read under the corrected key. A disk hit continues to use digest and payload checks under the access lease.
+
+If store verification observes a changed or unreadable source, it throws typed `ImageLoadError.sourceChanged`; `AccessImageSource` propagates that result to the existing `ViewerImageLoader` retry path. Ordinary cache write errors continue to fall back to source decoding. A mutation detected after atomic payload write removes that payload before returning the source-change error; a failed index insert may still leave an unindexed orphan as in the initial design.
+
+Unit tests cover same-pipeline in-place A→B pixels and a fresh cache/pipeline reopen, replacement at the post-write hook through access and loader, a benign index failure fallback, an independently decoded equal-byte-length foreign PNG, and eligible in-flight cancellation with a held decoder and real FileAccess lease accounting. They do not establish an atomic snapshot against a concurrent writer that changes and restores the source after the final check. Separate-process, signed-sandbox revocation, cold/warm scale, and device behavior remain unverified. Fresh decoding on a disk miss trades extra decode work for source correspondence; P3-08 must measure this path.

@@ -26,7 +26,8 @@ public actor AccessImageSource {
         let file: URL
         switch request { case .fileGrant(let url), .root(_, let url): file = url }
         let pipeline = pipeline
-        let thumbnailCache = (pipeline as? any ThumbnailCacheProviding)?.thumbnailCache
+        let cacheProvider = pipeline as? any ThumbnailCacheProviding
+        let thumbnailCache = cacheProvider?.thumbnailCache
         do {
             let result = try await access.withLease(request) { lease in
                 let root = lease.rootID.map { ItemIdentityRoot(id: $0, url: lease.url) }
@@ -57,11 +58,19 @@ public actor AccessImageSource {
                     }
                 }
                 try Task.checkCancellation()
-                let image = try await pipeline.image(for: request)
+                // A durable miss proves current source bytes, but a session-keyed memory hit
+                // or shared in-flight decode has no proof that its pixels came from those bytes.
+                let image: DecodedImage
+                if let cacheProvider, ticket != nil {
+                    image = try await cacheProvider.imageFresh(for: request)
+                } else {
+                    image = try await pipeline.image(for: request)
+                }
                 try Task.checkCancellation()
                 if let thumbnailCache, let ticket {
                     do { try await thumbnailCache.store(image, for: ticket) }
                     catch is CancellationError { throw CancellationError() }
+                    catch let error as ImageLoadError where error.kind == .sourceChanged { throw error }
                     catch { /* The decoded source remains deliverable. */ }
                 }
                 try Task.checkCancellation()

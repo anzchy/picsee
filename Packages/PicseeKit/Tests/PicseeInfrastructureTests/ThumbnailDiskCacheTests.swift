@@ -7,6 +7,32 @@ import UniformTypeIdentifiers
 import PicseeCore
 @testable import PicseeInfrastructure
 
+private func pngPaddedToExactLength(_ source: Data, targetLength: Int) throws -> Data {
+    let input = [UInt8](source)
+    let iend: [UInt8] = [0, 0, 0, 0, 73, 69, 78, 68]
+    guard input.count >= 12, Array(input.suffix(12).prefix(8)) == iend,
+          targetLength >= input.count + 12 else {
+        throw ImageDecodeError.invalidRequest
+    }
+    let paddingCount = targetLength - input.count - 12
+    let type: [UInt8] = [110, 112, 65, 68] // npAD: ancillary, private PNG chunk.
+    let body = type + [UInt8](repeating: 0, count: paddingCount)
+    var crc: UInt32 = 0xffffffff
+    for byte in body {
+        crc ^= UInt32(byte)
+        for _ in 0..<8 { crc = (crc >> 1) ^ ((crc & 1) == 1 ? 0xedb88320 : 0) }
+    }
+    crc ^= 0xffffffff
+    let length = UInt32(paddingCount).bigEndian
+    let checksum = crc.bigEndian
+    var result = Data(input.dropLast(12))
+    withUnsafeBytes(of: length) { result.append(contentsOf: $0) }
+    result.append(contentsOf: body)
+    withUnsafeBytes(of: checksum) { result.append(contentsOf: $0) }
+    result.append(contentsOf: input.suffix(12))
+    return result
+}
+
 @Test func p303DiskCacheReopensAndSeparatesSourceContent() async throws {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -64,6 +90,14 @@ import PicseeCore
     #expect(CGImageDestinationFinalize(destination))
     #expect(other.width == original.image.width && other.height == original.image.height)
     #expect(try rgba(other) != rgba(original.image))
+    let storedPayload = try Data(contentsOf: cacheDirectory.appendingPathComponent(ticket.key.filename + ".png"))
+    bytes.setData(try pngPaddedToExactLength(bytes as Data, targetLength: storedPayload.count))
+    let foreignSource = try #require(CGImageSourceCreateWithData(bytes as CFData, nil))
+    #expect(CGImageSourceGetStatusAtIndex(foreignSource, 0) == .statusComplete)
+    let foreignPixels = try #require(CGImageSourceCreateImageAtIndex(foreignSource, 0, nil))
+    #expect(foreignPixels.width == original.image.width && foreignPixels.height == original.image.height)
+    #expect(try rgba(foreignPixels) != rgba(original.image))
+    #expect((bytes as Data).count == storedPayload.count)
     try (bytes as Data).write(to: cacheDirectory.appendingPathComponent(ticket.key.filename + ".png"))
     #expect(try await cache.load(ticket).map { _ in true } == nil)
     try Data("not sqlite".utf8).write(to: cacheDirectory.appendingPathComponent("index.sqlite3"))
@@ -125,11 +159,21 @@ import PicseeCore
     try Data(contentsOf: fixture("orientation-2.tiff")).write(to: file, options: .atomic)
     try FileManager.default.setAttributes([.modificationDate: time], ofItemAtPath: file.path)
     let oldPayload = try Data(contentsOf: payload)
-    try await cache.store(decoded, for: ticket)
+    do {
+        try await cache.store(decoded, for: ticket)
+        Issue.record("changed source was accepted for store")
+    } catch let error as ImageLoadError {
+        #expect(error.kind == .sourceChanged)
+    }
     #expect(try Data(contentsOf: payload) == oldPayload)
     #expect(try await cache.load(ticket).map { _ in true } == nil)
     let rejectedDirectory = folder.appendingPathComponent("rejected-cache")
-    try await ThumbnailDiskCache(directory: rejectedDirectory).store(decoded, for: ticket)
+    do {
+        try await ThumbnailDiskCache(directory: rejectedDirectory).store(decoded, for: ticket)
+        Issue.record("changed source was accepted for another store")
+    } catch let error as ImageLoadError {
+        #expect(error.kind == .sourceChanged)
+    }
     #expect(!FileManager.default.fileExists(atPath: rejectedDirectory.path))
 }
 
@@ -151,7 +195,12 @@ import PicseeCore
         try FileManager.default.setAttributes([.modificationDate: time], ofItemAtPath: file.path)
     })
     let ticket = try #require(try await cache.prepare(request))
-    try await cache.store(decoded, for: ticket)
+    do {
+        try await cache.store(decoded, for: ticket)
+        Issue.record("changed source was accepted after payload write")
+    } catch let error as ImageLoadError {
+        #expect(error.kind == .sourceChanged)
+    }
     #expect(!FileManager.default.fileExists(atPath: cacheDirectory.appendingPathComponent(ticket.key.filename + ".png").path))
     #expect(!FileManager.default.fileExists(atPath: cacheDirectory.appendingPathComponent("index.sqlite3").path))
 }

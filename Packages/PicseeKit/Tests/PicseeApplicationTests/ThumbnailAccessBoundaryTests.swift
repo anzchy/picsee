@@ -52,6 +52,9 @@ private actor P303BoundaryPipeline: ThumbnailCacheProviding {
         return DecodedImage(image: context.makeImage()!, sourcePixelSize: CGSize(width: 1, height: 1),
             revision: request.renderKey?.revision, itemID: request.renderKey?.itemID)
     }
+    func imageFresh(for request: ImageDecodeRequest) -> DecodedImage {
+        image(for: request)
+    }
 }
 
 @Test func p303AccessBoundaryRejectsCachePixelsWithWrongRevision() async throws {
@@ -109,6 +112,9 @@ private struct P303WarmPipeline: ThumbnailCacheProviding {
     }
     func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
         await base.image(for: request)
+    }
+    func imageFresh(for request: ImageDecodeRequest) async throws -> DecodedImage {
+        await base.imageFresh(for: request)
     }
 }
 

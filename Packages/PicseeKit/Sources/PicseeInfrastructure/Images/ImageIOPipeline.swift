@@ -136,6 +136,39 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Thu
             try await self.image(for: request, observation: observation)
         }
     }
+    package func imageFresh(for request: ImageDecodeRequest) async throws -> DecodedImage {
+        if Task.isCancelled {
+            throw ImageLoadError(.cancelled, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision)
+        }
+        let header = try await header(request)
+        let key = await admission.key(for: header.itemID, revision: header.revision,
+                                      maximumPixelSize: request.maximumPixelSize, isPreview: request.isPreview)
+        if let requested = request.renderKey, requested != key {
+            throw ImageLoadError(.sourceChanged, itemID: requested.itemID, revision: header.revision)
+        }
+        guard await cache.permits(request.priority) else {
+            throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision)
+        }
+        let cost = try DecodeBudget.outputCost(width: header.width, height: header.height,
+            maximumPixelSize: request.maximumPixelSize, bytesPerPixel: header.bytesPerPixel,
+            budget: configuration.budget)
+        let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
+            renderKey: key, priority: request.priority, sourceByteBudget: cost,
+            isPreview: request.isPreview, identityRoot: request.identityRoot)
+        do {
+            let image = try await admission.image(admittedRequest, key: key, cost: cost,
+                heavy: DecodeBudget.isHeavy(width: header.width, height: header.height),
+                priority: request.priority, reuseExisting: false)
+            try Task.checkCancellation()
+            guard image.itemID == key.itemID, image.revision == key.revision else {
+                throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: image.revision)
+            }
+            return image
+        } catch {
+            throw loadFailure(error, request: admittedRequest, revision: header.revision,
+                              unreadableKind: .corruptImage)
+        }
+    }
     private func lookup(_ request: ImageDecodeRequest, key: RenderKey, observation: UUID) async throws -> ImageCacheRequest {
         let context = await snapshotContext()
         let result = await cache.lookup(key, observation: observation, context: context)
