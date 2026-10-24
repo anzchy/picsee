@@ -58,10 +58,37 @@ targets:
           else
             /usr/libexec/PlistBuddy -c "Add :PicseeGitSHA string $sha" "$plist"
           fi
+  PicseeAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - PicseeApp.swift
+          - Info.plist
+          - Resources
+      - path: AppTests
+    dependencies:
+      - package: PicseeKit
+        product: PicseeCore
+      - package: PicseeKit
+        product: PicseeApplication
+      - package: PicseeKit
+        product: PicseeInfrastructure
+      - package: PicseeKit
+        product: PicseeMacUI
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.anzchy.picsee.tests
+        CODE_SIGNING_ALLOWED: NO
 schemes:
   Picsee:
     build:
       targets:
         PicseeApp: all
+    test:
+      targets:
+        - PicseeAppTests
     run:
       config: Debug
