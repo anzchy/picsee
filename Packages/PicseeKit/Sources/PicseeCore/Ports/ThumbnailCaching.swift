@@ -20,4 +20,6 @@ public protocol ThumbnailCaching: Sendable {
 /// Configuration bridge: the public image methods on a provider never consult this cache.
 package protocol ThumbnailCacheProviding: ImagePipeline {
     var thumbnailCache: (any ThumbnailCaching)? { get }
+    /// Decode a disk miss from source without reusing session memory or an in-flight keyed decode.
+    func imageFresh(for request: ImageDecodeRequest) async throws -> DecodedImage
 }

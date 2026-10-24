@@ -87,9 +87,10 @@ public actor DecodeAdmission {
         RenderKey(itemID: itemID, revision: revision, maximumPixelSize: maximumPixelSize, isPreview: isPreview)
     }
     public func image(_ request: ImageDecodeRequest, key: RenderKey, cost: Int, heavy: Bool,
-                      priority: DecodePriority) async throws -> DecodedImage {
+                      priority: DecodePriority, reuseExisting: Bool = true) async throws -> DecodedImage {
         try Task.checkCancellation()
-        let subscription = subscribe(request, key: key, cost: cost, heavy: heavy, priority: priority)
+        let subscription = subscribe(request, key: key, cost: cost, heavy: heavy, priority: priority,
+                                     reuseExisting: reuseExisting)
         return try await withTaskCancellationHandler {
             if Task.isCancelled { await subscription.cancel() }
             let image = try await subscription.value()
@@ -116,16 +117,16 @@ public actor DecodeAdmission {
     private var keyed: [RenderKey: UUID] = [:]
 
     public func subscribe(_ request: ImageDecodeRequest, key: RenderKey, cost: Int, heavy: Bool,
-                          priority: DecodePriority) -> DecodeSubscription {
+                          priority: DecodePriority, reuseExisting: Bool = true) -> DecodeSubscription {
         precondition(cost > 0 && cost <= configuration.budget)
         let id = UUID(), subscriber = UUID(), delivery = DecodeDelivery()
-        if let existing = keyed[key] {
+        if reuseExisting, let existing = keyed[key] {
             jobs[existing]!.subscribers[subscriber] = delivery
             jobs[existing]!.priority = DecodePriority(rawValue: max(jobs[existing]!.priority.rawValue, priority.rawValue))!
             drain()
             return DecodeSubscription(id: subscriber, delivery: delivery, admission: self)
         }
-        keyed[key] = id
+        if reuseExisting { keyed[key] = id }
         jobs[id] = Job(id: id, trace: DecodeTrace(), request: request, key: key, cost: cost, heavy: heavy,
                        priority: priority, subscribers: [subscriber: delivery])
         pending.append(id)
