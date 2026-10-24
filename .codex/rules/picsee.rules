@@ -192,11 +192,12 @@ prefix_rule(
     not_match = ["xcrun plutil -p Picsee.entitlements", "/usr/bin/xcrun plutil -replace unrelated.key -bool NO Picsee.entitlements"],
 )
 
-# Force pushes still require separate explicit authorization; ordinary pushes only.
+# Prefix rules cannot inspect options after the remote or force refspecs. Direct
+# push is denied for every role; the delegator uses the argument-checking
+# scripts/codex-rules/push-guard.py entry point.
 prefix_rule(
-    pattern = ["git", "push", ["-f", "--force", "--force-with-lease", "--mirror"]],
+    pattern = ["git", "push"],
     decision = "forbidden",
-    justification = "Force/mirror push requires separate user authorization; role setup permits ordinary pushes only.",
-    match = ["git push --force origin main", "git push -f origin main", "git push --force-with-lease origin topic", "git push --mirror"],
-    not_match = ["git push origin topic"],
+    justification = "Use the delegator's scripts/codex-rules/push-guard.py for an ordinary branch push; it rejects force, mirror and ref deletion forms. Implementors and auditors hand off commits.",
+    match = ["git push origin topic", "git push origin --force main", "git push origin --mirror", "git push origin +HEAD:topic"],
 )

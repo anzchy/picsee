@@ -266,8 +266,9 @@ Never pipe `git rebase`; check its exit status. Write logs to `$(git rev-parse -
   to the implementer.
 - After a rebase, confirm the code is unchanged versus the audited head (`git diff --stat <audited> HEAD -- App
   Packages`), then rerun all gates yourself.
-- **Force push** is allowed only as `git push --force-with-lease` on your own unmerged PR branches after a rebase.
-  Never on main.
+- **Rebased PR push:** direct `git push` is blocked. On your own unmerged PR branch, obtain the full current remote
+  tip OID and run `python3 scripts/codex-rules/push-guard.py --expected-remote-oid <oid>`. The script uses an exact
+  lease and refuses `main`. Ordinary topic pushes use the same script without a lease.
 
 ### 5.7 Doc gardener
 
