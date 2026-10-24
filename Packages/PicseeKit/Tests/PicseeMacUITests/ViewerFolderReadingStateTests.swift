@@ -118,6 +118,21 @@ private struct FolderNoMatchesScanner: FolderScanning {
     #expect(scene.chrome.position == "Images: 1")
 }
 
+@Test @MainActor func viewerImageFirstRescanShowsUnknownTotalAsReading() async throws {
+    let scene = StatesScene(), leases = FolderReadingNativeLeases(), scanner = FolderReadingNativeScanner()
+    defer { scene.window.close() }
+    let coordinator = FolderScanCoordinator(access: leases, scanner: scanner)
+    scene.session.folderScan = coordinator
+    let folder = URL(fileURLWithPath: "/native-folder/A")
+    let task = coordinator.begin(folder: folder, rootID: AccessRootID(), input: folder.appendingPathComponent("a.png"))
+    await scanner.waitForStart()
+    scene.chrome.refresh(session: scene.session)
+    #expect(scene.chrome.position == "Reading…")
+    await scanner.finish()
+    try await task.value
+    #expect(await leases.balance == [1, 1])
+}
+
 @Test @MainActor func viewerFolderScanFailureShowsPartialCountAndRetry() throws {
     let scene = StatesScene()
     defer { scene.window.close() }

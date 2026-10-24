@@ -7,11 +7,15 @@ import PicseeCore
     func showEmptyFolder()
     func clearFolderImageForNoMatches()
     func folderScanDidComplete(count: Int)
+    func folderScanDidStart()
+    func folderScanDidEnd()
 }
 
 extension FolderScanHost {
     public func clearFolderImageForNoMatches() { }
     public func folderScanDidComplete(count: Int) { }
+    public func folderScanDidStart() { }
+    public func folderScanDidEnd() { }
 }
 
 extension FolderScanCoordinator {

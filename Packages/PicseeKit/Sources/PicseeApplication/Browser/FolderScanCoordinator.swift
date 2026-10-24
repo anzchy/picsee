@@ -51,6 +51,7 @@ struct FolderScanRestorePoint {
             canPresent: canPresent, preserveConditions: true)
     }
     public private(set) var generation: UInt64 = 0
+    public var isScanning: Bool { activeGeneration != nil }
     public private(set) var isReadingFolder = false
     public private(set) var failure: (any Error)?
     public var completedImageCount: Int? {
@@ -191,10 +192,12 @@ struct FolderScanRestorePoint {
                 pendingDirection = nil
                 failure = error
                 trace?.end(outcome: .failed, generation: token)
+                host?.folderScanDidEnd()
                 throw error
             }
         }
         scanTask = task
+        host?.folderScanDidStart()
         return task
     }
     private nonisolated static func isRecoverableScanFailure(_ error: any Error) -> Bool {
@@ -298,6 +301,7 @@ struct FolderScanRestorePoint {
         failure = nil
         noMatchesPresented = false
         if let ending { trace?.end(outcome: outcome, generation: ending) }
+        host?.folderScanDidEnd()
     }
     /// Explicitly nonisolated: path canonicalization and scanning begin only inside the acquired lease.
     private nonisolated static func scanLeased(folder: URL, rootID: AccessRootID, generation: UInt64, input: URL?,
