@@ -16,6 +16,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     private static let encoderVersion = 2
     private let directory: URL
     private let afterPayloadWrite: (@Sendable () throws -> Void)?
+    private var didSweepOrphans = false
 
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Picsee/Thumbnails", isDirectory: true)) {
@@ -52,8 +53,12 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
                                                     encoderVersion: Self.encoderVersion),
               expectedKey == ticket.key,
               try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256 else { return nil }
+        sweepOrphansIfNeeded()
         guard let row = readRow(ticket), row.byteCount > 0, row.byteCount <= Self.maximumPayloadBytes,
-              row.payloadPath == ticket.key.filename + ".png" else { return nil }
+              row.payloadPath == ticket.key.filename + ".png" else {
+            removeDamagedEntry(ticket)
+            return nil
+        }
         let payload = directory.appendingPathComponent(row.payloadPath)
         guard let size = (try? FileManager.default.attributesOfItem(atPath: payload.path)[.size] as? NSNumber)?.intValue,
               size == row.byteCount, size <= Self.maximumPayloadBytes,
@@ -66,7 +71,10 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
               image.width > 0, image.height > 0,
               image.width <= ticket.request.maximumPixelSize,
-              image.height <= ticket.request.maximumPixelSize else { return nil }
+              image.height <= ticket.request.maximumPixelSize else {
+            removeDamagedEntry(ticket)
+            return nil
+        }
         try Task.checkCancellation()
         guard try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256 else { return nil }
         try Task.checkCancellation()
@@ -175,6 +183,42 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let sourceHeight: Int
     }
     private var databaseURL: URL { directory.appendingPathComponent("index.sqlite3") }
+    private func removeDamagedEntry(_ ticket: ThumbnailCacheTicket) {
+        // The path comes from the key, never from a possibly damaged SQLite row.
+        var writable: OpaquePointer?
+        guard sqlite3_open_v2(databaseURL.path, &writable,
+                              SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
+              let db = writable else {
+            if let writable { sqlite3_close(writable) }
+            return
+        }
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "DELETE FROM thumbnails WHERE key=?", -1, &statement, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(statement) }
+        bind(ticket.key.filename, to: statement, at: 1)
+        guard sqlite3_step(statement) == SQLITE_DONE else { return }
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent(ticket.key.filename + ".png"))
+    }
+
+    private func sweepOrphansIfNeeded() {
+        guard !didSweepOrphans, let db = openDatabase(create: false) else { return }
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT payload FROM thumbnails", -1, &statement, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(statement) }
+        var referenced = Set<String>()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let path = sqlite3_column_text(statement, 0) { referenced.insert(String(cString: path)) }
+        }
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
+        for name in names where name.hasSuffix(".png") && name.count == 68 && !referenced.contains(name) {
+            let hex = name.dropLast(4)
+            guard hex.allSatisfy({ $0.isHexDigit }) else { continue }
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        }
+        didSweepOrphans = true
+    }
     private func openDatabase(create: Bool) -> OpaquePointer? {
         if !create && !FileManager.default.fileExists(atPath: databaseURL.path) { return nil }
         var db: OpaquePointer?
