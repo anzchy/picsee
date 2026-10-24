@@ -160,6 +160,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
         }
         try Task.checkCancellation()
+        try repairCorruptIndexIfNeeded()
         try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
                      payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
                      sourceHeight: Int(image.sourcePixelSize.height))
@@ -216,6 +217,22 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let sourceHeight: Int
     }
     private var databaseURL: URL { directory.appendingPathComponent("index.sqlite3") }
+    private func repairCorruptIndexIfNeeded() throws {
+        let index = databaseURL.path
+        guard FileManager.default.fileExists(atPath: index),
+              (try? FileManager.default.attributesOfItem(atPath: index)[.type] as? FileAttributeType) == .typeRegular else { return }
+        var db: OpaquePointer?
+        let opened = sqlite3_open_v2(index, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK
+        var statement: OpaquePointer?
+        let prepared = opened && sqlite3_prepare_v2(db, "PRAGMA quick_check", -1, &statement, nil) == SQLITE_OK
+        let sound = prepared && sqlite3_step(statement) == SQLITE_ROW &&
+            sqlite3_column_text(statement, 0).map { String(cString: $0) == "ok" } == true
+        sqlite3_finalize(statement)
+        if let db { sqlite3_close(db) }
+        guard !sound else { return }
+        try FileManager.default.removeItem(atPath: index)
+        didSweepOrphans = false
+    }
     private func removeDamagedEntry(_ ticket: ThumbnailCacheTicket) {
         // The path comes from the key, never from a possibly damaged SQLite row.
         let path = directory.appendingPathComponent(ticket.key.filename + ".png").path
