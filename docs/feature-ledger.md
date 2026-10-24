@@ -153,7 +153,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| FOLDER-01 | 边扫描边浏览 | Partial | 单元 | P2-02 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FolderBrowser/`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/`、`Packages/PicseeKit/Sources/PicseeCore/Models/`、`Packages/PicseeKit/Sources/PicseeMacUI/States/ViewerStateHost.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/FolderScanning.swift` | 打开 S2（5000 项）：扫描时显示 24 页读取状态，可取消；扫描完成后显示按名称排第一的图片并可翻图（时间见 `docs/validation/P2.md`）。限制：仅单层（需 P2-04）；扫描中顺序临时；读取页后无扫描状态与取消（P2-09）；24 页读取与取消真机未验（[@1x 记录](validation/P2.md#p2-02分批扫描取消与快照导航)）。 |
+| FOLDER-01 | 边扫描边浏览 | Partial | 单元 | P2-02 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FolderBrowser/`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/`、`Packages/PicseeKit/Sources/PicseeCore/Models/`、`Packages/PicseeKit/Sources/PicseeMacUI/States/ViewerStateHost.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/FolderScanning.swift` | 打开 S2（5000 项）：扫描时显示 24 页读取状态，可取消；扫描完成后显示按名称排第一的图片并可翻图（时间见 `docs/validation/P2.md`）。限制：仅单层（需 P2-04）；扫描中顺序临时；读取页后无扫描状态与取消（P2-09）；按名称首张、24 页读取与取消真机未验（[@1x 记录](validation/P2.md#p2-02分批扫描取消与快照导航)）。 |
 | FOLDER-02 | 排序 | Absent | 无 | P2-03 | — | 按名称自然排序（img2 排在 img10 前）、修改日期、类型、大小，升降序都能切换 |
 | FOLDER-03 | 扩展名过滤 | Absent | 无 | P2-03 | — | 只勾选 PNG，列表与翻图都只剩 PNG；取消过滤后恢复，当前图合理保留 |
 | FOLDER-04 | 子目录递归 | Absent | 无 | P2-04 | — | 打开递归，嵌套目录的图片出现；含循环符号链接的目录扫描能结束，不重复列出 |
@@ -331,10 +331,10 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
 | 打开与输入 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：打开目录改为分批扫描、首批前显示 24 页读取态；OPEN-01/02/04/05/06 验收不受影响（空态、失败态、最近列表写入时机与过滤规则不变）。上次：P2-01 真机记录（docs/p2-01-device-mini，1c28a09..e8de551，run 20261024-074141-P2-01-ACCESS-02-03-OPEN-06） |
-| 查看与画布 | 2026-10-24 | doc-gardener | P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132，run 20261024-092410-P2-02-FOLDER-01-VIEW-10）：VIEW-10 未改；@1x 跨首批边界翻图、首尾停止与菜单禁用均在扫描完成后通过，扫描中到已知末尾未验，「（P2-02，单元）」限制仍真；可选在限制里引用该记录。上次：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a） |
+| 查看与画布 | 2026-10-24 | doc-gardener | 打开文件夹按名称首张（#82，fix/folder-open-first-by-name，d2fbd1a..5663e95）：VIEW-10 未改；`FolderScanCoordinator` 只把打开文件夹的首张移到扫描完成后，`advancePending` 与快照翻图未改，「扫描中按快照翻图…（P2-02，单元）」现只出现在以图片打开时，仍真。上次：P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132，run 20261024-092410-P2-02-FOLDER-01-VIEW-10） |
 | C 沉浸界面 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：`ViewerSession` 只改上一张/下一张启用与路由，不改 chrome 显隐；CHROME-01…05 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
 | 外观与显示偏好 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：`CanvasWindowController` 只接扫描与读取态；PREF-02 不变。上次：P1-02 输入（#70，p1/p1-02-inputs，2044bef..defbf44） |
-| 文件夹浏览 | 2026-10-24 | doc-gardener | P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132，run 20261024-092410-P2-02-FOLDER-01-VIEW-10）：883832a 只改 FOLDER-01「限制：」，恢复「扫描中顺序临时」「读取页后无扫描状态与取消（P2-09）」，记首张取自首批并链接 @1x 记录；状态 `Partial`/`单元` 与验收不变；格长去掉链接目标约 157 字，超出部分主要为链接。上次：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a） |
+| 文件夹浏览 | 2026-10-24 | doc-gardener | 打开文件夹按名称首张（#82，fix/folder-open-first-by-name，d2fbd1a..5663e95）：fa06a0a 只删限制「首张取自首批」；0ec1d04 单独改验收并引用用户 2026-10-24 原话；状态 `Partial`/`单元` 不变；代码在扫描完成后取 `completed.entries.first`（按名称排序）。提议限制补「按名称首张真机未验」：链接的 @1x 记录显示旧行为 `img-0040`；P2.md 无计时，「时间见」暂无数字；能力名「边扫描边浏览」现只合以图片打开。上次：P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132，run 20261024-092410-P2-02-FOLDER-01-VIEW-10） |
 | Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 网格、选择与菜单 | 2026-10-24 | doc-gardener | P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132）：5e83132 引用 P2-01，GRID-15 计划含 P2-01，但范围只改文档、无代码；GRID-15 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
