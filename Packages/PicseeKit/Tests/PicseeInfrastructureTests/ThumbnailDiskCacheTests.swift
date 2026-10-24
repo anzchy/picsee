@@ -422,3 +422,31 @@ private actor P304ReadGate {
     try await evictor.store(images[1], for: tickets[1])
     #expect(!FileManager.default.fileExists(atPath: heldPayload.path))
 }
+
+@Test func p304WarmPixelsSurviveIndexBecomingUnavailableAfterRowRead() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let file = folder.appendingPathComponent("image.tiff")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+    let sourceBytes = try Data(contentsOf: file)
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+    let expected = try await pipeline.image(for: request)
+    let cache = ThumbnailDiskCache(directory: cacheDirectory)
+    let ticket = try #require(try await cache.prepare(request))
+    try await cache.store(expected, for: ticket)
+    let index = cacheDirectory.appendingPathComponent("index.sqlite3")
+    let moved = cacheDirectory.appendingPathComponent("index-moved.sqlite3")
+    let reader = ThumbnailDiskCache(directory: cacheDirectory, afterReadLeaseAcquired: {
+        try? FileManager.default.moveItem(at: index, to: moved)
+        try? FileManager.default.createDirectory(at: index, withIntermediateDirectories: false)
+    })
+    let delivered = try #require(try await reader.load(ticket))
+    #expect(try rgba(delivered.image) == rgba(expected.image))
+    #expect(try Data(contentsOf: file) == sourceBytes)
+    #expect(FileManager.default.fileExists(atPath: moved.path))
+    #expect((try? FileManager.default.attributesOfItem(atPath: index.path)[.type] as? FileAttributeType) == .typeDirectory)
+}
