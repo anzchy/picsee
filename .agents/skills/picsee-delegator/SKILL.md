@@ -18,8 +18,11 @@ Before launching Codex in any new worktree, install its local role overlay:
 appointed delegator workspace uses `--role delegator`. Do not infer role from a pane title
 or prompt. Check `.codex/rules/picsee-role.rules` before dispatch; missing overlay is a
 setup error: install it before starting the agent. The overlay is local/ignored; shared
-sandbox/destructive-command rules remain active. Existing sessions may need a restart to
-reload changed rules; verify with a normal `git push --dry-run`, never a wrapper bypass.
+sandbox/destructive-command rules remain active. Project-local rules require a trusted
+`.codex/` layer and a session restart after rule changes. Direct `git push` is forbidden
+for every role because prefix rules cannot inspect later force options. The delegator
+uses `scripts/codex-rules/push-guard.py`. Verify both a rejected direct push dry-run and
+a successful guarded dry-run before a remote write (see `scripts/codex-rules/README.md`).
 
 
 1. Read the latest entries of `~/.picsee/handoff/20261022-migrate-to-mini.md`, then `gh pr list`, `gh issue list`,
@@ -59,8 +62,9 @@ Low only. Never touch mdpro or its tmux `dtrack`.
 7. **Gardener** — `picsee-doc-gardener` (Claude subagent / Codex custom agent), mode `pr`, `base..head`. UPDATED →
    commit its diff as `docs(ledger): garden <b>..<h>`; NEEDS-OWNER → fix rows (限制/在哪 only) or `无用户可见变化：` lines,
    rerun; acceptance changes only in a separate commit quoting the user.
-8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. Wait for checks to
-   register, `gh pr checks --watch`, then `gh pr merge --rebase` (authorised when no blocking C/H, gardener not BLOCK,
+8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. Push the current topic
+   with `python3 scripts/codex-rules/push-guard.py` (exact lease OID after rebasing an owned PR branch). Wait for checks
+   to register, `gh pr checks --watch`, then `gh pr merge --rebase` (authorised when no blocking C/H, gardener not BLOCK,
    CI green).
 9. **Device validation** — **first take the desktop GUI lock shared with mdpro**:
    `$SK/scripts/gui-lock.sh acquire <run-id> <minutes> "<purpose>"` (exit 75 = mdpro holds it: no GUI at all; use

@@ -21,11 +21,14 @@ def main():
     if args.role != 'delegator':
         content += Path(__file__).with_name('restricted-role.rules').read_text()
     else:
-        content += '# Push/PR ownership granted explicitly; common safety rules still apply.\n'
+        content += '# PR ownership is granted; push only through the checked push-guard.py entry point.\n'
     fd, temp = tempfile.mkstemp(prefix='.role-', dir=directory)
-    with os.fdopen(fd, 'w') as stream:
-        stream.write(content)
-    os.replace(temp, target)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            stream.write(content)
+        os.replace(temp, target)
+    finally:
+        Path(temp).unlink(missing_ok=True)
     print(f'{args.role}: {target}')
 
 
