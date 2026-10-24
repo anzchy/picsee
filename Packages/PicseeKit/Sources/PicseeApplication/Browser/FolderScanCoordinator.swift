@@ -25,7 +25,6 @@ import PicseeCore
         return true
     }
     public func setConditions(_ value: FolderViewConditions) {
-        presentationRevision &+= 1
         conditions = value
         projectSource()
     }
@@ -104,7 +103,7 @@ import PicseeCore
                         return
                     }
                     try Task.checkCancellation()
-                    // rememberFolder can yield while conditions replace or clear the first image.
+                    // Only a newer host presentation or clear supersedes this pending first image.
                     if presentationRevision == initialPresentationRevision,
                        currentItemID == first.itemID,
                        currentURL?.standardizedFileURL == first.url.standardizedFileURL,
@@ -173,6 +172,7 @@ import PicseeCore
             // Aliases can share identity while exposing different extensions. Use an eligible URL.
             let replacement = snapshot.navigationEntries[index]
             currentURL = replacement.url
+            presentationRevision &+= 1
             host?.openFolderImage(replacement.url, rootID: snapshot.version.rootID)
             return
         }
@@ -184,12 +184,14 @@ import PicseeCore
            inputMayBeEligible { return }
         guard let first = snapshot.navigationEntries.first else { return }
         currentItemID = first.itemID; currentURL = first.url
+        presentationRevision &+= 1
         host?.openFolderImage(first.url, rootID: snapshot.version.rootID)
     }
     private func presentNoMatchesIfNeeded() {
         guard hasNoMatches, !noMatchesPresented else { return }
         noMatchesPresented = true
         currentItemID = nil; currentURL = nil; pendingDirection = nil
+        presentationRevision &+= 1
         host?.clearFolderImageForNoMatches()
     }
     private func retainReadingAuthority() -> Bool {

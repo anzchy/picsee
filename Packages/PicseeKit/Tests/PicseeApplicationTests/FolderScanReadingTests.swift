@@ -48,6 +48,49 @@ import PicseeCore
     }
 }
 
+@Test(arguments: ["jpg", "unchanged", "loop"])
+@MainActor func folderReadingRetainedFirstDuringRememberOpensExactlyOnce(action: String) async throws {
+    let fixture = FolderScanFixture(), host = FolderReadingHost(), coordinator = fixture.coordinator
+    coordinator.host = host
+    host.onRemember = {
+        let jpg = FolderViewConditions(selectedExtensions: ["jpg"])
+        coordinator.setConditions(jpg)
+        if action == "unchanged" { coordinator.setConditions(jpg) }
+        if action == "loop" {
+            coordinator.setConditions(jpg)
+            coordinator.setLoopEnabled(true)
+        }
+        #expect(host.opens.isEmpty)
+    }
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await task.value
+    #expect(host.opens.map(\.lastPathComponent) == ["a.jpg"])
+    #expect(coordinator.currentURL?.lastPathComponent == "a.jpg")
+    #expect(coordinator.loopEnabled == (action == "loop"))
+    #expect(await fixture.access.balance == [1, 1])
+}
+
+@Test(arguments: [false, true])
+@MainActor func folderReadingUnchangedConditionsDuringRememberStillOpenFirst(loopMenu: Bool) async throws {
+    let fixture = FolderScanFixture(), host = FolderReadingHost(), coordinator = fixture.coordinator
+    coordinator.host = host
+    host.onRemember = {
+        // The Loop menu sends the current conditions again before changing Loop.
+        coordinator.setConditions(coordinator.conditions)
+        if loopMenu { coordinator.setLoopEnabled(true) }
+        #expect(host.opens.isEmpty)
+    }
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await task.value
+    #expect(host.opens.map(\.lastPathComponent) == ["a.jpg"])
+    #expect(coordinator.currentURL?.lastPathComponent == "a.jpg")
+    #expect(coordinator.loopEnabled == loopMenu)
+}
+
 @Test @MainActor func folderReadingCompletedSnapshotOpensNameFirstOnce() async throws {
     let fixture = FolderScanFixture(), host = FolderReadingHost(), session = ViewerSession()
     fixture.coordinator.host = host; session.folderScan = fixture.coordinator
