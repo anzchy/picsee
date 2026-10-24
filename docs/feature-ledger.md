@@ -216,7 +216,7 @@
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | CACHE-01 | 内存占用有上限 | Partial | 单元 | P1-06、P3-06 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageMemoryCache.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOPipeline.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/MemoryPressurePolicy.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ResourceSnapshotTracing.swift`、`Packages/PicseeKit/Sources/PicseeCore/Ports/ImagePresentationPinning.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageLoader.swift`、`App/PicseeApp.swift`、`App/UntestedResourceAdapters.swift` | 连续浏览 S2 三轮，内存不持续增长；两个窗口共用同一个上限（数据见 `docs/validation/P3.md`）。限制：仅内存缓存；@1x 重开命中、截断图不入缓存（[记录](validation/P1.md#p1-06内存成本与最小有界缓存)）；无磁盘缓存/预取，压力/S2/两窗口未验。#58 重叠修订在原租约内最多复核一次源文件，旧查找及消耗重试后的当前修订交付仅自动化通过；本修复真机未验。 |
-| CACHE-02 | 缩略图磁盘缓存 | Absent | 无 | P3-03、P3-04 | — | 第二次打开同一目录，网格明显更快出图；手动删掉缓存目录后自动重建，原图不受影响 |
+| CACHE-02 | 缩略图磁盘缓存 | Partial | 单元 | P3-03、P3-04 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ThumbnailDiskCache.swift`、`Packages/PicseeKit/Sources/PicseeCore/Identity/DurableThumbnailKey.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Access/AccessImageSource.swift`、`App/PicseeApp.swift` | 第二次打开同一目录，网格明显更快出图；手动删掉缓存目录后自动重建，原图不受影响；限制：真实授权根小图经 AccessImageSource 解码、写入、新存储与管线实例重开命中仅单元证明；同大小同时间原子替换、授权失败、损坏/缺失载荷及索引回退仅单元证明。仅缓存 32 MiB 内源文件、最长边 1024 像素内的 8 位定向 SDR 请求；网格接线、手删目录重建、P3-04 修复/淘汰/读写租约、P3-05 清空代次、P3-08 性能与真机均未验。 |
 | CACHE-03 | 清理缓存 | Absent | 无 | P3-05、P3-07 | — | 设置里显示缓存占用，点清理后占用归零，正在进行的旧任务不会把缓存重新写回 |
 | CACHE-04 | 本地诊断面板 | Absent | 无 | P3-07 | — | 打开诊断面板，看到本地的解码数、队列长度、缓存命中；不上传任何数据 |
 
