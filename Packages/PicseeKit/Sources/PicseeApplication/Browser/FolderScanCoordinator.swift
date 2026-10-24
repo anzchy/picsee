@@ -20,6 +20,7 @@ import PicseeCore
     private var firstBatchTraced = false
     private var scanTask: Task<Void, any Error>?
     private var activeGeneration: UInt64?
+    private var activeFolder: (url: URL, rootID: AccessRootID)?
     public init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)? = nil) {
         self.access = access; self.scanner = scanner; self.trace = trace
     }
@@ -29,6 +30,7 @@ import PicseeCore
         generation &+= 1
         let token = generation
         activeGeneration = token
+        activeFolder = (folder.standardizedFileURL, rootID)
         inputURL = input
         currentURL = input
         pendingDirection = pending
@@ -65,6 +67,7 @@ import PicseeCore
                 guard activeGeneration == token, let completed = snapshot else { return }
                 let showEmpty = input == nil && completed.entries.isEmpty && automaticPresentationAllowed?() != false
                 activeGeneration = nil
+                activeFolder = nil
                 snapshot = completed.appending([], isComplete: true)
                 pendingDirection = nil
                 isReadingFolder = false
@@ -75,6 +78,7 @@ import PicseeCore
             } catch {
                 guard activeGeneration == token else { return }
                 activeGeneration = nil
+                activeFolder = nil
                 isReadingFolder = false
                 scanTask = nil
                 if error is CancellationError || Task.isCancelled {
@@ -92,11 +96,23 @@ import PicseeCore
         scanTask = task
         return task
     }
+    /// Coalesce arrows while the current input has not reached the admitted batches yet.
+    public func queueNavigation(_ direction: NavigationDirection, folder: URL, input: URL, rootID: AccessRootID? = nil) -> Bool {
+        guard activeGeneration != nil, scanTask?.isCancelled != true, let activeFolder,
+              activeFolder.url.path == folder.standardizedFileURL.path,
+              rootID == nil || rootID == activeFolder.rootID,
+              input.standardizedFileURL == inputURL?.standardizedFileURL,
+              currentURL?.standardizedFileURL == input.standardizedFileURL else { return false }
+        pendingDirection = direction
+        advancePending()
+        return true
+    }
     public func cancel() { end() }
     public func end() { stop(.cancelled) }
     private func stop(_ outcome: FolderScanOutcome) {
         let ending = activeGeneration
         activeGeneration = nil
+        activeFolder = nil
         scanTask?.cancel()
         scanTask = nil
         snapshot = nil

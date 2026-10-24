@@ -238,6 +238,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func navigate(_ direction: NavigationDirection) {
         guard let file = fileURL else { return }
+        if session.folderScan?.queueNavigation(direction, folder: file.deletingLastPathComponent(), input: file) == true { return }
         let operation = accessIntent.navigation()
         navigationTask?.cancel()
         let current = generation

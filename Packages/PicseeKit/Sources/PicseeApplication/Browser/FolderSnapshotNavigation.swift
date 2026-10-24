@@ -15,7 +15,10 @@ extension FolderScanCoordinator {
     }
     /// A member endpoint is handled, including a provisional endpoint's enabled no-op.
     @discardableResult public func move(_ direction: NavigationDirection, currentURL: URL? = nil) -> Bool {
-        guard let navigation = navigation(matching: currentURL), let snapshot else { return false }
+        guard let navigation = navigation(matching: currentURL), let snapshot else {
+            guard let currentURL else { return false }
+            return queueNavigation(direction, folder: currentURL.deletingLastPathComponent(), input: currentURL)
+        }
         pendingDirection = nil
         if let entry = neighbor(in: navigation, direction: direction) {
             currentItemID = entry.itemID
