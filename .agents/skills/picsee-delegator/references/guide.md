@@ -580,3 +580,13 @@ Codex delegator doesn't see it, which is one reason this guide and the handoff l
 
 When in doubt, read the handoff log's latest entries, `gh pr list`, `gh issue list`, `herdr pane list` and each
 pane's screen before acting.
+
+### Live herdr status schema (2026-10-24)
+
+`herdr agent get <name>` returns `result.type = agent_info` and the named agent in
+`result.agent`, with `name` and `agent_status`. Report polling validates this envelope
+and exact agent name; malformed or mismatched responses become `poll-error`, never completion.
+Use sanitized real envelopes in fake-process tests. Before switching a new adapter to live
+monitoring, run its status reader against a read-only real `herdr agent get` response;
+a flat fake `{agent_status: ...}` is not an integration check. A queue receipt for
+`poll-error` means monitoring stopped and needs repair/rearming, not that the task finished.
