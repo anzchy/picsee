@@ -12,12 +12,19 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     public static let maximumSourceBytes = 32 * 1024 * 1024
     public static let maximumPayloadBytes = 8 * 1024 * 1024
     public static let maximumPixelEdge = 1024
-    private static let cacheVersion = 1
+    private static let cacheVersion = 2
     private let directory: URL
+    private let afterPayloadWrite: (@Sendable () throws -> Void)?
 
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Picsee/Thumbnails", isDirectory: true)) {
         self.directory = directory
+        self.afterPayloadWrite = nil
+    }
+
+    init(directory: URL, afterPayloadWrite: @escaping @Sendable () throws -> Void) {
+        self.directory = directory
+        self.afterPayloadWrite = afterPayloadWrite
     }
 
     public func prepare(_ request: ImageDecodeRequest) async throws -> ThumbnailCacheTicket? {
@@ -30,15 +37,10 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
               request.maximumPixelSize > 0,
               request.maximumPixelSize <= Self.maximumPixelEdge,
               request.fileURL.isFileURL else { return nil }
-        do {
-            guard let digest = try fingerprint(request.fileURL, expected: render.revision),
-                  let key = DurableThumbnailKey(renderKey: render, sourceSHA256: digest) else { return nil }
-            return ThumbnailCacheTicket(request: request, key: key, sourceSHA256: digest)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            return nil // A cache problem never prevents normal source decoding.
-        }
+        let digest = try? fingerprint(request.fileURL, expected: render.revision)
+        try Task.checkCancellation()
+        guard let digest, let key = DurableThumbnailKey(renderKey: render, sourceSHA256: digest) else { return nil }
+        return ThumbnailCacheTicket(request: request, key: key, sourceSHA256: digest)
     }
 
     public func load(_ ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
@@ -97,6 +99,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let path = ticket.key.filename + ".png"
         let url = directory.appendingPathComponent(path)
         try payload.write(to: url, options: .atomic)
+        try afterPayloadWrite?()
         // Catch a source mutation during payload publication before indexing the bytes.
         guard try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256 else {
             try? FileManager.default.removeItem(at: url)
@@ -133,6 +136,13 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
+    private func rowChecksum(key: String, item: String, source: String, path: String,
+                             byteCount: Int, payloadSHA256: String, width: Int, height: Int) -> String {
+        let fields = ["row1", key, item, source, path, String(byteCount), payloadSHA256,
+                      String(Self.cacheVersion), String(width), String(height)]
+        return digest(Data(fields.joined(separator: "|").utf8))
+    }
+
     private struct Row {
         let payloadPath: String
         let byteCount: Int
@@ -159,7 +169,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         guard let db = openDatabase(create: false) else { return nil }
         defer { sqlite3_close(db) }
         var statement: OpaquePointer?
-        let sql = "SELECT payload, byte_count, payload_sha256, source_width, source_height, item_id, source_sha256 FROM thumbnails WHERE key=? AND cache_version=1"
+        let sql = "SELECT payload, byte_count, payload_sha256, source_width, source_height, item_id, source_sha256, row_sha256 FROM thumbnails WHERE key=? AND cache_version=2"
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(statement) }
         bind(ticket.key.filename, to: statement, at: 1)
@@ -168,21 +178,28 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
               let sha = sqlite3_column_text(statement, 2),
               let item = sqlite3_column_text(statement, 5),
               let source = sqlite3_column_text(statement, 6),
+              let rowSHA = sqlite3_column_text(statement, 7),
               String(cString: item) == ticket.request.renderKey?.itemID.stableEncoding,
               String(cString: source) == ticket.sourceSHA256 else { return nil }
         let width = Int(sqlite3_column_int(statement, 3)), height = Int(sqlite3_column_int(statement, 4))
-        guard width > 0, height > 0 else { return nil }
-        return Row(payloadPath: String(cString: path), byteCount: Int(sqlite3_column_int(statement, 1)),
+        let byteCount = Int(sqlite3_column_int(statement, 1))
+        guard width > 0, height > 0,
+              String(cString: rowSHA) == rowChecksum(key: ticket.key.filename, item: String(cString: item),
+                source: String(cString: source), path: String(cString: path), byteCount: byteCount,
+                payloadSHA256: String(cString: sha), width: width, height: height) else { return nil }
+        return Row(payloadPath: String(cString: path), byteCount: byteCount,
                    payloadSHA256: String(cString: sha), sourceWidth: width, sourceHeight: height)
     }
     private func writeRow(_ ticket: ThumbnailCacheTicket, payloadPath: String, payloadBytes: Int,
                           payloadSHA256: String, sourceWidth: Int, sourceHeight: Int) throws {
         guard let db = openDatabase(create: true) else { throw ThumbnailStoreError.database }
         defer { sqlite3_close(db) }
-        let schema = "CREATE TABLE IF NOT EXISTS thumbnails (key TEXT PRIMARY KEY, item_id TEXT NOT NULL, source_sha256 TEXT NOT NULL, payload TEXT NOT NULL, byte_count INTEGER NOT NULL, payload_sha256 TEXT NOT NULL, last_access REAL NOT NULL, cache_version INTEGER NOT NULL, source_width INTEGER NOT NULL, source_height INTEGER NOT NULL)"
+        let schema = "CREATE TABLE IF NOT EXISTS thumbnails (key TEXT PRIMARY KEY, item_id TEXT NOT NULL, source_sha256 TEXT NOT NULL, payload TEXT NOT NULL, byte_count INTEGER NOT NULL, payload_sha256 TEXT NOT NULL, last_access REAL NOT NULL, cache_version INTEGER NOT NULL, source_width INTEGER NOT NULL, source_height INTEGER NOT NULL, row_sha256 TEXT)"
         guard sqlite3_exec(db, schema, nil, nil, nil) == SQLITE_OK else { throw ThumbnailStoreError.database }
+        // Older re-creatable indexes lack this column. Their version-1 rows remain misses.
+        _ = sqlite3_exec(db, "ALTER TABLE thumbnails ADD COLUMN row_sha256 TEXT", nil, nil, nil)
         var statement: OpaquePointer?
-        let sql = "INSERT OR REPLACE INTO thumbnails (key,item_id,source_sha256,payload,byte_count,payload_sha256,last_access,cache_version,source_width,source_height) VALUES (?,?,?,?,?,?,?,?,?,?)"
+        let sql = "INSERT OR REPLACE INTO thumbnails (key,item_id,source_sha256,payload,byte_count,payload_sha256,last_access,cache_version,source_width,source_height,row_sha256) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw ThumbnailStoreError.database }
         defer { sqlite3_finalize(statement) }
         bind(ticket.key.filename, to: statement, at: 1)
@@ -195,6 +212,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         sqlite3_bind_int(statement, 8, Int32(Self.cacheVersion))
         sqlite3_bind_int(statement, 9, Int32(sourceWidth))
         sqlite3_bind_int(statement, 10, Int32(sourceHeight))
+        bind(rowChecksum(key: ticket.key.filename, item: ticket.request.renderKey!.itemID.stableEncoding,
+            source: ticket.sourceSHA256, path: payloadPath, byteCount: payloadBytes,
+            payloadSHA256: payloadSHA256, width: sourceWidth, height: sourceHeight), to: statement, at: 11)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw ThumbnailStoreError.database }
     }
 }
