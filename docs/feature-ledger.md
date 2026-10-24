@@ -277,7 +277,7 @@ MVP 起就是门槛（见计划 P3「MVP 还需检查」），P6-04 补全全部
 | A11Y-01 | VoiceOver | Absent | 无 | P3-10、P6-04 | — | 开 VoiceOver 走一遍打开→网格→大图→Inspector，每个控件都有正确的名称，隐藏的工具不被读出 |
 | A11Y-02 | 纯键盘操作 | Partial | 单元 | P0-09、P6-04 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorFocus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`App/CanvasWindowController.swift`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift` | 不碰鼠标完成打开目录、选图、看大图、返回、打开 Inspector；焦点始终可见（28 页）。限制：选图/网格待 P3；⌘O 选目录、占位面板焦点 @1x 真机通过；空态状态按钮 Tab/Esc @1x 通过（[记录](validation/P1.md#p1-07空态加载失败取消菜单焦点与中英文本)）；失败态焦点环未验。 |
 | A11Y-03 | 对比度与焦点不被遮挡 | Absent | 无 | P6-04 | — | 浅色和深色下文字与控件对比度符合 `design/DESIGN.md` 的目标；获得焦点的控件不被其他元素挡住 |
-| A11Y-04 | 中英文界面 | Partial | 单元 | P1-07、P6-04 | `App/Resources/Localizable.xcstrings`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`Packages/PicseeKit/Tests/PicseeMacUITests/ViewerLocalizationTests.swift` | 系统语言切到中文或英文，界面文字跟随变化，没有截断和未翻译的键名。限制：中文仅由目录覆盖测试证明；本机自动入口仅英文（系统语言切换为系统设置，启动参数入口未建立）；截断检查待 P6-04。 |
+| A11Y-04 | 中英文界面 | Partial | 单元 | P1-07、P6-04 | `App/Resources/Localizable.xcstrings`、`App/Commands/CommandMenu.swift`、`App/UI/InspectorPlaceholder.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`Packages/PicseeKit/Tests/PicseeMacUITests/ViewerLocalizationTests.swift` | 系统语言切到中文或英文，界面文字跟随变化，没有截断和未翻译的键名。限制：中文目录、空态/错误态局部布局与图标名称仅单元；系统语言切换、中文签名像素未验；全界面截断检查待 P6-04。 |
 
 ### 分发
 
