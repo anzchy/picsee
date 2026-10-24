@@ -390,3 +390,35 @@ private actor P304ReadGate {
     #expect(try await reopened.load(ticket).map { _ in true } == true)
     #expect(try Data(contentsOf: file) == sourceBytes)
 }
+
+@Test func p304CancelledReadReleasesPayloadForEviction() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<2 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await seed.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    try await seed.store(images[0], for: tickets[0])
+    let heldPayload = cacheDirectory.appendingPathComponent(tickets[0].key.filename + ".png")
+    let gate = P304ReadGate()
+    let reader = ThumbnailDiskCache(directory: cacheDirectory, afterReadLeaseAcquired: { await gate.pause() })
+    let heldTicket = tickets[0]
+    let pending = Task { try await reader.load(heldTicket).map { _ in true } }
+    await gate.waitForEntry()
+    pending.cancel()
+    await gate.release()
+    await #expect(throws: CancellationError.self) { try await pending.value }
+    let evictor = ThumbnailDiskCache(directory: cacheDirectory, highWaterBytes: 1, lowWaterBytes: 0)
+    try await evictor.store(images[1], for: tickets[1])
+    #expect(!FileManager.default.fileExists(atPath: heldPayload.path))
+}
