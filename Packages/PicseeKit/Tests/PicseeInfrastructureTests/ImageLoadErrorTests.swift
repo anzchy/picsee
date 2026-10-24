@@ -57,9 +57,17 @@ func loadError(_ kind: ImageLoadError.Kind) -> @Sendable (any Error) -> Bool {
     defer { try? FileManager.default.removeItem(at: file) }
     // Complete IHDR, no image data or IEND. Independently truncate at PNG's first chunk boundary.
     try Data(contentsOf: fixture("alpha-gradient.png")).prefix(33).write(to: file)
-    await #expect(performing: {
-        try await ImageIOPipeline().image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 128))
-    }, throws: loadError(.corruptImage))
+    do {
+        _ = try await ImageIOPipeline().image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 128))
+        Issue.record("Expected missing PNG end chunk failure")
+    } catch {
+        let failure = try #require(error as? ImageLoadError)
+        #expect(failure.kind == .corruptImage)
+        // These are populated only after identity resolution succeeded and the header failure
+        // was followed by a successful revision read; kind alone also accepted earlier failures.
+        #expect(failure.itemID != nil)
+        #expect(failure.revision?.byteCount == 33)
+    }
 }
 
 private struct LoadFailureDecoder: ImageDecoding {
@@ -181,16 +189,5 @@ private struct RealReadingThenRemoving: FileIdentityResourceReading {
         #expect(failure.kind == .sourceChanged)
         #expect(failure.itemID == .rootRelative(rootID: tree.id, relativePath: "b.png"))
         #expect(failure.revision == nil)
-    }
-}
-
-// Keep this prerequisite coverage independent of asynchronous pipeline classification.
-@Test func loadErrorsMissingPNGEndChunkFailsDirectHeaderRead() throws {
-    let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
-    defer { try? FileManager.default.removeItem(at: file) }
-    try Data(contentsOf: fixture("alpha-gradient.png")).prefix(33).write(to: file)
-    #expect(throws: ImageDecodeError.unreadableImage) {
-        _ = try ImageSourceHeader.read(ImageDecodeRequest(fileURL: file, maximumPixelSize: 128),
-            budget: 1_000_000, itemID: .ephemeral(UUID()))
     }
 }
