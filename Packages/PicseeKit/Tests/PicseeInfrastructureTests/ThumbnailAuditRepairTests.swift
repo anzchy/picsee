@@ -119,3 +119,81 @@ import PicseeCore
     #expect(sqlite3_step(statement) == SQLITE_ROW)
     #expect(sqlite3_column_int(statement, 0) == 2)
 }
+
+@Test func p304AuditHealthyLockedIndexIsNeverUnlinked() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let cache = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<2 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await cache.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    try await cache.store(images[0], for: tickets[0])
+    let index = cacheDirectory.appendingPathComponent("index.sqlite3")
+    var blocker: OpaquePointer?
+    #expect(sqlite3_open_v2(index.path, &blocker, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK)
+    #expect(sqlite3_exec(blocker, "BEGIN EXCLUSIVE", nil, nil, nil) == SQLITE_OK)
+    let competing = ThumbnailDiskCache(directory: cacheDirectory)
+    await #expect(throws: Error.self) { try await competing.store(images[1], for: tickets[1]) }
+    #expect(sqlite3_exec(blocker, "ROLLBACK", nil, nil, nil) == SQLITE_OK)
+    sqlite3_close(blocker)
+    #expect(try await ThumbnailDiskCache(directory: cacheDirectory).load(tickets[0]).map { _ in true } == true)
+    try await competing.store(images[1], for: tickets[1])
+    #expect(try await ThumbnailDiskCache(directory: cacheDirectory).load(tickets[0]).map { _ in true } == true)
+    #expect(try await ThumbnailDiskCache(directory: cacheDirectory).load(tickets[1]).map { _ in true } == true)
+}
+
+private actor P304AuditGate {
+    private var entered = false
+    private var entryWaiter: CheckedContinuation<Void, Never>?
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+    func pause() async {
+        entered = true
+        entryWaiter?.resume()
+        await withCheckedContinuation { releaseWaiter = $0 }
+    }
+    func waitForEntry() async {
+        if entered { return }
+        await withCheckedContinuation { entryWaiter = $0 }
+    }
+    func release() { releaseWaiter?.resume() }
+}
+
+@Test func p304AuditOrphanSweepCannotDeleteNewlyCommittedPayload() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<2 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await seed.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    try await seed.store(images[0], for: tickets[0])
+    let gate = P304AuditGate()
+    let sweeper = ThumbnailDiskCache(directory: cacheDirectory, afterOrphanSnapshot: { await gate.pause() })
+    let oldTicket = tickets[0]
+    let sweep = Task { try await sweeper.load(oldTicket).map { _ in true } }
+    await gate.waitForEntry()
+    try await ThumbnailDiskCache(directory: cacheDirectory).store(images[1], for: tickets[1])
+    await gate.release()
+    #expect(try await sweep.value == true)
+    let warm = try await ThumbnailDiskCache(directory: cacheDirectory).load(tickets[1])
+    #expect(try warm.map { try rgba($0.image) } == rgba(images[1].image))
+}
