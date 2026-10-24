@@ -282,3 +282,87 @@ private func pngPaddedToExactLength(_ source: Data, targetLength: Int) throws ->
     #expect(try Data(contentsOf: file) == sourceBytes)
     #expect(try await reopened.load(ticket).map { _ in true } == nil)
 }
+
+@Test func p304RecentReadSurvivesHighLowWaterEviction() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<3 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await seed.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    try await seed.store(images[0], for: tickets[0])
+    try await seed.store(images[1], for: tickets[1])
+    let firstPayload = cacheDirectory.appendingPathComponent(tickets[0].key.filename + ".png")
+    let secondPayload = cacheDirectory.appendingPathComponent(tickets[1].key.filename + ".png")
+    let bytes = try Data(contentsOf: firstPayload).count
+    #expect(try Data(contentsOf: secondPayload).count == bytes)
+    let limited = ThumbnailDiskCache(directory: cacheDirectory,
+                                     highWaterBytes: 2 * bytes + 1, lowWaterBytes: 2 * bytes)
+    #expect(try await limited.load(tickets[0]).map { _ in true } == true)
+    try await limited.store(images[2], for: tickets[2])
+    #expect(FileManager.default.fileExists(atPath: firstPayload.path))
+    #expect(!FileManager.default.fileExists(atPath: secondPayload.path))
+    #expect(FileManager.default.fileExists(atPath: cacheDirectory.appendingPathComponent(tickets[2].key.filename + ".png").path))
+    #expect(try await limited.load(tickets[0]).map { _ in true } == true)
+    #expect(try await limited.load(tickets[1]).map { _ in true } == nil)
+}
+
+private actor P304ReadGate {
+    private var entered = false
+    private var entryWaiter: CheckedContinuation<Void, Never>?
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+    func pause() async {
+        entered = true
+        entryWaiter?.resume()
+        await withCheckedContinuation { releaseWaiter = $0 }
+    }
+    func waitForEntry() async {
+        if entered { return }
+        await withCheckedContinuation { entryWaiter = $0 }
+    }
+    func release() { releaseWaiter?.resume() }
+}
+
+@Test func p304HeldReaderKeepsPayloadDuringOtherCacheEviction() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<3 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await seed.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    try await seed.store(images[0], for: tickets[0])
+    try await seed.store(images[1], for: tickets[1])
+    let heldPayload = cacheDirectory.appendingPathComponent(tickets[0].key.filename + ".png")
+    let bytes = try Data(contentsOf: heldPayload).count
+    let gate = P304ReadGate()
+    let reader = ThumbnailDiskCache(directory: cacheDirectory, afterReadLeaseAcquired: { await gate.pause() })
+    let heldTicket = tickets[0]
+    let pending = Task { try await reader.load(heldTicket).map { _ in true } }
+    await gate.waitForEntry()
+    let evictor = ThumbnailDiskCache(directory: cacheDirectory,
+                                     highWaterBytes: 2 * bytes + 1, lowWaterBytes: 2 * bytes)
+    try await evictor.store(images[2], for: tickets[2])
+    #expect(FileManager.default.fileExists(atPath: heldPayload.path))
+    await gate.release()
+    #expect(try await pending.value == true)
+}

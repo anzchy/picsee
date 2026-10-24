@@ -15,18 +15,43 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     private static let cacheVersion = 2
     private static let encoderVersion = 2
     private let directory: URL
+    private let highWaterBytes: Int
+    private let lowWaterBytes: Int
     private let afterPayloadWrite: (@Sendable () throws -> Void)?
+    private let afterReadLeaseAcquired: (@Sendable () async -> Void)?
     private var didSweepOrphans = false
 
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Picsee/Thumbnails", isDirectory: true)) {
         self.directory = directory
+        self.highWaterBytes = 512 * 1024 * 1024
+        self.lowWaterBytes = 384 * 1024 * 1024
         self.afterPayloadWrite = nil
+        self.afterReadLeaseAcquired = nil
     }
 
     init(directory: URL, afterPayloadWrite: @escaping @Sendable () throws -> Void) {
         self.directory = directory
+        self.highWaterBytes = 512 * 1024 * 1024
+        self.lowWaterBytes = 384 * 1024 * 1024
         self.afterPayloadWrite = afterPayloadWrite
+        self.afterReadLeaseAcquired = nil
+    }
+
+    init(directory: URL, highWaterBytes: Int, lowWaterBytes: Int) {
+        self.directory = directory
+        self.highWaterBytes = highWaterBytes
+        self.lowWaterBytes = lowWaterBytes
+        self.afterPayloadWrite = nil
+        self.afterReadLeaseAcquired = nil
+    }
+
+    init(directory: URL, afterReadLeaseAcquired: @escaping @Sendable () async -> Void) {
+        self.directory = directory
+        self.highWaterBytes = 512 * 1024 * 1024
+        self.lowWaterBytes = 384 * 1024 * 1024
+        self.afterPayloadWrite = nil
+        self.afterReadLeaseAcquired = afterReadLeaseAcquired
     }
 
     public func prepare(_ request: ImageDecodeRequest) async throws -> ThumbnailCacheTicket? {
@@ -60,6 +85,10 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             return nil
         }
         let payload = directory.appendingPathComponent(row.payloadPath)
+        guard PayloadLeaseRegistry.shared.acquire(payload.path) else { return nil }
+        defer { PayloadLeaseRegistry.shared.release(payload.path) }
+        await afterReadLeaseAcquired?()
+        try Task.checkCancellation()
         guard let size = (try? FileManager.default.attributesOfItem(atPath: payload.path)[.size] as? NSNumber)?.intValue,
               size == row.byteCount, size <= Self.maximumPayloadBytes,
               let data = try? Data(contentsOf: payload), data.count == row.byteCount,
@@ -78,6 +107,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try Task.checkCancellation()
         guard try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256 else { return nil }
         try Task.checkCancellation()
+        touch(ticket.key.filename)
         return DecodedImage(image: image,
             sourcePixelSize: CGSize(width: row.sourceWidth, height: row.sourceHeight),
             revision: render.revision, itemID: render.itemID)
@@ -114,6 +144,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = ticket.key.filename + ".png"
         let url = directory.appendingPathComponent(path)
+        guard PayloadLeaseRegistry.shared.acquire(url.path) else { return }
+        defer { PayloadLeaseRegistry.shared.release(url.path) }
         try payload.write(to: url, options: .atomic)
         try afterPayloadWrite?()
         // Catch a source mutation during payload publication before indexing the bytes.
@@ -131,6 +163,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
                      payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
                      sourceHeight: Int(image.sourcePixelSize.height))
+        evictIfNeeded()
     }
 
     private func sourceMatches(_ ticket: ThumbnailCacheTicket, render: RenderKey) throws -> Bool {
@@ -185,6 +218,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     private var databaseURL: URL { directory.appendingPathComponent("index.sqlite3") }
     private func removeDamagedEntry(_ ticket: ThumbnailCacheTicket) {
         // The path comes from the key, never from a possibly damaged SQLite row.
+        let path = directory.appendingPathComponent(ticket.key.filename + ".png").path
+        guard PayloadLeaseRegistry.shared.beginDeletion(path) else { return }
+        defer { PayloadLeaseRegistry.shared.endDeletion(path) }
         var writable: OpaquePointer?
         guard sqlite3_open_v2(databaseURL.path, &writable,
                               SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
@@ -198,7 +234,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         defer { sqlite3_finalize(statement) }
         bind(ticket.key.filename, to: statement, at: 1)
         guard sqlite3_step(statement) == SQLITE_DONE else { return }
-        try? FileManager.default.removeItem(at: directory.appendingPathComponent(ticket.key.filename + ".png"))
+        try? FileManager.default.removeItem(atPath: path)
     }
 
     private func sweepOrphansIfNeeded() {
@@ -215,9 +251,68 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         for name in names where name.hasSuffix(".png") && name.count == 68 && !referenced.contains(name) {
             let hex = name.dropLast(4)
             guard hex.allSatisfy({ $0.isHexDigit }) else { continue }
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+            let path = directory.appendingPathComponent(name).path
+            guard PayloadLeaseRegistry.shared.beginDeletion(path) else { continue }
+            try? FileManager.default.removeItem(atPath: path)
+            PayloadLeaseRegistry.shared.endDeletion(path)
         }
         didSweepOrphans = true
+    }
+
+    private func touch(_ key: String) {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(databaseURL.path, &db,
+                              SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+            if let db { sqlite3_close(db) }
+            return
+        }
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        let sql = "UPDATE thumbnails SET last_access=(SELECT MAX(last_access)+1 FROM thumbnails) WHERE key=?"
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(statement) }
+        bind(key, to: statement, at: 1)
+        _ = sqlite3_step(statement)
+    }
+
+    private func evictIfNeeded() {
+        guard highWaterBytes > 0, lowWaterBytes >= 0, lowWaterBytes <= highWaterBytes else { return }
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(databaseURL.path, &db,
+                              SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+            if let db { sqlite3_close(db) }
+            return
+        }
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db,
+            "SELECT key,payload,byte_count FROM thumbnails ORDER BY last_access ASC,key ASC",
+            -1, &statement, nil) == SQLITE_OK else { return }
+        var rows: [(key: String, path: String, bytes: Int64)] = []
+        var total: Int64 = 0
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let key = sqlite3_column_text(statement, 0),
+                  let path = sqlite3_column_text(statement, 1) else { continue }
+            let bytes = max(0, sqlite3_column_int64(statement, 2))
+            let (sum, overflow) = total.addingReportingOverflow(bytes)
+            total = overflow ? Int64.max : sum
+            rows.append((String(cString: key), String(cString: path), bytes))
+        }
+        sqlite3_finalize(statement)
+        guard total > highWaterBytes else { return }
+        for row in rows where total > lowWaterBytes {
+            guard row.path == row.key + ".png" else { continue }
+            let payload = directory.appendingPathComponent(row.path)
+            guard PayloadLeaseRegistry.shared.beginDeletion(payload.path) else { continue }
+            defer { PayloadLeaseRegistry.shared.endDeletion(payload.path) }
+            do { try FileManager.default.removeItem(at: payload) }
+            catch { continue }
+            var deletion: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "DELETE FROM thumbnails WHERE key=?", -1, &deletion, nil) == SQLITE_OK else { continue }
+            bind(row.key, to: deletion, at: 1)
+            if sqlite3_step(deletion) == SQLITE_DONE { total -= row.bytes }
+            sqlite3_finalize(deletion)
+        }
     }
     private func openDatabase(create: Bool) -> OpaquePointer? {
         if !create && !FileManager.default.fileExists(atPath: databaseURL.path) { return nil }
@@ -288,3 +383,44 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
 }
 
 private enum ThumbnailStoreError: Error { case database }
+
+/// Coordinates actors in this process that use the same cache directory.
+private final class PayloadLeaseRegistry: @unchecked Sendable {
+    static let shared = PayloadLeaseRegistry()
+    private let lock = NSLock()
+    private var readers: [String: Int] = [:]
+    private var deleting = Set<String>()
+
+    func acquire(_ path: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = URL(fileURLWithPath: path).standardizedFileURL.path
+        guard !deleting.contains(key) else { return false }
+        readers[key, default: 0] += 1
+        return true
+    }
+
+    func release(_ path: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = URL(fileURLWithPath: path).standardizedFileURL.path
+        let count = readers[key, default: 0]
+        if count <= 1 { readers.removeValue(forKey: key) }
+        else { readers[key] = count - 1 }
+    }
+
+    func beginDeletion(_ path: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = URL(fileURLWithPath: path).standardizedFileURL.path
+        guard readers[key, default: 0] == 0, !deleting.contains(key) else { return false }
+        deleting.insert(key)
+        return true
+    }
+
+    func endDeletion(_ path: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        deleting.remove(URL(fileURLWithPath: path).standardizedFileURL.path)
+    }
+}
