@@ -3,6 +3,7 @@
 
 import argparse
 import fcntl
+import importlib.util
 import json
 import math
 import os
@@ -29,6 +30,11 @@ class EventIdentityError(RuntimeError):
 IDENTITY_FIELDS = ("event", "task", "agent", "thread", "handoff", "handoff_marker", "poll")
 REQUIRED_FIELDS = ("schema", "event", "task", "agent", "thread", "handoff", "poll", "created_at")
 EVENT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+REPORT_SPEC = importlib.util.spec_from_file_location(
+    "picsee_poll_report", Path(__file__).with_name("poll-report.py")
+)
+REPORT_POLL = importlib.util.module_from_spec(REPORT_SPEC)
+REPORT_SPEC.loader.exec_module(REPORT_POLL)
 _THREAD_LOCKS = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
 
@@ -66,8 +72,16 @@ def _validate_config(config):
     poll = config["poll"]
     if not isinstance(poll, list) or not poll or not all(isinstance(item, str) for item in poll):
         raise ValueError("poll must be a non-empty argv list")
-    if Path(poll[0]).name == "poll-report.py" and config.get("handoff_marker") != config["task"]:
-        raise ValueError("report polling requires handoff_marker equal to task identity")
+    if Path(poll[0]).name == "poll-report.py":
+        task, marker = config["task"], config.get("handoff_marker")
+        if (not isinstance(task, str) or not task.strip() or "\n" in task or "\r" in task
+                or not isinstance(marker, str) or not marker.strip()
+                or "\n" in marker or "\r" in marker):
+            raise ValueError("report polling requires non-empty, single-line task and handoff_marker")
+        if marker != task or len(poll) < 8 or poll[4] != task:
+            raise ValueError("report polling requires handoff_marker and poll identity equal to task")
+        if poll[1] != config["agent"] or Path(poll[2]) != handoff:
+            raise ValueError("report polling requires the poll agent and report path to match config")
     attempts = config.get("max_delivery_attempts", 5)
     backoff = config.get("initial_backoff_seconds", 5)
     if not isinstance(attempts, int) or attempts < 1 or attempts > 10:
@@ -119,6 +133,8 @@ def register_event(event_dir, config):
 
 def _handoff_evidence(config):
     handoff = Path(config["handoff"])
+    if Path(config["poll"][0]).name == "poll-report.py":
+        return REPORT_POLL.report_evidence(handoff, config["created_at"], config["task"])
     if not handoff.exists():
         return "missing"
     marker = config.get("handoff_marker")
@@ -430,6 +446,11 @@ def _config_from_args(args):
         if args.handoff_marker:
             poll.append(args.handoff_marker)
     else:
+        if (not isinstance(args.task, str) or not args.task.strip()
+                or not isinstance(args.handoff_marker, str) or not args.handoff_marker.strip()
+                or "\n" in args.task or "\r" in args.task
+                or "\n" in args.handoff_marker or "\r" in args.handoff_marker):
+            raise ValueError("report polling requires non-empty, single-line --task and --handoff-marker")
         if args.handoff_marker != args.task:
             raise ValueError("report polling requires --handoff-marker equal to --task")
         config_path = str(args.state_root.expanduser().resolve() / args.event / "config.json")
@@ -462,9 +483,9 @@ def main(argv=None):
             print(type(error).__name__ + ": " + str(error), file=sys.stderr, flush=True)
             return 1
         return 0
-    config = _config_from_args(args)
-    event_dir = args.state_root.expanduser().resolve() / args.event
     try:
+        config = _config_from_args(args)
+        event_dir = args.state_root.expanduser().resolve() / args.event
         result = start_listener(event_dir, config)
     except (EventIdentityError, ValueError) as error:
         print(type(error).__name__ + ": " + str(error), file=sys.stderr)

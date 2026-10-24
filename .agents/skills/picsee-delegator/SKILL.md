@@ -55,7 +55,9 @@ Low only. Never touch mdpro or its tmux `dtrack`.
 3. **Watch** — mandatory after every dispatch and rearm for every fix/audit round: attach
    `$SK/scripts/listen-notify.py start` with the literal delegator thread UUID, agent, fresh event/round ID and
    expected handoff/report path. Use `--poll report` for Codex tasks with a unique report: set `--task` and
-   `--handoff-marker` to the same round ID and require that ID in the report. This uses report freshness and
+   `--handoff-marker` to the same non-empty round ID. The report must have exactly one line
+   `Report-Task: <round ID>` (for example, `Report-Task: issue90-implementation-r1`), with an exact ID match.
+   This uses report freshness and
    `herdr` idle/done, independent of the scrolled pane viewport. Never infer the target from cached herdr state.
    See [the listener procedure](references/guide.md#durable-listener-notification). Scope stops → approve minimal hunks in an amendment file.
    Fixture-only test mistakes → approve. Network hang → `herdr pane send-keys <pane> Escape`, then "resume…".
