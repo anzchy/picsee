@@ -10,13 +10,14 @@ public actor FolderBrowser: FolderScanning {
     public func scan(in folder: URL, root: ItemIdentityRoot, options: FolderScanOptions,
         emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
         try Task.checkCancellation()
-        guard AccessBoundary.contains(folder, in: root.url) else { throw FileAccessError.outsideRoot }
+        let canonicalFolder = folder.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        guard AccessBoundary.contains(canonicalFolder, in: root.url) else { throw FileAccessError.outsideRoot }
         var batch: [FolderEntry] = []
         var limit = Self.firstBatchSize
         var admittedImages = 0
         var visitedEntries = 0
-        var directories: [(url: URL, depth: Int)] = [(folder, 0)]
-        var seenDirectories: Set<URL> = [folder.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL]
+        var directories: [(url: URL, depth: Int)] = [(canonicalFolder, 0)]
+        var seenDirectories: Set<URL> = [canonicalFolder]
         var seenImages: Set<ItemID> = []
         while let directory = directories.popLast() {
             try Task.checkCancellation()
@@ -33,8 +34,8 @@ public actor FolderBrowser: FolderScanning {
                 }
                 visitedEntries += 1
                 // Canonical boundary comes before resource lookup, including aliases and symlinks.
-                guard AccessBoundary.contains(file, in: root.url) else { continue }
                 let target = file.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+                guard AccessBoundary.contains(target, in: root.url) else { continue }
                 let values = try target.resourceValues(forKeys: [
                     .isRegularFileKey, .isDirectoryKey, .isPackageKey, .contentTypeKey,
                     .contentModificationDateKey, .fileSizeKey])
@@ -46,7 +47,7 @@ public actor FolderBrowser: FolderScanning {
                         throw FolderScanLimitError.depthLimit(limit: options.maxDepth, admittedImages: admittedImages)
                     }
                     _ = seenDirectories.insert(target)
-                    directories.append((file, nextDepth))
+                    directories.append((target, nextDepth))
                     continue
                 }
                 guard values.isRegularFile == true, values.contentType?.conforms(to: .image) == true else { continue }
