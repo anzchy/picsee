@@ -124,6 +124,10 @@ public final class ViewerStateHost: NSView {
             [progress, subtitle, cancel].forEach { addSubview($0) }
             buttons = [cancel]; setAccessibilityChildren([progress, subtitle, cancel])
             return
+        case .noMatches:
+            textLines = [String(localized: "No Images Match This Filter"),
+                         String(localized: "Choose another extension or clear the filter.")]
+            actions = [(String(localized: "Clear Filter"), "state.clear-filter")]
         case .failed(let kind, let name):
             failure = true
             textLines = [String(localized: "Unable to read this image"), name,
@@ -303,6 +307,11 @@ public final class ViewerStateHost: NSView {
         switch sender.identifier?.rawValue {
         case "state.cancel": session.cancelImageOpening(); refresh()
         case "state.cancel-folder": session.cancelFolderReading(); refresh()
+        case "state.clear-filter":
+            var conditions = session.folderConditions
+            conditions.selectedExtensions = nil
+            session.setFolderConditions(conditions)
+            refresh()
         case "state.retry": onRetry?()
         case "state.next": CommandRouter().route(.next, from: .button, to: session)
         default: CommandRouter().route(.open, from: .button, to: session)

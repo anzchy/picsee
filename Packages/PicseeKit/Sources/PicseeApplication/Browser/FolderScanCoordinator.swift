@@ -5,6 +5,20 @@ import PicseeCore
 /// One scan owner per window. The scanning task retains its lease until enumeration really exits.
 @MainActor @Observable public final class FolderScanCoordinator {
     public private(set) var snapshot: FolderSnapshot?
+    public private(set) var sourceSnapshot: FolderSnapshot?
+    public private(set) var conditions = FolderViewConditions()
+    public private(set) var loopEnabled = false
+    public var hasNoMatches: Bool {
+        sourceSnapshot?.entries.isEmpty == false && snapshot?.entries.isEmpty == true
+    }
+    public var availableExtensions: [String] {
+        Array(Set(sourceSnapshot?.entries.map(\.normalizedExtension) ?? [])).sorted()
+    }
+    public func setConditions(_ value: FolderViewConditions) {
+        conditions = value
+        projectSource()
+    }
+    public func setLoopEnabled(_ value: Bool) { loopEnabled = value }
     public private(set) var generation: UInt64 = 0
     public private(set) var isReadingFolder = false
     public private(set) var failure: (any Error)?
@@ -18,6 +32,7 @@ import PicseeCore
     private let scanner: any FolderScanning
     private let trace: (any FolderScanTracing)?
     private var firstBatchTraced = false
+    private var noMatchesPresented = false
     private var scanTask: Task<Void, any Error>?
     private var activeGeneration: UInt64?
     private var activeFolder: (url: URL, rootID: AccessRootID)?
@@ -27,6 +42,7 @@ import PicseeCore
     @discardableResult public func begin(folder: URL, rootID: AccessRootID, input: URL? = nil,
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool = { true }) -> Task<Void, any Error> {
         stop(.replaced)
+        conditions = FolderViewConditions()
         generation &+= 1
         let token = generation
         activeGeneration = token
@@ -43,11 +59,13 @@ import PicseeCore
                 try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: input,
                     access: access, scanner: scanner, ready: { [self] version, itemID in
                         guard activeGeneration == token, !Task.isCancelled else { return }
-                        snapshot = FolderSnapshot(version: version, entries: [], isComplete: false)
+                        sourceSnapshot = FolderSnapshot(version: version, entries: [], isComplete: false)
+                        snapshot = sourceSnapshot?.applying(conditions)
                         currentItemID = itemID
                     }, emit: { [self] batch in
-                        guard activeGeneration == token, !Task.isCancelled, retainReadingAuthority(), let snapshot else { return }
-                        self.snapshot = snapshot.appending(batch, isComplete: false)
+                        guard activeGeneration == token, !Task.isCancelled, retainReadingAuthority(), let sourceSnapshot else { return }
+                        self.sourceSnapshot = sourceSnapshot.appending(batch, isComplete: false)
+                        projectSource()
                         if !batch.isEmpty, !firstBatchTraced {
                             firstBatchTraced = true
                             trace?.firstBatch(count: batch.count, generation: token)
@@ -55,13 +73,15 @@ import PicseeCore
                         advancePending()
                     })
                 try Task.checkCancellation()
-                guard activeGeneration == token, retainReadingAuthority(), let completed = snapshot else { return }
+                guard activeGeneration == token, retainReadingAuthority(), let completed = sourceSnapshot else { return }
                 let showEmpty = input == nil && completed.entries.isEmpty && automaticPresentationAllowed?() != false
-                let first = input == nil ? completed.entries.first : nil
-                snapshot = completed.appending([], isComplete: true)
+                sourceSnapshot = completed.appending([], isComplete: true)
+                projectSource()
+                let first = input == nil ? snapshot?.entries.first : nil
                 pendingDirection = nil
                 isReadingFolder = false
                 scanTask = nil
+                presentNoMatchesIfNeeded()
                 if let first, automaticPresentationAllowed?() != false {
                     currentItemID = first.itemID; currentURL = first.url
                     try await host?.rememberFolder(folder, rootID: rootID)
@@ -91,7 +111,8 @@ import PicseeCore
                     trace?.end(outcome: .cancelled, generation: token)
                     return
                 }
-                snapshot = snapshot?.appending([], isComplete: true)
+                sourceSnapshot = sourceSnapshot?.appending([], isComplete: true)
+                snapshot = sourceSnapshot?.applying(conditions)
                 pendingDirection = nil
                 failure = error
                 trace?.end(outcome: .failed, generation: token)
@@ -114,6 +135,42 @@ import PicseeCore
     }
     public func cancel() { end() }
     public func end() { stop(.cancelled) }
+    private func projectSource() {
+        guard let sourceSnapshot else { return }
+        snapshot = sourceSnapshot.applying(conditions)
+        guard let snapshot, !isReadingFolder, automaticPresentationAllowed?() != false else { return }
+        if snapshot.entries.isEmpty {
+            presentNoMatchesIfNeeded()
+            return
+        }
+        noMatchesPresented = false
+        if let currentItemID, let index = snapshot.navigationIndex(for: currentItemID) {
+            let visibleURL = currentURL?.standardizedFileURL
+            if snapshot.entries.contains(where: {
+                $0.itemID == currentItemID && $0.url.standardizedFileURL == visibleURL
+            }) { return }
+            // Aliases can share identity while exposing different extensions. Use an eligible URL.
+            let replacement = snapshot.navigationEntries[index]
+            currentURL = replacement.url
+            host?.openFolderImage(replacement.url, rootID: snapshot.version.rootID)
+            return
+        }
+        // An eligible explicit input may still be in a later batch. An excluded input cannot remain visible.
+        let inputMayBeEligible = conditions.selectedExtensions?.contains {
+            $0.caseInsensitiveCompare(currentURL?.pathExtension ?? "") == .orderedSame
+        } ?? true
+        if let currentItemID, sourceSnapshot.navigationIndex(for: currentItemID) == nil,
+           inputMayBeEligible { return }
+        guard let first = snapshot.navigationEntries.first else { return }
+        currentItemID = first.itemID; currentURL = first.url
+        host?.openFolderImage(first.url, rootID: snapshot.version.rootID)
+    }
+    private func presentNoMatchesIfNeeded() {
+        guard hasNoMatches, !noMatchesPresented else { return }
+        noMatchesPresented = true
+        currentItemID = nil; currentURL = nil; pendingDirection = nil
+        host?.clearFolderImageForNoMatches()
+    }
     private func retainReadingAuthority() -> Bool {
         guard isReadingFolder, automaticPresentationAllowed?() == false else { return true }
         stop(.replaced)
@@ -126,6 +183,7 @@ import PicseeCore
         scanTask?.cancel()
         scanTask = nil
         snapshot = nil
+        sourceSnapshot = nil
         inputURL = nil
         currentItemID = nil
         currentURL = nil
@@ -133,6 +191,7 @@ import PicseeCore
         automaticPresentationAllowed = nil
         isReadingFolder = false
         failure = nil
+        noMatchesPresented = false
         if let ending { trace?.end(outcome: outcome, generation: ending) }
     }
     /// Explicitly nonisolated: path canonicalization and scanning begin only inside the acquired lease.
