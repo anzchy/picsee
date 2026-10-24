@@ -49,3 +49,73 @@ import PicseeCore
     #expect(sqlite3_step(statement) == SQLITE_ROW)
     #expect(sqlite3_column_int(statement, 0) == 0)
 }
+
+@Test func p304AuditStoreAndTouchShareOneRecencyOrder() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<3 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await seed.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    try await seed.store(images[0], for: tickets[0])
+    let bytes = try Data(contentsOf: cacheDirectory.appendingPathComponent(tickets[0].key.filename + ".png")).count
+    let limited = ThumbnailDiskCache(directory: cacheDirectory,
+                                     highWaterBytes: 2 * bytes + 1, lowWaterBytes: 2 * bytes)
+    for _ in 0..<20 {
+        #expect(try await limited.load(tickets[0]).map { _ in true } == true)
+    }
+    try await limited.store(images[1], for: tickets[1])
+    try await limited.store(images[2], for: tickets[2])
+    #expect(!FileManager.default.fileExists(atPath: cacheDirectory.appendingPathComponent(tickets[0].key.filename + ".png").path))
+    #expect(try await limited.load(tickets[1]).map { _ in true } == true)
+    #expect(try await limited.load(tickets[2]).map { _ in true } == true)
+}
+
+@Test func p304AuditMissingPayloadRowsConvergeWithoutEvictingLiveImages() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<4 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await seed.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    for index in 0..<3 { try await seed.store(images[index], for: tickets[index]) }
+    let payload = cacheDirectory.appendingPathComponent(tickets[0].key.filename + ".png")
+    let bytes = try Data(contentsOf: payload).count
+    for index in 0..<2 {
+        try FileManager.default.removeItem(at: cacheDirectory.appendingPathComponent(tickets[index].key.filename + ".png"))
+    }
+    let limited = ThumbnailDiskCache(directory: cacheDirectory,
+                                     highWaterBytes: 3 * bytes, lowWaterBytes: 2 * bytes)
+    try await limited.store(images[3], for: tickets[3])
+    #expect(try await limited.load(tickets[2]).map { _ in true } == true)
+    #expect(try await limited.load(tickets[3]).map { _ in true } == true)
+    var db: OpaquePointer?
+    let index = cacheDirectory.appendingPathComponent("index.sqlite3")
+    #expect(sqlite3_open_v2(index.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK)
+    defer { if let db { sqlite3_close(db) } }
+    var statement: OpaquePointer?
+    #expect(sqlite3_prepare_v2(db, "SELECT count(*) FROM thumbnails", -1, &statement, nil) == SQLITE_OK)
+    defer { sqlite3_finalize(statement) }
+    #expect(sqlite3_step(statement) == SQLITE_ROW)
+    #expect(sqlite3_column_int(statement, 0) == 2)
+}

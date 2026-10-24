@@ -336,7 +336,12 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             guard PayloadLeaseRegistry.shared.beginDeletion(payload.path) else { continue }
             defer { PayloadLeaseRegistry.shared.endDeletion(payload.path) }
             do { try FileManager.default.removeItem(at: payload) }
-            catch { continue }
+            catch {
+                let failure = error as NSError
+                let missing = (failure.domain == NSCocoaErrorDomain && failure.code == CocoaError.fileNoSuchFile.rawValue)
+                    || (failure.domain == NSPOSIXErrorDomain && failure.code == Int(ENOENT))
+                guard missing else { continue }
+            }
             if deleteIndexRow(row.key, using: db) { total -= row.bytes }
         }
     }
@@ -388,7 +393,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         // Older re-creatable indexes lack this column. Their version-1 rows remain misses.
         _ = sqlite3_exec(db, "ALTER TABLE thumbnails ADD COLUMN row_sha256 TEXT", nil, nil, nil)
         var statement: OpaquePointer?
-        let sql = "INSERT OR REPLACE INTO thumbnails (key,item_id,source_sha256,payload,byte_count,payload_sha256,last_access,cache_version,source_width,source_height,row_sha256) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        let sql = "INSERT OR REPLACE INTO thumbnails (key,item_id,source_sha256,payload,byte_count,payload_sha256,last_access,cache_version,source_width,source_height,row_sha256) VALUES (?,?,?,?,?, ?, (SELECT COALESCE(MAX(last_access),0)+1 FROM thumbnails), ?,?,?,?)"
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw ThumbnailStoreError.database }
         defer { sqlite3_finalize(statement) }
         bind(ticket.key.filename, to: statement, at: 1)
@@ -397,13 +402,12 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         bind(payloadPath, to: statement, at: 4)
         sqlite3_bind_int(statement, 5, Int32(payloadBytes))
         bind(payloadSHA256, to: statement, at: 6)
-        sqlite3_bind_double(statement, 7, Date().timeIntervalSince1970)
-        sqlite3_bind_int(statement, 8, Int32(Self.cacheVersion))
-        sqlite3_bind_int(statement, 9, Int32(sourceWidth))
-        sqlite3_bind_int(statement, 10, Int32(sourceHeight))
+        sqlite3_bind_int(statement, 7, Int32(Self.cacheVersion))
+        sqlite3_bind_int(statement, 8, Int32(sourceWidth))
+        sqlite3_bind_int(statement, 9, Int32(sourceHeight))
         bind(rowChecksum(key: ticket.key.filename, item: ticket.request.renderKey!.itemID.stableEncoding,
             source: ticket.sourceSHA256, path: payloadPath, byteCount: payloadBytes,
-            payloadSHA256: payloadSHA256, width: sourceWidth, height: sourceHeight), to: statement, at: 11)
+            payloadSHA256: payloadSHA256, width: sourceWidth, height: sourceHeight), to: statement, at: 10)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw ThumbnailStoreError.database }
         sqlite3_finalize(statement)
         statement = nil
