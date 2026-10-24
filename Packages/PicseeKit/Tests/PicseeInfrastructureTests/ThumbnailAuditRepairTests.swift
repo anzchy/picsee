@@ -228,3 +228,34 @@ private actor P304AuditGate {
     let warm = try await ThumbnailDiskCache(directory: cacheDirectory).load(ticket)
     #expect(try warm.map { try rgba($0.image) } == expected)
 }
+
+@Test func p304AuditRecencyOrderPersistsAcrossCacheActors() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<3 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await seed.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    try await seed.store(images[0], for: tickets[0])
+    let bytes = try Data(contentsOf: cacheDirectory.appendingPathComponent(tickets[0].key.filename + ".png")).count
+    let reader = ThumbnailDiskCache(directory: cacheDirectory)
+    for _ in 0..<5 { #expect(try await reader.load(tickets[0]).map { _ in true } == true) }
+    let writer = ThumbnailDiskCache(directory: cacheDirectory,
+                                    highWaterBytes: 2 * bytes + 1, lowWaterBytes: 2 * bytes)
+    try await writer.store(images[1], for: tickets[1])
+    try await writer.store(images[2], for: tickets[2])
+    let reopened = ThumbnailDiskCache(directory: cacheDirectory)
+    #expect(try await reopened.load(tickets[0]).map { _ in true } == nil)
+    #expect(try await reopened.load(tickets[1]).map { _ in true } == true)
+    #expect(try await reopened.load(tickets[2]).map { _ in true } == true)
+}
