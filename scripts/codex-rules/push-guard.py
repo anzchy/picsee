@@ -22,7 +22,7 @@ def main():
     try:
         worktree = Path(git('rev-parse', '--show-toplevel')).resolve()
         branch = git('symbolic-ref', '--quiet', '--short', 'HEAD')
-        remote = git('remote', 'get-url', '--push', 'origin')
+        push_urls = git('remote', 'get-url', '--push', '--all', 'origin').splitlines()
     except subprocess.CalledProcessError as error:
         parser.error(f'cannot identify worktree, branch or origin: {error}')
     if worktree != script_root:
@@ -32,8 +32,8 @@ def main():
         parser.error('only the explicitly provisioned delegator worktree may push')
     if branch in ('main', 'HEAD') or branch.startswith('-'):
         parser.error('push only the current topic branch, never main or a detached HEAD')
-    if remote not in ('https://github.com/anzchy/picsee.git', 'git@github.com:anzchy/picsee.git'):
-        parser.error('origin push URL is not anzchy/picsee')
+    if len(push_urls) != 1 or push_urls[0] not in ('https://github.com/anzchy/picsee.git', 'git@github.com:anzchy/picsee.git'):
+        parser.error('origin must have exactly one anzchy/picsee push URL')
 
     ref = f'refs/heads/{branch}'
     command = ['git', 'push']
@@ -43,7 +43,7 @@ def main():
         if not re.fullmatch(r'(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})', args.expected_remote_oid):
             parser.error('expected remote OID must be a full 40- or 64-digit hex value')
         command.append(f'--force-with-lease={ref}:{args.expected_remote_oid.lower()}')
-    command.extend(['-u', 'origin', f'HEAD:{ref}'])
+    command.extend([push_urls[0], f'HEAD:{ref}'])
     return subprocess.run(command, check=False).returncode
 
 

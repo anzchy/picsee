@@ -4,8 +4,10 @@
 agent role or an option after the remote. Direct `git push` is therefore forbidden in all
 roles: a third-token-only force ban misses `git push origin --force`. The appointed delegator
 uses `python3 scripts/codex-rules/push-guard.py` instead. This checked entry point accepts
-only the current topic branch and the project's `origin`, with an optional exact lease OID
-for an authorized rebase push. It never accepts arbitrary Git options or refspecs.
+only the current topic branch and exactly one approved `origin` push URL, with an optional
+exact lease OID for an authorized rebase push. It passes that validated URL directly to
+Git, so extra remote push URLs cannot become extra destinations. It never accepts
+arbitrary Git options or refspecs.
 
 The local ignored `picsee-role.rules` adds PR bans for implementors and auditors. Their
 push-guard calls fail its own role check. The delegator overlay declares its role; it cannot
