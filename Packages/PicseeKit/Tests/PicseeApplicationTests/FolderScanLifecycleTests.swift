@@ -45,6 +45,7 @@ actor FolderScanControlledScanner: FolderScanning {
     struct Call: Sendable {
         let folder: URL
         let root: ItemIdentityRoot
+        let options: FolderScanOptions
     }
     private enum Event: Sendable {
         case batch([String], CheckedContinuation<Void, any Error>)
@@ -58,7 +59,7 @@ actor FolderScanControlledScanner: FolderScanning {
     func scan(in folder: URL, root: ItemIdentityRoot,
               options: FolderScanOptions, emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
         let index = calls.count
-        calls.append(Call(folder: folder, root: root)); events.append([])
+        calls.append(Call(folder: folder, root: root, options: options)); events.append([])
         let ready = waiters.filter { calls.count > $0.0 }
         waiters.removeAll { calls.count > $0.0 }
         ready.forEach { $0.1.resume() }
@@ -87,6 +88,7 @@ actor FolderScanControlledScanner: FolderScanning {
         await withCheckedContinuation { waiters.append((index, $0)) }
     }
     func root(at index: Int) -> ItemIdentityRoot { calls[index].root }
+    func options(at index: Int) -> FolderScanOptions { calls[index].options }
     func deliver(_ names: [String], at index: Int = 0) async throws {
         try await withCheckedThrowingContinuation { send(.batch(names, $0), at: index) }
     }

@@ -1988,6 +1988,48 @@
         }
       }
     },
+    "Include Subfolders": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Include Subfolders" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "包含子文件夹" } }
+      }
+    },
+    "Images: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Images: %lld" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "图片：%lld 张" } }
+      }
+    },
+    "Images found before scan stopped: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Images found before scan stopped: %lld" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "扫描停止前找到图片：%lld 张" } }
+      }
+    },
+    "Scan limit reached": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Scan limit reached" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已达到扫描上限" } }
+      }
+    },
+    "Folder access denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Folder access denied" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "文件夹访问被拒绝" } }
+      }
+    },
+    "Unable to finish reading folder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Unable to finish reading folder" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法完成文件夹读取" } }
+      }
+    },
     "Loop Through Folder": {
       "extractionState": "manual",
       "localizations": {

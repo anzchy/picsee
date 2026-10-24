@@ -742,6 +742,7 @@ extension CanvasWindowController: FolderScanHost {
         refreshRecents()
     }
     func showEmptyFolder() { showAccessMessage(String(localized: "No Images in This Folder")) }
+    func folderScanDidComplete(count: Int) { chromeOverlay.refresh(session: session) }
 
     /// Untested native os adapter; structured lifecycle is covered at the Application trace port.
     @MainActor private final class NativeFolderScanTrace: FolderScanTracing {

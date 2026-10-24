@@ -128,6 +128,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         view.addItem(extensionItem)
         folderSubmenuItems.append(extensionItem)
         addFolderItem(.loop, to: view)
+        addFolderItem(.recursive, to: view)
         view.addItem(.separator())
         let fullScreen = view.addItem(withTitle: String(localized: "Enter Full Screen"),
             action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
@@ -194,16 +195,18 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         guard let action = item.representedObject as? FolderMenuAction,
               let session = (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session,
               session.hasFolderSource, session.filePreviewSet == nil, session.previewSet == nil else { return }
-        let selection = FolderMenuSelection(conditions: session.folderConditions, loopEnabled: session.folderLoopEnabled)
+        let selection = FolderMenuSelection(conditions: session.folderConditions, loopEnabled: session.folderLoopEnabled,
+            recursiveEnabled: session.folderRecursiveEnabled)
         let changed = FolderMenuPolicy.applying(action, to: selection)
         session.setFolderConditions(changed.conditions)
         session.setFolderLoopEnabled(changed.loopEnabled)
+        session.setFolderRecursiveEnabled(changed.recursiveEnabled)
     }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if let action = item.representedObject as? FolderMenuAction {
             let session = (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session
             let selection = FolderMenuSelection(conditions: session?.folderConditions ?? .init(),
-                loopEnabled: session?.folderLoopEnabled ?? false)
+                loopEnabled: session?.folderLoopEnabled ?? false, recursiveEnabled: session?.folderRecursiveEnabled ?? false)
             let state = FolderMenuPolicy.state(for: action, selection: selection,
                 hasFolderSource: session?.hasFolderSource == true,
                 previewActive: session?.filePreviewSet != nil || session?.previewSet != nil)

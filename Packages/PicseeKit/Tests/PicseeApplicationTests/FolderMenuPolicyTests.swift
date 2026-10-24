@@ -82,3 +82,17 @@ import PicseeCore
     let expanded = FolderMenuPolicy.applying(.extensionType("PNG"), to: selected)
     #expect(expanded.conditions.selectedExtensions == ["jpg", "png"])
 }
+
+@Test func folderMenuPolicyRecursiveToggleIsSessionScopedAndHasNoShortcutID() {
+    let original = FolderMenuSelection(conditions: .init(), loopEnabled: false)
+    #expect(FolderMenuAction.recursive.accessibilityIdentifier == "folder.recursive.menu")
+    #expect(FolderMenuAction.recursive.titleKey == "Include Subfolders")
+    #expect(!FolderMenuPolicy.state(for: .recursive, selection: original,
+        hasFolderSource: false, previewActive: false).enabled)
+    let enabled = FolderMenuPolicy.applying(.recursive, to: original)
+    #expect(enabled.recursiveEnabled)
+    #expect(!original.recursiveEnabled)
+    #expect(FolderMenuPolicy.state(for: .recursive, selection: enabled,
+        hasFolderSource: true, previewActive: false) == .init(enabled: true, checked: true))
+    #expect(FolderMenuPolicy.applying(.recursive, to: enabled) == original)
+}
