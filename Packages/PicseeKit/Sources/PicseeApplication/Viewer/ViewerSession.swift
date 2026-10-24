@@ -9,6 +9,8 @@ import PicseeCore
     func requestOpen()
     func applyFocus(_ focus: FocusContext)
     func showInspector(_ visible: Bool)
+    func presentGridItem(_ id: ItemID)
+    func returnToGrid()
 }
 
 public enum ViewerMode: Sendable { case browsing, viewing }
@@ -88,6 +90,13 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         previewSet = nil
         self.scrollAnchor = scrollAnchor
         updateItems(items, sourceVersion: sourceVersion)
+    }
+    public func leaveBrowsing() {
+        mode = .viewing
+        previewSet = nil
+        selection = BrowserSelection()
+        scrollAnchor = nil
+        orderedItemIDs = []
     }
     /// Caller reports authoritative available IDs; filtered-out items alone are not deletions.
     public func updateItems(_ items: [ItemID], sourceVersion: PreviewSourceVersion) {
@@ -190,6 +199,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
                 scrollAnchor = origin.scrollAnchor
                 previewSet = nil
                 mode = .browsing
+                host?.returnToGrid()
             }
         } else if command == .preview || command == .enter {
             previewSet = PreviewSet(items: orderedItemIDs, sourceVersion: sourceVersion,
@@ -197,12 +207,15 @@ public enum ViewerMode: Sendable { case browsing, viewing }
             mode = .viewing
             updateFocus(.canvas)
             host?.applyFocus(.canvas)
+            if let id = previewSet?.currentItemID { host?.presentGridItem(id) }
         } else if command == .next || command == .previous {
             inputNavigationIntent.invalidate()
             if filePreviewSet != nil {
                 moveInputFile(forward: command == .next)
             } else if previewSet != nil {
+                let previous = previewSet?.currentItemID
                 previewSet?.move(forward: command == .next)
+                if let id = previewSet?.currentItemID, id != previous { host?.presentGridItem(id) }
             } else if mode == .viewing,
                       folderScan?.move(command == .next ? .next : .previous, currentURL: imageLoader.fileURL) == true {
             } else {

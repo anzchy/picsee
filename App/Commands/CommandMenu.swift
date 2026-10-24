@@ -6,6 +6,8 @@ import PicseeMacUI
 extension CommandID {
     var menuTitle: String {
         switch self {
+        case .preview: String(localized: "Preview Selected Image")
+        case .enter: String(localized: "Open Selected Image")
         case .previous: String(localized: "Previous Image")
         case .next: String(localized: "Next Image")
         case .fit: String(localized: "Fit")

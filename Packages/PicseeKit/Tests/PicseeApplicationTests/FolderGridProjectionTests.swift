@@ -27,3 +27,24 @@ import PicseeApplication
     #expect(grid.selectedItemID == nil)
     #expect(grid.scrollAnchor == a.itemID)
 }
+
+@Test @MainActor func gridProjectionDropsOldFolderIdentityOnRootChange() {
+    let firstRoot = AccessRootID(rawValue: UUID())
+    let secondRoot = AccessRootID(rawValue: UUID())
+    let firstFolder = URL(fileURLWithPath: "/tmp/picsee-grid-first")
+    let secondFolder = URL(fileURLWithPath: "/tmp/picsee-grid-second")
+    let first = FolderEntry(url: firstFolder.appendingPathComponent("shared.jpg"),
+        root: .init(id: firstRoot, url: firstFolder))
+    let second = FolderEntry(url: secondFolder.appendingPathComponent("shared.jpg"),
+        root: .init(id: secondRoot, url: secondFolder))
+    let grid = FolderGridProjection()
+    #expect(grid.apply(.init(version: .init(rootID: firstRoot, folder: firstFolder, generation: 9),
+        entries: [first], isComplete: true)))
+    grid.select(first.itemID)
+    grid.setScrollAnchor(first.itemID)
+    #expect(grid.apply(.init(version: .init(rootID: secondRoot, folder: secondFolder, generation: 1),
+        entries: [second], isComplete: true)))
+    #expect(grid.selectedItemID == nil)
+    #expect(grid.scrollAnchor == nil)
+    #expect(grid.entry(for: first.itemID) == nil)
+}
