@@ -7,6 +7,7 @@ public enum FolderMenuAction: Equatable, Sendable {
     case extensionType(String)
     case clearFilter
     case loop
+    case recursive
 
     public var accessibilityIdentifier: String {
         switch self {
@@ -15,6 +16,7 @@ public enum FolderMenuAction: Equatable, Sendable {
         case .extensionType(let value): value.isEmpty ? "folder.extension.none.menu" : "folder.extension.\(value.lowercased()).menu"
         case .clearFilter: "folder.extension.all.menu"
         case .loop: "folder.loop.menu"
+        case .recursive: "folder.recursive.menu"
         }
     }
     public var titleKey: String {
@@ -28,6 +30,7 @@ public enum FolderMenuAction: Equatable, Sendable {
         case .extensionType(let value): value.isEmpty ? "No Extension" : value.uppercased()
         case .clearFilter: "All Extensions"
         case .loop: "Loop Through Folder"
+        case .recursive: "Include Subfolders"
         }
     }
 }
@@ -35,9 +38,11 @@ public enum FolderMenuAction: Equatable, Sendable {
 public struct FolderMenuSelection: Equatable, Sendable {
     public var conditions: FolderViewConditions
     public var loopEnabled: Bool
-    public init(conditions: FolderViewConditions, loopEnabled: Bool) {
+    public var recursiveEnabled: Bool
+    public init(conditions: FolderViewConditions, loopEnabled: Bool, recursiveEnabled: Bool = false) {
         self.conditions = conditions
         self.loopEnabled = loopEnabled
+        self.recursiveEnabled = recursiveEnabled
     }
 }
 
@@ -67,6 +72,7 @@ public enum FolderMenuPolicy {
             checked = selection.conditions.selectedExtensions?.contains(where: { $0.lowercased() == value.lowercased() }) == true
         case .clearFilter: checked = selection.conditions.selectedExtensions == nil
         case .loop: checked = selection.loopEnabled
+        case .recursive: checked = selection.recursiveEnabled
         }
         return .init(enabled: active, checked: active && checked)
     }
@@ -84,6 +90,7 @@ public enum FolderMenuPolicy {
             } else { result.conditions.selectedExtensions = [normalized] }
         case .clearFilter: result.conditions.selectedExtensions = nil
         case .loop: result.loopEnabled.toggle()
+        case .recursive: result.recursiveEnabled.toggle()
         }
         return result
     }

@@ -17,6 +17,7 @@ struct FolderScanRestorePoint {
     public private(set) var sourceSnapshot: FolderSnapshot?
     public private(set) var conditions = FolderViewConditions()
     public private(set) var loopEnabled = false
+    public private(set) var recursiveEnabled = false
     public var hasNoMatches: Bool {
         sourceSnapshot?.entries.isEmpty == false && snapshot?.entries.isEmpty == true
     }
@@ -38,9 +39,41 @@ struct FolderScanRestorePoint {
         projectSource()
     }
     public func setLoopEnabled(_ value: Bool) { loopEnabled = value }
+    @discardableResult public func setRecursiveEnabled(_ value: Bool) -> Task<Void, any Error>? {
+        guard recursiveEnabled != value else { return nil }
+        recursiveEnabled = value
+        guard let folder = activeFolder ?? sourceSnapshot.map({ ($0.version.folder, $0.version.rootID) }),
+            let canPresent = automaticPresentationAllowed else { return nil }
+        let shown = currentURL
+        let staysInFlatFolder = shown?.deletingLastPathComponent().standardizedFileURL == folder.url.standardizedFileURL
+        let retainedInput = value || staysInFlatFolder ? shown : nil
+        return start(folder: folder.url, rootID: folder.rootID, input: retainedInput,
+            canPresent: canPresent, preserveConditions: true)
+    }
     public private(set) var generation: UInt64 = 0
     public private(set) var isReadingFolder = false
     public private(set) var failure: (any Error)?
+    public var completedImageCount: Int? {
+        guard failure == nil, sourceSnapshot?.isComplete == true else { return nil }
+        return sourceSnapshot?.entries.count
+    }
+    public var failureReason: String? {
+        guard let failure else { return nil }
+        if failure is FolderScanLimitError { return "Scan limit reached" }
+        if failure is FileAccessError { return "Folder access denied" }
+        let error = failure as NSError
+        if error.domain == NSCocoaErrorDomain, error.code == NSFileReadNoPermissionError { return "Folder access denied" }
+        if error.domain == NSPOSIXErrorDomain {
+            if error.code == Int(POSIXError.Code.EACCES.rawValue) { return "Folder access denied" }
+            if error.code == Int(POSIXError.Code.EPERM.rawValue) { return "Folder access denied" }
+        }
+        return nil
+    }
+    @discardableResult public func retry() -> Task<Void, any Error>? {
+        guard failure != nil, let activeFolder, let canPresent = automaticPresentationAllowed else { return nil }
+        return start(folder: activeFolder.url, rootID: activeFolder.rootID,
+            canPresent: canPresent, preserveConditions: true)
+    }
     public private(set) var inputURL: URL?
     public internal(set) var currentItemID: ItemID?
     public internal(set) var currentURL: URL?
@@ -61,8 +94,15 @@ struct FolderScanRestorePoint {
     }
     @discardableResult public func begin(folder: URL, rootID: AccessRootID, input: URL? = nil,
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool = { true }) -> Task<Void, any Error> {
+        start(folder: folder, rootID: rootID, input: input, pending: pending, canPresent: canPresent,
+            preserveConditions: false)
+    }
+    @discardableResult private func start(folder: URL, rootID: AccessRootID, input: URL? = nil,
+        pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool,
+        preserveConditions: Bool) -> Task<Void, any Error> {
+        let previousConditions = conditions
         stop(.replaced)
-        conditions = FolderViewConditions()
+        conditions = preserveConditions ? previousConditions : FolderViewConditions()
         generation &+= 1
         let token = generation
         activeGeneration = token
@@ -77,6 +117,7 @@ struct FolderScanRestorePoint {
         let task = Task { [self] in
             do {
                 try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: input,
+                    options: FolderScanOptions(recursive: recursiveEnabled),
                     access: access, scanner: scanner, ready: { [self] version, itemID in
                         guard activeGeneration == token, !Task.isCancelled else { return }
                         sourceSnapshot = FolderSnapshot(version: version, entries: [], isComplete: false)
@@ -127,21 +168,26 @@ struct FolderScanRestorePoint {
                 activeFolder = nil
                 trace?.complete(count: completed.entries.count, generation: token)
                 trace?.end(outcome: .complete, generation: token)
+                host?.folderScanDidComplete(count: completed.entries.count)
                 if showEmpty { host?.showEmptyFolder() }
             } catch {
                 guard activeGeneration == token else { return }
                 if !Task.isCancelled, !retainReadingAuthority() { return }
                 activeGeneration = nil
-                activeFolder = nil
                 isReadingFolder = false
                 scanTask = nil
                 if error is CancellationError || Task.isCancelled {
+                    activeFolder = nil
                     snapshot = nil; inputURL = nil; currentItemID = nil; currentURL = nil; pendingDirection = nil
                     trace?.end(outcome: .cancelled, generation: token)
                     return
                 }
-                sourceSnapshot = sourceSnapshot?.appending([], isComplete: true)
-                snapshot = sourceSnapshot?.applying(conditions)
+                if Self.isRecoverableScanFailure(error) {
+                    snapshot = sourceSnapshot?.applying(conditions)
+                } else {
+                    sourceSnapshot = sourceSnapshot?.appending([], isComplete: true)
+                    snapshot = sourceSnapshot?.applying(conditions)
+                }
                 pendingDirection = nil
                 failure = error
                 trace?.end(outcome: .failed, generation: token)
@@ -150,6 +196,16 @@ struct FolderScanRestorePoint {
         }
         scanTask = task
         return task
+    }
+    private nonisolated static func isRecoverableScanFailure(_ error: any Error) -> Bool {
+        if error is FolderScanLimitError || error is FileAccessError { return true }
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain { return nsError.code == NSFileReadNoPermissionError }
+        if nsError.domain == NSPOSIXErrorDomain {
+            return nsError.code == Int(POSIXError.Code.EACCES.rawValue)
+                || nsError.code == Int(POSIXError.Code.EPERM.rawValue)
+        }
+        return false
     }
     /// Coalesce arrows while the current input has not reached the admitted batches yet.
     public func queueNavigation(_ direction: NavigationDirection, folder: URL, input: URL, rootID: AccessRootID? = nil) -> Bool {
@@ -245,6 +301,7 @@ struct FolderScanRestorePoint {
     }
     /// Explicitly nonisolated: path canonicalization and scanning begin only inside the acquired lease.
     private nonisolated static func scanLeased(folder: URL, rootID: AccessRootID, generation: UInt64, input: URL?,
+        options: FolderScanOptions,
         access: any AccessLeasing, scanner: any FolderScanning,
         ready: @MainActor @Sendable (SnapshotVersion, ItemID?) -> Void,
         emit: @MainActor @Sendable ([FolderEntry]) async throws -> Void) async throws {
@@ -254,7 +311,7 @@ struct FolderScanRestorePoint {
             let itemID = input.flatMap { AccessBoundary.contains($0, in: lease.url) ? FolderEntry(url: $0, root: root).itemID : nil }
             await ready(version, itemID)
             try Task.checkCancellation()
-            try await scanner.scan(in: folder, root: root, options: .init()) { batch in
+            try await scanner.scan(in: folder, root: root, options: options) { batch in
                 try await emit(batch)
             }
         }

@@ -6,10 +6,12 @@ import PicseeCore
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws
     func showEmptyFolder()
     func clearFolderImageForNoMatches()
+    func folderScanDidComplete(count: Int)
 }
 
 extension FolderScanHost {
     public func clearFolderImageForNoMatches() { }
+    public func folderScanDidComplete(count: Int) { }
 }
 
 extension FolderScanCoordinator {
@@ -58,8 +60,10 @@ extension FolderScanCoordinator {
 extension ViewerSession {
     public func endFolderScan() { folderScan?.end() }
     public func cancelFolderReading() { folderScan?.cancel() }
+    public func retryFolderScan() { _ = folderScan?.retry() }
     public var folderConditions: FolderViewConditions { folderScan?.conditions ?? .init() }
     public var folderLoopEnabled: Bool { folderScan?.loopEnabled ?? false }
+    public var folderRecursiveEnabled: Bool { folderScan?.recursiveEnabled ?? false }
     public var folderAvailableExtensions: [String] { folderScan?.availableExtensions ?? [] }
     public var hasFolderSource: Bool { folderScan?.sourceSnapshot != nil }
     public func setFolderConditions(_ conditions: FolderViewConditions) {
@@ -69,5 +73,9 @@ extension ViewerSession {
     public func setFolderLoopEnabled(_ enabled: Bool) {
         guard filePreviewSet == nil, previewSet == nil else { return }
         folderScan?.setLoopEnabled(enabled)
+    }
+    public func setFolderRecursiveEnabled(_ enabled: Bool) {
+        guard filePreviewSet == nil, previewSet == nil else { return }
+        _ = folderScan?.setRecursiveEnabled(enabled)
     }
 }

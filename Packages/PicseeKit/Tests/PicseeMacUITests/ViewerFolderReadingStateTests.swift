@@ -68,7 +68,12 @@ private actor FolderReadingNativeScanner: FolderScanning {
     let catalog = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
     let strings = try #require(catalog["strings"] as? [String: Any])
     for (key, chinese) in [("Reading Folder…", "正在读取文件夹…"),
-        ("Looking for images to browse. Please wait.", "正在查找可浏览的图片，请稍候。"), ("Cancel Reading", "取消读取")] {
+        ("Looking for images to browse. Please wait.", "正在查找可浏览的图片，请稍候。"),
+        ("Cancel Reading", "取消读取"), ("Include Subfolders", "包含子文件夹"),
+        ("Scan limit reached", "已达到扫描上限"), ("Folder access denied", "文件夹访问被拒绝"),
+        ("Unable to finish reading folder", "无法完成文件夹读取"),
+        ("Images: %lld", "图片：%lld 张"),
+        ("Images found before scan stopped: %lld", "扫描停止前找到图片：%lld 张")] {
         let entry = strings[key] as? [String: Any]
         let localizations = entry?["localizations"] as? [String: Any]
         for (language, expected) in [("en", key), ("zh-Hans", chinese)] {
@@ -98,6 +103,31 @@ private struct FolderNoMatchesScanner: FolderScanning {
               options: FolderScanOptions, emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
         try await emit([FolderEntry(url: folder.appendingPathComponent("a.jpg"), root: root)])
     }
+}
+
+@Test @MainActor func viewerCompletedFolderCountUsesActualSnapshot() async throws {
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    let folder = URL(fileURLWithPath: "/native-folder/A")
+    let coordinator = FolderScanCoordinator(access: FolderReadingNativeLeases(), scanner: FolderNoMatchesScanner())
+    scene.session.folderScan = coordinator
+    scene.chrome.refresh(session: scene.session)
+    #expect(scene.chrome.position == nil)
+    try await coordinator.begin(folder: folder, rootID: AccessRootID(), input: folder.appendingPathComponent("a.jpg")).value
+    scene.chrome.refresh(session: scene.session)
+    #expect(scene.chrome.position == "Images: 1")
+}
+
+@Test @MainActor func viewerFolderScanFailureShowsPartialCountAndRetry() throws {
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    scene.state.display(.folderScanFailed("Scan limit reached", 7))
+    #expect(scene.state.showsProgress == false)
+    #expect(scene.state.textLines == ["Unable to finish reading folder", "Scan limit reached",
+        "Images found before scan stopped: 7"])
+    #expect(scene.state.buttons.map { $0.identifier?.rawValue } == ["state.retry-folder"])
+    #expect(scene.state.buttons.first?.title == "Retry")
+    #expect(scene.state.isHidden == false)
 }
 
 @Test @MainActor func viewerNoMatchesClearButtonRestoresEligibleFolderSnapshot() async throws {

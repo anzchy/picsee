@@ -125,6 +125,12 @@ public final class ViewerStateHost: NSView {
             [progress, subtitle, cancel].forEach { addSubview($0) }
             buttons = [cancel]; setAccessibilityChildren([progress, subtitle, cancel])
             return
+        case .folderScanFailed(let reason, let count):
+            failure = true
+            textLines = [String(localized: "Unable to finish reading folder"),
+                String(localized: String.LocalizationValue(reason)),
+                String(format: String(localized: "Images found before scan stopped: %lld"), Int64(count))]
+            actions = [(String(localized: "Retry"), "state.retry-folder")]
         case .noMatches:
             textLines = [String(localized: "No Images Match This Filter"),
                          String(localized: "Choose another extension or clear the filter.")]
@@ -172,7 +178,10 @@ public final class ViewerStateHost: NSView {
     private func composeState(_ status: ViewerImageStatus, actions: [(String, String)]) {
         composedState = status
         let failure: Bool
-        if case .failed = status { failure = true } else { failure = false }
+        switch status {
+        case .failed, .folderScanFailed: failure = true
+        default: failure = false
+        }
         let iconLabel = Self.stateIconLabel(failure: failure)
         let image = NSImageView(image: NSImage(systemSymbolName: failure
             ? "exclamationmark.triangle" : DesignSymbol.folder.name,
@@ -317,6 +326,7 @@ public final class ViewerStateHost: NSView {
             session.setFolderConditions(conditions)
             refresh()
         case "state.retry": onRetry?()
+        case "state.retry-folder": session.retryFolderScan(); refresh()
         case "state.next": CommandRouter().route(.next, from: .button, to: session)
         default: CommandRouter().route(.open, from: .button, to: session)
         }
