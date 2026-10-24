@@ -83,7 +83,10 @@ Queueing a follow-up while a Codex agent works: `send-text`, then `send-keys Tab
 
 ### Status is unreliable for Codex
 
-herdr's `agent_status` often stays `working` (or says `done`) for Codex when it isn't. Use
+herdr's `agent_status` can be stale for Codex. For a Codex task with a unique report, use the report-aware
+listener mode below. It requires both a fresh report carrying this round's task ID and `herdr` idle/done; a scrolled
+pane showing old activity cannot prevent detection. The older screen poller remains available for tasks without a
+report. Run
 `.agents/skills/picsee-delegator/scripts/poll-idle.sh <agent> [interval] [max_min]` in the background. It prints
 `<agent> idle|question <time>`, using these rules:
 
@@ -105,7 +108,8 @@ log. Immediately after every implementation, fix, audit or confirm dispatch, sta
 active delegator Codex thread UUID literally; never derive it from cached `herdr agent_session` data, which has been
 observed to point at a stale, wrong session. The helper uses argv throughout and never types into the desktop UI.
 
-One complete Codex implementation-round command is:
+One complete Codex implementation-round command is (the agent must put `issue90-implementation-r1` in its unique
+report):
 
 ```sh
 python3 .agents/skills/picsee-delegator/scripts/listen-notify.py start \
@@ -114,13 +118,20 @@ python3 .agents/skills/picsee-delegator/scripts/listen-notify.py start \
   --thread '<exact-delegator-thread-uuid>' \
   --agent 'gpt-imple-3' \
   --handoff "$HOME/.picsee/herdr/gpt-imple-3/issue90-handoff.md" \
-  --poll idle \
-  --interval 120 \
+  --handoff-marker 'issue90-implementation-r1' \
+  --poll report \
+  --interval 30 \
+  --idle-grace-seconds 180 \
   --max-minutes 3000
 ```
 
 Use `--poll handoff` for Kimi/Claude and add `--handoff-marker '## Fix round 1'` when a report is appended or
-reused. Every dispatch or rearm gets a new `--event` and matching `--task`; include the round and expected head or
+reused. `--poll idle` remains available where no unique report can be required. Report mode checks the expected
+file's modification time against listener registration and requires its content to include the exact `--task` ID.
+It completes only on fresh report plus idle/done. If idle/done persists without a fresh report for the configured
+grace period, it queues `missing-handoff` for reconciliation. A blocked status queues immediately. Working with
+an old report stays pending until a status change or the bounded deadline. Neither idle nor a report alone means
+acceptance. Every dispatch or rearm gets a new `--event` and matching `--task`; include the round and expected head or
 other unique token. Reusing an event with a different agent, task, target thread, poll argv or report path is rejected.
 
 The start command detaches a new process session, so it survives the parent shell and agent turn. Runtime state is
@@ -132,7 +143,8 @@ hangs inside `herdr`, the listener terminates its private poller process group, 
 until cleanup after either a normal poller exit or a deadline, so a poller cannot leave a same-group child running after
 its result is recorded; failed cleanup records a poll error for inspection. Queue delivery uses finite 30-second
 attempts and bounded exponential backoff. No heavy lock is taken. A nonzero poller exit, timeout, blocker,
-question, or missing/stale report is still queued as **needs inspection** and is never labelled successful or accepted.
+question, `missing-handoff`, or missing/stale report is still queued as **needs inspection** and is never labelled
+successful or accepted.
 
 Inspect `status.json` and `poll-result.json` first. A `queue-receipt.json` proves only that Codex accepted the queued
 message; it is not the delegator's ACK and poll completion is not audit acceptance. Before relying on this mechanism

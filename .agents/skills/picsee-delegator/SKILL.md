@@ -53,8 +53,10 @@ Low only. Never touch mdpro or its tmux `dtrack`.
    `~/.picsee/herdr/<impl>/<item>-brief.md`. Read the code before writing fences. Codex uses `$tdd-guardian-workflow`;
    Kimi needs the hand-written test-first steps. Dispatch: `herdr agent prompt <impl> 'New task: … Read and follow <brief>…'`.
 3. **Watch** — mandatory after every dispatch and rearm for every fix/audit round: attach
-   `$SK/scripts/listen-notify.py start` to the applicable shipped poller, with the literal delegator thread UUID,
-   agent, fresh event/round ID and expected handoff/report path. Never infer the target from cached herdr state.
+   `$SK/scripts/listen-notify.py start` with the literal delegator thread UUID, agent, fresh event/round ID and
+   expected handoff/report path. Use `--poll report` for Codex tasks with a unique report: set `--task` and
+   `--handoff-marker` to the same round ID and require that ID in the report. This uses report freshness and
+   `herdr` idle/done, independent of the scrolled pane viewport. Never infer the target from cached herdr state.
    See [the listener procedure](references/guide.md#durable-listener-notification). Scope stops → approve minimal hunks in an amendment file.
    Fixture-only test mistakes → approve. Network hang → `herdr pane send-keys <pane> Escape`, then "resume…".
    Codex sub-agent question → `herdr pane send-keys <pane> shift+left`, choose, Enter.
