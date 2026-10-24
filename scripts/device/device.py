@@ -95,8 +95,22 @@ def inside(exe, app):
     return exe is not None and exe.is_relative_to(app / 'Contents' / 'MacOS')
 
 def running():
-    r = command(['/usr/bin/pgrep', '-x', 'Picsee'])
-    return [int(p) for p in r.stdout.split()]
+    try:
+        r = command(['/usr/bin/pgrep', '-x', 'Picsee'])
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError('pgrep process query failed: ' + str(error)) from error
+    if r.returncode == 1 and not r.stdout.strip() and not r.stderr.strip():
+        return []
+    if r.returncode != 0:
+        raise RuntimeError(f'pgrep process query failed (exit {r.returncode}): '
+                           + (r.stderr.strip() or r.stdout.strip() or 'inconsistent result'))
+    parts = r.stdout.split()
+    if not parts or any(not re.fullmatch(r'[0-9]+', part) for part in parts):
+        raise RuntimeError('pgrep returned malformed or empty PID list')
+    pids = [int(part) for part in parts]
+    if any(pid <= 1 for pid in pids) or len(set(pids)) != len(pids):
+        raise RuntimeError('pgrep returned malformed or duplicate PID list')
+    return pids
 
 def windows(pid):
     script = '''on run argv
