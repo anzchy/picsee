@@ -1,0 +1,3 @@
+interface:
+  display_name: "picsee delegator"
+  short_description: "Run the picsee herdr roster: briefs, audits, merges, validation"

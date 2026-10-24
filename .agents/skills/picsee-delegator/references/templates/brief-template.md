@@ -1,0 +1,63 @@
+# <implementer> task: <WP or #issue> — <one-line summary> (delegator, <date>)
+
+You are **<implementer>**. New task, fresh session. Worktree `~/Documents/mac-app/picsee-wt/<implementer>`.
+Branch: `git fetch origin && git switch -c <branch> origin/main` (main ≥ <sha7>). Issue #<n>.
+Tier **<Low|Medium|High>** because <reason>. <Low: opus-auditor alone | Medium/High: gpt-auditor + opus-auditor, blind>.
+
+## Read first
+- `AGENTS.md` (binding: test-first, named-path staging, commit format, ledger md+html, heavy lock, dangerous commands).
+  Codex loads it itself; tell Kimi explicitly.
+- `docs/feature-ledger.md` rows <IDs>; plan section <WP>; ADRs <list>; `docs/validation/P<n>.md` §<WP>.
+- `gh issue view <n>`. User decisions to honour, quoted: 「…」.
+
+## Today / wanted
+<what happens now, with evidence (file:line, device run); what must happen instead>
+
+## WI-0 — probe the risky seam first (only if an assumption needs the device)
+<exact probe; throwaway code allowed, never committed; what to record; "if it can't be delivered, record NOT VERIFIED
+and continue"; "if <bad outcome>, stop and report — that is High">
+
+## Acceptance
+- AC-1 … (each testable, tied to ledger rows)
+- AC-n Ledger: only text after 「限制：」 may change; never above Partial without a device record; md+html in the same
+  commit (`node scripts/ledger/build.mjs`); acceptance sentences are the delegator's (separate commit quoting the user).
+
+## Ownership
+**You own, and may edit:** <files / exact hunks>. **Not yours:** <files>. Shared with <other implementer>: <split>.
+If a needed change crosses a fence: stop, propose the minimal hunk, ask in your final reply.
+
+## Test-first
+- Codex: `$tdd-guardian-workflow` (plan → design tests + spec adversary → per-WI RED receipt → implement → verify →
+  coverage). Receipt IDs `<WP>-WI-n`.
+- Kimi / no plugin: write the tests first; run only them
+  (`scripts/heavy-lock.sh swift test --package-path Packages/PicseeKit --filter <Name>`); paste the FAILING assertion
+  output (not compile errors) in the handoff; implement; rerun the same filter; paste GREEN.
+- Changing an existing assertion: only where it asserts the old behaviour; list before/after/why.
+
+## Gates (paste decisive lines)
+```sh
+export PATH=$HOME/.picsee/tools/xcodegen/bin:/opt/homebrew/bin:$PATH DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+scripts/heavy-lock.sh swift test --package-path Packages/PicseeKit --enable-code-coverage
+sh scripts/tdd/swift-lcov.sh      # coverage/lcov.info: sum LF/LH and FNF/FNH → 100% lines and functions
+xcodegen generate
+scripts/heavy-lock.sh xcodebuild build -scheme Picsee -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -derivedDataPath .build/dd-ci
+node --test --test-reporter=spec scripts/tdd/*.test.mjs scripts/ledger/*.test.mjs
+node scripts/ledger/build.mjs --check
+```
+Only the heavy job itself goes under `scripts/heavy-lock.sh`, one command per call.
+
+## Device smoke (implementer smoke, not validation) — only if the brief needs it
+`pgrep -x Picsee` first; never kill a Picsee you didn't start; `~/Applications/Picsee.app` is off limits; no
+pre-granting, no container/store edits, no system settings; list root IDs you leave behind.
+
+## Commits
+`<type>(<scope>): <summary>`; body names #<n>, <WP>, ledger IDs; trailer `Implemented-by: <implementer>`; one WI per
+commit; stage named paths only. No push, PR, branch switch/deletion, `rm -r`, other worktrees.
+
+## Handoff
+`~/.picsee/herdr/<implementer>/<item>-handoff.md`: design; AC table (AC → proving test); RED/GREEN or receipts;
+changed existing assertions; gates output; `git diff --stat origin/main..HEAD`; production lines per target; NOT
+VERIFIED list; open questions. Reply DONE with the path.
+
+## Open questions (defaults)
+- OQ-1 … default: … — Follow each default; if WI-0 or the code contradicts one, stop and report.
