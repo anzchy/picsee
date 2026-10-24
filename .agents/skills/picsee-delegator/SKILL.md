@@ -50,7 +50,9 @@ Low only. Never touch mdpro or its tmux `dtrack`.
 
 1. **Issue** — `gh issue create … --label ready-for-agent`; quote any user decision.
 2. **Brief** — copy [templates/brief-template.md](references/templates/brief-template.md) to
-   `~/.picsee/herdr/<impl>/<item>-brief.md`. Read the code before writing fences. Codex uses `$tdd-guardian-workflow`;
+   `~/.picsee/herdr/<impl>/<item>-brief.md`. For UI work, fill the per-state design and evidence fields in
+   [the C design parity contract](../../../docs/agents/ui-parity-contract.md) before dispatch. Read the code before
+   writing fences. Codex uses `$tdd-guardian-workflow`;
    Kimi needs the hand-written test-first steps. Dispatch: `herdr agent prompt <impl> 'New task: … Read and follow <brief>…'`.
 3. **Watch** — mandatory after every dispatch and rearm for every fix/audit round: attach
    `$SK/scripts/listen-notify.py start` with a fresh event/round ID, agent, expected handoff/report path, and an
@@ -89,7 +91,9 @@ Low only. Never touch mdpro or its tmux `dtrack`.
    `$SK/scripts/gui-lock.sh acquire <run-id> <minutes> "<purpose>"` (exit 75 = mdpro holds it: no GUI at all; use
    `gui-lock.sh wait …` or tell the user), message mdpro-delegator at start/end, and `gui-lock.sh release <run-id>`
    only after cleanup (aborted runs too). Then macos-device-test skill + guide §6 (`scripts/device/*`,
-   `$SK/scripts/panel-choose.sh`, `drag2.sh`, `menus.sh`). Record in `docs/validation/P<n>.md` with `Validated-by: picsee-delegator run=<id>`;
+   `$SK/scripts/panel-choose.sh`, `drag2.sh`, `menus.sh`). For UI work, capture and independently review the
+   signed App and pinned HTML states under [the parity contract](../../../docs/agents/ui-parity-contract.md).
+   Record in `docs/validation/P<n>.md` with `Validated-by: picsee-delegator run=<id>`;
    garden; PR. Defect found → issue + FAIL limit + fix brief + re-validate.
 10. **Log** — update `~/.picsee/timeline.json` and append the handoff log; record user decisions verbatim.
 
