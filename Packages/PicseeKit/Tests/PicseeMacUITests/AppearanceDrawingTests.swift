@@ -75,7 +75,7 @@ import PicseeApplication
                 chrome.viewDidChangeEffectiveAppearance()
                 let dark = expected == .darkAqua
                 let canvasBytes: [CGFloat] = dark ? [15, 17, 21] : [255, 255, 255]
-                let chromeBytes: [CGFloat] = dark ? [22, 26, 34] : [246, 247, 251]
+                let chromeBytes: [CGFloat] = dark ? [20, 24, 33] : [255, 255, 255]
                 let canvasRGB = canvasBytes.map { $0 / 255 }
                 let chromeRGB = chromeBytes.map { $0 / 255 }
                 let bitmap = try appearanceDrawingBitmap(canvas)
