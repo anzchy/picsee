@@ -104,6 +104,8 @@ def running():
     if r.returncode != 0:
         raise RuntimeError(f'pgrep process query failed (exit {r.returncode}): '
                            + (r.stderr.strip() or r.stdout.strip() or 'inconsistent result'))
+    if r.stderr.strip():
+        raise RuntimeError('pgrep process query emitted a diagnostic: ' + r.stderr.strip())
     parts = r.stdout.split()
     if not parts or any(not re.fullmatch(r'[0-9]+', part) for part in parts):
         raise RuntimeError('pgrep returned malformed or empty PID list')
