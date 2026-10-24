@@ -40,11 +40,11 @@ import PicseeCore
             do {
                 try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: input,
                     access: access, scanner: scanner, ready: { [self] version, itemID in
-                        guard activeGeneration == token else { return }
+                        guard activeGeneration == token, !Task.isCancelled else { return }
                         snapshot = FolderSnapshot(version: version, entries: [], isComplete: false)
                         currentItemID = itemID
                     }, emit: { [self] batch in
-                        guard activeGeneration == token, let snapshot else { return }
+                        guard activeGeneration == token, !Task.isCancelled, let snapshot else { return }
                         self.snapshot = snapshot.appending(batch, isComplete: false)
                         if !batch.isEmpty, !firstBatchTraced {
                             firstBatchTraced = true
@@ -77,7 +77,7 @@ import PicseeCore
                 activeGeneration = nil
                 isReadingFolder = false
                 scanTask = nil
-                if error is CancellationError {
+                if error is CancellationError || Task.isCancelled {
                     snapshot = nil; inputURL = nil; currentItemID = nil; currentURL = nil; pendingDirection = nil
                     trace?.end(outcome: .cancelled, generation: token)
                     return

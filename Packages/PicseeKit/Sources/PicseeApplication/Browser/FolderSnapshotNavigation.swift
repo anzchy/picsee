@@ -25,7 +25,7 @@ extension FolderScanCoordinator {
         return true
     }
     func advancePending() {
-        guard let direction = pendingDirection, automaticPresentationAllowed?() != false,
+        guard !Task.isCancelled, let direction = pendingDirection, automaticPresentationAllowed?() != false,
               let navigation = navigation(matching: nil), neighbor(in: navigation, direction: direction) != nil else { return }
         move(direction)
     }
