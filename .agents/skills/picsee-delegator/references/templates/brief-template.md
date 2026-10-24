@@ -2,16 +2,27 @@
 
 You are **<implementer>**. New task, fresh session. Worktree `~/Documents/mac-app/picsee-wt/<implementer>`.
 Branch: `git fetch origin && git switch -c <branch> origin/main` (main ≥ <sha7>). Issue #<n>.
-Tier **<Low|Medium|High>** because <reason>. <Low: opus-auditor alone | Medium/High: gpt-auditor + opus-auditor, blind>.
+Tier **<Low|Medium|High>** because <reason>. Until the user explicitly restores Opus, every tier receives independent `gpt-auditor` review.
 
 ## Read first
 - `AGENTS.md` (binding: test-first, named-path staging, commit format, ledger md+html, heavy lock, dangerous commands).
   Codex loads it itself; tell Kimi explicitly.
 - `docs/feature-ledger.md` rows <IDs>; plan section <WP>; ADRs <list>; `docs/validation/P<n>.md` §<WP>.
 - `gh issue view <n>`. User decisions to honour, quoted: 「…」.
+- If UI changes: [`docs/agents/ui-parity-contract.md`](../../../../../docs/agents/ui-parity-contract.md), `design/DESIGN.md`, native mapping, and the exact HTML states mapped in plan §1.3.
 
 ## Today / wanted
 <what happens now, with evidence (file:line, device run); what must happen instead>
+
+## UI design contract (required for user-visible UI; otherwise write `无 UI 变化`)
+
+Use [`docs/agents/ui-parity-contract.md`](../../../../../docs/agents/ui-parity-contract.md). Before coding, pin the design Git tree OID plus HTML/manifest SHA256 and list **each** affected `states/manifest.json` name, HTML path, viewport, appearance, plan §1.3 work package, ledger ID and native entry point. Split wide/compact, light/dark and visible/hidden states into separate rows; mark states outside this work package `PENDING`, not passed.
+
+| State / HTML | Design hashes | Viewport / appearance / scale | Native user path + fixture | Ledger / WP | Native exception + source | Proof / remaining limits |
+|---|---|---|---|---|---|---|
+| `<manifest name>` / `<states/file.html>` | `<tree OID; HTML SHA256; manifest SHA256>` | `<width×height; light/dark; @1x/@2x>` | `<steps + deterministic input>` | `<ID / Pn-nn>` | `<specific mapped exception or 无>` | `<region/behavior/focus/a11y/zh-en checks; NOT VERIFIED items>` |
+
+Define comparison regions, measurement coordinates and any dynamic-data masks before seeing the App screenshot. Implement from the design token/component contract; do not treat browser mockup clicks as native behavior. Device evidence requires a signed sandboxed App at matching viewport/appearance and raw reference/native PNGs tied to source/build SHAs outside the repo. A visual match alone never upgrades the ledger to `Shipped`.
 
 ## WI-0 — probe the risky seam first (only if an assumption needs the device)
 <exact probe; throwaway code allowed, never committed; what to record; "if it can't be delivered, record NOT VERIFIED
