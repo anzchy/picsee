@@ -338,9 +338,9 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 网格、选择与菜单 | 2026-10-24 | doc-gardener | P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132）：5e83132 引用 P2-01，GRID-15 计划含 P2-01，但范围只改文档、无代码；GRID-15 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
 | 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-24 | doc-gardener | P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132）：5e83132 单独提交改 ACCESS-03 验收，提交说明引用用户 2026-10-24「ACCESS-03：选A」（移动／改名在新位置浏览，找不到才提示重连），状态 `Partial`/`单元` 不变；新验收与 P2 记录相符（删除弹重连通过，改名直接浏览），限制如实列出实现者观察与卷不可用未验；ACCESS-05 未改，扫描中关窗未验，「扫描租约关窗释放仅单元」可留；ACCESS-02 无变化。上次：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a） |
+| 授权与文件访问 | 2026-10-24 | doc-gardener | 限制缩写（chore/kimi-trial-low，fe5125d..45e2fea）：只改 ACCESS-05 限制，状态 `Partial`/`单元` 与验收不变；P0、P1-04 记录链接保留，「日志不区分临时/租约」「续租/租约平衡、P2-02 扫描租约释放仅单元」保留；删去的 `4bdd6ef`／关闭按钮细节仍在 P1-04 记录第 6 步。上次：P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132） |
 | 缓存与资源 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`；CACHE-01 不变。上次：P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2） |
-| 命令与键盘 | 2026-10-24 | doc-gardener | P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a）：未增删命令 ID、菜单项或快捷键；读取中 ←/→ 禁用，路由仍经 CommandRouter；CMD-01/02 不变。上次：P2-01 授权根重连（#77，p2/p2-01-access，d703ede..c5c9738） |
+| 命令与键盘 | 2026-10-24 | doc-gardener | 限制缩写（chore/kimi-trial-low，fe5125d..45e2fea）：只改 CMD-01 限制，状态与验收不变；未实现项与「工具组按钮仅合成点击」保留；删去的 P1-07 句是通过记录而非限制，证据仍在 P1 记录 P1-07 节。上次：P2-02 分批扫描（#78，p2/p2-02-folder-browser，6435bba..a0fbe5a） |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-23 | doc-gardener | P1-07 状态、菜单与焦点（#49，p1/p1-07-states，fa2703f..d97615d）：`ViewerImageLoader` 只公开 `fileURL`，解码器与格式集合未改；FMT-01 不变。上次：P1-06 内存缓存（#48，p1/p1-06-memory-cache，51b3525..f4488ed） |
