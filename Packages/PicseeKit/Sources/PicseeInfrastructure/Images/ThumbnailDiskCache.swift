@@ -167,7 +167,6 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
                      payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
                      sourceHeight: Int(image.sourcePixelSize.height))
-        evictIfNeeded()
     }
 
     private func sourceMatches(_ ticket: ThumbnailCacheTicket, render: RenderKey) throws -> Bool {
@@ -295,15 +294,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         _ = sqlite3_step(statement)
     }
 
-    private func evictIfNeeded() {
+    private func evictIfNeeded(using db: OpaquePointer) {
         guard highWaterBytes > 0, lowWaterBytes >= 0, lowWaterBytes <= highWaterBytes else { return }
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(databaseURL.path, &db,
-                              SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
-            if let db { sqlite3_close(db) }
-            return
-        }
-        defer { sqlite3_close(db) }
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db,
             "SELECT key,payload,byte_count FROM thumbnails ORDER BY last_access ASC,key ASC",
@@ -399,6 +391,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             source: ticket.sourceSHA256, path: payloadPath, byteCount: payloadBytes,
             payloadSHA256: payloadSHA256, width: sourceWidth, height: sourceHeight), to: statement, at: 11)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw ThumbnailStoreError.database }
+        sqlite3_finalize(statement)
+        statement = nil
+        evictIfNeeded(using: db)
     }
 }
 
@@ -424,7 +419,8 @@ private final class PayloadLeaseRegistry: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         let key = URL(fileURLWithPath: path).standardizedFileURL.path
-        let count = readers[key, default: 0]
+        // Every release follows a successful acquire; fail fast on an unbalanced lease.
+        let count = readers[key]!
         if count <= 1 { readers.removeValue(forKey: key) }
         else { readers[key] = count - 1 }
     }
