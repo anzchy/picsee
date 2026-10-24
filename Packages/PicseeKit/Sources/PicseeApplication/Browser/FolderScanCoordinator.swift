@@ -47,9 +47,9 @@ struct FolderScanRestorePoint {
         let shown = currentURL
         let staysInFlatFolder = shown?.deletingLastPathComponent().standardizedFileURL == folder.url.standardizedFileURL
         let retainedInput = value || staysInFlatFolder ? shown : nil
+        if !value && shown != nil && !staysInFlatFolder { excludedPresentationNeedsReconciliation = true }
         return start(folder: folder.url, rootID: folder.rootID, input: retainedInput,
-            canPresent: canPresent, preserveConditions: true,
-            clearExcludedOnEmpty: !value && shown != nil && !staysInFlatFolder)
+            canPresent: canPresent, preserveConditions: true)
     }
     public private(set) var generation: UInt64 = 0
     public var isScanning: Bool { activeGeneration != nil }
@@ -91,6 +91,7 @@ struct FolderScanRestorePoint {
     private var scanTask: Task<Void, any Error>?
     private var activeGeneration: UInt64?
     private var activeFolder: (url: URL, rootID: AccessRootID)?
+    private var excludedPresentationNeedsReconciliation = false
     public init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)? = nil) {
         self.access = access; self.scanner = scanner; self.trace = trace
     }
@@ -101,9 +102,10 @@ struct FolderScanRestorePoint {
     }
     @discardableResult private func start(folder: URL, rootID: AccessRootID, input: URL? = nil,
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool,
-        preserveConditions: Bool, clearExcludedOnEmpty: Bool = false) -> Task<Void, any Error> {
+        preserveConditions: Bool) -> Task<Void, any Error> {
         let previousConditions = conditions
         stop(.replaced)
+        if !preserveConditions { excludedPresentationNeedsReconciliation = false }
         conditions = preserveConditions ? previousConditions : FolderViewConditions()
         generation &+= 1
         let token = generation
@@ -145,9 +147,11 @@ struct FolderScanRestorePoint {
                 isReadingFolder = false
                 scanTask = nil
                 presentNoMatchesIfNeeded()
-                if clearExcludedOnEmpty, !hasNoMatches, snapshot?.navigationEntries.isEmpty == true {
+                if excludedPresentationNeedsReconciliation, !hasNoMatches,
+                   snapshot?.navigationEntries.isEmpty == true {
                     currentItemID = nil; currentURL = nil; inputURL = nil
                     presentationRevision &+= 1
+                    excludedPresentationNeedsReconciliation = false
                     host?.clearFolderImageForNoMatches()
                 }
                 if let first, automaticPresentationAllowed?() != false {
@@ -167,6 +171,7 @@ struct FolderScanRestorePoint {
                        snapshot?.entries.contains(where: {
                            $0.itemID == first.itemID && $0.url.standardizedFileURL == first.url.standardizedFileURL
                        }) == true {
+                        excludedPresentationNeedsReconciliation = false
                         host?.openFolderImage(first.url, rootID: rootID)
                     }
                 }
@@ -250,6 +255,7 @@ struct FolderScanRestorePoint {
             let replacement = snapshot.navigationEntries[index]
             currentURL = replacement.url
             presentationRevision &+= 1
+            excludedPresentationNeedsReconciliation = false
             host?.openFolderImage(replacement.url, rootID: snapshot.version.rootID)
             return
         }
@@ -262,6 +268,7 @@ struct FolderScanRestorePoint {
         guard let first = snapshot.navigationEntries.first else { return }
         currentItemID = first.itemID; currentURL = first.url
         presentationRevision &+= 1
+        excludedPresentationNeedsReconciliation = false
         host?.openFolderImage(first.url, rootID: snapshot.version.rootID)
     }
     private func presentNoMatchesIfNeeded() {
@@ -269,6 +276,7 @@ struct FolderScanRestorePoint {
         noMatchesPresented = true
         currentItemID = nil; currentURL = nil; pendingDirection = nil
         presentationRevision &+= 1
+        excludedPresentationNeedsReconciliation = false
         host?.clearFolderImageForNoMatches()
     }
     private func retainReadingAuthority() -> Bool {
@@ -292,6 +300,7 @@ struct FolderScanRestorePoint {
         isReadingFolder = false
         failure = nil
         noMatchesPresented = false
+        if outcome == .cancelled { excludedPresentationNeedsReconciliation = false }
         if let ending { trace?.end(outcome: outcome, generation: ending) }
         host?.folderScanDidEnd()
     }
