@@ -146,7 +146,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try Task.checkCancellation()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = ticket.key.filename + ".png"
-        let url = directory.appendingPathComponent(path)
+        guard let url = payloadURL(forKey: ticket.key.filename) else { return }
         guard PayloadLeaseRegistry.shared.acquire(url.path) else { return }
         defer { PayloadLeaseRegistry.shared.release(url.path) }
         try payload.write(to: url, options: .atomic)
@@ -219,6 +219,23 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let sourceHeight: Int
     }
     private var databaseURL: URL { directory.appendingPathComponent("index.sqlite3") }
+    private func payloadURL(forKey key: String) -> URL? {
+        let bytes = key.utf8
+        guard bytes.count == 64,
+              bytes.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { return nil }
+        let root = directory.standardizedFileURL
+        let payload = root.appendingPathComponent(key + ".png").standardizedFileURL
+        guard payload.deletingLastPathComponent() == root else { return nil }
+        return payload
+    }
+
+    private func deleteIndexRow(_ key: String, using db: OpaquePointer) -> Bool {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "DELETE FROM thumbnails WHERE key=?", -1, &statement, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(statement) }
+        bind(key, to: statement, at: 1)
+        return sqlite3_step(statement) == SQLITE_DONE
+    }
     private func repairCorruptIndexIfNeeded() throws {
         let index = databaseURL.path
         guard FileManager.default.fileExists(atPath: index),
@@ -237,7 +254,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     }
     private func removeDamagedEntry(_ ticket: ThumbnailCacheTicket) {
         // The path comes from the key, never from a possibly damaged SQLite row.
-        let path = directory.appendingPathComponent(ticket.key.filename + ".png").path
+        guard let path = payloadURL(forKey: ticket.key.filename)?.path else { return }
         guard PayloadLeaseRegistry.shared.beginDeletion(path) else { return }
         defer { PayloadLeaseRegistry.shared.endDeletion(path) }
         var writable: OpaquePointer?
@@ -268,9 +285,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         }
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
         for name in names where name.hasSuffix(".png") && name.count == 68 && !referenced.contains(name) {
-            let hex = name.dropLast(4)
-            guard hex.allSatisfy({ $0.isHexDigit }) else { continue }
-            let path = directory.appendingPathComponent(name).path
+            guard let path = payloadURL(forKey: String(name.dropLast(4)))?.path else { continue }
             guard PayloadLeaseRegistry.shared.beginDeletion(path) else { continue }
             try? FileManager.default.removeItem(atPath: path)
             PayloadLeaseRegistry.shared.endDeletion(path)
@@ -313,17 +328,16 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         sqlite3_finalize(statement)
         guard total > highWaterBytes else { return }
         for row in rows where total > lowWaterBytes {
-            guard row.path == row.key + ".png" else { continue }
-            let payload = directory.appendingPathComponent(row.path)
+            guard let payload = payloadURL(forKey: row.key), row.path == payload.lastPathComponent else {
+                // An index row cannot authorize deletion of a filesystem path.
+                if deleteIndexRow(row.key, using: db) { total -= row.bytes }
+                continue
+            }
             guard PayloadLeaseRegistry.shared.beginDeletion(payload.path) else { continue }
             defer { PayloadLeaseRegistry.shared.endDeletion(payload.path) }
             do { try FileManager.default.removeItem(at: payload) }
             catch { continue }
-            var deletion: OpaquePointer?
-            guard sqlite3_prepare_v2(db, "DELETE FROM thumbnails WHERE key=?", -1, &deletion, nil) == SQLITE_OK else { continue }
-            bind(row.key, to: deletion, at: 1)
-            if sqlite3_step(deletion) == SQLITE_DONE { total -= row.bytes }
-            sqlite3_finalize(deletion)
+            if deleteIndexRow(row.key, using: db) { total -= row.bytes }
         }
     }
     private func openDatabase(create: Bool) -> OpaquePointer? {
