@@ -1,4 +1,6 @@
-# Delegator guide (picsee herdr roster)
+# Delegator guide (picsee herdr roster) — full reference
+
+This is the long reference behind `SKILL.md`. Paths to helpers are under `.agents/skills/picsee-delegator/scripts/`.
 
 For the agent that takes over **picsee-delegator**: Claude Code, Codex or anything else that can run a shell. It
 describes how the roster has actually been run on the Mac mini since 2026-10-22. AGENTS.md, the feature ledger,
@@ -82,7 +84,7 @@ Queueing a follow-up while a Codex agent works: `send-text`, then `send-keys Tab
 ### Status is unreliable for Codex
 
 herdr's `agent_status` often stays `working` (or says `done`) for Codex when it isn't. Use
-`~/.picsee/herdr/delegator/poll-idle.sh <agent> [interval] [max_min]` in the background. It prints
+`.agents/skills/picsee-delegator/scripts/poll-idle.sh <agent> [interval] [max_min]` in the background. It prints
 `<agent> idle|question <time>`, using these rules:
 
 - A question screen ("to answer", "enter submit") exits immediately.
@@ -91,13 +93,9 @@ herdr's `agent_status` often stays `working` (or says `done`) for Codex when it 
 - An empty screen falls back to herdr status.
 - For Claude panes, herdr status is reliable.
 
-For **Kimi**, herdr status is reliable (`working` → `idle`/`done`). Poll it together with a check for the handoff
-file:
-
-```sh
-for i in $(seq 1 120); do st=$(herdr agent get kimi-imple-1 | grep -oE '"agent_status":"[a-z]+"' | cut -d'"' -f4)
-  [ -f ~/.picsee/herdr/kimi-imple-1/<item>-handoff.md ] && [[ $st == idle || $st == done ]] && break; sleep 60; done
-```
+For **Kimi** (and Claude panes), herdr status is reliable (`working` → `idle`/`done`). Poll it together with
+the handoff file: `.agents/skills/picsee-delegator/scripts/poll-handoff.sh kimi-imple-1 ~/.picsee/herdr/kimi-imple-1/<item>-handoff.md
+[max_min] ['## Fix round 1']` (the optional marker waits for a section to appear).
 
 Don't grep a Kimi screen for words like "permission"; that produced a false "question" once.
 
@@ -110,7 +108,7 @@ conversation, but reset it if its context is above ~80%; the fix brief must then
 
 | Agent | Reset | Notes |
 |---|---|---|
-| Codex (p2–p5) | `~/.picsee/herdr/delegator/reset.sh <name> <pane>` | Sends `/new`, then Enter twice (the "Where should the new conversation run?" chooser). Then check `Context 0% used` on screen. Zoom first if the pane is tiny. If the next prompt "didn't land" (still 0% and idle after 20 s), send it again. |
+| Codex (p2–p5) | `.agents/skills/picsee-delegator/scripts/reset.sh <name> <pane>` | Sends `/new`, then Enter twice (the "Where should the new conversation run?" chooser). Then check `Context 0% used` on screen. Zoom first if the pane is tiny. If the next prompt "didn't land" (still 0% and idle after 20 s), send it again. |
 | opus-auditor (p6) | `herdr pane send-text w1:p6 '/clear' && herdr pane send-keys w1:p6 Enter` before **every** request | `/clear` does not reload `.claude/agents/picsee-opus-auditor.md`. When that file changes on main, move `picsee-wt/opus-auditor` to the new main and restart the pane with the start command in §2. |
 | kimi-imple-1 (p7) | type `/new`, Enter; the status bar must show `context: 0%` | Start: `herdr agent start kimi-imple-1 --kind kimi --pane w1:p7 -- --yolo -m kimi-code/k3.1-pro`. Effort comes from `~/.kimi-code/config.toml` (`[models."kimi-code/k3.1-pro"] default_effort = "high"`). The status bar must read `K3.1 Pro thinking: high`. The first run in a new folder asks "Trust this folder?". Kimi lives in `~/.kimi-code/bin`, which `.zshrc` puts on PATH; a non-login shell may not find `kimi`. |
 
@@ -256,12 +254,14 @@ that one finding. If the fix is cheap, it is usually faster to fix it and then c
 
 Never pipe `git rebase`; check its exit status. Write logs to `$(git rev-parse --git-dir)/rb.log`.
 
+`.agents/skills/picsee-delegator/scripts/rebase-ledger.sh [origin/main]` (run inside the PR worktree) automates the two ledger cases below and stops, leaving the rebase in progress, on anything else.
+
 - **Only `docs/feature-ledger.html` conflicts.** Regenerate and continue, in a loop:
   `node scripts/ledger/build.mjs && git add docs/feature-ledger.html && GIT_EDITOR=true git rebase --continue`.
-- **`docs/feature-ledger.md` row conflicts.** `~/.picsee/herdr/delegator/tools/resolve_rows.py` does a three-way merge
+- **`docs/feature-ledger.md` row conflicts.** `.agents/skills/picsee-delegator/scripts/resolve_rows.py` does a three-way merge
   by row key (stage 1/2/3). It keeps main's text and appends the commit's added suffix. It stops on rows that need
   manual merging, for example when both sides rewrote the same 限制 clause; merge those by hand.
-- **Part 3 area-review conflicts.** Use `tools/resolve_part3.py`: 分发 keeps HEAD, other rows take theirs.
+- **Part 3 area-review conflicts.** Use `.agents/skills/picsee-delegator/scripts/resolve_part3.py <file>`: 分发 keeps HEAD, other rows take theirs.
 - **Any other conflict** (Swift, `CanvasWindowController`, xcstrings): stop and resolve deliberately, or send it back
   to the implementer.
 - After a rebase, confirm the code is unchanged versus the audited head (`git diff --stat <audited> HEAD -- App
@@ -334,11 +334,11 @@ Driving tools (all synthetic input, which must be disclosed in the record):
 - `scripts/device/kc.sh RUN KEYCODE [command shift …]` for named keys: Return 36, Esc 53, Tab 48, ←→ 123/124,
   ⌘O = `31 command`, ⌘W = `13 command`, ⌘Q = `12 command`, ⌘⇧G = `5 command shift`. `key.sh` types exactly one
   printable character and nothing else.
-- `tools/panel-choose.sh RUN PATH`: in an open NSOpenPanel or powerbox, press ⌘⇧G, type the path via System Events
+- `.agents/skills/picsee-delegator/scripts/panel-choose.sh RUN PATH`: in an open NSOpenPanel or powerbox, press ⌘⇧G, type the path via System Events
   `keystroke`, then Return twice.
-- `tools/drag2.sh X0 Y0 X1 Y1`: a CGEvent drag from a Finder list-view row with a press-hold. Finder starts a real
+- `.agents/skills/picsee-delegator/scripts/drag2.sh X0 Y0 X1 Y1`: a CGEvent drag from a Finder list-view row with a press-hold. Finder starts a real
   drag session. computer-use drags never arrived.
-- `tools/menus.sh PID` (menu item enabled states), `tools/axlist.sh PID`, AX clicks via
+- `.agents/skills/picsee-delegator/scripts/menus.sh PID` (menu item enabled states), `scripts/axlist.sh PID`, `scripts/click.sh`/`move.sh X Y`, AX clicks via
   `osascript -e 'tell application "System Events" to tell (first process whose unix id is PID) to click …'`.
 - Window title via `get name of every window`. Screenshots: `screencapture -x -R480,110,960,640` (window region)
   into `$RUN_DIR/shots/`. Never put screenshots in the repo.
@@ -436,14 +436,14 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 | `log show` failed with "too many arguments" | zsh builtin `log` shadows `/usr/bin/log` | call `/usr/bin/log` |
 | Coverage awk printed `lines /` | wrong lcov path | `swift-lcov.sh` writes `coverage/lcov.info` |
 | `key.sh` typed letters instead of Tab/Esc | `key.sh` is single-character only | `kc.sh` with keycodes |
-| Open panel path couldn't be typed | `key.sh` is one character | `tools/panel-choose.sh` (System Events keystroke; disclose it) |
+| Open panel path couldn't be typed | `key.sh` is one character | `scripts/panel-choose.sh` (System Events keystroke; disclose it) |
 | `launch.sh` failed in a relaunch dir | missing `bundle.path`/`build.json` | copy both from the first run dir |
 | Doctor `window` FAIL at end of run | title is a non-fixture file name | disclose; doctor only knows fixture names |
 | Doctor `fixtures` FAIL | files added after hashing, or `.DS_Store` from Finder | hash after copying; keep Finder-touched files outside `fixtures/` |
 | `build.sh` refused: untracked `.DS_Store` | Finder browsing in the repo | move them out intact (don't delete) |
 | A drag "passed" because of cache | the same path had been opened with `open -a` | drag files the app has never opened |
 | A drop landed in another Finder window and *moved* the file | stray Finder window over Picsee | move it back, close stray windows, redo, disclose |
-| computer-use drag never arrived | tool limit | `tools/drag2.sh` CGEvent drag |
+| computer-use drag never arrived | tool limit | `scripts/drag2.sh` CGEvent drag |
 | Finder Open With launched the wrong copy | `~/Applications/Picsee.app` registered with the same bundle ID | NOT VERIFIED while the user's copy is installed |
 | Gardener died on ECONNRESET | network | check `git status` for partial edits, rerun |
 | Gardener NEEDS-OWNER again and again | over-long cells, over-claims, dropped cautions | write limits that state only what the record shows; keep cautions; one fact per clause |
@@ -469,7 +469,7 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 | Audit reports | `~/.picsee/herdr/{gpt-auditor,opus-auditor}/<item>-r<n>.md`, `-confirm.md` |
 | Gardener reports | `~/.picsee/gardening/` |
 | Device runs (evidence, screenshots, logs) | `~/.picsee/device-runs/<run-id>/` |
-| Delegator scripts | `~/.picsee/herdr/delegator/{reset.sh,poll-idle.sh,audit-brief.md}`, `tools/` |
+| Delegator scripts and templates | `.agents/skills/picsee-delegator/scripts/`, `.agents/skills/picsee-delegator/references/templates/` (`.claude/skills/picsee-delegator` is a symlink to the same folder); the auditors' rules file is installed at `~/.picsee/herdr/delegator/audit-brief.md` (copy of `references/templates/audit-brief.md`) |
 | Heavy lock | `scripts/heavy-lock.sh`; flock `~/.picsee/locks/heavy.lock` (never delete) |
 
 A Claude delegator also keeps auto-memory under `~/.claude/projects/-Users-jack-Documents-mac-app-picsee/memory/`. A
