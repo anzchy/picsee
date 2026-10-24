@@ -29,6 +29,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var gridProjection = FolderGridProjection()
     private var gridView: GridBrowserView!
     private var gridFolderRoot: AccessRootID?
+    private var gridFolderURL: URL?
     let session: ViewerSession
     private let inspector: InspectorModel
     private let router = CommandRouter()
@@ -159,6 +160,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         if !fromFolderScan {
             session.leaveBrowsing()
             gridFolderRoot = nil
+            gridFolderURL = nil
             gridView.isHidden = true
             gridView.setAccessibilityHidden(true)
             canvas.isHidden = false
@@ -172,6 +174,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         refreshRecents()
         filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
         fileURL = url
+        window?.representedURL = url
         if !fromFolderScan { navigationTask?.cancel() }
         let scale = window?.backingScaleFactor ?? 1
         let maximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
@@ -193,6 +196,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         gridFolderRoot = nil
+        gridFolderURL = nil
         endInput()
         session.endFolderScan()
         accessIntent.invalidate()
@@ -249,15 +253,20 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private func openFolder(_ folder: URL, rootID: AccessRootID) {
         let operation = accessIntent.begin()
+        if let window { GridWindowIdentity.enterFolder(folder, session: session, canvas: canvas, window: window) }
+        else { session.enterFolderGrid(items: [], sourceVersion: .init(0)); canvas.showFailure() }
+        retryIntent = nil
+        retryFromFolderScan = false
+        fileURL = nil
+        inspector.hasImage = false
         gridFolderRoot = rootID
+        gridFolderURL = folder
         gridProjection = FolderGridProjection()
         let pending = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: 0),
             entries: [], isComplete: false)
         _ = gridProjection.apply(pending)
         gridView.display(pending, selectedItemID: nil)
-        session.beginBrowsing(items: [], sourceVersion: .init(0), scrollAnchor: nil)
         showGrid()
-        window?.title = folder.lastPathComponent
         refreshRecents()
         navigationTask?.cancel()
         let current = generation
@@ -412,12 +421,13 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         open(entry.url, accessRequest: .root(rootID, file: entry.url), fromFolderScan: true)
     }
     func returnToGrid() {
-        guard gridFolderRoot != nil else { return }
+        guard gridFolderRoot != nil, let folder = gridProjection.snapshot?.version.folder ?? gridFolderURL else { return }
         session.setInspectorVisible(false)
         session.closeImage()
         canvas.showFailure()
         fileURL = nil
         showGrid()
+        if let window { GridWindowIdentity.showFolder(folder, in: window) }
         if let snapshot = gridProjection.snapshot {
             gridView.display(snapshot, selectedItemID: session.selection.currentItemID)
             if let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }

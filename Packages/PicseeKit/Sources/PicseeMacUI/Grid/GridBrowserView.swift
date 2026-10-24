@@ -1,6 +1,14 @@
 import AppKit
 import PicseeCore
 
+@MainActor private final class GridPhotoSurface: NSView {
+    var onAppearanceChange: (() -> Void)?
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChange?()
+    }
+}
+
 /// A reused grid item contains only display data supplied by an authorized snapshot.
 @MainActor public final class GridPhotoItem: NSCollectionViewItem {
     public private(set) var representedItemID: ItemID?
@@ -9,7 +17,8 @@ import PicseeCore
     private let nameLabel = NSTextField(labelWithString: "")
 
     public override func loadView() {
-        let surface = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 184))
+        let surface = GridPhotoSurface(frame: NSRect(x: 0, y: 0, width: 220, height: 184))
+        surface.onAppearanceChange = { [weak self] in self?.updateSelection() }
         surface.wantsLayer = true
         surface.layer?.cornerRadius = 7
         placeholder.frame = NSRect(x: 8, y: 36, width: 204, height: 140)
@@ -20,6 +29,7 @@ import PicseeCore
         nameLabel.frame = NSRect(x: 8, y: 6, width: 204, height: 22)
         nameLabel.lineBreakMode = .byTruncatingMiddle
         nameLabel.maximumNumberOfLines = 1
+        nameLabel.wantsLayer = true
         nameLabel.autoresizingMask = [.width, .maxYMargin]
         surface.addSubview(placeholder)
         surface.addSubview(nameLabel)
@@ -39,9 +49,16 @@ import PicseeCore
     public override var isSelected: Bool { didSet { updateSelection() } }
     private func updateSelection() {
         guard isViewLoaded else { return }
+        var accent = NSColor.clear.cgColor
+        var fill = NSColor.clear.cgColor
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            accent = DesignColor.accent.nsColor.cgColor
+            fill = DesignColor.selectionFill.nsColor.cgColor
+        }
         view.layer?.borderWidth = isSelected ? 2 : 0
-        view.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        view.layer?.borderColor = accent
         view.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        nameLabel.layer?.backgroundColor = isSelected ? fill : NSColor.clear.cgColor
         view.setAccessibilityValue(isSelected ? String(localized: "Selected") : "")
     }
 }

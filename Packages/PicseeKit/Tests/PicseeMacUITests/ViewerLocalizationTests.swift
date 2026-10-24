@@ -77,3 +77,19 @@ private let statesLocalizationKeys = [
         #expect(catalog.value(key, "zh-Hans")?.isEmpty == false, "Chinese translation required for \(key)")
     }
 }
+
+@Test func gridLocalizationDoesNotFallBackToEnglishForVisibleAndAXText() throws {
+    let catalog = try statesCatalog()
+    let expected = [
+        "Thumbnail pending": "缩略图待生成",
+        "thumbnail pending": "缩略图待生成",
+        "Selected": "已选中",
+        "Preview Selected Image": "预览所选图片",
+        "Open Selected Image": "打开所选图片"
+    ]
+    for (key, chinese) in expected {
+        #expect(catalog.value(key, "en") == key)
+        #expect(catalog.value(key, "zh-Hans") == chinese)
+        #expect(catalog.value(key, "zh-Hans") != key)
+    }
+}
