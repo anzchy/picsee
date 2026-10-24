@@ -170,8 +170,17 @@ public final class ViewerChromeOverlay: NSView {
         updateGroupColors()
     }
     private func updateGroupColors() {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            for group in groups { group.layer?.backgroundColor = DesignColor.popoverBackground.nsColor.cgColor }
+            for group in groups {
+                guard let layer = group.layer else { continue }
+                layer.backgroundColor = DesignColor.popoverBackground.nsColor.cgColor
+                layer.shadowColor = NSColor.black.cgColor
+                layer.shadowOpacity = dark ? 0.32 : 0.18
+                layer.shadowRadius = 6
+                layer.shadowOffset = CGSize(width: 0, height: -2)
+                layer.masksToBounds = false
+            }
         }
     }
     public override func resizeSubviews(withOldSize oldSize: NSSize) {
@@ -195,6 +204,9 @@ public final class ViewerChromeOverlay: NSView {
         groups[1].frame = NSRect(x: centerX, y: singleRow ? 14 : 60, width: width, height: 38)
         tools[3].setFrameOrigin(NSPoint(x: width - 35, y: 5))
         fileLabel.frame = NSRect(x: 37, y: 10, width: max(0, width - 74), height: 18)
+        for group in groups {
+            group.layer?.shadowPath = CGPath(roundedRect: group.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        }
     }
     public static let edgeBandHeight: CGFloat = 32
     public func pointerMoved(_ point: NSPoint) {

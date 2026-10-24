@@ -20,3 +20,46 @@ import PicseeApplication
         }
     }
 }
+
+@Test @MainActor func chromeFloatingPanelsSeparateFromCanvasAcrossAppearances() throws {
+    _ = NSApplication.shared
+    let overlay = ViewerChromeOverlay(frame: NSRect(x: 0, y: 0, width: 1280, height: 800),
+        session: ViewerSession())
+    overlay.refresh(filename: "a.png")
+    let initialWidth = overlay.groups[1].frame.width
+    var lightOpacity: Float = 0
+
+    for (index, appearance) in [NSAppearance.Name.aqua, .darkAqua, .aqua].enumerated() {
+        overlay.appearance = NSAppearance(named: appearance)
+        overlay.viewDidChangeEffectiveAppearance()
+        for group in overlay.groups {
+            let layer = try #require(group.layer)
+            #expect(layer.shadowColor != nil)
+            #expect(layer.shadowOpacity > 0.1)
+            #expect(layer.shadowOpacity < 0.4)
+            #expect(layer.shadowRadius > 0)
+            #expect(layer.shadowOffset.height < 0)
+            #expect(layer.masksToBounds == false)
+            let path = try #require(layer.shadowPath)
+            #expect(path.boundingBoxOfPath == group.bounds)
+        }
+        let opacity = try #require(overlay.groups[0].layer).shadowOpacity
+        if index == 0 { lightOpacity = opacity }
+        if index == 1 { #expect(opacity > lightOpacity) }
+        if index == 2 { #expect(opacity == lightOpacity) }
+    }
+
+    overlay.refresh(filename: String(repeating: "long-filename-", count: 30) + ".png")
+    #expect(overlay.groups[1].frame.width > initialWidth)
+    for group in overlay.groups {
+        let layer = try #require(group.layer)
+        let path = try #require(layer.shadowPath)
+        #expect(path.boundingBoxOfPath == group.bounds)
+    }
+    overlay.setFrameSize(NSSize(width: 800, height: 680))
+    for group in overlay.groups {
+        let layer = try #require(group.layer)
+        let path = try #require(layer.shadowPath)
+        #expect(path.boundingBoxOfPath == group.bounds)
+    }
+}
