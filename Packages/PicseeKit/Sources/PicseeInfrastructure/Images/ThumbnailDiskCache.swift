@@ -19,6 +19,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     private let lowWaterBytes: Int
     private let afterPayloadWrite: (@Sendable () throws -> Void)?
     private let afterReadLeaseAcquired: (@Sendable () async -> Void)?
+    private let afterOrphanSnapshot: (@Sendable () async -> Void)?
     private var didSweepOrphans = false
 
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -28,6 +29,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         self.lowWaterBytes = 384 * 1024 * 1024
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = nil
+        self.afterOrphanSnapshot = nil
     }
 
     init(directory: URL, afterPayloadWrite: @escaping @Sendable () throws -> Void) {
@@ -36,6 +38,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         self.lowWaterBytes = 384 * 1024 * 1024
         self.afterPayloadWrite = afterPayloadWrite
         self.afterReadLeaseAcquired = nil
+        self.afterOrphanSnapshot = nil
     }
 
     init(directory: URL, highWaterBytes: Int, lowWaterBytes: Int) {
@@ -44,6 +47,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         self.lowWaterBytes = lowWaterBytes
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = nil
+        self.afterOrphanSnapshot = nil
     }
 
     init(directory: URL, afterReadLeaseAcquired: @escaping @Sendable () async -> Void) {
@@ -52,6 +56,16 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         self.lowWaterBytes = 384 * 1024 * 1024
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = afterReadLeaseAcquired
+        self.afterOrphanSnapshot = nil
+    }
+
+    init(directory: URL, afterOrphanSnapshot: @escaping @Sendable () async -> Void) {
+        self.directory = directory
+        self.highWaterBytes = 512 * 1024 * 1024
+        self.lowWaterBytes = 384 * 1024 * 1024
+        self.afterPayloadWrite = nil
+        self.afterReadLeaseAcquired = nil
+        self.afterOrphanSnapshot = afterOrphanSnapshot
     }
 
     public func prepare(_ request: ImageDecodeRequest) async throws -> ThumbnailCacheTicket? {
@@ -78,7 +92,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
                                                     encoderVersion: Self.encoderVersion),
               expectedKey == ticket.key,
               try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256 else { return nil }
-        sweepOrphansIfNeeded()
+        await sweepOrphansIfNeeded()
         guard let row = readRow(ticket), row.byteCount > 0, row.byteCount <= Self.maximumPayloadBytes,
               row.payloadPath == ticket.key.filename + ".png" else {
             removeDamagedEntry(ticket)
@@ -163,10 +177,12 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
         }
         try Task.checkCancellation()
-        try repairCorruptIndexIfNeeded()
-        try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
-                     payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
-                     sourceHeight: Int(image.sourcePixelSize.height))
+        try withIndexLock {
+            try repairCorruptIndexIfNeeded()
+            try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
+                         payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
+                         sourceHeight: Int(image.sourcePixelSize.height))
+        }
     }
 
     private func sourceMatches(_ ticket: ThumbnailCacheTicket, render: RenderKey) throws -> Bool {
@@ -219,6 +235,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let sourceHeight: Int
     }
     private var databaseURL: URL { directory.appendingPathComponent("index.sqlite3") }
+    private func withIndexLock<T>(_ body: () throws -> T) rethrows -> T {
+        try CacheIndexLocks.shared.withLock(for: directory, body)
+    }
     private func payloadURL(forKey key: String) -> URL? {
         let bytes = key.utf8
         guard bytes.count == 64,
@@ -240,19 +259,38 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let index = databaseURL.path
         guard FileManager.default.fileExists(atPath: index),
               (try? FileManager.default.attributesOfItem(atPath: index)[.type] as? FileAttributeType) == .typeRegular else { return }
-        var db: OpaquePointer?
-        let opened = sqlite3_open_v2(index, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK
-        var statement: OpaquePointer?
-        let prepared = opened && sqlite3_prepare_v2(db, "PRAGMA quick_check", -1, &statement, nil) == SQLITE_OK
-        let sound = prepared && sqlite3_step(statement) == SQLITE_ROW &&
-            sqlite3_column_text(statement, 0).map { String(cString: $0) == "ok" } == true
-        sqlite3_finalize(statement)
-        if let db { sqlite3_close(db) }
-        guard !sound else { return }
+        let confirmedCorrupt = try { () throws -> Bool in
+            var db: OpaquePointer?
+            let opened = sqlite3_open_v2(index, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil)
+            defer { if let db { sqlite3_close(db) } }
+            guard opened == SQLITE_OK else { throw ThumbnailStoreError.database }
+            var statement: OpaquePointer?
+            let prepared = sqlite3_prepare_v2(db, "PRAGMA quick_check", -1, &statement, nil)
+            defer { sqlite3_finalize(statement) }
+            if prepared != SQLITE_OK {
+                guard Self.isCorruptSQLite(prepared) else { throw ThumbnailStoreError.database }
+                return true
+            }
+            let result = sqlite3_step(statement)
+            if result == SQLITE_ROW {
+                guard let status = sqlite3_column_text(statement, 0) else { throw ThumbnailStoreError.database }
+                return String(cString: status) != "ok"
+            }
+            guard Self.isCorruptSQLite(result) else { throw ThumbnailStoreError.database }
+            return true
+        }()
+        guard confirmedCorrupt else { return }
         try FileManager.default.removeItem(atPath: index)
         didSweepOrphans = false
     }
+    private static func isCorruptSQLite(_ code: Int32) -> Bool {
+        let primary = code & 0xff
+        return primary == SQLITE_CORRUPT || primary == SQLITE_NOTADB
+    }
     private func removeDamagedEntry(_ ticket: ThumbnailCacheTicket) {
+        withIndexLock { removeDamagedEntryLocked(ticket) }
+    }
+    private func removeDamagedEntryLocked(_ ticket: ThumbnailCacheTicket) {
         // The path comes from the key, never from a possibly damaged SQLite row.
         guard let path = payloadURL(forKey: ticket.key.filename)?.path else { return }
         guard PayloadLeaseRegistry.shared.beginDeletion(path) else { return }
@@ -273,27 +311,50 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try? FileManager.default.removeItem(atPath: path)
     }
 
-    private func sweepOrphansIfNeeded() {
-        guard !didSweepOrphans, let db = openDatabase(create: false) else { return }
+    private func referencedPayloads() -> Set<String>? {
+        guard let db = openDatabase(create: false) else { return nil }
         defer { sqlite3_close(db) }
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT payload FROM thumbnails", -1, &statement, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, "SELECT payload FROM thumbnails", -1, &statement, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(statement) }
         var referenced = Set<String>()
         while sqlite3_step(statement) == SQLITE_ROW {
             if let path = sqlite3_column_text(statement, 0) { referenced.insert(String(cString: path)) }
         }
+        return referenced
+    }
+    private func sweepOrphansIfNeeded() async {
+        guard !didSweepOrphans, let referenced = withIndexLock({ referencedPayloads() }) else { return }
+        await afterOrphanSnapshot?()
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
+        var deferred = false
         for name in names where name.hasSuffix(".png") && name.count == 68 && !referenced.contains(name) {
-            guard let path = payloadURL(forKey: String(name.dropLast(4)))?.path else { continue }
-            guard PayloadLeaseRegistry.shared.beginDeletion(path) else { continue }
-            try? FileManager.default.removeItem(atPath: path)
-            PayloadLeaseRegistry.shared.endDeletion(path)
+            guard let payload = payloadURL(forKey: String(name.dropLast(4))) else { continue }
+            if !withIndexLock({ removeOrphanIfUnindexed(payload) }) { deferred = true }
         }
-        didSweepOrphans = true
+        didSweepOrphans = !deferred
+    }
+    private func removeOrphanIfUnindexed(_ payload: URL) -> Bool {
+        guard PayloadLeaseRegistry.shared.beginDeletion(payload.path) else { return false }
+        defer { PayloadLeaseRegistry.shared.endDeletion(payload.path) }
+        guard let db = openDatabase(create: false) else { return false }
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT 1 FROM thumbnails WHERE payload=? LIMIT 1", -1, &statement, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(statement) }
+        bind(payload.lastPathComponent, to: statement, at: 1)
+        let result = sqlite3_step(statement)
+        if result == SQLITE_ROW { return true }
+        guard result == SQLITE_DONE else { return false }
+        do { try FileManager.default.removeItem(at: payload) }
+        catch { return false }
+        return true
     }
 
     private func touch(_ key: String) {
+        withIndexLock { touchLocked(key) }
+    }
+    private func touchLocked(_ key: String) {
         var db: OpaquePointer?
         guard sqlite3_open_v2(databaseURL.path, &db,
                               SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
@@ -360,6 +421,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         value.withCString { sqlite3_bind_text(statement, index, $0, -1, transient) }
     }
     private func readRow(_ ticket: ThumbnailCacheTicket) -> Row? {
+        withIndexLock { readRowLocked(ticket) }
+    }
+    private func readRowLocked(_ ticket: ThumbnailCacheTicket) -> Row? {
         guard let db = openDatabase(create: false) else { return nil }
         defer { sqlite3_close(db) }
         var statement: OpaquePointer?
@@ -416,6 +480,28 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
 }
 
 private enum ThumbnailStoreError: Error { case database }
+
+/// Every app-owned SQLite connection for one cache directory uses this lock.
+private final class CacheIndexLocks: @unchecked Sendable {
+    static let shared = CacheIndexLocks()
+    private let mapLock = NSLock()
+    private var locks: [String: NSRecursiveLock] = [:]
+
+    func withLock<T>(for directory: URL, _ body: () throws -> T) rethrows -> T {
+        let key = directory.standardizedFileURL.path
+        mapLock.lock()
+        let lock: NSRecursiveLock
+        if let existing = locks[key] { lock = existing }
+        else {
+            lock = NSRecursiveLock()
+            locks[key] = lock
+        }
+        mapLock.unlock()
+        lock.lock()
+        defer { lock.unlock() }
+        return try body()
+    }
+}
 
 /// Coordinates actors in this process that use the same cache directory.
 private final class PayloadLeaseRegistry: @unchecked Sendable {
