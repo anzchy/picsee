@@ -69,6 +69,11 @@ So:
   one it started).
 - **One computer-use driver per desktop.** On the mini, mdpro's `dtrack` tmux session drives the same screen;
   confirm it is idle before starting, and never send it commands or otherwise touch it.
+- **Take the shared desktop GUI lock first** (agreed with mdpro 2026-10-24; mdpro ADR-0134 decision 6). The lock is
+  the directory `~/.cache/desktop-gui.lock/`, and its key=value `owner` file is the one that counts. Acquire it with
+  `.agents/skills/picsee-delegator/scripts/gui-lock.sh acquire <run-id> <minutes> "<purpose>"` before the first launch,
+  keystroke, click or screenshot. Hold it across relaunches, and release it after cleanup, also on aborted runs.
+  Exit 75 means mdpro holds it: drive nothing and wait, or tell the user. Never remove another project's lock.
 - **The user's own Picsee is off limits.** If a Picsee is running that this run didn't start (an installed
   copy, a dev build from Xcode), stop and ask the user to quit it. Don't kill it.
 
