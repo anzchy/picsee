@@ -180,9 +180,9 @@ public actor DecodeAdmission {
         guard !jobs[jobID]!.cancelled.contains(id) else { return }
         jobs[jobID]!.cancelled.insert(id)
         let job = jobs[jobID]!
-        if job.cancelled.count == job.subscribers.count && keyed[job.key] == jobID {
-            keyed.removeValue(forKey: job.key)
+        if job.cancelled.count == job.subscribers.count {
             job.trace.cancel()
+            if keyed[job.key] == jobID { keyed.removeValue(forKey: job.key) }
         }
         if jobs[jobID]!.admitted == nil {
             let delivery = jobs[jobID]!.subscribers.removeValue(forKey: id)!

@@ -89,3 +89,23 @@ final class BlockingDecoder: ImageDecoding, @unchecked Sendable {
     #expect(await admission.activity().running == 0)
     #expect(await admission.activity().heavy == 0)
 }
+
+@Test(.timeLimit(.minutes(1))) func freshAdmittedCancellationSkipsDecoderAndReleasesReservation() async throws {
+    let executor = ControlledExecutor()
+    let decoder = DecodeCounter()
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),
+                                    executor: executor, decoder: decoder)
+    let fresh = await admission.subscribe(tinyRequest, key: decodeKey(1073), cost: 4,
+                                          heavy: true, priority: .current, reuseExisting: false)
+    #expect(executor.count == 1)
+    #expect(await admission.activity().running == 1)
+    #expect(await admission.activity().reservedBytes == 4)
+
+    await fresh.cancel()
+    #expect(await admission.activity().reservedBytes == 4)
+    executor.runFirst()
+    await expectCancelled(fresh)
+    #expect(decoder.count == 0)
+    #expect(await admission.activity().running == 0)
+    #expect(await admission.activity().reservedBytes == 0)
+}
