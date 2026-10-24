@@ -48,8 +48,8 @@ gardener is not BLOCK, and CI is green.
 | Pane | Name | Agent / model | Worktree | Role |
 |---|---|---|---|---|
 | w1:p1 | picsee-delegator | Claude Code, Opus (or you) | main checkout | delegator |
-| w1:p2 | gpt-imple-1 | Codex `gpt-6.1-sol`, `-s danger-full-access` | `picsee-wt/gpt-imple-1` | Medium/High implementer |
-| w1:p3 | gpt-imple-2 | Codex `gpt-6.1-sol`, `-s danger-full-access` | `picsee-wt/gpt-imple-2` | Medium/High implementer |
+| w1:p2 | gpt-imple-1 | Target Codex `gpt-6-sol`, effort `medium`, after its current work/fix rounds end | `picsee-wt/gpt-imple-1` | Medium/High implementer |
+| w1:p3 | gpt-imple-2 | Codex `gpt-6-sol`, effort `medium` (transition applied) | `picsee-wt/gpt-imple-2` | Medium/High implementer |
 | w1:p4 | gpt-imple-3 | Codex `gpt-5.6-sol` | `picsee-wt/gpt-imple-3` | Low-only implementer |
 | w1:p5 | gpt-auditor | Codex `gpt-6-astra`, reasoning high | `picsee-wt/gpt-auditor` (detached) | auditor |
 | w1:p6 | opus-auditor | Claude Code `--agent picsee-opus-auditor --model opus --dangerously-skip-permissions` | `picsee-wt/opus-auditor` (detached) | auditor |
@@ -93,11 +93,59 @@ herdr's `agent_status` often stays `working` (or says `done`) for Codex when it 
 - An empty screen falls back to herdr status.
 - For Claude panes, herdr status is reliable.
 
-For **Kimi** (and Claude panes), herdr status is reliable (`working` → `idle`/`done`). Poll it together with
-the handoff file: `.agents/skills/picsee-delegator/scripts/poll-handoff.sh kimi-imple-1 ~/.picsee/herdr/kimi-imple-1/<item>-handoff.md
-[max_min] ['## Fix round 1']` (the optional marker waits for a section to appear).
+For **Kimi** (and Claude panes), herdr status is reliable (`working` → `idle`/`done`). The shipped adapter is
+`poll-handoff.sh`; give the listener a unique round marker when the report file is reused.
 
 Don't grep a Kimi screen for words like "permission"; that produced a false "question" once.
+
+### Durable listener notification
+
+Starting a bare poller is not enough: it can finish after the delegator's shell or turn exits and leave only a local
+log. Immediately after every implementation, fix, audit or confirm dispatch, start the attached listener. Paste the
+active delegator Codex thread UUID literally; never derive it from cached `herdr agent_session` data, which has been
+observed to point at a stale, wrong session. The helper uses argv throughout and never types into the desktop UI.
+
+One complete Codex implementation-round command is:
+
+```sh
+python3 .agents/skills/picsee-delegator/scripts/listen-notify.py start \
+  --event 'issue90-implementation-r1-head-<sha7>' \
+  --task 'issue90-implementation-r1' \
+  --thread '<exact-delegator-thread-uuid>' \
+  --agent 'gpt-imple-3' \
+  --handoff "$HOME/.picsee/herdr/gpt-imple-3/issue90-handoff.md" \
+  --poll idle \
+  --interval 120 \
+  --max-minutes 3000
+```
+
+Use `--poll handoff` for Kimi/Claude and add `--handoff-marker '## Fix round 1'` when a report is appended or
+reused. Every dispatch or rearm gets a new `--event` and matching `--task`; include the round and expected head or
+other unique token. Reusing an event with a different agent, task, target thread, poll argv or report path is rejected.
+
+The start command detaches a new process session, so it survives the parent shell and agent turn. Runtime state is
+under `~/.picsee/herdr/delegator/listeners/<event>/`: `config.json`, `pid`, `listener.log`, `status.json`,
+`poll-result.json`, and, only after a successful `codex queue` response, `queue-receipt.json`. The shipped pollers
+have finite waits; queue delivery uses finite 30-second attempts and bounded exponential backoff. No heavy lock is
+taken. A nonzero poller exit, timeout, blocker, question, or missing/stale report is still queued as **needs
+inspection** and is never labelled successful or accepted.
+
+Inspect `status.json` and `poll-result.json` first. A `queue-receipt.json` proves only that Codex accepted the queued
+message; it is not the delegator's ACK and poll completion is not audit acceptance. Before relying on this mechanism
+for a new environment, run one user-authorized probe event, confirm the exact target thread visibly receives it, ACK
+it there, and then continue the real work. Do not make the helper accept an audit, merge, or advance a lifecycle
+unattended.
+
+Failed delivery keeps the poll result and can be restarted with the identical command; repeats after a receipt do
+not queue again. Registration and delivery are serialized per event without holding a duplicate lock through the
+long poll. There is an unavoidable at-least-once edge: if `codex queue` accepts the message and the listener crashes
+before writing its receipt, a retry can duplicate the notification. Treat event IDs and message labels as the
+deduplication aid, not as an exactly-once transport guarantee.
+
+This helper is available after its reviewed change lands; it does not migrate or stop listeners already running, and
+it does not provide unattended acceptance or merge safeguards. When a real operating failure is demonstrated, fix
+the narrow instruction or attachment and add a reproducing behavioral test in a reviewed PR instead of keeping the
+repair only under `~/.picsee/`.
 
 ---
 
@@ -194,7 +242,8 @@ Put it at `~/.picsee/herdr/<implementer>/<item>-brief.md`. Templates that worked
     stop and report".
 
 Dispatch with a one-line prompt that points at the file, for example `herdr agent prompt gpt-imple-2 'New task: … Read
-and follow ~/.picsee/herdr/gpt-imple-2/<brief>.md … Do not push.'`, and start the poller.
+and follow ~/.picsee/herdr/gpt-imple-2/<brief>.md … Do not push.'`, then start a fresh listener event as described
+in [Durable listener notification](#durable-listener-notification).
 
 ### 5.3 During implementation
 
@@ -448,7 +497,7 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Missed that an implementer had finished (twice) | herdr status stuck at `working` for Codex | `poll-idle.sh` (screen-based); two idle reads |
+| Missed that an implementer had finished (twice) | A screen-based poller ended with only a local log | Attach `listen-notify.py start` to `poll-idle.sh`; pin the exact delegator thread and inspect queue receipt vs ACK |
 | `reset.sh` prints `FAIL … after /new` | pane too small to show "Context 0% used" | `herdr pane zoom`, read again; usually the reset did work |
 | Prompt sent right after a reset "didn't land" | chooser still open or the pane redrawing | wait, check for "esc to interrupt" after ~20 s, resend |
 | A mid-rebase commit swallowed the implementer's message | `git rebase … | tail` hid the conflict | never pipe a rebase; check its exit code |

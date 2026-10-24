@@ -33,6 +33,11 @@
 - 新增 Kimi 实现者：「我想将 Kimi 作为另一个 implementor」，试用通过后「同意，正式派任务」；
 - 模型：「之后Kimi 默认用`K3.1 Pro thinking: high` model,effort high，这个记入相关rule」。
 
+用户决定（2026-10-24，第二轮）：
+- gpt-imple-1/2 在各自当前任务（含已进入的修复轮）完成后切换，不中断在途工作：
+  「当前任务完成后，gpt-imple-1/2背后的模型切换为GPT-6-Sol medium effort」。记录时 gpt-imple-2 已切换，
+  gpt-imple-1 等当前任务/修复轮结束后切换；本次文档更新不操作活会话。
+
 ## 1. 为什么不能直接复制
 
 - M71 只是 M70 的覆盖层，只替换角色表、Codex 派活方式、guard、审计分工这几块。合入流程（三个条件和 `--ff-only`）、两份审计结论怎么合并、三轮上限、风险分级、receipts、编号预留、会话轮换、真机批次，都写在 M70 里。
@@ -45,8 +50,8 @@
 
 | 节 | 来源 | picsee 改法 |
 |---|---|---|
-| 角色表 | M71 Roster + M70 Sessions | delegator 改名 `picsee-delegator`；实现者为 `gpt-imple-1/2`（Codex `gpt-6.1-sol`）、`gpt-imple-3`（Codex `gpt-5.6-sol`）和 `kimi-imple-1`（Kimi Code CLI，模型 `kimi-code/k3.1-pro`，thinking effort `high`；`herdr agent start kimi-imple-1 --kind kimi --pane <id> -- --yolo -m kimi-code/k3.1-pro`，effort 由 `~/.kimi-code/config.toml` 中该模型的 `default_effort = "high"` 设定；独立 worktree `picsee-wt/kimi-imple-1`）；审计者为 `gpt-auditor`、`opus-auditor`（herdr 窗格，Claude Code + Opus），真机为 `claude-imple-1`；报告目录在 `~/.picsee/herdr/<name>/`，`gpt-imple-3` 对应 `~/.picsee/herdr/gpt-imple-3/`；去掉 `/security-review` 行；去掉 mdpro-device-harness 和历史别名表 |
-| 模型规则 | M70 “Every session runs on Opus” | 只保留结论：Claude 会话和 subagent 用 Opus（审计者 `opus-auditor` 也用 Opus，2026-10-23 用户决定），Codex 用指定模型；Kimi 实现者固定用 K3.1 Pro、effort high（2026-10-24 用户决定），换模型或 effort 须用户同意。Kimi 没有 `$tdd-guardian-workflow`，brief 须写明测试先行步骤（先写失败测试并贴出失败输出，再实现）。不搬演变历史 |
+| 角色表 | M71 Roster + M70 Sessions | delegator 改名 `picsee-delegator`；实现者为 `gpt-imple-1/2`（Codex `gpt-6-sol`、effort `medium`，各自当前任务/修复轮结束后生效，不中断在途工作）、`gpt-imple-3`（Codex `gpt-5.6-sol`）和 `kimi-imple-1`（Kimi Code CLI，模型 `kimi-code/k3.1-pro`，thinking effort `high`；`herdr agent start kimi-imple-1 --kind kimi --pane <id> -- --yolo -m kimi-code/k3.1-pro`，effort 由 `~/.kimi-code/config.toml` 中该模型的 `default_effort = "high"` 设定；独立 worktree `picsee-wt/kimi-imple-1`）；审计者为 `gpt-auditor`、`opus-auditor`（herdr 窗格，Claude Code + Opus），真机为 `claude-imple-1`；报告目录在 `~/.picsee/herdr/<name>/`，`gpt-imple-3` 对应 `~/.picsee/herdr/gpt-imple-3/`；去掉 `/security-review` 行；去掉 mdpro-device-harness 和历史别名表 |
+| 模型规则 | M70 “Every session runs on Opus” | 只保留结论：Claude 会话和 subagent 用 Opus（审计者 `opus-auditor` 也用 Opus，2026-10-23 用户决定）；`gpt-imple-1/2` 在各自在途任务完成后使用 `gpt-6-sol`、effort medium，不由文档改动直接切换活会话；其他 Codex 用指定模型；Kimi 实现者固定用 K3.1 Pro、effort high（2026-10-24 用户决定），换模型或 effort 须用户同意。Kimi 没有 `$tdd-guardian-workflow`，brief 须写明测试先行步骤（先写失败测试并贴出失败输出，再实现）。不搬演变历史 |
 | 派活与上限 | M70 How work is assigned、idle pull | 工作项编号用开发计划里的 `P0-01…P7-09`；新发现的问题编号改用 `F<n>`，替代 mdpro 的 D 编号；每会话一个、picsee 整机最多三个未合入实现项，不与 mdpro 合计：`gpt-imple-1/2` 与 `kimi-imple-1` 共用 Medium/High 工作名额，同时最多两个（2026-10-24 起），Kimi 的 Medium/High 项走双审，第三个名额只给 `gpt-imple-3` 的 Low 项。`gpt-imple-3` 只接 Low 风险工作：纯文档、机械重命名与路径修复、Low 审计修复、小脚本与测试 fixture、账簿与时间线措辞；Swift、并发、sandbox、entitlements、签名、真机脚本、receipt lane 及 Medium/High 风险仍由 `gpt-imple-1/2` 负责。`gpt-imple-3` 的 Low 项采用一名盲审加 confirm，gardener 与 CI 不变 |
 | Codex 智能体 | M71 Codex agents + mdpro ADR-0131 | 照搬 `prompt --wait`、唤醒、超时只重新等待不重发、restart 四步。`herdr agent wait --timeout` 和 `herdr agent prompt --wait --timeout` 的 `--timeout` 均以毫秒计（20 分钟写 `1200000`）；立即返回 timeout 说明单位写错，不是 agent 卡住。`prompt` 后立即 `wait` 可能读到上一轮残留的 `done` 而马上返回；先确认 pane 已进入 working（`herdr pane read` 见 `Working`），或返回后核对 handoff/报告文件确已更新。路径改为 `~/.picsee/herdr/<name>/`，环境变量改为 `PICSEE_ROLE`。每次 gpt-auditor 请求前只在 idle 或 done 时重置：先记录 session id，执行 `herdr pane send-text <pane> '/new'`，再用 `herdr pane send-keys <pane> enter` 提交（`herdr agent send-keys` 不会提交；第一次 Enter 可能被斜杠命令弹层吞掉，要按到出现选择框为止），Codex 0.163.0 随后问「Where should the new conversation run?」，再按一次 Enter 选默认的当前 worktree；都不用 `--wait`。状态行回到 `Context 0% used` 才继续；herdr 要到下一轮才报告新 session id，所以在请求开始后核对 id 已变，没变就作废结果并开新 pane。脚本：`~/.picsee/herdr/delegator/reset.sh <name> <pane>`。2026-10-22 的探针通过：gpt-auditor 重置后 id 由 `01a161b4…` 变为 `01a16250…`，问上一请求答 `NONE`。依赖前先做一次探针：重置后问上一请求是什么；id 已变且回答不含此前请求才通过。实现者每项一个新会话；仅当 fix 1 brief 点名 1–2 个 finding 且 context used 低于约 50% 时留在原会话。其余 fix（fix 2 起）都开新会话，只读 brief、上一份 handoff、merged verdict 和 fix brief。context used 超过约 60% 时先写 progress note，再重启。通过 `herdr pane read` 读取 Codex status line 计算 context used |
 | Brief 与自验收 | M71 Briefs and self-acceptance + mdpro ADR-0131 | 6 节 brief 结构照搬；Background 引用开发计划工作包、mockup 编号、DESIGN 条款和 ADR；测试矩阵、对抗审查四步照搬，skill 改为 `$picsee-tdd-workflow`；每份 handoff 列出曾拒绝的方法及原因 |
