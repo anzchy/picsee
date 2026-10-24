@@ -18,18 +18,26 @@ import PicseeCore
     func clearFolderImageForNoMatches() { cleared += 1 }
 }
 
-@Test(arguments: ["png", "none"])
+@Test(arguments: ["png", "none", "restore"])
 @MainActor func folderReadingConditionChangeDuringRememberDoesNotReopenExcludedFirst(selection: String) async throws {
     let fixture = FolderScanFixture(), host = FolderReadingHost(), coordinator = fixture.coordinator
     coordinator.host = host
     host.onRemember = {
         coordinator.setConditions(.init(selectedExtensions: selection == "png" ? ["png"] : ["tiff"]))
+        if selection == "restore" {
+            coordinator.setConditions(.init(selectedExtensions: ["png"]))
+            coordinator.setConditions(.init())
+            #expect(coordinator.move(.previous))
+        }
     }
     let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
     await fixture.scanner.waitForStart()
     try await fixture.scanner.deliver(["a.jpg", "b.png"])
     await fixture.scanner.finish(); try await task.value
-    if selection == "png" {
+    if selection == "restore" {
+        #expect(host.opens.map(\.lastPathComponent) == ["b.png", "a.jpg"])
+        #expect(coordinator.currentURL?.lastPathComponent == "a.jpg")
+    } else if selection == "png" {
         #expect(host.opens.map(\.lastPathComponent) == ["b.png"])
         #expect(coordinator.currentURL?.lastPathComponent == "b.png")
         #expect(host.cleared == 0)
