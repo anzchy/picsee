@@ -14,6 +14,16 @@ import PicseeCore
     public var availableExtensions: [String] {
         Array(Set(sourceSnapshot?.entries.map(\.normalizedExtension) ?? [])).sorted()
     }
+    public func preservesPresentationAuthorityForRetry(_ url: URL, accessRequest: AccessRequest?) -> Bool {
+        guard case .root(let requestRoot, let file)? = accessRequest,
+              let rootID = activeFolder?.rootID ?? sourceSnapshot?.version.rootID,
+              requestRoot == rootID,
+              file.standardizedFileURL == url.standardizedFileURL,
+              inputURL?.standardizedFileURL == url.standardizedFileURL,
+              currentURL?.standardizedFileURL == url.standardizedFileURL,
+              automaticPresentationAllowed?() != false else { return false }
+        return true
+    }
     public func setConditions(_ value: FolderViewConditions) {
         conditions = value
         projectSource()

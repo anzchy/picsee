@@ -75,7 +75,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         stateHost.autoresizingMask = [.width, .height]
         stateHost.onRetry = { [weak self] in
             self?.retryIntent?.reopen { url, request in
-                self?.open(url, accessRequest: request, fromFolderScan: self?.retryFromFolderScan == true)
+                guard let self else { return }
+                let retainsFolder = self.session.folderScan?.preservesPresentationAuthorityForRetry(url, accessRequest: request) == true
+                self.open(url, accessRequest: request, fromFolderScan: self.retryFromFolderScan || retainsFolder)
             }
         }
         content.addSubview(stateHost)
