@@ -44,14 +44,139 @@ private struct PartialFailureScanner: FolderScanning {
     #expect(await fixture.access.balance == [1, 1])
 }
 
-@MainActor private final class RecursiveSelectionHost: FolderScanHost {
+@MainActor private final class RecursiveSelectionHost: FolderScanHost, ViewerSessionNavigationHost, ViewerImageHost {
     var opened: [URL] = []
     var cleared = 0
+    var emptyAlerts = 0
+    var paintedURL: URL?
+    var nativeFileURL: URL?
+    var retryAvailable = false
+    var hasImage: Bool { paintedURL != nil }
+    var canNavigate: Bool { nativeFileURL != nil }
     weak var session: ViewerSession?
-    func openFolderImage(_ url: URL, rootID: AccessRootID) { opened.append(url) }
+    func openFolderImage(_ url: URL, rootID: AccessRootID) {
+        opened.append(url); paintedURL = url; nativeFileURL = url; retryAvailable = true
+    }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { }
-    func showEmptyFolder() { }
-    func clearFolderImageForNoMatches() { cleared += 1; session?.closeImage() }
+    func showEmptyFolder() { emptyAlerts += 1 }
+    func clearFolderImageForNoMatches() {
+        cleared += 1; paintedURL = nil; nativeFileURL = nil; retryAvailable = false; session?.closeImage()
+    }
+    func beginImageOpening() { }
+    func installImage(_ image: DecodedImage, fileURL: URL) {
+        paintedURL = fileURL; nativeFileURL = fileURL; retryAvailable = true
+    }
+    func imageLoadFailed(_ error: any Error) { }
+    func navigate(_ direction: NavigationDirection) { }
+    func performCanvas(_ command: CommandID, from entry: CommandEntry) { }
+    func requestOpen() { }
+    func applyFocus(_ focus: FocusContext) { }
+    func showInspector(_ visible: Bool) { }
+}
+
+@Test @MainActor func p204FixR2RapidOffOnOffClearsSettledNestedPresentation() async throws {
+    let fixture = FolderScanFixture(), host = RecursiveSelectionHost()
+    let session = ViewerSession(host: host), pipeline = LoadPipeline(), leases = LoadLeases()
+    host.session = session
+    session.folderScan = fixture.coordinator
+    session.imageLoader.host = host
+    fixture.coordinator.host = host
+    _ = fixture.coordinator.setRecursiveEnabled(true)
+    let nested = fixture.folder.appendingPathComponent("sub/nested.png")
+    let initial = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id, input: nested)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["sub/nested.png"])
+    await fixture.scanner.finish(); try await initial.value
+    session.openImage(nested, maximumPixelSize: 512) {
+        try await AccessImageSource.open(.fileGrant(nested), access: leases, pipeline: pipeline)
+    }
+    await session.imageLoader.loadTask?.value
+    #expect(session.imageLoader.phase == .settled && host.paintedURL == nested)
+    let firstOff = try #require(fixture.coordinator.setRecursiveEnabled(false))
+    await fixture.scanner.waitForStart(1)
+    let on = try #require(fixture.coordinator.setRecursiveEnabled(true))
+    await fixture.scanner.waitForStart(2)
+    let finalOff = try #require(fixture.coordinator.setRecursiveEnabled(false))
+    await fixture.scanner.waitForStart(3)
+    #expect(host.paintedURL == nested && host.cleared == 0)
+    await fixture.scanner.finish(1); await fixture.scanner.finish(2)
+    await fixture.scanner.finish(3)
+    try await firstOff.value; try await on.value; try await finalOff.value
+    #expect(fixture.coordinator.snapshot?.isComplete == true)
+    #expect(fixture.coordinator.snapshot?.entries.isEmpty == true)
+    #expect(host.cleared == 1 && host.emptyAlerts == 1)
+    #expect(host.paintedURL == nil && host.nativeFileURL == nil && !host.retryAvailable)
+    #expect(session.imageLoader.fileURL == nil && session.imageStatus == .empty)
+    #expect(!session.isEnabled(.next) && !session.isEnabled(.previous))
+    #expect(await fixture.access.balance == [4, 4])
+}
+
+@Test @MainActor func p204FixR2FailedOffRetryClearsSettledNestedPresentation() async throws {
+    let fixture = FolderScanFixture(), host = RecursiveSelectionHost()
+    let session = ViewerSession(host: host), pipeline = LoadPipeline(), leases = LoadLeases()
+    host.session = session
+    session.folderScan = fixture.coordinator
+    session.imageLoader.host = host
+    fixture.coordinator.host = host
+    _ = fixture.coordinator.setRecursiveEnabled(true)
+    let nested = fixture.folder.appendingPathComponent("sub/nested.png")
+    let initial = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id, input: nested)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["sub/nested.png"])
+    await fixture.scanner.finish(); try await initial.value
+    session.openImage(nested, maximumPixelSize: 512) {
+        try await AccessImageSource.open(.fileGrant(nested), access: leases, pipeline: pipeline)
+    }
+    await session.imageLoader.loadTask?.value
+    #expect(session.imageLoader.phase == .settled && host.paintedURL == nested)
+    let off = try #require(fixture.coordinator.setRecursiveEnabled(false))
+    await fixture.scanner.waitForStart(1)
+    await fixture.scanner.finish(1, failing: true)
+    await #expect(throws: FolderScanTestError.expected) { try await off.value }
+    #expect(session.imageStatus == .folderScanFailed("Folder scan failed", 0))
+    #expect(host.paintedURL == nested && host.cleared == 0)
+    let retry = try #require(fixture.coordinator.retry())
+    await fixture.scanner.waitForStart(2)
+    await fixture.scanner.finish(2); try await retry.value
+    #expect(fixture.coordinator.snapshot?.entries.isEmpty == true)
+    #expect(host.cleared == 1 && host.emptyAlerts == 1)
+    #expect(host.paintedURL == nil && host.nativeFileURL == nil && !host.retryAvailable)
+    #expect(session.imageLoader.fileURL == nil && session.imageStatus == .empty)
+    #expect(!session.isEnabled(.next) && !session.isEnabled(.previous))
+    #expect(await fixture.access.balance == [3, 3])
+}
+
+@Test @MainActor func p204FixR2CancelledOffKeepsSettledImageAndReplacementPresentsTopLevel() async throws {
+    let fixture = FolderScanFixture(), host = RecursiveSelectionHost()
+    let session = ViewerSession(host: host), pipeline = LoadPipeline(), leases = LoadLeases()
+    host.session = session
+    session.folderScan = fixture.coordinator
+    session.imageLoader.host = host
+    fixture.coordinator.host = host
+    _ = fixture.coordinator.setRecursiveEnabled(true)
+    let nested = fixture.folder.appendingPathComponent("sub/nested.png")
+    let top = fixture.folder.appendingPathComponent("top.png")
+    let initial = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id, input: nested)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["sub/nested.png", "top.png"])
+    await fixture.scanner.finish(); try await initial.value
+    session.openImage(nested, maximumPixelSize: 512) {
+        try await AccessImageSource.open(.fileGrant(nested), access: leases, pipeline: pipeline)
+    }
+    await session.imageLoader.loadTask?.value
+    let cancelled = try #require(fixture.coordinator.setRecursiveEnabled(false))
+    await fixture.scanner.waitForStart(1)
+    fixture.coordinator.cancel()
+    await fixture.scanner.finish(1); try await cancelled.value
+    #expect(host.cleared == 0 && host.paintedURL == nested)
+    #expect(session.imageLoader.phase == .settled && session.imageLoader.fileURL == nested)
+    let replacement = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart(2)
+    try await fixture.scanner.deliver(["top.png"], at: 2)
+    await fixture.scanner.finish(2); try await replacement.value
+    #expect(host.opened.last == top && host.paintedURL == top)
+    #expect(host.cleared == 0 && fixture.coordinator.currentURL == top)
+    #expect(await fixture.access.balance == [3, 3])
 }
 
 @Test @MainActor func p204FixEmptyFlatToggleClearsExcludedNestedImage() async throws {
