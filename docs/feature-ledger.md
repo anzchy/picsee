@@ -331,12 +331,12 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
 | 打开与输入 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；OPEN-06 因 P2-09/P3-14 被映射，状态与验收未变。 |
-| 查看与画布 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：VIEW-10 已记录同一排序/过滤快照导航、可选循环及 folder.loop.menu，保留原生菜单/按键组合未验；VIEW-05 的全屏路径不变。前次 #58 的 VIEW-09 限制保留，本范围不改缓存/加载代次。 |
+| 查看与画布 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..0bcbb90）：0bcbb90 只改开发计划状态措辞，补记 P0-03 另有 MacBook @2x 记录，与 VIEW-02/03 已链接的 P0 @2x/@1x 记录一致；无代码、无验证记录，VIEW 各行状态与验收未变。上次：P2-03（#89，d26e164..057462f）。 |
 | C 沉浸界面 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；CHROME-04/05 因 P3-11/P3-01 被映射；未合入 P3-01 分支的探查运行不是验证记录，CHROME-05 网格来源仍待 P3-01。 |
 | 外观与显示偏好 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；PREF-03 因 P3-11 被映射，保持 Absent。 |
 | 文件夹浏览 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；FOLDER-01 验收与 P3-01 网格入口的冲突仅列为待用户决定，验收未改；FOLDER-04…09 保持 Absent，P2-04 未合入。 |
 | Filmstrip | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；FILM-01/02 因 P2-06 被映射，保持 Absent。 |
-| 网格、选择与菜单 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；GRID 各行因 P3-01…15 被映射；P3-01 签名 App 探查明确不是验证记录、代码未合入，GRID-01/02 等保持 Absent。 |
+| 网格、选择与菜单 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；GRID 各行因 P3-01…15 被映射；P3-01 签名 App 探查明确不是验证记录、代码未合入，GRID-01/02 等保持 Absent；0bcbb90 提交标题提到 GRID-15：计划头不再称已合入工作包的账簿行均为 Partial，与 GRID-15（计划含 P2-01）保持 Absent 一致。 |
 | 信息与元数据 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；INFO-01/02 因 P3-13 被映射，保持 Absent。 |
 | 授权与文件访问 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；ACCESS-04 因 P2-08 被映射，保持 Absent。 |
 | 缓存与资源 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；CACHE-01 因 P3-06、CACHE-02…04 因 P3-03…07 被映射；P3-03/04 未合入，CACHE-02 保持 Absent，CACHE-01 保持 Partial/单元。 |
