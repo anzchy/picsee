@@ -23,8 +23,10 @@ extension FolderScanCoordinator {
     public func canMove(_ direction: NavigationDirection, currentURL: URL? = nil) -> Bool? {
         if hasNoMatches { return false }
         if snapshot?.isComplete == true, snapshot?.navigationEntries.isEmpty == true { return false }
-        guard let navigation = navigation(matching: currentURL), let snapshot else { return nil }
-        return !snapshot.isComplete || neighbor(in: navigation, direction: direction) != nil
+        guard let navigation = navigation(matching: currentURL), let snapshot else {
+            return failure == nil ? nil : false
+        }
+        return (failure == nil && !snapshot.isComplete) || neighbor(in: navigation, direction: direction) != nil
     }
     /// A member endpoint is handled, including a provisional endpoint's enabled no-op.
     @discardableResult public func move(_ direction: NavigationDirection, currentURL: URL? = nil) -> Bool {
