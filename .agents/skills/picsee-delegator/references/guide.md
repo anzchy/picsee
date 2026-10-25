@@ -395,7 +395,9 @@ Never pipe `git rebase`; check its exit status. Write logs to `$(git rev-parse -
 ### 5.7 Doc gardener
 
 Run it before opening a PR and before every push of a new head:
-- **Claude:** the `picsee-doc-gardener` subagent.
+- **Claude:** the `picsee-doc-gardener` subagent. It runs on Haiku (`model: haiku` in its agent file; user decision
+  2026-10-25: 「picsee-doc-gardener will be powered by Haiku model, from now on」); do not override the model when
+  dispatching it.
 - **Codex:** the custom agent of the same name.
 
 Pass it the mode `pr`, the worktree, `base..head`, a context paragraph and the handoff path. It edits only Part 3
