@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import PicseeApplication
 import PicseeInfrastructure
 import PicseeMacUI
 
@@ -12,7 +13,7 @@ final class CacheSettingsWindow {
     init(cache: ThumbnailDiskCache, appearanceAdapter: WindowAppearanceAdapter) {
         self.appearanceAdapter = appearanceAdapter
         model = CacheSettingsModel(cache: cache)
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 190),
+        window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 190),
                           styleMask: [.titled, .closable, .miniaturizable],
                           backing: .buffered, defer: false)
         window.title = String(localized: "Settings")
@@ -29,6 +30,10 @@ final class CacheSettingsWindow {
     }
 }
 
+private final class SettingsWindow: NSWindow {
+    override func cancelOperation(_ sender: Any?) { performClose(sender) }
+}
+
 private struct CacheSettingsPane: View {
     let model: CacheSettingsModel
 
@@ -38,9 +43,8 @@ private struct CacheSettingsPane: View {
                 Text(sizeLabel).accessibilityIdentifier("settings.cache.size")
             }
             if let diagnostic = model.diagnostic {
-                Text(String(localized: "Cache operation failed"))
+                Text(LocalizedStringKey(diagnostic))
                     .foregroundStyle(.secondary)
-                    .help(diagnostic)
                     .accessibilityIdentifier("settings.cache.diagnostic")
             }
             HStack {
@@ -50,13 +54,12 @@ private struct CacheSettingsPane: View {
                 } label: {
                     Text(String(localized: "Clear Cache"))
                 }
-                .disabled(model.isMeasuring)
+                .disabled(model.isMeasuring || model.isClearing)
                 .accessibilityIdentifier("settings.cache.clear")
             }
         }
         .padding(24)
         .frame(width: 460, height: 190)
-        .task { await model.refresh() }
     }
 
     private var sizeLabel: String {

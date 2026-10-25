@@ -4,6 +4,31 @@ import PicseeApplication
 import PicseeCore
 @testable import PicseeInfrastructure
 
+@Test func p305PublicCacheErrorCodeNeverIncludesAFilePath() {
+    let path = "/Users/private-person/Library/Caches/Picsee/Thumbnails/index.sqlite3"
+    let error = NSError(domain: NSCocoaErrorDomain, code: 512, userInfo: [NSFilePathErrorKey: path])
+    let code = ThumbnailDiskCache.publicErrorCode(error)
+    #expect(code == "cocoa:512")
+    #expect(!code.contains(path))
+    #expect(ThumbnailDiskCache.publicErrorCode(NSError(domain: NSPOSIXErrorDomain, code: 28,
+        userInfo: [NSFilePathErrorKey: path])) == "posix:28")
+    #expect(ThumbnailDiskCache.publicErrorCode(NSError(domain: path, code: 7)) == "other:7")
+}
+
+@Test func p305ClearCountsAndRemovesOwnedSQLiteJournal() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let cacheURL = root.appendingPathComponent("cache")
+    try FileManager.default.createDirectory(at: cacheURL, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let journal = cacheURL.appendingPathComponent("index.sqlite3-journal")
+    try Data(repeating: 7, count: 13).write(to: journal)
+    let cache = ThumbnailDiskCache(directory: cacheURL)
+    #expect(try await cache.sizeBytes() == 13)
+    try await cache.clear()
+    #expect(!FileManager.default.fileExists(atPath: journal.path))
+    #expect(try await cache.sizeBytes() == 0)
+}
+
 @Test func p305ClearInvalidatesHeldStoreAndMeasuresRealBytes() async throws {
     let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
@@ -48,7 +73,8 @@ import PicseeCore
     let model = CacheSettingsModel(cache: ThumbnailDiskCache(directory: cacheURL))
     await model.clear()
     #expect(model.sizeBytes == nil)
-    #expect(model.diagnostic != nil)
+    #expect(model.diagnostic == "Cache clear failed")
+    #expect(!(model.diagnostic ?? "").contains(cacheURL.path))
     #expect(try Data(contentsOf: cacheURL) == Data("not a directory".utf8))
 }
 
@@ -85,7 +111,7 @@ private actor P307MeasurementGate {
     #expect(model.sizeBytes == 0)
 }
 
-@Test func p305WriteFailureSkipsLaterWritesUntilClear() async throws {
+@Test func p305WriteFailureRetriesWithoutClearAfterOneSkippedAttempt() async throws {
     let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: rootURL) }
@@ -110,6 +136,10 @@ private actor P307MeasurementGate {
     #expect(skipped.failureCount == 1)
     #expect(skipped.skippedWriteCount == 1)
     #expect(try await cache.load(ticket).map { _ in true } == nil)
+    try await cache.store(decoded, for: ticket)
+    #expect(try await cache.load(ticket).map { _ in true } != nil)
+    #expect((await cache.writeDiagnostics()).failureCount == 1)
+    #expect((await cache.writeDiagnostics()).lastFailure == nil)
     try await cache.clear()
     let recovered = await cache.writeDiagnostics()
     #expect(recovered.failureCount == 0)
@@ -144,6 +174,9 @@ private actor P307MeasurementGate {
     let diagnostics = await cache.writeDiagnostics()
     #expect(diagnostics.failureCount == 1)
     #expect(diagnostics.skippedWriteCount == 1)
+    let settings = await CacheSettingsModel(cache: cache)
+    await settings.refresh()
+    #expect(await settings.diagnostic == "Cache write failed")
     #expect(try Data(contentsOf: source) == originalBytes)
     #expect(try Data(contentsOf: cacheURL) == Data("blocked".utf8))
 }
@@ -377,6 +410,8 @@ private actor P305WaitRegistration {
         await model.clear(onWaitRegistered: { Task { await registered.signal() } })
     }
     await registered.wait()
+    #expect(model.isMeasuring)
+    await model.refresh()
     #expect(model.isMeasuring)
     #expect(FileManager.default.fileExists(atPath: payload.path))
     await gate.release()

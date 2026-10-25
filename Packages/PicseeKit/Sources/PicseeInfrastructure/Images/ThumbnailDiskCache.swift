@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 
 /// Re-creatable small renders only. Actor isolation serializes SQLite and payload operations;
 /// the actor never inherits MainActor from its caller.
-public actor ThumbnailDiskCache: ThumbnailCaching {
+public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
     public struct WriteDiagnostics: Sendable, Equatable {
         public let failureCount: Int
         public let skippedWriteCount: Int
@@ -27,6 +27,14 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     static func isMissingRemovalError(_ error: NSError) -> Bool {
         (error.domain == NSCocoaErrorDomain && error.code == CocoaError.fileNoSuchFile.rawValue)
             || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT))
+    }
+    static func publicErrorCode(_ error: Error) -> String {
+        if case let ThumbnailStoreError.database(code) = error { return "sqlite:\(code)" }
+        if error is CachePathError { return "unsafe-cache-path" }
+        let value = error as NSError
+        if value.domain == NSCocoaErrorDomain { return "cocoa:\(value.code)" }
+        if value.domain == NSPOSIXErrorDomain { return "posix:\(value.code)" }
+        return "other:\(value.code)"
     }
     public static let maximumSourceBytes = 32 * 1024 * 1024
     public static let maximumPayloadBytes = 8 * 1024 * 1024
@@ -52,6 +60,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     private var didSweepOrphans = false
     private var writeFailureCount = 0
     private var skippedWriteCount = 0
+    private var writeRetrySkipsRemaining = 0
     private var lastWriteFailure: String?
     private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "thumbnail-cache")
 
@@ -123,6 +132,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         WriteDiagnostics(failureCount: writeFailureCount, skippedWriteCount: skippedWriteCount,
                          lastFailure: lastWriteFailure)
     }
+    public func hasWriteFailure() -> Bool { lastWriteFailure != nil }
 
     /// Advances the generation before removing any files, so old work can never publish later.
     public func clear() throws {
@@ -141,23 +151,21 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         }
         writeFailureCount = 0
         skippedWriteCount = 0
+        writeRetrySkipsRemaining = 0
         lastWriteFailure = nil
     }
 
     /// Used by Settings after Clear so its next measurement includes deferred lease cleanup.
-    public func waitForPendingDeletions() async {
-        await PayloadLeaseRegistry.shared.waitForPendingDeletions(in: directory)
-    }
     public func deferredClearFailure() -> String? {
         PayloadLeaseRegistry.shared.deferredClearFailure(in: directory)
     }
 
-    func waitForPendingDeletions(onRegistered: @escaping @Sendable () -> Void) async {
+    public func waitForPendingDeletions(onRegistered: (@Sendable () -> Void)? = nil) async {
         await PayloadLeaseRegistry.shared.waitForPendingDeletions(in: directory, onRegistered: onRegistered)
     }
 
     private static func isOwnedName(_ name: String) -> Bool {
-        if ["index.sqlite3", "index.sqlite3-wal", "index.sqlite3-shm"].contains(name) { return true }
+        if ["index.sqlite3", "index.sqlite3-wal", "index.sqlite3-shm", "index.sqlite3-journal"].contains(name) { return true }
         if name.hasPrefix(".tmp-") { return UUID(uuidString: String(name.dropFirst(5))) != nil }
         guard name.hasSuffix(".png"), name.utf8.count == 68 else { return false }
         return name.dropLast(4).utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
@@ -275,10 +283,12 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         }
         try Task.checkCancellation()
         guard ticket.generation == CacheIndexLocks.shared.generation(for: directory) else { return }
-        guard lastWriteFailure == nil else {
+        guard writeRetrySkipsRemaining == 0 else {
             skippedWriteCount += 1
+            writeRetrySkipsRemaining -= 1
             return
         }
+        var didWrite = false
         do {
         try withIndexLock {
         guard ticket.generation == CacheIndexLocks.shared.generation(for: directory) else { return }
@@ -314,19 +324,22 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
                          payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
                          sourceHeight: Int(image.sourcePixelSize.height))
+            didWrite = true
         }
         }
+        if didWrite { lastWriteFailure = nil }
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ImageLoadError where error.kind == .sourceChanged {
             throw error
         } catch let error as ThumbnailStoreError where !error.isPersistentWriteFailure {
-            logger.error("Thumbnail cache store failed; retry remains available: \(String(describing: error), privacy: .public)")
+            logger.error("Thumbnail cache store failed; retry remains available: \(Self.publicErrorCode(error), privacy: .public)")
             throw error
         } catch {
             writeFailureCount += 1
+            writeRetrySkipsRemaining = 1
             lastWriteFailure = String(describing: error)
-            logger.error("Thumbnail cache writes disabled: \(String(describing: error), privacy: .public)")
+            logger.error("Thumbnail cache write failed; retry after one skipped attempt: \(Self.publicErrorCode(error), privacy: .public)")
         }
     }
 
@@ -773,7 +786,7 @@ private final class PayloadLeaseRegistry: @unchecked Sendable {
             failedDeletions.removeValue(forKey: key)
         } catch {
             failedDeletions[key] = String(describing: error)
-            logger.error("Deferred thumbnail cache deletion failed: \(String(describing: error), privacy: .public)")
+            logger.error("Deferred thumbnail cache deletion failed: \(ThumbnailDiskCache.publicErrorCode(error), privacy: .public)")
         }
         resumeDrainedWaiters()
     }
