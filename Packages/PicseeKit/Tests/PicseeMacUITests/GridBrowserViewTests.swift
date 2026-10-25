@@ -73,12 +73,13 @@ import PicseeCore
     let filename = try #require(cell.view.subviews.compactMap { $0 as? NSTextField }
         .first { $0.stringValue == "A.jpg" })
     func rgba(_ color: CGColor?) -> [CGFloat] { color?.components ?? [] }
-    let lightBorder = rgba(cell.view.layer?.borderColor)
+    let outline = try #require(cell.view.layer?.sublayers?.first { $0.borderWidth == 2 })
+    let lightBorder = rgba(outline.borderColor)
     let lightFill = rgba(filename.layer?.backgroundColor)
     #expect(lightBorder == DesignColor.accent.components(.light).map { CGFloat($0) })
     #expect(lightFill == DesignColor.selectionFill.components(.light).map { CGFloat($0) })
     cell.view.appearance = NSAppearance(named: .darkAqua)
-    let darkBorder = rgba(cell.view.layer?.borderColor)
+    let darkBorder = rgba(outline.borderColor)
     let darkFill = rgba(filename.layer?.backgroundColor)
     #expect(darkBorder == DesignColor.accent.components(.dark).map { CGFloat($0) })
     #expect(darkFill == DesignColor.selectionFill.components(.dark).map { CGFloat($0) })

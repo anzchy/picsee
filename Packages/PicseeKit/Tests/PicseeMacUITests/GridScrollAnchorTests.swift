@@ -30,6 +30,6 @@ import PicseeCore
     grid.restoreContentOffset(previewOffset)
     #expect(grid.contentOffset == previewOffset)
     let layout = grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout
-    #expect(layout?.sectionInset.top == 20)
-    #expect(layout?.sectionInset.left == 20)
+    #expect(layout?.sectionInset.top == 16)
+    #expect(layout?.sectionInset.left == 16)
 }

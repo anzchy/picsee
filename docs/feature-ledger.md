@@ -174,8 +174,8 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| GRID-01 | 网格浏览 | Partial | 单元 | P3-01、P3-10 | `Packages/PicseeKit/Sources/PicseeApplication/Browser/FolderGridProjection.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridBrowserView.swift`、`App/CanvasWindowController.swift` | 打开目录显示 11/12 页网格：紧凑标题、底部工具，没有顶部横幅；文件名单行显示。限制：快照、cell 复用、单行文件名、当前项环、常驻标题栏与浅深底块仅单元；缩略图待 P3-02，侧栏/底栏待 P3-10，显示与收藏待 P3-11/14；签名真机、@2x、VoiceOver、中英文未验。 |
-| GRID-02 | 网格与大图来回切换 | Partial | 单元 | P3-01 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/FolderGridProjection.swift`、`App/CanvasWindowController.swift` | 选中一张按 Space 或 Enter 看大图，按 Esc 回网格，选择、当前项和滚动位置都恢复。限制：选择/当前项/滚动恢复、预览中删除、单图 Esc 顺序与取消读取恢复仅单元（App 接线无测试）；原生按键、像素、VoiceOver、中英文未验；多选待 P3-09。 |
+| GRID-01 | 网格浏览 | Partial | 单元 | P3-01、P3-10 | `Packages/PicseeKit/Sources/PicseeApplication/Browser/FolderGridProjection.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridBrowserView.swift`、`App/CanvasWindowController.swift` | 打开目录显示 11/12 页网格：紧凑标题、底部工具，没有顶部横幅；文件名单行显示。限制：快照、cell 复用、响应式几何、缩略图选择描边、文件名末尾截断、当前项环、常驻标题栏与浅深底块仅单元；缩略图待 P3-02，侧栏/底栏待 P3-10，显示与收藏待 P3-11/14；本轮签名真机、@2x、VoiceOver、中英文未验。 |
+| GRID-02 | 网格与大图来回切换 | Partial | 单元 | P3-01 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/FolderGridProjection.swift`、`App/CanvasWindowController.swift` | 选中一张按 Space 或 Enter 看大图，按 Esc 回网格，选择、当前项和滚动位置都恢复。限制：连续方向键后单一选择、选择/当前项/滚动恢复、预览中删除、单图 Esc 顺序与取消读取恢复仅单元（App 接线无测试）；本轮原生按键、像素、VoiceOver、中英文未验；多选待 P3-09。 |
 | GRID-03 | 快速滚动不串图 | Absent | 无 | P3-02 | — | 在 S2 里快速来回滚动，每个格子的图和文件名始终对得上 |
 | GRID-04 | 多选 | Absent | 无 | P3-09 | — | ⌘点击切换单项，Shift 点击从锚点选一段；计数正确，当前项与选择集合分开显示（32 页） |
 | GRID-05 | 多选后的预览范围 | Absent | 无 | P3-09 | — | 选 3 张按 Space，翻图只在这 3 张内；Esc 回来后仍是这 3 张被选中 |
