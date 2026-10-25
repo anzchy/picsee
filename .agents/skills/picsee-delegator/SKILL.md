@@ -7,8 +7,8 @@ description: Run picsee's herdr roster as the delegator — plan work packages, 
 
 You turn the development plan into merged, audited, device-verified work **without writing product code**:
 implementers write code, the independent roster auditor judges it, the doc gardener checks the ledger, you merge and validate.
-The former dual-audit baseline is suspended: until the user explicitly restores Opus, every tier uses only
-`gpt-auditor`; a quota reset does not restore `opus-auditor` automatically.
+Audit route (user override, 2026-10-25: 「Opus单审，gpt暂停」): every tier uses only `opus-auditor`; `gpt-auditor` gets no
+dispatches until the user explicitly restores it, and a Codex quota reset does not restore it automatically.
 Full reference: [references/guide.md](references/guide.md) — read it once before your first dispatch.
 `$SK` below means this folder: `.agents/skills/picsee-delegator` (`.claude/skills/picsee-delegator` is a symlink to it).
 
@@ -30,7 +30,7 @@ a successful guarded dry-run before a remote write (see `scripts/codex-rules/REA
 1. Read the latest entries of `~/.picsee/handoff/20261022-migrate-to-mini.md`, then `gh pr list`, `gh issue list`,
    `herdr pane list`, and each busy pane's screen (`herdr pane read <pane> | tail -30`; `herdr pane zoom` if empty).
 2. Install the auditors' rules file if missing: `cp $SK/references/templates/audit-brief.md ~/.picsee/herdr/delegator/`.
-3. Check Codex budget (panes show "weekly limit: N% left"). Do not dispatch `opus-auditor` while suspended.
+3. Check Codex budget (panes show "weekly limit: N% left"). Do not dispatch `gpt-auditor` while it is paused.
 
 ## Roster (guide §2)
 
@@ -39,8 +39,8 @@ a successful guarded dry-run before a remote write (see `scripts/codex-rules/REA
 | w1:p2 | gpt-imple-1 | Target Codex `gpt-6-sol`, effort `medium`, after current work/fix rounds end | `$SK/scripts/reset.sh <name> <pane>` |
 | w1:p3 | gpt-imple-2 | Codex `gpt-6-sol`, effort `medium` | `$SK/scripts/reset.sh <name> <pane>` |
 | w1:p4 | gpt-imple-3 | Codex `gpt-5.6-sol`, Low only | `$SK/scripts/reset.sh` |
-| w1:p5 | gpt-auditor | Codex `gpt-6-astra` | `$SK/scripts/reset.sh` (zoom if it says FAIL) |
-| w1:p6 | opus-auditor | **Suspended until explicit user restoration** | Do not dispatch or auto-restore on quota reset |
+| w1:p5 | gpt-auditor | **Paused since 2026-10-25 until explicit user restoration** | Do not dispatch or auto-restore on quota reset |
+| w1:p6 | opus-auditor | Claude `--agent picsee-opus-auditor --model opus`; sole auditor | send `/clear` + Enter, confirm `Context 0%` |
 | w1:p7 | kimi-imple-1 | Kimi `-m kimi-code/k3.1-pro`, effort **high** (user rule) | `/new` + Enter |
 
 At most two Medium/High implementation items in flight (gpt-imple-1/2 and kimi-imple-1 share them); gpt-imple-3 takes
@@ -72,11 +72,11 @@ Low only. Never touch mdpro or its tmux `dtrack`.
    See [the listener procedure](references/guide.md#durable-listener-notification). Scope stops → approve minimal hunks in an amendment file.
    Fixture-only test mistakes → approve. Network hang → `herdr pane send-keys <pane> Escape`, then "resume…".
    Codex sub-agent question → `herdr pane send-keys <pane> shift+left`, choose, Enter.
-4. **Audit** — all tiers use `gpt-auditor` alone until the user restores Opus. Reset it to fresh context before
-   every audit or confirm; it must not run Swift tests, so the delegator supplies and reruns owner gate evidence.
-5. **Apply verdict** — C/H block → fix + fresh-context confirm by `gpt-auditor` (≤3 rounds). User-visible/AC Medium → one fix round, no
+4. **Audit** — all tiers use `opus-auditor` alone. `/clear` it before every audit or confirm; it runs no Swift tests
+   unless a request asks for a lane re-run, so the delegator supplies and reruns owner gate evidence.
+5. **Apply verdict** — C/H block → fix + fresh-context confirm by `opus-auditor` (≤3 rounds). User-visible/AC Medium → one fix round, no
    confirm. Other Medium/Low → PR "Still open". If consulting
-   [confirm-and-fix-templates.md](references/templates/confirm-and-fix-templates.md), use only its GPT path while the
+   [confirm-and-fix-templates.md](references/templates/confirm-and-fix-templates.md), use only its Opus path while the
    override is active and replace dual-verdict assumptions with the sole verdict.
 6. **Rebase** — `$SK/scripts/rebase-ledger.sh` in the PR worktree (never pipe `git rebase`); confirm code unchanged
    vs the audited head; rerun all gates yourself (guide §5.2 item 7).
@@ -86,7 +86,7 @@ Low only. Never touch mdpro or its tmux `dtrack`.
 8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. For changed UI, add
    the per-state `UI-Parity` table required by [the contract](../../../docs/agents/ui-parity-contract.md). Before
    merge, every changed reachable state and its required conditions need a signed App versus pinned Prototype `PASS`
-   on the PR head, independent device verification and gpt-auditor review. `FAIL`/`NOT VERIFIED` keeps the PR draft;
+   on the PR head, independent device verification and opus-auditor review. `FAIL`/`NOT VERIFIED` keeps the PR draft;
    `PENDING` is only for genuinely unreachable future-work states. Recheck after any new App/design/input commit.
    Push with `python3 scripts/codex-rules/push-guard.py` (exact lease OID after rebasing an owned PR branch). Wait for checks
    to register, `gh pr checks --watch`, then `gh pr merge --rebase` (authorised when no blocking C/H, gardener not BLOCK,

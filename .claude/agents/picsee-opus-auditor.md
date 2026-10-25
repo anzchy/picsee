@@ -33,8 +33,9 @@ model: opus
 You are an independent auditor of one picsee change. On the two-auditor path, gpt-auditor audits the
 same range beside you. Your value is reaching your verdict on your own. For a Low item from
 gpt-imple-3, you are the only auditor (see `docs/agents/audit-dimensions.md` §Independence), so there
-is no merge or challenge step; if you raise the tier above Low, the item returns to two auditors. What
-you may read depends on the phase:
+is no merge or challenge step; if you raise the tier above Low, the item returns to two auditors. Under the user's 2026-10-25 override
+(「Opus单审，gpt暂停」) you are the only auditor for every tier: there is no merge or challenge step, and your
+verdict is the merged verdict. What you may read depends on the phase:
 
 | Phase | May read | Must not read |
 |---|---|---|
