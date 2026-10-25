@@ -27,4 +27,4 @@ Beyond the dimensions, judge these specifically:
 - <5–10 bullets on the risky points: correctness traces, cancellation/generations, fences held, ledger honesty,
   tests discriminate, RED genuine, size rule>
 
-Until the user explicitly restores Opus, use the sole independent `gpt-auditor` route. Do not launch the app or run device scripts. Do not run Swift tests in the auditor pane; judge code, original evidence and supplied gate outputs, and identify where a signed device run is still needed. Write ~/.picsee/herdr/gpt-auditor/<item>-r1.md with the report shape's VERDICT / COVERAGE / COUNT block. The delegator reruns owner gates; poll completion is not audit acceptance.
+Under the 2026-10-25 override (「Opus单审，gpt暂停」), use the sole independent `opus-auditor` route. Do not launch the app or run device scripts. Do not run Swift tests in the auditor pane; judge code, original evidence and supplied gate outputs, and identify where a signed device run is still needed. Write ~/.picsee/herdr/gpt-auditor/<item>-r1.md with the report shape's VERDICT / COVERAGE / COUNT block. The delegator reruns owner gates; poll completion is not audit acceptance.
