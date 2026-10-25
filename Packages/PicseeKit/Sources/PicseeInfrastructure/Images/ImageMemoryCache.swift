@@ -43,7 +43,8 @@ public actor ImageMemoryCache {
     private var pending: [UUID: RenderKey] = [:]
     private var epoch = 0
     private var observations: [UUID: (epoch: Int, itemID: ItemID?)] = [:]
-    private var recent: [ItemID: (epoch: Int, revision: FileRevision)] = [:]
+    // Two distinct revision events suffice to detect a conflict with any still-live observation.
+    private var recent: [ItemID: [(epoch: Int, revision: FileRevision)]] = [:]
     public init(capacity: Int, pressureRecoveryDelay: TimeInterval = 5,
                 pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         precondition(capacity >= 0); self.capacity = capacity; limit = capacity
@@ -82,9 +83,7 @@ public actor ImageMemoryCache {
     }
     func pin(_ key: RenderKey, image: DecodedImage, context: ResourceSnapshotContext? = nil) {
         guard image.itemID == key.itemID, image.revision == key.revision else { return }
-        epoch += 1
-        recent[key.itemID] = (epoch, key.revision)
-        pruneObservations()
+        recordRevision(key.revision, for: key.itemID)
         if let index = entries.firstIndex(where: { $0.key == key }) {
             if entries[index].image.image !== image.image,
                !entries[index].variants.contains(where: { $0.image === image.image }) {
@@ -108,6 +107,7 @@ public actor ImageMemoryCache {
         }
     }
     func pinCount(for key: RenderKey) -> Int { entries.first(where: { $0.key == key })?.pins ?? 0 }
+    func pendingCount() -> Int { pending.count }
     func trim(to limit: Int, context: ResourceSnapshotContext? = nil) {
         precondition(limit >= 0)
         self.limit = min(capacity, limit)
@@ -126,9 +126,22 @@ public actor ImageMemoryCache {
     }
     private func pruneObservations() {
         // Only a still-running validation can need an intervening revision, including after eviction.
-        recent = recent.filter { item, value in
-            observations.values.contains { ($0.itemID == nil || $0.itemID == item) && $0.epoch < value.epoch }
+        recent = recent.reduce(into: [:]) { keptByItem, pair in
+            let (item, events) = pair
+            let kept = events.filter { event in
+                observations.values.contains { ($0.itemID == nil || $0.itemID == item) && $0.epoch < event.epoch }
+            }
+            if !kept.isEmpty { keptByItem[item] = kept }
         }
+    }
+    private func recordRevision(_ revision: FileRevision, for item: ItemID) {
+        epoch += 1
+        var events = recent[item] ?? []
+        events.removeAll { $0.revision == revision }
+        events.append((epoch, revision))
+        if events.count > 2 { events.removeFirst(events.count - 2) }
+        recent[item] = events
+        pruneObservations()
     }
     func lookup(_ key: RenderKey, observation: UUID? = nil, sourceRevalidated: Bool = false,
                 context: ResourceSnapshotContext? = nil) -> ImageCacheRequest {
@@ -143,22 +156,21 @@ public actor ImageMemoryCache {
                   validation.itemID == nil || validation.itemID == key.itemID else {
                 return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
             }
-            if let latest = recent[key.itemID], latest.epoch > validation.epoch, latest.revision != key.revision {
+            if recent[key.itemID]?.contains(where: { $0.epoch > validation.epoch && $0.revision != key.revision }) == true {
                 // Either header may have been delayed. Only a new leased source read can resolve this.
                 return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true, requiresSourceValidation: true)
             }
+            // A live pinned revision makes an observed header ambiguous until one leased reread settles it.
             if !sourceRevalidated && entries.contains(where: {
-                $0.key.itemID == key.itemID && $0.key.revision != key.revision && $0.pins > 0
+                $0.key.itemID == key.itemID && $0.key.revision != key.revision && $0.pins > 0 && !$0.stale
             }) {
                 return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true, requiresSourceValidation: true)
             }
         }
         // Revision values are opaque. Reject conflicting observations made during this validation,
         // rather than assuming either mtimes or request-start order identify the newest header.
-        epoch += 1
         if let observation { observations[observation]?.itemID = key.itemID }
-        recent[key.itemID] = (epoch, key.revision)
-        pruneObservations()
+        recordRevision(key.revision, for: key.itemID)
         for index in entries.indices where entries[index].key.itemID == key.itemID {
             entries[index].stale = entries[index].stale || entries[index].key.revision != key.revision
         }
