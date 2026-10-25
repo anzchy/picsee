@@ -9,6 +9,18 @@ import UniformTypeIdentifiers
 /// Re-creatable small renders only. Actor isolation serializes SQLite and payload operations;
 /// the actor never inherits MainActor from its caller.
 public actor ThumbnailDiskCache: ThumbnailCaching {
+    enum IntegrityDecision: Equatable { case healthy, confirmedCorrupt, unconfirmedFailure }
+    static func integrityDecision(prepareCode: Int32, firstStepCode: Int32?, diagnostic: String?) -> IntegrityDecision {
+        if isCorruptSQLite(prepareCode) { return .confirmedCorrupt }
+        guard prepareCode == SQLITE_OK, let firstStepCode else { return .unconfirmedFailure }
+        if isCorruptSQLite(firstStepCode) { return .confirmedCorrupt }
+        guard firstStepCode == SQLITE_ROW, let diagnostic else { return .unconfirmedFailure }
+        return diagnostic == "ok" ? .healthy : .confirmedCorrupt
+    }
+    static func isMissingRemovalError(_ error: NSError) -> Bool {
+        (error.domain == NSCocoaErrorDomain && error.code == CocoaError.fileNoSuchFile.rawValue)
+            || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT))
+    }
     public static let maximumSourceBytes = 32 * 1024 * 1024
     public static let maximumPayloadBytes = 8 * 1024 * 1024
     public static let maximumPixelEdge = 1024
@@ -259,7 +271,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let index = databaseURL.path
         guard FileManager.default.fileExists(atPath: index),
               (try? FileManager.default.attributesOfItem(atPath: index)[.type] as? FileAttributeType) == .typeRegular else { return }
-        let confirmedCorrupt = try { () throws -> Bool in
+        let decision = try { () throws -> IntegrityDecision in
             var db: OpaquePointer?
             let opened = sqlite3_open_v2(index, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil)
             defer { if let db { sqlite3_close(db) } }
@@ -267,19 +279,16 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             var statement: OpaquePointer?
             let prepared = sqlite3_prepare_v2(db, "PRAGMA quick_check", -1, &statement, nil)
             defer { sqlite3_finalize(statement) }
-            if prepared != SQLITE_OK {
-                guard Self.isCorruptSQLite(prepared) else { throw ThumbnailStoreError.database }
-                return true
+            let result = prepared == SQLITE_OK ? sqlite3_step(statement) : nil
+            var diagnostic: String?
+            if result == SQLITE_ROW, let status = sqlite3_column_text(statement, 0) {
+                diagnostic = String(cString: status)
             }
-            let result = sqlite3_step(statement)
-            if result == SQLITE_ROW {
-                guard let status = sqlite3_column_text(statement, 0) else { throw ThumbnailStoreError.database }
-                return String(cString: status) != "ok"
-            }
-            guard Self.isCorruptSQLite(result) else { throw ThumbnailStoreError.database }
-            return true
+            let decision = Self.integrityDecision(prepareCode: prepared, firstStepCode: result, diagnostic: diagnostic)
+            guard decision != .unconfirmedFailure else { throw ThumbnailStoreError.database }
+            return decision
         }()
-        guard confirmedCorrupt else { return }
+        guard decision == .confirmedCorrupt else { return }
         try FileManager.default.removeItem(atPath: index)
         didSweepOrphans = false
     }
@@ -398,10 +407,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             defer { PayloadLeaseRegistry.shared.endDeletion(payload.path) }
             do { try FileManager.default.removeItem(at: payload) }
             catch {
-                let failure = error as NSError
-                let missing = (failure.domain == NSCocoaErrorDomain && failure.code == CocoaError.fileNoSuchFile.rawValue)
-                    || (failure.domain == NSPOSIXErrorDomain && failure.code == Int(ENOENT))
-                guard missing else { continue }
+                guard Self.isMissingRemovalError(error as NSError) else { continue }
             }
             if deleteIndexRow(row.key, using: db) { total -= row.bytes }
         }
@@ -460,8 +466,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let sql = "INSERT OR REPLACE INTO thumbnails (key,item_id,source_sha256,payload,byte_count,payload_sha256,last_access,cache_version,source_width,source_height,row_sha256) VALUES (?,?,?,?,?, ?, (SELECT COALESCE(MAX(last_access),0)+1 FROM thumbnails), ?,?,?,?)"
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw ThumbnailStoreError.database }
         defer { sqlite3_finalize(statement) }
+        guard let renderKey = ticket.request.renderKey else { throw ThumbnailStoreError.database }
         bind(ticket.key.filename, to: statement, at: 1)
-        bind(ticket.request.renderKey!.itemID.stableEncoding, to: statement, at: 2)
+        bind(renderKey.itemID.stableEncoding, to: statement, at: 2)
         bind(ticket.sourceSHA256, to: statement, at: 3)
         bind(payloadPath, to: statement, at: 4)
         sqlite3_bind_int(statement, 5, Int32(payloadBytes))
@@ -469,7 +476,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         sqlite3_bind_int(statement, 7, Int32(Self.cacheVersion))
         sqlite3_bind_int(statement, 8, Int32(sourceWidth))
         sqlite3_bind_int(statement, 9, Int32(sourceHeight))
-        bind(rowChecksum(key: ticket.key.filename, item: ticket.request.renderKey!.itemID.stableEncoding,
+        bind(rowChecksum(key: ticket.key.filename, item: renderKey.itemID.stableEncoding,
             source: ticket.sourceSHA256, path: payloadPath, byteCount: payloadBytes,
             payloadSHA256: payloadSHA256, width: sourceWidth, height: sourceHeight), to: statement, at: 10)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw ThumbnailStoreError.database }
