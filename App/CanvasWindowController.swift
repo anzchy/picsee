@@ -120,6 +120,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridView.onSelect = { [weak self] id in
             self?.session.select(id)
         }
+        gridView.onCurrentChange = { [weak self] id in self?.session.focus(id) }
         gridView.onDeselect = { [weak self] in
             guard let self, let current = session.selection.currentItemID else { return }
             session.select(current, modifier: .command)

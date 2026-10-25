@@ -95,6 +95,8 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
     public private(set) var currentItemID: ItemID?
     public var onSelect: ((ItemID) -> Void)?
     public var onDeselect: (() -> Void)?
+    /// The grid's Current Item changed without a selection (entry, Esc return, removal fallback).
+    public var onCurrentChange: ((ItemID) -> Void)?
     private let scrollView = NSScrollView()
     private var entries: [FolderEntry] = []
     private var indices: [ItemID: Int] = [:]
@@ -137,7 +139,10 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
         }
         entries = snapshot.navigationEntries
         indices = Dictionary(uniqueKeysWithValues: entries.enumerated().map { ($0.element.itemID, $0.offset) })
-        if let currentItemID, indices[currentItemID] == nil { self.currentItemID = entries.first?.itemID }
+        if let currentItemID, indices[currentItemID] == nil {
+            self.currentItemID = entries.first?.itemID
+            if let first = self.currentItemID { onCurrentChange?(first) }
+        }
         updating = true
         collectionView.reloadData()
         if let selectedItemID, let index = indices[selectedItemID] {
@@ -147,9 +152,11 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
         }
         updating = false
     }
+    /// A requested Current Item that is filtered out or gone falls back to the first item in sort order.
     public func activate(currentItemID: ItemID? = nil) {
-        if let currentItemID, indices[currentItemID] != nil { self.currentItemID = currentItemID }
+        if let currentItemID { self.currentItemID = indices[currentItemID] != nil ? currentItemID : nil }
         if self.currentItemID.flatMap({ indices[$0] }) == nil { self.currentItemID = entries.first?.itemID }
+        if let current = self.currentItemID { onCurrentChange?(current) }
         window?.makeFirstResponder(collectionView)
     }
     private func moveCurrent(by delta: Int) {
