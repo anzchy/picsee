@@ -63,9 +63,31 @@ import PicseeCore
     }
 }
 
+@MainActor private final class GridCollectionView: NSCollectionView {
+    var onArrow: ((Int) -> Void)?
+    override func keyDown(with event: NSEvent) {
+        let delta: Int
+        switch event.keyCode {
+        case 123: delta = -1
+        case 124: delta = 1
+        case 125: delta = columns
+        case 126: delta = -columns
+        default: super.keyDown(with: event); return
+        }
+        onArrow?(delta)
+    }
+    private var columns: Int {
+        guard let layout = collectionViewLayout as? NSCollectionViewFlowLayout else { return 1 }
+        let inset = layout.sectionInset.left + layout.sectionInset.right
+        return max(1, Int((bounds.width - inset + layout.minimumInteritemSpacing) /
+            (layout.itemSize.width + layout.minimumInteritemSpacing)))
+    }
+}
+
 /// Data source retains identity separately from position; native collection view handles reuse.
 @MainActor public final class GridBrowserView: NSView, NSCollectionViewDataSource, NSCollectionViewDelegate {
-    public private(set) var collectionView = NSCollectionView()
+    public private(set) var collectionView: NSCollectionView = GridCollectionView()
+    public private(set) var currentItemID: ItemID?
     public var onSelect: ((ItemID) -> Void)?
     private let scrollView = NSScrollView()
     private var entries: [FolderEntry] = []
@@ -85,6 +107,9 @@ import PicseeCore
         collectionView.allowsMultipleSelection = false
         collectionView.dataSource = self
         collectionView.delegate = self
+        (collectionView as? GridCollectionView)?.onArrow = { [weak self] delta in
+            self?.moveCurrent(by: delta)
+        }
         collectionView.register(GridPhotoItem.self, forItemWithIdentifier: Self.reuseID)
         collectionView.setAccessibilityIdentifier("grid.collection")
         scrollView.frame = bounds
@@ -98,6 +123,7 @@ import PicseeCore
     public func display(_ snapshot: FolderSnapshot, selectedItemID: ItemID?) {
         entries = snapshot.navigationEntries
         indices = Dictionary(uniqueKeysWithValues: entries.enumerated().map { ($0.element.itemID, $0.offset) })
+        if let currentItemID, indices[currentItemID] == nil { self.currentItemID = entries.first?.itemID }
         updating = true
         collectionView.reloadData()
         if let selectedItemID, let index = indices[selectedItemID] {
@@ -106,6 +132,22 @@ import PicseeCore
             collectionView.deselectAll(nil)
         }
         updating = false
+    }
+    public func activate(currentItemID: ItemID? = nil) {
+        if let currentItemID, indices[currentItemID] != nil { self.currentItemID = currentItemID }
+        if self.currentItemID.flatMap({ indices[$0] }) == nil { self.currentItemID = entries.first?.itemID }
+        window?.makeFirstResponder(collectionView)
+    }
+    private func moveCurrent(by delta: Int) {
+        guard !entries.isEmpty else { return }
+        let current = currentItemID.flatMap { indices[$0] } ?? 0
+        let next = max(0, min(entries.count - 1, current + delta))
+        guard next != current || currentItemID == nil, let id = itemID(at: next) else { return }
+        currentItemID = id
+        updating = true
+        collectionView.selectItems(at: [IndexPath(item: next, section: 0)], scrollPosition: [])
+        updating = false
+        onSelect?(id)
     }
     public func itemID(at index: Int) -> ItemID? { entries.indices.contains(index) ? entries[index].itemID : nil }
     public func index(for id: ItemID) -> Int? { indices[id] }
@@ -127,6 +169,7 @@ import PicseeCore
     }
     public func collectionView(_ collectionView: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>) {
         guard !updating, let index = indexPaths.first?.item, let id = itemID(at: index) else { return }
+        currentItemID = id
         onSelect?(id)
     }
 }

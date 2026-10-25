@@ -441,7 +441,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         inspectorHost.isHidden = true
         gridView.isHidden = false
         gridView.setAccessibilityHidden(false)
-        window?.makeFirstResponder(gridView.collectionView)
+        gridView.activate(currentItemID: session.selection.currentItemID)
     }
     private func consumePanelKey(_ event: NSEvent) -> Bool {
         if !gridView.isHidden, event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
