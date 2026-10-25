@@ -33,6 +33,25 @@ import PicseeApplication
     #expect(host.opened == [b, b])
 }
 
+@Test @MainActor func gridPreviewRemovalPresentsReconciledSuccessorThenEmptyGrid() {
+    let a = ItemID.ephemeral(UUID()), b = ItemID.ephemeral(UUID()), c = ItemID.ephemeral(UUID())
+    let host = GridRouteHost(), session = ViewerSession(host: host)
+    session.beginBrowsing(items: [a, b, c], sourceVersion: .init(1), scrollAnchor: a)
+    session.select(b)
+    #expect(CommandRouter().route(.preview, from: .key, to: session))
+    #expect(host.opened == [b])
+
+    session.updateItems([a, c], sourceVersion: .init(2))
+    #expect(session.previewSet?.currentItemID == c)
+    #expect(host.opened == [b, c])
+    #expect(host.returned == 0)
+
+    session.updateItems([], sourceVersion: .init(3))
+    #expect(session.previewSet?.currentItemID == nil)
+    #expect(host.opened == [b, c])
+    #expect(host.returned == 1)
+}
+
 @Test @MainActor func defaultRouterEnablesGridPreviewKeysOnlyWhenBrowseHasItems() {
     let session = ViewerSession(host: GridRouteHost())
     let router = CommandRouter()
