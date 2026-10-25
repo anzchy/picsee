@@ -73,7 +73,7 @@ struct FolderScanRestorePoint {
     }
     @discardableResult public func retry() -> Task<Void, any Error>? {
         guard failure != nil, let activeFolder, let canPresent = automaticPresentationAllowed else { return nil }
-        return start(folder: activeFolder.url, rootID: activeFolder.rootID,
+        return start(folder: activeFolder.url, rootID: activeFolder.rootID, input: inputURL,
             canPresent: canPresent, preserveConditions: true)
     }
     public private(set) var inputURL: URL?
