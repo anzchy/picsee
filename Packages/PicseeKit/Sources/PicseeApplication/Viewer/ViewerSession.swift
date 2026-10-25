@@ -37,6 +37,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public private(set) var chrome: ViewerChromeState
     public private(set) var isMenuTracking = false
     private var orderedItemIDs: [ItemID] = []
+    var folderEntryRestore: FolderEntryRestorePoint?
     private var sourceVersion = PreviewSourceVersion(0)
     public var currentItemID: ItemID? {
         mode == .viewing ? previewSet?.currentItemID : selection.currentItemID

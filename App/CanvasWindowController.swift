@@ -28,10 +28,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var chromeHasImage = false
     private var gridProjection = FolderGridProjection()
     private var gridView: GridBrowserView!
+    private var presentation: GridViewerPresentation!
     private var gridFolderRoot: AccessRootID?
     private var gridFolderURL: URL?
     private var gridPreviewScrollOffset: NSPoint?
-    private var folderEntryRestore: (() -> Void)?
+    private var folderEntryRestore: ((FolderEntryRestoreTarget) -> Void)?
     private var pendingGridCurrentItemID: ItemID?
     private var gridSelectedItemID: ItemID? {
         guard let id = session.selection.currentItemID, session.selection.selectedItemIDs.contains(id) else { return nil }
@@ -124,6 +125,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             session.select(current, modifier: .command)
         }
         content.addSubview(gridView)
+        presentation = GridViewerPresentation(canvas: canvas, chrome: chromeOverlay, state: stateHost,
+            grid: gridView, inspector: inspectorHost)
         window.contentView = content
         chromeOverlay.linkKeyViews(to: canvas)
         stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
@@ -170,14 +173,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func open(_ url: URL, accessRequest: AccessRequest? = nil, fromFolderScan: Bool = false) {
         if !fromFolderScan {
             session.leaveBrowsing()
+            session.completeFolderEntry()
+            folderEntryRestore = nil
             gridFolderRoot = nil
             gridFolderURL = nil
-            gridView.isHidden = true
-            gridView.setAccessibilityHidden(true)
-            canvas.isHidden = false
-            chromeOverlay.isHidden = false
-            stateHost.isHidden = false
-            stateHost.setAccessibilityHidden(false)
+            presentation.showViewer()
         }
         retryIntent = ViewerRetryIntent(fileURL: url, accessRequest: accessRequest)
         retryFromFolderScan = fromFolderScan
@@ -263,7 +263,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func openFolder(_ folder: URL, rootID: AccessRootID, currentItemID: ItemID? = nil) {
-        folderEntryRestore = makeFolderEntryRestore()
+        if folderEntryRestore == nil { folderEntryRestore = makeFolderEntryRestore() }
         pendingGridCurrentItemID = currentItemID
         let operation = accessIntent.begin()
         if let window { GridWindowIdentity.enterFolder(folder, session: session, canvas: canvas, window: window) }
@@ -448,12 +448,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     func presentGridItem(_ id: ItemID) {
         guard let entry = gridProjection.entry(for: id), let rootID = gridFolderRoot,
               gridProjection.snapshot?.version.rootID == rootID else { return }
-        gridView.isHidden = true
-        gridView.setAccessibilityHidden(true)
-        canvas.isHidden = false
-        stateHost.isHidden = false
-        stateHost.setAccessibilityHidden(false)
-        chromeOverlay.isHidden = false
+        presentation.showViewer()
         open(entry.url, accessRequest: .root(rootID, file: entry.url), fromFolderScan: true)
     }
     func returnToGrid() {
@@ -471,13 +466,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func showGrid(reading: Bool = false) {
-        canvas.isHidden = true
-        chromeOverlay.isHidden = true
-        inspectorHost.isHidden = true
-        gridView.isHidden = reading
-        gridView.setAccessibilityHidden(reading)
-        stateHost.isHidden = !reading
-        stateHost.setAccessibilityHidden(!reading)
+        presentation.showGrid(reading: reading)
         if reading {
             stateHost.display(.readingFolder)
             if let cancel = stateHost.buttons.first { window?.makeFirstResponder(cancel) }
@@ -488,23 +477,28 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func cancelFolderEntry() {
-        session.cancelFolderReading()
+        pendingGridCurrentItemID = nil
         let restore = folderEntryRestore
         folderEntryRestore = nil
-        pendingGridCurrentItemID = nil
-        restore?()
+        guard let target = session.cancelFolderEntry() else { session.cancelFolderReading(); return }
+        restore?(target)
     }
-    private func makeFolderEntryRestore() -> (() -> Void) {
-        if gridFolderRoot != nil, let snapshot = gridProjection.snapshot, snapshot.isComplete {
-            let projection = gridProjection, selection = session.selection
-            let offset = gridView.contentOffset, previewOffset = gridPreviewScrollOffset
-            return { [weak self] in
-                guard let self else { return }
+    /// Native half of the restore point; the Session records the target and stops the scan.
+    private func makeFolderEntryRestore() -> ((FolderEntryRestoreTarget) -> Void) {
+        let projection = gridProjection, selection = session.selection
+        let offset = gridView.contentOffset, previewOffset = gridPreviewScrollOffset
+        let request = retryIntent?.accessRequest, fromFolder = retryFromFolderScan
+        session.beginFolderEntry(shownImage: fileURL,
+            hasCompleteGrid: gridFolderRoot != nil && projection.snapshot?.isComplete == true)
+        return { [weak self] target in
+            guard let self else { return }
+            switch target {
+            case .grid:
+                guard let snapshot = projection.snapshot else { return }
                 gridFolderRoot = snapshot.version.rootID
                 gridFolderURL = snapshot.version.folder
                 gridProjection = projection
                 gridPreviewScrollOffset = previewOffset
-                session.leaveBrowsing()
                 session.beginBrowsing(items: snapshot.navigationEntries.map(\.itemID),
                     sourceVersion: .init(snapshot.version.generation), scrollAnchor: session.scrollAnchor)
                 if let id = selection.currentItemID {
@@ -515,17 +509,17 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
                 gridView.restoreContentOffset(offset)
                 showGrid()
                 if let window { GridWindowIdentity.showFolder(snapshot.version.folder, in: window) }
-            }
-        }
-        if let file = fileURL {
-            let request = retryIntent?.accessRequest, fromFolder = retryFromFolderScan
-            return { [weak self] in
-                guard let self else { return }
-                session.leaveBrowsing()
+            case .viewer(let file):
+                gridFolderRoot = nil
+                gridFolderURL = nil
+                gridProjection = FolderGridProjection()
+                gridPreviewScrollOffset = nil
+                presentation.show(target)
                 open(file, accessRequest: request, fromFolderScan: fromFolder)
+            case .empty:
+                restoreEmptyFolderEntry()
             }
         }
-        return { [weak self] in self?.restoreEmptyFolderEntry() }
     }
     private func restoreEmptyFolderEntry() {
         gridFolderRoot = nil
@@ -533,13 +527,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         gridProjection = FolderGridProjection()
         gridPreviewScrollOffset = nil
         session.leaveBrowsing()
-        canvas.isHidden = false
+        presentation.showViewer()
         canvas.showFailure()
-        stateHost.isHidden = false
-        stateHost.setAccessibilityHidden(false)
-        chromeOverlay.isHidden = false
-        gridView.isHidden = true
-        gridView.setAccessibilityHidden(true)
         window?.title = "Picsee"
         window?.representedURL = nil
         stateHost.refresh()
@@ -725,6 +714,7 @@ extension CanvasWindowController: FolderScanHost {
                     sourceVersion: .init(snapshot.version.generation))
                 gridView.display(snapshot, selectedItemID: gridSelectedItemID)
                 folderEntryRestore = nil
+                session.completeFolderEntry()
                 showGrid()
             }
         } onChange: { [weak self, weak scan] in
