@@ -321,7 +321,10 @@ Every run produces one row per criterion and entry point, keyed by ledger row ID
   on 2026-10-25 a Chinese IME (Doubao Pinyin) turned a typed open-panel path into
   `…095720-跑01-grid-explore、fixtures、grid` and the panel never navigated. `panel-choose.sh` now pastes the path through
   the pasteboard (⌘A ⌘V) instead of typing it, prints the active `input-source:` read-only for the record, refuses a
-  pasteboard that holds non-text types, and restores the previous text byte-for-byte on every exit (non-zero otherwise).
+  pasteboard that holds non-text types, and restores the previous text byte-for-byte on every exit except SIGKILL (non-zero
+  otherwise). A copy made by someone else during the run is kept, not restored over; the helper then exits non-zero with
+  `not restored`, and the run record must say so. The path passes through the general pasteboard, so clipboard-history tools
+  and Universal Clipboard may record it, and an empty pasteboard comes back as an empty plain-text item.
 
 ## 14. Proving this skill (do once, then after big changes)
 
