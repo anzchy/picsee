@@ -76,6 +76,58 @@ import PicseeCore
     }
 }
 
+@Test @MainActor func gridRenderedColumnsAndArrowFollowClipWidth() throws {
+    for (width, style, columns, gap, inset, tileHeight) in [
+        (1280.0, NSScroller.Style.overlay, 5, 16.0, 24.0, 188.16),
+        (1280.0, .legacy, 5, 16.0, 24.0, 188.16),
+        (1036.0, .overlay, 4, 12.0, 16.0, 165.0),
+        (1036.0, .legacy, 4, 12.0, 16.0, 165.0),
+        (1280.0, .overlay, 5, 16.0, 24.0, 188.16)
+    ] {
+        let (grid, entries, window) = parityGrid(width: width)
+        let scroll = try #require(grid.subviews.compactMap { $0 as? NSScrollView }.first)
+        scroll.scrollerStyle = style
+        scroll.tile()
+        grid.layoutSubtreeIfNeeded()
+        grid.collectionView.layoutSubtreeIfNeeded()
+        let clipWidth = scroll.contentSize.width
+        let expectedWidth = (clipWidth - 2 * inset - CGFloat(columns - 1) * gap) / CGFloat(columns)
+        let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
+        let first = try #require(layout.layoutAttributesForItem(at: IndexPath(item: 0, section: 0)))
+        let second = try #require(layout.layoutAttributesForItem(at: IndexPath(item: 1, section: 0)))
+        let nextRow = try #require(layout.layoutAttributesForItem(at: IndexPath(item: columns, section: 0)))
+        #expect(abs(first.frame.minX - inset) < 0.1)
+        #expect(abs(second.frame.minX - (inset + expectedWidth + gap)) < 0.1)
+        #expect(abs(nextRow.frame.minX - inset) < 0.1)
+        #expect(abs(nextRow.frame.minY - first.frame.minY) >= tileHeight + 36 + 12)
+        #expect(abs(layout.itemSize.width - expectedWidth) < 0.1)
+        try parityArrow(125, in: grid, window: window)
+        #expect(grid.currentItemID == entries[columns].itemID)
+    }
+}
+
+@Test @MainActor func gridRelayoutsWhenScrollerOrClipChangesWithoutOuterResize() throws {
+    let (grid, _, _) = parityGrid(width: 1280)
+    let scroll = try #require(grid.subviews.compactMap { $0 as? NSScrollView }.first)
+    let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
+    scroll.scrollerStyle = .overlay
+    scroll.tile()
+    grid.layoutSubtreeIfNeeded()
+    grid.collectionView.layoutSubtreeIfNeeded()
+    let overlayWidth = layout.itemSize.width
+
+    scroll.scrollerStyle = .legacy
+    scroll.tile()
+    NotificationCenter.default.post(name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil)
+    #expect(scroll.contentSize.width < grid.bounds.width)
+    #expect(layout.itemSize.width < overlayWidth)
+
+    let legacyWidth = layout.itemSize.width
+    scroll.contentView.setFrameSize(NSSize(width: 1250, height: scroll.contentView.frame.height))
+    #expect(scroll.contentSize.width == 1250)
+    #expect(layout.itemSize.width < legacyWidth)
+}
+
 @Test @MainActor func gridSelectionOutlinesTileOnlyAndCurrentRingIsDistinct() throws {
     let cell = GridPhotoItem()
     _ = cell.view
