@@ -127,6 +127,14 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
     public required init?(coder: NSCoder) { nil }
 
     public func display(_ snapshot: FolderSnapshot, selectedItemID: ItemID?) {
+        if !snapshot.isComplete {
+            entries = []; indices = [:]; currentItemID = nil
+            updating = true
+            collectionView.reloadData()
+            collectionView.deselectAll(nil)
+            updating = false
+            return
+        }
         entries = snapshot.navigationEntries
         indices = Dictionary(uniqueKeysWithValues: entries.enumerated().map { ($0.element.itemID, $0.offset) })
         if let currentItemID, indices[currentItemID] == nil { self.currentItemID = entries.first?.itemID }

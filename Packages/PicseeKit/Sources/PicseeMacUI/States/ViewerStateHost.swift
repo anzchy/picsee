@@ -27,6 +27,7 @@ public final class ViewerStateHost: NSView {
     public private(set) var textLines: [String] = []
     public private(set) var showsProgress = false
     public var onRetry: (() -> Void)?
+    public var onCancelFolderReading: (() -> Void)?
     private weak var keyCanvas: NSView?
     private weak var keyChrome: ViewerChromeOverlay?
     private var displayedStatus: ViewerImageStatus?
@@ -306,7 +307,10 @@ public final class ViewerStateHost: NSView {
               buttons.contains(where: { $0 === sender }), let session else { return }
         switch sender.identifier?.rawValue {
         case "state.cancel": session.cancelImageOpening(); refresh()
-        case "state.cancel-folder": session.cancelFolderReading(); refresh()
+        case "state.cancel-folder":
+            if let onCancelFolderReading { onCancelFolderReading() }
+            else { session.cancelFolderReading() }
+            refresh()
         case "state.clear-filter":
             var conditions = session.folderConditions
             conditions.selectedExtensions = nil
