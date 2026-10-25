@@ -397,11 +397,6 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     @discardableResult
     func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
-        if command == .escape, gridView.isHidden, session.previewSet == nil,
-           session.filePreviewSet == nil, let file = fileURL {
-            returnSingleImageToFolder(file)
-            return true
-        }
         if !gridView.isHidden && (command == .preview || command == .enter) {
             gridPreviewScrollOffset = gridView.contentOffset
             session.beginBrowsing(items: gridProjection.snapshot?.navigationEntries.map(\.itemID) ?? [],
@@ -413,7 +408,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         session.setMenuTracking(menuTracking())
         return router.route(command, from: entry, to: session)
     }
-    private func returnSingleImageToFolder(_ file: URL) {
+    private func returnToFolder(of file: URL) {
         let operation = accessIntent.navigation()
         navigationTask?.cancel()
         let current = generation
@@ -576,6 +571,14 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
             if opened { session.activity() }
         }
+    }
+}
+
+// Untested native effect; the Session runs it only after menu and Inspector/panel Esc (package-tested).
+extension CanvasWindowController: ViewerSingleImageReturnHost {
+    var canReturnToFolder: Bool { gridView.isHidden && fileURL != nil && window?.attachedSheet == nil }
+    func returnSingleImageToFolder() {
+        if let fileURL { returnToFolder(of: fileURL) }
     }
 }
 
