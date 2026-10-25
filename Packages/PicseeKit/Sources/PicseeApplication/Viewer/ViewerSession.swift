@@ -204,8 +204,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         case .previous, .next:
             if let filePreviewSet { filePreviewSet.canMove(forward: command == .next) }
             else {
-                if mode == .viewing, previewSet == nil, folderScan?.failure != nil { false }
-                else if mode == .viewing, previewSet == nil, folderScan?.isReadingFolder == true { false }
+                if mode == .viewing, previewSet == nil, folderScan?.isReadingFolder == true { false }
                 else if mode == .viewing, previewSet == nil,
                         let enabled = folderScan?.canMove(command == .next ? .next : .previous, currentURL: imageLoader.fileURL) { enabled }
                 else {

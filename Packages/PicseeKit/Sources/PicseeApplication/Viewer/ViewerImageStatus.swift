@@ -41,7 +41,7 @@ extension ViewerSession {
         guard mode == .viewing else { return false }
         guard host?.hasImage == true else { return false }
         switch imageStatus {
-        case .loading, .readingFolder, .folderScanFailed, .noMatches, .failed: return false
+        case .loading, .readingFolder, .noMatches, .failed: return false
         default: return true
         }
     }
