@@ -74,7 +74,7 @@ public enum FolderMenuPolicy {
         case .loop: checked = selection.loopEnabled
         case .recursive: checked = selection.recursiveEnabled
         }
-        return .init(enabled: active, checked: active && checked)
+        return .init(enabled: active, checked: action == .recursive ? checked : active && checked)
     }
     public static func applying(_ action: FolderMenuAction, to selection: FolderMenuSelection) -> FolderMenuSelection {
         var result = selection

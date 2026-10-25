@@ -94,5 +94,7 @@ import PicseeCore
     #expect(!original.recursiveEnabled)
     #expect(FolderMenuPolicy.state(for: .recursive, selection: enabled,
         hasFolderSource: true, previewActive: false) == .init(enabled: true, checked: true))
+    #expect(FolderMenuPolicy.state(for: .recursive, selection: enabled,
+        hasFolderSource: false, previewActive: false) == .init(enabled: false, checked: true))
     #expect(FolderMenuPolicy.applying(.recursive, to: enabled) == original)
 }
