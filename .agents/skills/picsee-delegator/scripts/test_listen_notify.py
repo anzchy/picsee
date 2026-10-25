@@ -141,6 +141,24 @@ class ListenerTests(unittest.TestCase):
             "cwd": cwd, "foreground_cwd": cwd if foreground is None else foreground,
         }]}}
 
+    @staticmethod
+    def fake_clock(call_seconds=0):
+        """Monotonic clock that advances on sleep and, optionally, on every herdr call."""
+        now = [0.0]
+        sleeps = []
+
+        def sleep(seconds):
+            sleeps.append(seconds)
+            now[0] += seconds
+
+        def timed(run):
+            def wrapped(argv, **kwargs):
+                now[0] += call_seconds
+                return run(argv, **kwargs)
+            return wrapped
+
+        return (lambda: now[0]), sleep, sleeps, timed
+
     def claude_transport(self, screens, calls, on_read=None):
         """Fake herdr: pane list matches, pane read returns `screens` in turn (last one repeats), run succeeds."""
         screens = list(screens)
@@ -177,14 +195,14 @@ class ListenerTests(unittest.TestCase):
         self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "delivered")
         self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "already-delivered")
         self.assertEqual([call[:3] for call in calls],
-                         [["herdr", "pane", "list"], ["herdr", "pane", "read"],
+                         [["herdr", "pane", "list"], ["herdr", "pane", "read"], ["herdr", "pane", "read"],
                           ["herdr", "pane", "run"], ["herdr", "pane", "list"]])
         receipt = json.loads((self.event_dir / "queue-receipt.json").read_text())
         self.assertEqual(receipt["destination"], config["destination"])
         self.assertNotIn("thread", receipt)
         self.assertIn(config["event"], (self.event_dir / "notification.txt").read_text())
         self.assertIn(str(self.handoff), (self.event_dir / "notification.txt").read_text())
-        self.assertNotIn(str(self.handoff), calls[2][4])
+        self.assertNotIn(str(self.handoff), calls[3][4])
 
     def test_claude_route_refuses_stale_or_malformed_pane_before_send(self):
         config = self.claude_config()
@@ -286,14 +304,16 @@ class ListenerTests(unittest.TestCase):
 
         with self.assertRaises(listen_notify.DeliveryUncertain):
             listen_notify.run_event(self.event_dir, run=run, sleep=lambda _: None)
-        self.assertEqual(len(calls), 4)
+        self.assertEqual(len(calls), 5)
         self.assertFalse((self.event_dir / "queue-receipt.json").exists())
 
     def test_claude_input_box_classifier_reads_only_undimmed_text_inside_the_box(self):
         state = listen_notify._claude_input_state
         for screen in (claude_screen(EMPTY_BOX), claude_screen(BUSY_EMPTY_BOX),
                        claude_screen("❯ "), claude_screen(SUGGESTION_BOX),
-                       claude_screen(EMPTY_BOX, label="")):
+                       claude_screen(EMPTY_BOX, label=""),
+                       claude_screen("❯\xa0\x1b[2;38:5:244msuggestion\x1b[0m"),
+                       claude_screen("❯\xa0\x1b[2;38;2;1;2;3;1msuggestion\x1b[39;22m")):
             with self.subTest(screen=screen):
                 self.assertEqual(state(screen), "empty")
         for screen in (claude_screen(TYPED_BOX), claude_screen("❯\xa0x"),
@@ -302,7 +322,15 @@ class ListenerTests(unittest.TestCase):
                        claude_screen("❯\xa0\x1b[2m\x1b[0mtyped after reset"),
                        claude_screen("❯\xa0[Pasted text #1 +5 lines]"),
                        claude_screen("❯\xa0\x1b[38;2;2;2;2mcoloured typed"),
-                       claude_screen("❯\xa0\x1b[2m", "\x1b[0m  typed on a dim-reset line")):
+                       claude_screen("❯\xa0\x1b[2m", "\x1b[0m  typed on a dim-reset line"),
+                       # Encodings not positively recognised as the dim suggestion count as typed text.
+                       claude_screen("❯\xa0\x1b[38:2::255:0:2mtyped"),
+                       claude_screen("❯\xa0\x1b[2msugg\x1b[00mtyped"),
+                       claude_screen("❯\xa0\x1b[2msugg\x1b[4:3mtyped"),
+                       claude_screen("❯\xa0\x1b[2msugg\x1b[99mtyped"),
+                       claude_screen("❯\xa0\x1b[2msugg\x1b[38;2;1mtyped"),
+                       claude_screen("❯\xa0\x1b[2msugg\x1b[?2mtyped"),
+                       claude_screen("❯\xa0\x1b[2msugg\x1b[2 mtyped")):
             with self.subTest(screen=screen):
                 self.assertEqual(state(screen), "typing")
         for screen in ("", "plain shell $ \r\n", claude_screen("! ls"),
@@ -318,45 +346,49 @@ class ListenerTests(unittest.TestCase):
         run = self.claude_transport([claude_screen(SUGGESTION_BOX)], calls)
         self.assertEqual(listen_notify.run_event(self.event_dir, run=run, sleep=self.fail), "delivered")
         self.assertEqual([c[:3] for c in calls], [["herdr", "pane", "list"], ["herdr", "pane", "read"],
-                                                  ["herdr", "pane", "run"], ["herdr", "pane", "list"]])
+                                                  ["herdr", "pane", "read"], ["herdr", "pane", "run"],
+                                                  ["herdr", "pane", "list"]])
         self.assertTrue((self.event_dir / "queue-receipt.json").exists())
 
     def test_claude_typing_defers_without_touching_input_then_sends_once_empty(self):
         config = self.claude_config()
         config.update(typing_retry_seconds=5, typing_defer_seconds=60, max_delivery_attempts=1)
         (self.event_dir / "config.json").write_text(json.dumps(config))
-        calls, sleeps, waiting = [], [], []
+        calls, waiting = [], []
+        clock, advance, sleeps, _ = self.fake_clock()
 
         def sleep(seconds):
-            sleeps.append(seconds)
+            advance(seconds)
             waiting.append(json.loads((self.event_dir / "status.json").read_text()))
             self.assertFalse((self.event_dir / "queue-receipt.json").exists())
 
         run = self.claude_transport(
             [claude_screen(TYPED_BOX), claude_screen(EMPTY_BOX, "  more"), claude_screen(EMPTY_BOX)], calls)
-        self.assertEqual(listen_notify.run_event(self.event_dir, run=run, sleep=sleep), "delivered")
+        self.assertEqual(listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock), "delivered")
         self.assertEqual(sleeps, [5, 5])
         self.assertEqual([w["state"] for w in waiting], ["waiting-user-typing"] * 2)
         self.assertEqual(waiting[0]["input"], "typing")
         self.assertEqual([c[:3] for c in calls], [
             ["herdr", "pane", "list"], ["herdr", "pane", "read"],
             ["herdr", "pane", "list"], ["herdr", "pane", "read"],
-            ["herdr", "pane", "list"], ["herdr", "pane", "read"],
+            ["herdr", "pane", "list"], ["herdr", "pane", "read"], ["herdr", "pane", "read"],
             ["herdr", "pane", "run"], ["herdr", "pane", "list"]])
         self.assertEqual(json.loads((self.event_dir / "status.json").read_text())["state"], "delivered")
+        self.assertIn("held 10s", (self.event_dir / "notification.txt").read_text())
 
     def test_claude_typing_past_deadline_records_deferral_and_keeps_event(self):
         config = self.claude_config()
-        config.update(typing_retry_seconds=5, typing_defer_seconds=10)
+        config.update(typing_retry_seconds=5, typing_defer_seconds=10, typing_give_up_seconds=10)
         (self.event_dir / "config.json").write_text(json.dumps(config))
         poll_before = (self.event_dir / "poll-result.json").read_text()
         for screen, reason in ((claude_screen(TYPED_BOX), "typing"), ("unparseable", "unknown")):
             with self.subTest(reason=reason):
                 (self.event_dir / "status.json").unlink(missing_ok=True)
-                calls, sleeps = [], []
+                calls = []
+                clock, sleep, sleeps, _ = self.fake_clock()
                 run = self.claude_transport([screen], calls)
                 with self.assertRaises(listen_notify.DeliveryDeferred):
-                    listen_notify.run_event(self.event_dir, run=run, sleep=sleeps.append)
+                    listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock)
                 self.assertEqual(sleeps, [5, 5])
                 self.assertEqual(sum(c[:3] == ["herdr", "pane", "read"] for c in calls), 3)
                 self.assertFalse(any(c[:3] == ["herdr", "pane", "run"] for c in calls))
@@ -366,6 +398,7 @@ class ListenerTests(unittest.TestCase):
                 self.assertEqual(status["state"], "deferred-user-typing")
                 self.assertEqual(status["input"], reason)
                 self.assertEqual(status["deferred_seconds"], 10)
+                self.assertFalse(status["retrying"])
                 self.assertFalse((self.event_dir / "queue-receipt.json").exists())
                 self.assertEqual((self.event_dir / "poll-result.json").read_text(), poll_before)
                 self.assertTrue((self.event_dir / "notification.txt").exists())
@@ -381,6 +414,191 @@ class ListenerTests(unittest.TestCase):
         self.assertEqual(listen_notify.run_event(
             self.event_dir, run=self.claude_transport([claude_screen(EMPTY_BOX)], calls)), "delivered")
         self.assertEqual(sum(c[:3] == ["herdr", "pane", "run"] for c in calls), 1)
+
+    def test_claude_input_is_rechecked_immediately_before_send_and_aborts_if_it_changed(self):
+        config = self.claude_config()
+        config.update(typing_retry_seconds=5, max_delivery_attempts=1)
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        calls, seen = [], []
+        clock, sleep, sleeps, _ = self.fake_clock()
+
+        def on_read():
+            status = self.event_dir / "status.json"
+            seen.append(json.loads(status.read_text())["state"] if status.exists() else None)
+
+        # Empty at the first check, a keystroke before the gate read, then empty twice.
+        run = self.claude_transport([claude_screen(EMPTY_BOX), claude_screen("❯\xa0h"),
+                                     claude_screen(EMPTY_BOX)], calls, on_read=on_read)
+        self.assertEqual(listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock), "delivered")
+        self.assertEqual(sleeps, [5])
+        self.assertEqual([c[:3] for c in calls], [
+            ["herdr", "pane", "list"], ["herdr", "pane", "read"], ["herdr", "pane", "read"],
+            ["herdr", "pane", "list"], ["herdr", "pane", "read"], ["herdr", "pane", "read"],
+            ["herdr", "pane", "run"], ["herdr", "pane", "list"]])
+        # The gate read is the last thing before the send: uncertainty is already on disk.
+        self.assertEqual(seen, ["delivering", "delivery-uncertain", "delivering", "delivery-uncertain"])
+
+    def test_claude_failed_gate_read_is_a_preflight_failure_without_send(self):
+        config = self.claude_config()
+        config["max_delivery_attempts"] = 2
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        calls, sleeps = [], []
+        reads = 0
+
+        def run(argv, **_):
+            nonlocal reads
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            if argv[:3] == ["herdr", "pane", "read"]:
+                reads += 1
+                if reads % 2 == 0:
+                    return self.completed(argv, returncode=1, stderr="gate read failed")
+                return self.completed(argv, stdout=claude_screen(EMPTY_BOX))
+            self.fail("must not send after a failed gate read")
+
+        with self.assertRaisesRegex(listen_notify.DeliveryError, "gate read failed"):
+            listen_notify.run_event(self.event_dir, run=run, sleep=sleeps.append)
+        self.assertEqual(sleeps, [1])
+        self.assertEqual(json.loads((self.event_dir / "status.json").read_text())["state"], "delivery-failed")
+        self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+
+    def test_claude_hold_uses_a_monotonic_deadline_including_herdr_call_time(self):
+        config = self.claude_config()
+        config.update(typing_retry_seconds=5, typing_defer_seconds=20, typing_give_up_seconds=20)
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        clock, sleep, sleeps, timed = self.fake_clock(call_seconds=7)
+        run = timed(self.claude_transport([claude_screen(TYPED_BOX)], []))
+        with self.assertRaises(listen_notify.DeliveryDeferred):
+            listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock)
+        # Held from the first non-empty read (t=14): 5 s sleep, then the last sleep is capped to
+        # the 1 s left, and the deferral reports the real 34 s that passed, not the 6 s slept.
+        self.assertEqual(sleeps, [5, 1])
+        status = json.loads((self.event_dir / "status.json").read_text())
+        self.assertEqual((status["state"], status["deferred_seconds"]), ("deferred-user-typing", 34))
+
+    def test_claude_deferral_keeps_retrying_slowly_and_is_visible_until_give_up(self):
+        config = self.claude_config()
+        config.update(typing_retry_seconds=5, typing_defer_seconds=10, typing_give_up_seconds=130)
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        clock, advance, sleeps, _ = self.fake_clock()
+        states = []
+
+        def sleep(seconds):
+            states.append(json.loads((self.event_dir / "status.json").read_text()))
+            advance(seconds)
+
+        run = self.claude_transport([claude_screen(TYPED_BOX)], [])
+        with self.assertRaisesRegex(listen_notify.DeliveryDeferred, "130s"):
+            listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock)
+        self.assertEqual(sleeps, [5, 5, 60, 60])
+        self.assertEqual([s["state"] for s in states], ["waiting-user-typing"] * 2 + ["deferred-user-typing"] * 2)
+        self.assertTrue(all(s["retrying"] for s in states))
+        final = json.loads((self.event_dir / "status.json").read_text())
+        self.assertEqual((final["state"], final["retrying"], final["deferred_seconds"]),
+                         ("deferred-user-typing", False, 130))
+        self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+
+        # The user clears the box during the slow phase: the event is delivered and says it was held.
+        (self.event_dir / "status.json").unlink()
+        clock, sleep, sleeps, _ = self.fake_clock()
+        calls = []
+        run = self.claude_transport([claude_screen(TYPED_BOX)] * 3 + [claude_screen(EMPTY_BOX)], calls)
+        self.assertEqual(listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock), "delivered")
+        self.assertEqual(sleeps, [5, 5, 60])
+        self.assertEqual(sum(c[:3] == ["herdr", "pane", "run"] for c in calls), 1)
+        self.assertIn("held 70s", (self.event_dir / "notification.txt").read_text())
+
+    def test_claude_event_lock_blocks_a_concurrent_run_during_the_hold(self):
+        config = self.claude_config()
+        config.update(typing_retry_seconds=5)
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        holding, release = threading.Event(), threading.Event()
+        calls, results = [], []
+        clock, advance, _, _ = self.fake_clock()
+
+        def sleep(seconds):
+            holding.set()
+            self.assertTrue(release.wait(timeout=5))
+            advance(seconds)
+
+        run = self.claude_transport([claude_screen(TYPED_BOX), claude_screen(EMPTY_BOX)], calls)
+        first = threading.Thread(target=lambda: results.append(
+            listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock)))
+        second = threading.Thread(target=lambda: results.append(
+            listen_notify.run_event(self.event_dir, run=run, sleep=self.fail, clock=clock)))
+        first.start()
+        self.assertTrue(holding.wait(timeout=5))
+        before = len(calls)
+        second.start()
+        second.join(timeout=0.3)
+        self.assertTrue(second.is_alive(), "a concurrent run must wait for the held event lock")
+        self.assertEqual(len(calls), before)
+        release.set()
+        first.join(timeout=5)
+        second.join(timeout=5)
+        self.assertCountEqual(results, ["delivered", "already-delivered"])
+        self.assertEqual(sum(c[:3] == ["herdr", "pane", "run"] for c in calls), 1)
+
+    def test_claude_pane_identity_change_mid_hold_uses_preflight_attempts_and_never_sends(self):
+        config = self.claude_config()
+        config.update(typing_retry_seconds=5, max_delivery_attempts=2)
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        calls = []
+        clock, sleep, sleeps, _ = self.fake_clock()
+
+        def run(argv, **_):
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                terminal = "term_123abc" if len(calls) == 1 else "term_replacement"
+                return self.completed(argv, stdout=json.dumps(self.pane_list(terminal=terminal)))
+            if argv[:3] == ["herdr", "pane", "read"]:
+                return self.completed(argv, stdout=claude_screen(TYPED_BOX))
+            self.fail("must not send to a changed pane")
+
+        with self.assertRaisesRegex(listen_notify.DeliveryError, "identity changed"):
+            listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock)
+        self.assertEqual(sleeps, [5, 1])
+        self.assertEqual([c[:3] for c in calls], [["herdr", "pane", "list"], ["herdr", "pane", "read"],
+                                                  ["herdr", "pane", "list"], ["herdr", "pane", "list"]])
+        self.assertEqual(json.loads((self.event_dir / "status.json").read_text())["state"], "delivery-failed")
+
+    def test_status_command_surfaces_parked_and_stuck_events(self):
+        root = self.root / "listeners"
+
+        def event(name, status, pid=None):
+            directory = root / name
+            directory.mkdir(parents=True)
+            (directory / "config.json").write_text(json.dumps({"event": name}))
+            (directory / "status.json").write_text(json.dumps(dict(status, event=name)))
+            if pid is not None:
+                (directory / "pid").write_text(str(pid) + "\n")
+
+        event("a-delivered", {"state": "delivered"}, pid=99999999)
+        event("b-waiting", {"state": "waiting-user-typing", "input": "typing", "deferred_seconds": 12.5},
+              pid=os.getpid())
+        event("c-deferred", {"state": "deferred-user-typing", "input": "unknown", "deferred_seconds": 900,
+                             "retrying": False}, pid=99999999)
+        event("d-polling-dead", {"state": "polling"}, pid=99999999)
+        event("e-uncertain", {"state": "delivery-uncertain", "reason": "x"}, pid=99999999)
+        (root / "not-an-event").mkdir()
+        output = []
+        with patch("builtins.print", lambda *a, **_k: output.append(" ".join(map(str, a)))):
+            code = listen_notify.main(["status", "--state-root", str(root)])
+        self.assertEqual(code, 3)
+        lines = {line.split()[1]: line for line in output}
+        self.assertEqual(sorted(lines), ["b-waiting", "c-deferred", "d-polling-dead", "e-uncertain"])
+        self.assertTrue(lines["b-waiting"].startswith("active b-waiting state=waiting-user-typing worker=running"))
+        self.assertIn("input=typing", lines["b-waiting"])
+        self.assertTrue(lines["c-deferred"].startswith("attention c-deferred state=deferred-user-typing"))
+        self.assertIn("deferred_seconds=900", lines["c-deferred"])
+        self.assertTrue(lines["d-polling-dead"].startswith("attention d-polling-dead state=polling worker=stopped"))
+        self.assertTrue(lines["e-uncertain"].startswith("attention e-uncertain"))
+        output.clear()
+        quiet = self.root / "quiet"
+        with patch("builtins.print", lambda *a, **_k: output.append(" ".join(map(str, a)))):
+            self.assertEqual(listen_notify.main(["status", "--state-root", str(quiet)]), 0)
+        self.assertEqual(output, [])
 
     def test_claude_unreadable_input_is_a_preflight_failure_before_send(self):
         config = self.claude_config()
@@ -405,23 +623,30 @@ class ListenerTests(unittest.TestCase):
         config = self.claude_config()
         for field, value in (("typing_retry_seconds", 0), ("typing_retry_seconds", 301),
                              ("typing_retry_seconds", "5"), ("typing_defer_seconds", -1),
-                             ("typing_defer_seconds", 86401), ("typing_defer_seconds", float("nan"))):
+                             ("typing_defer_seconds", 86401), ("typing_defer_seconds", float("nan")),
+                             ("typing_give_up_seconds", True), ("typing_give_up_seconds", 86401),
+                             ("typing_give_up_seconds", float("inf")), ("typing_give_up_seconds", 899)):
             with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
                 listen_notify._validate_config(dict(config, **{field: value}))
         listen_notify._validate_config(dict(config, typing_retry_seconds=0.5, typing_defer_seconds=0))
+        listen_notify._validate_config(dict(config, typing_defer_seconds=0, typing_give_up_seconds=0))
+        # Old events without a give-up bound keep a valid one even with a long hold.
+        listen_notify._validate_config(dict(config, typing_defer_seconds=20000))
         args = listen_notify._build_parser().parse_args([
             "start", "--event", "typing-cli", "--task", "typing-cli", "--agent", "gpt-auditor",
             "--handoff", str(self.handoff), "--poll", "idle", "--route", "claude-pane",
             "--pane", "w1:p1", "--terminal-id", "term_123abc", "--cwd", "/tmp/picsee",
-            "--typing-retry-seconds", "3", "--typing-defer-seconds", "120",
+            "--typing-retry-seconds", "3", "--typing-defer-seconds", "120", "--typing-give-up-seconds", "600",
         ])
         built = listen_notify._config_from_args(args)
-        self.assertEqual((built["typing_retry_seconds"], built["typing_defer_seconds"]), (3, 120))
+        self.assertEqual((built["typing_retry_seconds"], built["typing_defer_seconds"],
+                          built["typing_give_up_seconds"]), (3, 120, 600))
         defaults = listen_notify._config_from_args(listen_notify._build_parser().parse_args([
             "start", "--event", "typing-cli", "--task", "typing-cli", "--agent", "gpt-auditor",
             "--handoff", str(self.handoff), "--poll", "idle", "--route", "claude-pane",
             "--pane", "w1:p1", "--terminal-id", "term_123abc", "--cwd", "/tmp/picsee"]))
-        self.assertEqual((defaults["typing_retry_seconds"], defaults["typing_defer_seconds"]), (5, 900))
+        self.assertEqual((defaults["typing_retry_seconds"], defaults["typing_defer_seconds"],
+                          defaults["typing_give_up_seconds"]), (5, 900, 14400))
 
     def test_claude_cli_keeps_copied_symlink_alias_for_preflight(self):
         real_cwd = self.root / "real-picsee"
