@@ -1,28 +1,31 @@
 import Foundation
-import Observation
 import PicseeApplication
 
-@MainActor @Observable public final class UserDefaultsDisplayPreferencesStore: DisplayPreferencesStore {
+@MainActor public final class UserDefaultsDisplayPreferencesStore: DisplayPreferencesStore {
     private static let key = "displayPreferences.v1"
     private let defaults: UserDefaults
     private struct WeakObserver { weak var value: (any DisplayPreferencesObserver)? }
-    @ObservationIgnored private var observers: [WeakObserver] = []
+    private var observers: [WeakObserver] = []
+    private var storedValue: DisplayPreferences
 
     public var value: DisplayPreferences {
-        didSet {
-            guard value != oldValue else { return }
+        get { storedValue }
+        set {
+            var normalized = newValue
+            normalized.gridSidebarWidth = DisplayPreferences.normalizedSidebarWidth(normalized.gridSidebarWidth)
+            guard normalized != storedValue else { return }
+            storedValue = normalized
             let encoder = JSONEncoder()
             encoder.outputFormatting = .sortedKeys
-            // This fixed Codable value contains only Booleans and string enum cases.
-            defaults.set(try! encoder.encode(value), forKey: Self.key)
+            if let data = try? encoder.encode(normalized) { defaults.set(data, forKey: Self.key) }
             observers.removeAll { $0.value == nil }
-            for observer in observers { observer.value?.preferencesDidChange(value) }
+            for observer in observers { observer.value?.preferencesDidChange(normalized) }
         }
     }
 
     public init(defaults: UserDefaults) {
         self.defaults = defaults
-        value = defaults.data(forKey: Self.key).flatMap {
+        storedValue = defaults.data(forKey: Self.key).flatMap {
             try? JSONDecoder().decode(DisplayPreferences.self, from: $0)
         } ?? DisplayPreferences()
     }

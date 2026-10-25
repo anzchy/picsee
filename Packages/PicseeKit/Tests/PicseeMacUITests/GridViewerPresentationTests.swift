@@ -58,18 +58,32 @@ import PicseeApplication
     let host = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
     let store = InMemoryDisplayPreferencesStore()
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 1280, height: 772), preferencesStore: store)
-    let canvas = NSView(), chrome = NSView(), state = NSView(frame: host.bounds)
+    let session = ViewerSession()
+    let canvas = NSView(), chrome = NSView(), state = ViewerStateHost(frame: host.bounds, session: session)
     let grid = NSView(), inspector = NSView()
+    host.addSubview(canvas)
     host.addSubview(shell)
-    host.addSubview(state)
+    host.addSubview(state, positioned: .above, relativeTo: shell)
+    host.addSubview(chrome, positioned: .above, relativeTo: state)
     let presentation = GridViewerPresentation(canvas: canvas, chrome: chrome, state: state,
                                                grid: grid, inspector: inspector, shell: shell)
     presentation.showGrid(reading: false)
     #expect(!shell.sidebar.isHidden)
     #expect(presentation.showReadingOverGrid(true))
+    state.display(.readingFolder)
     #expect(!shell.isHidden)
     #expect(grid.isHidden && !state.isHidden)
     #expect(state.frame == NSRect(x: 196, y: 40, width: 1084, height: 732))
+    let title = state.subviews.first { $0.accessibilityIdentifier() == "state.folder-title" }
+    let subtitle = state.subviews.first { $0.accessibilityIdentifier() == "state.folder-subtitle" }
+    #expect(title != nil && subtitle != nil && state.buttons.count == 1)
+    if let title, let subtitle, let cancel = state.buttons.first {
+        #expect(abs(title.frame.midX - state.bounds.midX) < 0.1)
+        #expect(abs(subtitle.frame.midX - state.bounds.midX) < 0.1)
+        #expect(abs(cancel.frame.midX - state.bounds.midX) < 0.1)
+        #expect(state.bounds.contains(title.frame) && state.bounds.contains(subtitle.frame))
+    }
+    let stacking = host.subviews.map(ObjectIdentifier.init)
     shell.resizeSidebar(to: 320)
     #expect(state.frame == NSRect(x: 320, y: 40, width: 960, height: 732))
     presentation.show(.grid)
@@ -77,9 +91,11 @@ import PicseeApplication
     #expect(!shell.sidebar.isHidden)
     #expect(presentation.showReadingOverGrid(true))
     #expect(state.frame == NSRect(x: 320, y: 40, width: 960, height: 732))
+    if let cancel = state.buttons.first { #expect(abs(cancel.frame.midX - state.bounds.midX) < 0.1) }
     presentation.showViewer()
     #expect(shell.isHidden)
     #expect(state.frame == host.bounds)
+    #expect(host.subviews.map(ObjectIdentifier.init) == stacking)
     shell.frame.size.width = 800
     shell.layoutSubtreeIfNeeded()
     #expect(state.frame == host.bounds)

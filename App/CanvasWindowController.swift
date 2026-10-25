@@ -46,6 +46,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var navigationTask: Task<Void, Never>?
     var onRecentsChanged: (([RecentFolder]) -> Void)?
     var canNavigate: Bool { fileURL != nil && window?.attachedSheet == nil }
+    var gridShellVisible: Bool { gridShell != nil && !gridShell.isHidden }
+    func toggleGridSidebar() { if gridShellVisible { gridShell.toggleSidebar() } }
     private var inspectorHost: NSHostingView<MotionPolicyContent<InspectorPlaceholder>>!
     var onOpenRequest: (() -> Void)?
     var menuTracking: () -> Bool = { false }
@@ -118,8 +120,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridShell.autoresizingMask = [.width, .height]
         gridShell.isHidden = true
         content.addSubview(gridShell)
-        gridView = GridBrowserView(frame: NSRect(x: 0, y: 0, width: content.bounds.width - 196,
-                                                  height: content.bounds.height - 68))
+        gridView = GridBrowserView(frame: NSRect(origin: .zero, size: gridShell.mainFrame.size))
         gridView.autoresizingMask = [.width, .height]
         gridView.isHidden = true
         gridView.setAccessibilityHidden(true)
@@ -492,7 +493,10 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     private func showReadingState() {
         stateHost.display(.readingFolder)
-        if let cancel = stateHost.buttons.first { window?.makeFirstResponder(cancel) }
+        if let cancel = stateHost.buttons.first {
+            gridShell.linkKeyViews(from: cancel)
+            window?.makeFirstResponder(cancel)
+        }
     }
     private func cancelFolderEntry() {
         pendingGridCurrentItemID = nil

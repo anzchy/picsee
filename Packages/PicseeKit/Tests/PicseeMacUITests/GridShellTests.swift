@@ -2,15 +2,21 @@ import AppKit
 import Testing
 import PicseeApplication
 import PicseeCore
+import PicseeInfrastructure
 @testable import PicseeMacUI
+
+@MainActor private final class SidebarWriteObserver: DisplayPreferencesObserver {
+    var writes = 0
+    func preferencesDidChange(_ preferences: DisplayPreferences) { writes += 1 }
+}
 
 @Test @MainActor func gridShellFramesAndColumnsFollowSidebarAtDesignViewports() throws {
     _ = NSApplication.shared
     let store = InMemoryDisplayPreferencesStore()
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 1280, height: 772), preferencesStore: store)
     let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 1084, height: 732))
+    grid.autoresizingMask = [.width, .height]
     shell.mainContent.addSubview(grid)
-    shell.onMainFrameChange = { grid.frame = NSRect(origin: .zero, size: $0.size) }
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
                           styleMask: [], backing: .buffered, defer: false)
     let host = NSView(frame: window.contentView!.bounds)
@@ -24,6 +30,7 @@ import PicseeCore
     #expect(shell.footer.frame == NSRect(x: 0, y: 0, width: 1280, height: 40))
     #expect(shell.mainFrame == NSRect(x: 196, y: 40, width: 1084, height: 732))
     #expect(grid.frame.width == 1084)
+    #expect(grid.frame == shell.mainContent.bounds)
     grid.layoutSubtreeIfNeeded()
     let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
     #expect(abs(layout.itemSize.width - 247) < 0.1) // four columns at 1084 pt
@@ -32,6 +39,7 @@ import PicseeCore
     shell.layoutSubtreeIfNeeded()
     #expect(shell.sidebar.frame.width == 320)
     #expect(shell.mainFrame.width == 960)
+    #expect(grid.frame == shell.mainContent.bounds)
     grid.layoutSubtreeIfNeeded()
     #expect(abs(layout.itemSize.width - 223) < 0.1) // four columns at 960 pt
     #expect(store.value.gridSidebarWidth == 320)
@@ -44,6 +52,7 @@ import PicseeCore
     #expect(shell.mainFrame.width == 1280)
     grid.layoutSubtreeIfNeeded()
     #expect(grid.frame.width == 1280)
+    #expect(grid.frame == shell.mainContent.bounds)
     #expect(abs(layout.itemSize.width - 233.6) < 0.1) // five columns after closing
     shell.toggleSidebar()
     #expect(store.value.gridSidebarWidth == 160)
@@ -95,11 +104,17 @@ import PicseeCore
         eventNumber: 2, clickCount: 1, pressure: 1))
     divider.mouseDown(with: down)
     divider.mouseDragged(with: moved)
+    #expect(active.sidebar.frame.width == 276)
+    #expect(store.value.gridSidebarWidth == 196)
+    divider.mouseUp(with: moved)
     #expect(store.value.gridSidebarWidth == 276)
     active.resizeSidebar(to: .infinity)
     #expect(store.value.gridSidebarWidth == 276)
     active.appearance = NSAppearance(named: .darkAqua)
     active.viewDidChangeEffectiveAppearance()
+    let dark = DesignColor.sidebarBackground.components(.dark)
+    let actual = try #require(active.sidebar.layer?.backgroundColor?.components)
+    #expect(zip(actual, dark).allSatisfy { abs(Double($0.0) - $0.1) < 0.01 })
 
     #expect(GridShellView(coder: NSKeyedArchiver(requiringSecureCoding: false)) == nil)
 }
@@ -127,4 +142,95 @@ import PicseeCore
     #expect(name.lineBreakMode == .byTruncatingTail)
     #expect(name.frame.maxX <= cell.view.bounds.maxX)
     #expect(shell.mainContent.frame.minY == shell.footer.frame.maxY)
+    let cellInShell = cell.view.convert(cell.view.bounds, to: shell)
+    #expect(shell.mainContent.frame.contains(cellInShell))
+    #expect(cellInShell.minY >= shell.footer.frame.maxY)
+}
+
+@Test @MainActor func sidebarDragUsesMouseDownWidthAndWritesOnceOnRelease() throws {
+    _ = NSApplication.shared
+    let store = InMemoryDisplayPreferencesStore()
+    let observer = SidebarWriteObserver()
+    store.observe(observer)
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652), preferencesStore: store)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 680), styleMask: [], backing: .buffered, defer: false)
+    window.contentView!.addSubview(shell)
+    shell.layoutSubtreeIfNeeded()
+    let divider = try #require(shell.sidebar.subviews.first { $0.accessibilityIdentifier() == "grid.sidebar.resize" })
+    func event(_ type: NSEvent.EventType, _ x: CGFloat) throws -> NSEvent {
+        try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: 320), modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+    }
+    divider.mouseDown(with: try event(.leftMouseDown, 196))
+    divider.mouseDragged(with: try event(.leftMouseDragged, 500))
+    #expect(shell.sidebar.frame.width == 320)
+    divider.mouseDragged(with: try event(.leftMouseDragged, 206))
+    #expect(shell.sidebar.frame.width == 206)
+    #expect(observer.writes == 0)
+    divider.mouseUp(with: try event(.leftMouseUp, 206))
+    #expect(store.value.gridSidebarWidth == 206)
+    #expect(observer.writes == 1)
+}
+
+@Test @MainActor func gridSidebarControlsAreInKeyboardLoopAndExposeAdjustableWidth() throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
+                              preferencesStore: InMemoryDisplayPreferencesStore())
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+    shell.mainContent.addSubview(grid)
+    let host = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 680))
+    let window = NSWindow(contentRect: host.bounds, styleMask: [.titled], backing: .buffered, defer: false)
+    window.autorecalculatesKeyViewLoop = false
+    window.contentView = host
+    host.addSubview(shell)
+    let presentation = GridViewerPresentation(canvas: NSView(), chrome: NSView(), state: NSView(),
+        grid: grid, inspector: NSView(), shell: shell)
+    presentation.showGrid(reading: false)
+    let divider = try #require(shell.sidebar.subviews.first { $0.accessibilityIdentifier() == "grid.sidebar.resize" })
+    #expect(grid.collectionView.nextKeyView === shell.toggleButton)
+    #expect(shell.toggleButton.nextKeyView === divider)
+    #expect(divider.accessibilityRole() == .splitter)
+    #expect(divider.accessibilityLabel() == "Resize sidebar")
+    #expect((divider.accessibilityMinValue() as? NSNumber)?.intValue == 160)
+    #expect((divider.accessibilityMaxValue() as? NSNumber)?.intValue == 320)
+    #expect((divider.accessibilityValue() as? NSNumber)?.intValue == 196)
+    #expect(divider.accessibilityPerformIncrement())
+    #expect(shell.sidebar.frame.width > 196)
+    #expect(window.makeFirstResponder(grid.collectionView))
+    window.selectNextKeyView(nil)
+    #expect(window.firstResponder === shell.toggleButton)
+    #expect(window.makeFirstResponder(shell.toggleButton))
+    window.selectNextKeyView(nil)
+    #expect(window.firstResponder === divider)
+    let arrow = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+        windowNumber: window.windowNumber, context: nil, characters: "→", charactersIgnoringModifiers: "→", isARepeat: false, keyCode: 124))
+    divider.keyDown(with: arrow)
+    #expect(shell.sidebar.frame.width > 204)
+    #expect(divider.accessibilityPerformDecrement())
+    #expect(shell.sidebar.frame.width == 204)
+}
+
+@Test @MainActor func savedSidebarWidthSizesGridWhenAppHostReopens() throws {
+    _ = NSApplication.shared
+    let suite = "grid-host-reopen-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let saved = UserDefaultsDisplayPreferencesStore(defaults: defaults)
+    saved.value.gridSidebarWidth = 284
+    let reopened = UserDefaultsDisplayPreferencesStore(defaults: defaults)
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 1280, height: 772), preferencesStore: reopened)
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+    grid.autoresizingMask = [.width, .height]
+    shell.mainContent.addSubview(grid)
+    let host = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
+    host.addSubview(shell)
+    let presentation = GridViewerPresentation(canvas: NSView(), chrome: NSView(), state: NSView(),
+        grid: grid, inspector: NSView(), shell: shell)
+    presentation.showGrid(reading: false)
+    #expect(shell.mainFrame == NSRect(x: 284, y: 40, width: 996, height: 732))
+    #expect(grid.frame == shell.mainContent.bounds)
+    shell.frame.size.width = 800
+    shell.layoutSubtreeIfNeeded()
+    #expect(grid.frame == shell.mainContent.bounds)
+    #expect(grid.frame.width == 516)
 }
