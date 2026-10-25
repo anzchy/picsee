@@ -30,6 +30,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var gridView: GridBrowserView!
     private var gridFolderRoot: AccessRootID?
     private var gridFolderURL: URL?
+    private var gridSelectedItemID: ItemID? {
+        guard let id = session.selection.currentItemID, session.selection.selectedItemIDs.contains(id) else { return nil }
+        return id
+    }
     let session: ViewerSession
     private let inspector: InspectorModel
     private let router = CommandRouter()
@@ -109,8 +113,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridView.isHidden = true
         gridView.setAccessibilityHidden(true)
         gridView.onSelect = { [weak self] id in
-            self?.gridProjection.select(id)
             self?.session.select(id)
+        }
+        gridView.onDeselect = { [weak self] in
+            guard let self, let current = session.selection.currentItemID else { return }
+            session.select(current, modifier: .command)
         }
         content.addSubview(gridView)
         window.contentView = content
@@ -388,7 +395,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             session.beginBrowsing(items: gridProjection.snapshot?.navigationEntries.map(\.itemID) ?? [],
                 sourceVersion: .init(gridProjection.snapshot?.version.generation ?? 0),
                 scrollAnchor: gridView.firstVisibleItemID())
-            if let selected = gridProjection.selectedItemID { session.select(selected) }
+            if let selected = gridSelectedItemID { session.select(selected) }
         }
         session.updateFocus(focusContext)
         session.setMenuTracking(menuTracking())
@@ -429,7 +436,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         showGrid()
         if let window { GridWindowIdentity.showFolder(folder, in: window) }
         if let snapshot = gridProjection.snapshot {
-            gridView.display(snapshot, selectedItemID: session.selection.currentItemID)
+            gridView.display(snapshot, selectedItemID: gridSelectedItemID)
             if let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }
         }
     }
@@ -614,7 +621,7 @@ extension CanvasWindowController: FolderScanHost {
                 gridProjection.setScrollAnchor(anchor)
                 session.updateItems(snapshot.navigationEntries.map(\.itemID),
                     sourceVersion: .init(snapshot.version.generation))
-                gridView.display(snapshot, selectedItemID: session.selection.currentItemID)
+                gridView.display(snapshot, selectedItemID: gridSelectedItemID)
                 if let anchor = gridProjection.scrollAnchor { gridView.scrollTo(anchor) }
             }
         } onChange: { [weak self, weak scan] in

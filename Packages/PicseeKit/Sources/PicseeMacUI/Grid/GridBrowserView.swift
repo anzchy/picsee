@@ -91,6 +91,7 @@ import PicseeCore
     public private(set) var collectionView: NSCollectionView = GridCollectionView()
     public private(set) var currentItemID: ItemID?
     public var onSelect: ((ItemID) -> Void)?
+    public var onDeselect: (() -> Void)?
     private let scrollView = NSScrollView()
     private var entries: [FolderEntry] = []
     private var indices: [ItemID: Int] = [:]
@@ -173,5 +174,9 @@ import PicseeCore
         guard !updating, let index = indexPaths.first?.item, let id = itemID(at: index) else { return }
         currentItemID = id
         onSelect?(id)
+    }
+    public func collectionView(_ collectionView: NSCollectionView, didDeselectItemsAt indexPaths: Set<IndexPath>) {
+        guard !updating, collectionView.selectionIndexPaths.isEmpty else { return }
+        onDeselect?()
     }
 }
