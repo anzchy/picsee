@@ -330,21 +330,21 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：OPEN-05 已记录过滤 Next 与扫描中/后同图 Retry 保留条件及权限的单元边界，验收未变；owner 已将确认格压缩至约 165 字、两句，保留 P1/#92 链接及全部未验条件，长度提议已解决。OPEN-01/02/04/06 的既有输入、空态与最近列表边界不变。 |
+| 打开与输入 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；OPEN-06 因 P2-09/P3-14 被映射，状态与验收未变。 |
 | 查看与画布 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：VIEW-10 已记录同一排序/过滤快照导航、可选循环及 folder.loop.menu，保留原生菜单/按键组合未验；VIEW-05 的全屏路径不变。前次 #58 的 VIEW-09 限制保留，本范围不改缓存/加载代次。 |
-| C 沉浸界面 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：目录子菜单沿用 menuWillOpen/menuDidClose 的跟踪集合；CHROME-01…04 的计时、唤回、交互锁及常驻偏好未改。新子菜单的真机组合未验已列于 FOLDER-02/03 与 VIEW-10，不据源码升级。 |
-| 外观与显示偏好 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：新增目录排序/过滤/循环为 Session 内条件，无新 DisplayPreferences 键或持久化；PREF-01/02 的外观、系统跟随与 Reduce Motion 路径不变。 |
-| 文件夹浏览 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：FOLDER-02/03 从 Absent/无 到 Partial/单元，验收逐字保留；目录元数据、投影与无匹配清除已接线，菜单 ID 含无扩展名及动态扩展名。FOLDER-01 保留名称首图、读取/取消未真机验；首图等待期间条件变化与 Retry 回归只作单元边界，不宣称规模通过。 |
-| Filmstrip | 2026-10-23 | doc-gardener | P1-09 外观与偏好（#50，p1/p1-09-appearance-prefs，736fa1a..6eb5dc2）：`filmstripExpanded` 现随 `displayPreferences.v1` 持久化，仍无 Filmstrip UI；FILM-01 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
-| 网格、选择与菜单 | 2026-10-24 | doc-gardener | P2-02 真机记录（docs/p2-02-device-mini，3b69d7e..5e83132）：5e83132 引用 P2-01，GRID-15 计划含 P2-01，但范围只改文档、无代码；GRID-15 保持 `Absent`。上次：P0-09 Session（#11/#29，dcfe3f8..bef71d5） |
-| 信息与元数据 | 2026-10-23 | doc-gardener | P1-04/P1-05 加载路径（#41，p1/p1-04-load-path，30c2f06..afc18f2）：Inspector 占位面板只加当前已接受图片的文件名行（`inspector.item-name`，属 VIEW-09 验收），无其他文件信息；INFO-01 保持 `Absent`。上次：P0-09（#10，749697a..7054a5d） |
-| 授权与文件访问 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：同一显式输入 Retry 经 root、文件、当前图与呈现权限匹配后保留扫描权限，限制见 OPEN-05/FOLDER-03；ACCESS-01/03/05 的授权入口、重连和租约释放实现未改，无新增 entitlement。 |
-| 缓存与资源 | 2026-10-24 | doc-gardener | #58 最新 main 复核（430e2a2..9a230ce）：CACHE-01 已记录重叠修订在原租约内最多复核一次源文件，保留 Partial/单元、本修复真机未验及压力/S2/两窗口限制；新增测试覆盖旧查找与已消耗重试的交付，未升级能力。上次：P1-07（fa2703f..d97615d），仅公开 fileURL。 |
+| C 沉浸界面 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；CHROME-04/05 因 P3-11/P3-01 被映射；未合入 P3-01 分支的探查运行不是验证记录，CHROME-05 网格来源仍待 P3-01。 |
+| 外观与显示偏好 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；PREF-03 因 P3-11 被映射，保持 Absent。 |
+| 文件夹浏览 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；FOLDER-01 验收与 P3-01 网格入口的冲突仅列为待用户决定，验收未改；FOLDER-04…09 保持 Absent，P2-04 未合入。 |
+| Filmstrip | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；FILM-01/02 因 P2-06 被映射，保持 Absent。 |
+| 网格、选择与菜单 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；GRID 各行因 P3-01…15 被映射；P3-01 签名 App 探查明确不是验证记录、代码未合入，GRID-01/02 等保持 Absent。 |
+| 信息与元数据 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；INFO-01/02 因 P3-13 被映射，保持 Absent。 |
+| 授权与文件访问 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；ACCESS-04 因 P2-08 被映射，保持 Absent。 |
+| 缓存与资源 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；CACHE-01 因 P3-06、CACHE-02…04 因 P3-03…07 被映射；P3-03/04 未合入，CACHE-02 保持 Absent，CACHE-01 保持 Partial/单元。 |
 | 命令与键盘 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：新增 FolderMenuAction 标识已映射 FOLDER-02/03、VIEW-10；未增改 CommandRouter 命令 ID 或快捷键。CMD-01/02 的既有路由与菜单/输入框优先规则保留，新目录菜单组合真机未验。 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
 | 格式 | 2026-10-24 | doc-gardener | #58 最新 main 复核（430e2a2..9a230ce）：ImageIOPipeline 只新增观察冲突后的文件头复核，支持格式、方向与颜色解码不变；FMT-01 保留既有状态及 @1x 记录，@2x 未验。上次：P1-07（fa2703f..d97615d），解码器与格式集合未改。 |
-| 可访问性与本地化 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：新增 15 条菜单/无匹配状态文案具备 en 与 zh-Hans，Clear Filter 有标识及组件测试；系统中文、VoiceOver 与原生键盘路径仍未验，A11Y-02/04 状态不变。A11Y-04 当前限制已保留 #92 局部布局单元边界，前次措辞提议已解决。 |
+| 可访问性与本地化 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；A11Y-01 因 P3-10 被映射，保持 Absent。 |
 | 分发 | 2026-10-23 | doc-gardener | P1-10 真机记录（validation/p1-10-device-mini，3996845..08c5ecf，run 20261023-212346-P1-10-DIST-06）：DIST-06 只改「限制：」（@1x Dock 与访达列表/图标视图通过），仍 `Partial`/`无`，验收不变；⌘Tab、浅色 Dock、@2x 未验。DIST-01…05 不变。上次：App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2） |
 | 增强 | 2026-10-21 | 建账 | 同上 |
 
