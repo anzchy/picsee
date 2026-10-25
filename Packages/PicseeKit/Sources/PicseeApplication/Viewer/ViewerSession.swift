@@ -179,7 +179,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public func isEnabled(_ command: CommandID) -> Bool {
         switch command {
         case .fit, .actualPixels, .zoomIn, .zoomOut: imageCommandsAvailable
-        case .escape: inspectorFocus.focus != .canvas || (filePreviewSet == nil && previewSet != nil)
+        case .escape: inspectorFocus.focus != .canvas || (filePreviewSet == nil && previewSet != nil) || canReturnSingleImage
         case .open: true
         case .inspector: inspectorFocus.isVisible || imageCommandsAvailable
         case .preview, .enter: mode == .browsing && !orderedItemIDs.isEmpty
@@ -196,6 +196,10 @@ public enum ViewerMode: Sendable { case browsing, viewing }
             }
         case .search: false
         }
+    }
+    private var canReturnSingleImage: Bool {
+        mode == .viewing && previewSet == nil && filePreviewSet == nil
+            && (host as? any ViewerSingleImageReturnHost)?.canReturnToFolder == true
     }
     func perform(_ command: CommandID, from entry: CommandEntry) {
         activity()
@@ -214,6 +218,8 @@ public enum ViewerMode: Sendable { case browsing, viewing }
                 previewSet = nil
                 mode = .browsing
                 host?.returnToGrid()
+            } else if canReturnSingleImage {
+                (host as? any ViewerSingleImageReturnHost)?.returnSingleImageToFolder()
             }
         } else if command == .preview || command == .enter {
             previewSet = PreviewSet(items: orderedItemIDs, sourceVersion: sourceVersion,
