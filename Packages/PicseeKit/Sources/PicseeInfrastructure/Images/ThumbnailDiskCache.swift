@@ -431,7 +431,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             catch {
                 guard Self.isMissingRemovalError(error as NSError) else { continue }
             }
-            if deleteIndexRow(row.key, using: db) { total -= row.bytes }
+            total -= row.bytes
+            _ = deleteIndexRow(row.key, using: db)
         }
     }
     private func openDatabase(create: Bool) -> OpaquePointer? {

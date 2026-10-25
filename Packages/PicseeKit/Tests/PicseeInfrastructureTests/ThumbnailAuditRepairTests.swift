@@ -120,6 +120,60 @@ import PicseeCore
     #expect(sqlite3_column_int(statement, 0) == 2)
 }
 
+@Test func p304DeleteFailureDoesNotOverEvictAndConvergesNextPass() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let seed = ThumbnailDiskCache(directory: cacheDirectory)
+    var tickets: [ThumbnailCacheTicket] = []
+    var images: [DecodedImage] = []
+    for index in 0..<3 {
+        let file = folder.appendingPathComponent("image-\(index).tiff")
+        try FileManager.default.copyItem(at: fixture("orientation-1.tiff"), to: file)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 128, identityRoot: root)
+        tickets.append(try #require(try await seed.prepare(request)))
+        images.append(try await pipeline.image(for: request))
+    }
+    try await seed.store(images[0], for: tickets[0])
+    try await seed.store(images[1], for: tickets[1])
+    let payloads = tickets.map { cacheDirectory.appendingPathComponent($0.key.filename + ".png") }
+    let bytes = try Data(contentsOf: payloads[0]).count
+    let index = cacheDirectory.appendingPathComponent("index.sqlite3")
+    var db: OpaquePointer?
+    #expect(sqlite3_open_v2(index.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK)
+    #expect(sqlite3_exec(db, "CREATE TRIGGER reject_thumbnail_delete BEFORE DELETE ON thumbnails BEGIN SELECT RAISE(ABORT, 'injected delete failure'); END", nil, nil, nil) == SQLITE_OK)
+    sqlite3_close(db)
+
+    let limited = ThumbnailDiskCache(directory: cacheDirectory,
+        highWaterBytes: 2 * bytes + 1, lowWaterBytes: 2 * bytes)
+    try await limited.store(images[2], for: tickets[2])
+    #expect(!FileManager.default.fileExists(atPath: payloads[0].path))
+    #expect(FileManager.default.fileExists(atPath: payloads[1].path))
+    #expect(FileManager.default.fileExists(atPath: payloads[2].path))
+
+    #expect(sqlite3_open_v2(index.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK)
+    var retained: OpaquePointer?
+    #expect(sqlite3_prepare_v2(db, "SELECT count(*) FROM thumbnails WHERE key='\(tickets[0].key.filename)'", -1, &retained, nil) == SQLITE_OK)
+    #expect(sqlite3_step(retained) == SQLITE_ROW)
+    #expect(sqlite3_column_int(retained, 0) == 1)
+    sqlite3_finalize(retained)
+    #expect(sqlite3_exec(db, "DROP TRIGGER reject_thumbnail_delete", nil, nil, nil) == SQLITE_OK)
+    sqlite3_close(db)
+    try await limited.store(images[2], for: tickets[2])
+    #expect(FileManager.default.fileExists(atPath: payloads[1].path))
+    #expect(FileManager.default.fileExists(atPath: payloads[2].path))
+    #expect(sqlite3_open_v2(index.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK)
+    defer { if let db { sqlite3_close(db) } }
+    var statement: OpaquePointer?
+    #expect(sqlite3_prepare_v2(db, "SELECT count(*) FROM thumbnails", -1, &statement, nil) == SQLITE_OK)
+    defer { sqlite3_finalize(statement) }
+    #expect(sqlite3_step(statement) == SQLITE_ROW)
+    #expect(sqlite3_column_int(statement, 0) == 2)
+}
+
 @Test func p304AuditHealthyLockedIndexIsNeverUnlinked() async throws {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
