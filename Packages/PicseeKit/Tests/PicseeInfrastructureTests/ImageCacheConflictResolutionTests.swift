@@ -46,7 +46,139 @@ private func issue58Write(_ name: String, to file: URL) throws {
     try FileManager.default.setAttributes([.modificationDate: issue58Time], ofItemAtPath: file.path)
 }
 
+@MainActor private func issue122RunLoader(tree: IdentityTree, cache: ImageMemoryCache,
+    pipeline: ImageIOPipeline, old: RenderKey, observation: UUID) async throws {
+    try issue58Write("pan-grid-4096x3072.png", to: tree.file)
+    let access = CacheLeases(rootURL: tree.root), host = CacheHost()
+    let loader = ViewerImageLoader(trace: nil, presentation: Issue58Presentation(pipeline))
+    loader.host = host
+    loader.open(tree.file, maximumPixelSize: 128) {
+        try await AccessImageSource.open(.root(tree.id, file: tree.file), access: access, pipeline: pipeline)
+    }
+    await loader.loadTask?.value
+    let shown = try #require(loader.presented?.key)
+    #expect(shown.revision != old.revision && loader.phase == .settled)
+    let obsolete = await cache.lookup(old, observation: observation)
+    #expect(obsolete.sourceChanged && obsolete.requiresSourceValidation)
+    loader.requireResolution(2048)
+    await loader.loadTask?.value
+    #expect(loader.phase == .settled && loader.failure == nil && host.failures.isEmpty)
+    #expect(loader.presented?.key.revision == shown.revision)
+    #expect(host.images.count == 3)
+    #expect(await cache.finish(obsolete, image: cacheImage(try cachePixels(marker: 9), key: old)) == nil)
+    loader.close()
+    await access.waitUntilEmpty()
+}
+
 @Suite struct ImageCacheConflictResolutionTests {
+    @MainActor @Test(.timeLimit(.minutes(1))) func issue122DisplayedCurrentRevisionSurvivesDelayedOldLookupAndZoom() async throws {
+        let tree = try IdentityTree(); defer { tree.remove() }
+        try issue58Write("orientation-1.tiff", to: tree.file)
+        let cache = ImageMemoryCache(capacity: 32_000_000)
+        let disk = ThumbnailDiskCache(directory: tree.root.appendingPathComponent("cache"))
+        let pipeline = ImageIOPipeline(cache: cache, thumbnailCache: disk)
+        let old = try #require(try await pipeline.request(for: tree.file, maximumPixelSize: 128,
+                                                           identityRoot: tree.scope).renderKey)
+        try await cache.withObservation(itemID: old.itemID) { delayed in
+            try await issue122RunLoader(tree: tree, cache: cache, pipeline: pipeline, old: old, observation: delayed)
+        }
+    }
+
+    @Test func issue122CancelledCacheActorLookupKeepsOtherTicket() async throws {
+        let cache = ImageMemoryCache(capacity: 1_000_000)
+        let old = cacheKey(120)
+        let current = issue58RevisionKey(old, revision: FileRevision(byteCount: 42, modificationDate: nil, resourceIdentifier: "R1"))
+        let pending = await cache.lookup(old)
+        let currentPixels = try cachePixels(marker: 4)
+        await cache.pin(current, image: cacheImage(currentPixels, key: current))
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await cache.lookup(current)
+        }
+        let result = await cancelled.value
+        #expect(result.sourceChanged && result.image == nil)
+        let oldPixels = try cachePixels(marker: 5)
+        #expect(await cache.finish(pending, image: cacheImage(oldPixels, key: old))?.image === oldPixels)
+        #expect(await cache.image(for: current)?.image === currentPixels)
+        await cache.unpin(current)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func issue122PinnedFreshImageSurvivesRealReplacementAndOldObservation() async throws {
+        let tree = try IdentityTree(); defer { tree.remove() }
+        try issue58Write("orientation-1.tiff", to: tree.file)
+        let cache = ImageMemoryCache(capacity: 1_000_000)
+        let pipeline = ImageIOPipeline(cache: cache)
+        let old = try #require(try await pipeline.request(for: tree.file, maximumPixelSize: 128).renderKey)
+        try await cache.withObservation(itemID: old.itemID) { delayed in
+            try issue58Write("orientation-2.tiff", to: tree.file)
+            let preview = try await pipeline.request(for: tree.file, maximumPixelSize: 128)
+            let current = try #require(preview.renderKey)
+            #expect(old.revision != current.revision)
+            let shown = try await pipeline.imageFresh(for: preview)
+            await pipeline.pin(current, image: shown)
+            let obsolete = await cache.lookup(old, observation: delayed)
+            #expect(obsolete.sourceChanged && obsolete.requiresSourceValidation && obsolete.image == nil)
+            let detail = try await pipeline.request(for: tree.file, maximumPixelSize: 256)
+            let detailed = try await pipeline.image(for: detail)
+            #expect(detailed.revision == current.revision)
+            #expect(await cache.image(for: current)?.image === shown.image)
+            #expect(await cache.finish(obsolete, image: cacheImage(try cachePixels(marker: 9), key: old)) == nil)
+            await pipeline.unpin(current)
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1))) func issue122CancelledHeaderCannotPrunePendingRevision() async throws {
+        let tree = try IdentityTree(); defer { tree.remove() }
+        try issue58Write("orientation-2.tiff", to: tree.file)
+        let cache = ImageMemoryCache(capacity: 1_000_000)
+        let resolver = Issue58IdentityGate(root: tree.scope, holds: [2])
+        let pipeline = ImageIOPipeline(identityResolver: resolver, cache: cache)
+        let request = try await pipeline.request(for: tree.file, maximumPixelSize: 128)
+        let current = try #require(request.renderKey)
+        let old = issue58RevisionKey(current, revision: FileRevision(byteCount: 42, modificationDate: nil, resourceIdentifier: "R0"))
+        let pending = await cache.lookup(old)
+        let currentPixels = try cachePixels(marker: 2)
+        await cache.pin(current, image: cacheImage(currentPixels, key: current))
+        let task = Task { try await pipeline.image(for: request) }
+        var arrivals = resolver.arrivals.makeAsyncIterator()
+        #expect(await arrivals.next() == 2)
+        task.cancel()
+        await resolver.release(2)
+        do { _ = try await task.value; Issue.record("cancelled request returned an image") }
+        catch { #expect((error as? ImageLoadError)?.kind == .cancelled) }
+        let oldPixels = try cachePixels(marker: 3)
+        #expect(await cache.finish(pending, image: cacheImage(oldPixels, key: old))?.image === oldPixels)
+        #expect(await cache.image(for: current)?.image === currentPixels)
+        await cache.unpin(current)
+    }
+
+    @Test func issue122FreshCurrentObservationHealsPinnedRevisionAfterDelayedOldLookup() async throws {
+        let cache = ImageMemoryCache(capacity: 1_000_000)
+        let old = cacheKey(122)
+        let current = issue58RevisionKey(old, revision: FileRevision(byteCount: 42, modificationDate: nil, resourceIdentifier: "R1"))
+        let detail = RenderKey(itemID: current.itemID, revision: current.revision, maximumPixelSize: 1024, isPreview: false)
+        let pixels = try cachePixels(marker: 7)
+        await cache.pin(current, image: cacheImage(pixels, key: current))
+        try await cache.withObservation(itemID: old.itemID) { delayed in
+            // The old header has been read. A newer presentation is already pinned.
+            let obsolete = await cache.lookup(old, observation: delayed)
+            #expect(obsolete.image == nil)
+            try await cache.withObservation(itemID: current.itemID) { fresh in
+                let recovered = await cache.lookup(current, observation: fresh)
+                #expect(!recovered.sourceChanged)
+                #expect(recovered.image?.image === pixels)
+                let anotherSize = await cache.lookup(detail, observation: fresh)
+                #expect(!anotherSize.sourceChanged)
+                #expect(anotherSize.image == nil)
+                let detailPixels = try cachePixels(marker: 8)
+                #expect(await cache.finish(anotherSize, image: cacheImage(detailPixels, key: detail))?.image === detailPixels)
+            }
+            #expect(await cache.finish(obsolete, image: cacheImage(try cachePixels(marker: 9), key: old)) == nil)
+        }
+        #expect(await cache.image(for: current)?.image === pixels)
+        await cache.unpin(current)
+    }
+
     @Test(.timeLimit(.minutes(1))) func issue58OlderLookupFirstCurrentRevisionSucceeds() async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try issue58Write("orientation-1.tiff", to: tree.file)

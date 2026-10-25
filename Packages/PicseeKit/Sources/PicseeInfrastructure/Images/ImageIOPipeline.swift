@@ -171,7 +171,9 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Thu
     }
     private func lookup(_ request: ImageDecodeRequest, key: RenderKey, observation: UUID) async throws -> ImageCacheRequest {
         let context = await snapshotContext()
+        if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
         let result = await cache.lookup(key, observation: observation, context: context)
+        if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
         guard result.requiresSourceValidation else { return result }
         // One bounded reread, inside the caller's existing lease. Observe BEFORE reading so a
         // conflicting lookup during this validation still rejects us, including after eviction.
@@ -184,12 +186,16 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Thu
             }
             if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
             let context = await self.snapshotContext()
-            return await self.cache.lookup(key, observation: freshObservation, context: context)
+            if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
+            let result = await self.cache.lookup(key, observation: freshObservation, sourceRevalidated: true, context: context)
+            if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
+            return result
         }
     }
     private func image(for request: ImageDecodeRequest, observation: UUID) async throws -> DecodedImage {
         if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision) }
         let header = try await header(request)
+        if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: header.itemID, revision: header.revision) }
         let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: request.maximumPixelSize, isPreview: request.isPreview)
         // An explicit request revision must still match at the last predecode check.
         if let requested = request.renderKey, requested != key {
