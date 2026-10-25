@@ -330,20 +330,20 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；OPEN-06 因 P2-09/P3-14 被映射，状态与验收未变。 |
-| 查看与画布 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..0bcbb90）：0bcbb90 只改开发计划状态措辞，补记 P0-03 另有 MacBook @2x 记录，与 VIEW-02/03 已链接的 P0 @2x/@1x 记录一致；无代码、无验证记录，VIEW 各行状态与验收未变。上次：P2-03（#89，d26e164..057462f）。 |
+| 打开与输入 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；OPEN-06 因 P2-09/P3-14 被映射，状态与验收未变。d87bdf1..83c1457（P3-03/04）：App/PicseeApp.swift 注入缩略图缓存；OPEN-02/03 的打开结果、取消与 Finder 路径未变，行未改，缓存首预览见 CACHE-02。 |
+| 查看与画布 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..0bcbb90）：0bcbb90 只改开发计划状态措辞，补记 P0-03 另有 MacBook @2x 记录，与 VIEW-02/03 已链接的 P0 @2x/@1x 记录一致；无代码、无验证记录，VIEW 各行状态与验收未变。上次：P2-03（#89，d26e164..057462f）。d87bdf1..83c1457（P3-03/04）：ImageIOPipeline 增加缓存注入与 imageFresh，DecodeAdmission 增加可选复用；VIEW-06/07 的缓存命中方向与透明需 PR 行的「无用户可见变化」确认，VIEW-08 已记磁盘缓存路径；状态未变，无真机记录。 |
 | C 沉浸界面 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；CHROME-04/05 因 P3-11/P3-01 被映射；未合入 P3-01 分支的探查运行不是验证记录，CHROME-05 网格来源仍待 P3-01。 |
 | 外观与显示偏好 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；PREF-03 因 P3-11 被映射，保持 Absent。 |
 | 文件夹浏览 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；FOLDER-01 验收与 P3-01 网格入口的冲突仅列为待用户决定，验收未改；FOLDER-04…09 保持 Absent，P2-04 未合入。 |
 | Filmstrip | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；FILM-01/02 因 P2-06 被映射，保持 Absent。 |
 | 网格、选择与菜单 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；GRID 各行因 P3-01…15 被映射；P3-01 签名 App 探查明确不是验证记录、代码未合入，GRID-01/02 等保持 Absent；0bcbb90 提交标题提到 GRID-15：计划头不再称已合入工作包的账簿行均为 Partial，与 GRID-15（计划含 P2-01）保持 Absent 一致。 |
 | 信息与元数据 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；INFO-01/02 因 P3-13 被映射，保持 Absent。 |
-| 授权与文件访问 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；ACCESS-04 因 P2-08 被映射，保持 Absent。 |
-| 缓存与资源 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；CACHE-01 因 P3-06、CACHE-02…04 因 P3-03…07 被映射；P3-03/04 未合入，CACHE-02 保持 Absent，CACHE-01 保持 Partial/单元。 |
+| 授权与文件访问 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；ACCESS-04 因 P2-08 被映射，保持 Absent。d87bdf1..83c1457（P3-03/04）：AccessImageSource 在 withLease 内做缓存查找与写入，租约范围与释放日志语义未改，ACCESS-05 行未改、状态未变；ACCESS-04 仍 Absent。 |
+| 缓存与资源 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；CACHE-01 因 P3-06、CACHE-02…04 因 P3-03…07 被映射；P3-03/04 未合入，CACHE-02 保持 Absent，CACHE-01 保持 Partial/单元。d87bdf1..83c1457（P3-03/04）：CACHE-02 由 Absent 升为 Partial/单元，验收前缀未改，限制写明仅查看器首预览、未接网格、无真机记录；CACHE-01 限制已改为磁盘缓存见 CACHE-02。上文「CACHE-02 保持 Absent」不再成立，以本行为准。 |
 | 命令与键盘 | 2026-10-24 | doc-gardener | P2-03（#89，d26e164..057462f）：新增 FolderMenuAction 标识已映射 FOLDER-02/03、VIEW-10；未增改 CommandRouter 命令 ID 或快捷键。CMD-01/02 的既有路由与菜单/输入框优先规则保留，新目录菜单组合真机未验。 |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | P7-09 去掉自动更新，WIN-07 不受影响 |
 | 编辑与导出 | 2026-10-22 | doc-gardener | EDIT-03 验收按 ADR-007 补替换与源文件拒绝，状态未变；EDIT-05 依赖 P5-04 写权限；「不做」里覆盖原文件一行的来源已补 ADR-007，决定与状态未变 |
-| 格式 | 2026-10-24 | doc-gardener | #58 最新 main 复核（430e2a2..9a230ce）：ImageIOPipeline 只新增观察冲突后的文件头复核，支持格式、方向与颜色解码不变；FMT-01 保留既有状态及 @1x 记录，@2x 未验。上次：P1-07（fa2703f..d97615d），解码器与格式集合未改。 |
+| 格式 | 2026-10-25 | doc-gardener | #58 最新 main 复核（430e2a2..9a230ce）：ImageIOPipeline 只新增观察冲突后的文件头复核，支持格式、方向与颜色解码不变；FMT-01 保留既有状态及 @1x 记录，@2x 未验。上次：P1-07（fa2703f..d97615d），解码器与格式集合未改。d87bdf1..83c1457（P3-03/04）：ImageIOPipeline 增加缓存注入与 imageFresh，解码器集合与支持格式未改；缓存命中路径的格式表现需 PR 行的「无用户可见变化」确认，状态未变。 |
 | 可访问性与本地化 | 2026-10-25 | doc-gardener | 计划 v0.0.1 剩余任务（docs/plan-v001-remaining，00a5c6d..50a495a）：只改开发计划 §13/§14 与 docs/test 复核报告，无代码、无验证记录；A11Y-01 因 P3-10 被映射，保持 Absent。 |
 | 分发 | 2026-10-23 | doc-gardener | P1-10 真机记录（validation/p1-10-device-mini，3996845..08c5ecf，run 20261023-212346-P1-10-DIST-06）：DIST-06 只改「限制：」（@1x Dock 与访达列表/图标视图通过），仍 `Partial`/`无`，验收不变；⌘Tab、浅色 Dock、@2x 未验。DIST-01…05 不变。上次：App 图标 Lens（feat/app-icon-lens，cfef98f..75127a2） |
 | 增强 | 2026-10-21 | 建账 | 同上 |
