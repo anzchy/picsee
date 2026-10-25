@@ -103,7 +103,21 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         orderedItemIDs = items
         self.sourceVersion = sourceVersion
         selection.reconcile(with: items)
+        let previous = previewSet?.currentItemID
         previewSet?.reconcile(availableItemIDs: items)
+        if previous != previewSet?.currentItemID, previous != nil {
+            if let current = previewSet?.currentItemID {
+                host?.presentGridItem(current)
+            } else {
+                if let origin = previewSet?.origin {
+                    selection = origin.selection
+                    scrollAnchor = origin.scrollAnchor
+                }
+                previewSet = nil
+                mode = .browsing
+                host?.returnToGrid()
+            }
+        }
         if let scrollAnchor, !items.contains(scrollAnchor) { self.scrollAnchor = nil }
     }
     public func select(_ id: ItemID, modifier: SelectionModifier = .plain) {
