@@ -25,6 +25,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     public static let maximumSourceBytes = 32 * 1024 * 1024
     public static let maximumPayloadBytes = 8 * 1024 * 1024
     public static let maximumPixelEdge = 1024
+    static let defaultHighWaterBytes = 2 * 1024 * 1024 * 1024
+    static let defaultLowWaterBytes = defaultHighWaterBytes * 3 / 4
     private static let cacheVersion = 2
     private static let encoderVersion = 2
     private static let tempSweepCutoff: Date = {
@@ -46,8 +48,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Picsee/Thumbnails", isDirectory: true)) {
         self.directory = directory
-        self.highWaterBytes = 512 * 1024 * 1024
-        self.lowWaterBytes = 384 * 1024 * 1024
+        self.highWaterBytes = Self.defaultHighWaterBytes
+        self.lowWaterBytes = Self.defaultLowWaterBytes
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = nil
         self.afterOrphanSnapshot = nil
@@ -55,8 +57,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
 
     init(directory: URL, afterPayloadWrite: @escaping @Sendable () throws -> Void) {
         self.directory = directory
-        self.highWaterBytes = 512 * 1024 * 1024
-        self.lowWaterBytes = 384 * 1024 * 1024
+        self.highWaterBytes = Self.defaultHighWaterBytes
+        self.lowWaterBytes = Self.defaultLowWaterBytes
         self.afterPayloadWrite = afterPayloadWrite
         self.afterReadLeaseAcquired = nil
         self.afterOrphanSnapshot = nil
@@ -73,8 +75,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
 
     init(directory: URL, afterReadLeaseAcquired: @escaping @Sendable () async -> Void) {
         self.directory = directory
-        self.highWaterBytes = 512 * 1024 * 1024
-        self.lowWaterBytes = 384 * 1024 * 1024
+        self.highWaterBytes = Self.defaultHighWaterBytes
+        self.lowWaterBytes = Self.defaultLowWaterBytes
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = afterReadLeaseAcquired
         self.afterOrphanSnapshot = nil
@@ -82,8 +84,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
 
     init(directory: URL, afterOrphanSnapshot: @escaping @Sendable () async -> Void) {
         self.directory = directory
-        self.highWaterBytes = 512 * 1024 * 1024
-        self.lowWaterBytes = 384 * 1024 * 1024
+        self.highWaterBytes = Self.defaultHighWaterBytes
+        self.lowWaterBytes = Self.defaultLowWaterBytes
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = nil
         self.afterOrphanSnapshot = afterOrphanSnapshot
