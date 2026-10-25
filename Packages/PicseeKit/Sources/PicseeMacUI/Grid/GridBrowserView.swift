@@ -13,6 +13,7 @@ import PicseeCore
 @MainActor public final class GridPhotoItem: NSCollectionViewItem {
     public private(set) var representedItemID: ItemID?
     public private(set) var filename = ""
+    private let tile = NSView()
     private let placeholder = NSTextField(labelWithString: String(localized: "Thumbnail pending"))
     private let nameLabel = NSTextField(labelWithString: "")
 
@@ -21,6 +22,11 @@ import PicseeCore
         surface.onAppearanceChange = { [weak self] in self?.updateSelection() }
         surface.wantsLayer = true
         surface.layer?.cornerRadius = 7
+        // Page 11 `.thumbnail-wrap`: a quiet surface tile with the inner radius inside a transparent cell.
+        tile.frame = NSRect(x: 8, y: 36, width: 204, height: 140)
+        tile.wantsLayer = true
+        tile.layer?.cornerRadius = CGFloat(DesignMetrics.radii["inner"] ?? 4)
+        tile.autoresizingMask = [.width, .height]
         placeholder.frame = NSRect(x: 8, y: 36, width: 204, height: 140)
         placeholder.alignment = .center
         placeholder.textColor = .secondaryLabelColor
@@ -31,12 +37,14 @@ import PicseeCore
         nameLabel.maximumNumberOfLines = 1
         nameLabel.wantsLayer = true
         nameLabel.autoresizingMask = [.width, .maxYMargin]
+        surface.addSubview(tile)
         surface.addSubview(placeholder)
         surface.addSubview(nameLabel)
         surface.setAccessibilityRole(.button)
         view = surface
     }
 
+    var tileLayer: CALayer? { tile.layer }
     public func configure(_ entry: FolderEntry) {
         representedItemID = entry.itemID
         filename = entry.url.lastPathComponent
@@ -51,15 +59,15 @@ import PicseeCore
         guard isViewLoaded else { return }
         var accent = NSColor.clear.cgColor
         var fill = NSColor.clear.cgColor
-        var background = NSColor.clear.cgColor
+        var surface = NSColor.clear.cgColor
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             accent = DesignColor.accent.nsColor.cgColor
             fill = DesignColor.selectionFill.nsColor.cgColor
-            background = NSColor.controlBackgroundColor.cgColor
+            surface = DesignColor.sidebarBackground.nsColor.cgColor
         }
         view.layer?.borderWidth = isSelected ? 2 : 0
         view.layer?.borderColor = accent
-        view.layer?.backgroundColor = background
+        tile.layer?.backgroundColor = surface
         nameLabel.layer?.backgroundColor = isSelected ? fill : NSColor.clear.cgColor
         view.setAccessibilityValue(isSelected ? String(localized: "Selected") : "")
     }
@@ -113,6 +121,7 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
         collectionView.collectionViewLayout = layout
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = false
+        collectionView.backgroundColors = [DesignColor.canvasBackground.nsColor]
         collectionView.dataSource = self
         collectionView.delegate = self
         (collectionView as? GridCollectionView)?.onArrow = { [weak self] delta in
@@ -123,6 +132,7 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
         scrollView.frame = bounds
         scrollView.autoresizingMask = [.width, .height]
         scrollView.hasVerticalScroller = true
+        scrollView.backgroundColor = DesignColor.canvasBackground.nsColor
         scrollView.documentView = collectionView
         addSubview(scrollView)
     }

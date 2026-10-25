@@ -86,34 +86,49 @@ import PicseeCore
     #expect(cell.isSelected && cell.view.window?.firstResponder !== cell.view)
 }
 
-@Test @MainActor func gridCellTileBackgroundUsesEffectiveWindowAppearance() throws {
+@Test @MainActor func gridTileSurfaceDiffersFromGridBackgroundAcrossAppearances() throws {
     let application = NSApplication.shared
     let previous = application.appearance
     defer { application.appearance = previous }
     let folder = URL(fileURLWithPath: "/tmp/picsee-grid-tile")
     let entry = FolderEntry(url: folder.appendingPathComponent("A.jpg"),
         root: .init(id: AccessRootID(rawValue: UUID()), url: folder))
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 480, height: 320))
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+        styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = grid
     let cell = GridPhotoItem()
     cell.configure(entry)
-    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 200),
-        styleMask: [.titled], backing: .buffered, defer: false)
-    window.contentView = cell.view
-    for (override, inherited) in [(NSAppearance.Name?.some(.aqua), NSAppearance.Name.aqua),
-        (.some(.darkAqua), .aqua), (nil, .darkAqua)] {
+    grid.addSubview(cell.view)
+    func rgba(_ color: NSColor?) -> [CGFloat] {
+        guard let color = color?.usingColorSpace(.sRGB) else { return [] }
+        return [color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent]
+    }
+    func resolved(_ color: NSColor?, in view: NSView) -> [CGFloat] {
+        var value: [CGFloat] = []
+        view.effectiveAppearance.performAsCurrentDrawingAppearance { value = rgba(color.flatMap { NSColor(cgColor: $0.cgColor) }) }
+        return value
+    }
+    func close(_ actual: [CGFloat], _ token: DesignColor, _ theme: DesignTheme) -> Bool {
+        let expected = token.components(theme).map { CGFloat($0) }
+        return actual.count == 4 && zip(actual, expected).allSatisfy { abs($0 - $1) < 0.002 }
+    }
+    for (override, inherited, theme) in [(NSAppearance.Name?.some(.aqua), NSAppearance.Name.aqua, DesignTheme.light),
+        (.some(.darkAqua), .aqua, .dark), (nil, .darkAqua, .dark)] {
         application.appearance = try #require(NSAppearance(named: inherited))
         window.appearance = override.flatMap(NSAppearance.init(named:))
         cell.view.viewDidChangeEffectiveAppearance()
-        var expected: CGColor?
-        cell.view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            expected = NSColor.controlBackgroundColor.cgColor
-        }
-        let actualCG = try #require(cell.view.layer?.backgroundColor)
-        let expectedCG = try #require(expected)
-        let actualColor = try #require(NSColor(cgColor: actualCG)?.usingColorSpace(.sRGB))
-        let expectedColor = try #require(NSColor(cgColor: expectedCG)?.usingColorSpace(.sRGB))
-        #expect(actualColor.redComponent == expectedColor.redComponent)
-        #expect(actualColor.greenComponent == expectedColor.greenComponent)
-        #expect(actualColor.blueComponent == expectedColor.blueComponent)
-        #expect(actualColor.alphaComponent == expectedColor.alphaComponent)
+        let tileLayer = try #require(cell.tileLayer)
+        let tile = rgba(tileLayer.backgroundColor.flatMap { NSColor(cgColor: $0) })
+        let background = resolved(grid.collectionView.backgroundColors.first, in: grid)
+        let scroll = resolved(grid.collectionView.enclosingScrollView?.backgroundColor, in: grid)
+        #expect(tile != background, "\(theme): tile must separate from the grid background")
+        #expect(close(tile, .sidebarBackground, theme), "\(theme): tile \(tile)")
+        #expect(close(background, .canvasBackground, theme), "\(theme): collection background \(background)")
+        #expect(close(scroll, .canvasBackground, theme), "\(theme): scroll background \(scroll)")
+        #expect(tileLayer !== cell.view.layer)
+        #expect(tileLayer.cornerRadius == CGFloat(DesignMetrics.radii["inner"] ?? 0))
+        #expect(cell.view.layer?.backgroundColor.flatMap { NSColor(cgColor: $0)?.alphaComponent } ?? 0 == 0,
+            "the cell plate stays transparent; only the tile is drawn")
     }
 }
