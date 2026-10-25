@@ -11,7 +11,7 @@ import PicseeCore
     let entries = (0..<40).map { FolderEntry(url: folder.appendingPathComponent(String(format: "%02d.jpg", $0)), root: root) }
     func snapshot(_ generation: UInt64) -> FolderSnapshot {
         FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: generation),
-            entries: entries, isComplete: generation == 2)
+            entries: entries, isComplete: true)
     }
     let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 500, height: 240))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 240),
