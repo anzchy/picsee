@@ -1,27 +1,28 @@
 ---
 status: accepted
+date: 2026-10-25
 ---
 
-# A folder opens in the grid after a complete scan
+# ADR-010：打开文件夹在扫描完成后进入网格
 
-Opening a folder (File › Open…, Choose Folder, dropping a folder) lands in the **Grid**, not the viewer. While the folder is
-scanned the content area shows the **Reading State** (indeterminate, cancellable, inside the grid shell); only when the scan
-completes does the full sorted Grid appear, with the first image in the sort order as the **Current Item** and nothing
-selected; Space or Enter opens the viewer. Cancelling returns to whatever was shown before and never shows a partly scanned
-folder. Opening a single image still goes straight to the viewer, and Esc from it returns to its folder's Grid when that
-folder lies inside an Access Root. This supersedes the 2026-10-24 decision that a folder opens on its first image by name:
-the grid entry (pages 11/12, and page 24 drawn inside the grid shell) contradicted it, and the same "after the scan"
-rule now keeps the grid from reordering under the user, at the cost of no browsing before a large scan finishes.
+打开文件夹（File › Open…、选择文件夹、拖入文件夹）落在**网格**，不进大图。扫描期间内容区显示**读取状态**（不确定进度、可取消，位于网格外壳内）；扫描完成后一次性显示完整的排序网格，排序首张为**当前项**、没有**选择**；Space/Enter 才进入大图，此时预览集合是整个过滤排序后的文件夹，从当前项开始。取消读取回到之前显示的内容，从不显示扫描了一半的文件夹。单独打开的图片仍直接进大图；若它的文件夹位于某个授权根内，Esc 走同一条路回到该文件夹网格：尚未扫描就先显示读取状态，完成后当前项为刚才看的那张图（被过滤掉或已不在时退回排序首张）；不在任何授权根内时，Esc 不会出现一个不存在的网格。本决定取代 2026-10-24 的“打开文件夹显示按名称排第一的图片”：网格入口（11/12 页，以及画在网格外壳里的 24 页）与它矛盾，而同样的“扫描完成后再显示”规则现在让网格不会在用户眼前重排；代价是大目录扫描完成前不能浏览。
 
-User decisions, 2026-10-25 grilling (answers to the delegator's questions):
-「打开一个文件夹……最终落在哪里？」→「网格，首张为当前项」;
-「文件夹扫描尚未完成时，网格区域显示什么？」→「读取状态，完成后出网格」;
-「从 Finder 双击一张图打开……此时按 Esc？」→「回到该文件夹的网格」;
-「在 page24 读取状态时按「取消读取」，之后显示什么？」→「回到上一个状态」.
+用户决定（2026-10-25 grilling，delegator 提问、用户选择）：
+- 「打开一个文件夹（File › Open… / 选择文件夹 / 拖入文件夹）时，最终落在哪里？」→「网格，首张为当前项」；
+- 「文件夹扫描尚未完成时，网格区域显示什么？」→「读取状态，完成后出网格」；
+- 「从 Finder 双击一张图打开（直接进大图），而它所在的文件夹已经授权。此时按 Esc？」→「回到该文件夹的网格」；
+- 「在 page24 读取状态时按「取消读取」，之后显示什么？」→「回到上一个状态」；
+- 「打开文件夹进入网格后“当前项是首张、无选择”，这时按 Space，大图里左右翻的范围是？」→「整个文件夹，从当前项开始」；
+- 「从 Finder 单独打开的图按 Esc 回到它（已授权的）文件夹网格时，过程是？」→「先读取状态，当前项为这张图」。
 
-## Considered options
+## Considered Options
 
-- Open the viewer on the first image after the scan (the 2026-10-24 rule), with the grid reached by Esc.
-- A preference choosing between the two.
-- Filling the grid incrementally while scanning, or switching to incremental filling after a timeout: rejected for
-  reordering and two behaviours to test.
+- 扫描完成后打开按名称首张的大图（2026-10-24 规则），网格经 Esc 进入。
+- 用偏好在两者之间选择。
+- 扫描中边扫边出格子，或超时后改为边扫边出：因重排跳动和两套行为需测试而放弃。
+
+## Consequences
+
+- FOLDER-01 的能力与验收、CHROME-05 的验收、开发计划 P2 验收与演示、§1.3 第 24 页归属和 §10“目录首张”指标随之改写。
+- P2 的“边扫描边浏览”只适用于以图片打开的路径；打开文件夹的首个可用时间改为“扫描完成并显示完整网格”。
+- P3-01 负责网格入口、读取状态到网格、取消与单图 Esc；24 页的侧栏与页脚属于 P3-10。
