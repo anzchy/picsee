@@ -27,6 +27,10 @@ class DeliveryUncertain(RuntimeError):
     """A Claude pane send may have happened; never replay without reconciliation."""
 
 
+class DeliveryDeferred(RuntimeError):
+    """The Claude input box was not seen empty before the typing deadline; nothing was sent."""
+
+
 class EventIdentityError(RuntimeError):
     """An event ID was reused for a different task or destination."""
 
@@ -37,6 +41,9 @@ REQUIRED_FIELDS = ("schema", "event", "task", "agent", "handoff", "poll", "creat
 EVENT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 PANE_PATTERN = re.compile(r"^w[0-9]+:p[0-9]+$")
 TERMINAL_PATTERN = re.compile(r"^term_[A-Za-z0-9_-]+$")
+# Claude Code's input box sits between two full-width rules; the top one may end in " <label> ─".
+RULE_PATTERN = re.compile(r"^─{20,}(?: [^\n]* ─)?$")
+ANSI_PATTERN = re.compile(r"\x1b\[([0-9;:?]*)[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]")
 REPORT_SPEC = importlib.util.spec_from_file_location(
     "picsee_poll_report", Path(__file__).with_name("poll-report.py")
 )
@@ -129,6 +136,14 @@ def _validate_config(config):
         raise ValueError("max_delivery_attempts must be between 1 and 10")
     if not isinstance(backoff, (int, float)) or backoff < 0 or backoff > 300:
         raise ValueError("initial_backoff_seconds must be between 0 and 300")
+    retry = config.get("typing_retry_seconds", 5)
+    if (not isinstance(retry, (int, float)) or isinstance(retry, bool) or not math.isfinite(retry)
+            or retry <= 0 or retry > 300):
+        raise ValueError("typing_retry_seconds must be above 0 and at most 300")
+    hold = config.get("typing_defer_seconds", 900)
+    if (not isinstance(hold, (int, float)) or isinstance(hold, bool) or not math.isfinite(hold)
+            or hold < 0 or hold > 86400):
+        raise ValueError("typing_defer_seconds must be between 0 and 86400")
     deadline = config.get("poll_deadline_seconds")
     if deadline is not None and (
         not isinstance(deadline, (int, float)) or not math.isfinite(deadline) or deadline <= 0
@@ -368,6 +383,58 @@ def _checked_claude_pane(destination, run):
         raise ValueError("malformed herdr pane list") from error
 
 
+def _claude_input_state(screen):
+    """Classify the Claude Code input box in an ANSI pane snapshot: empty, typing or unknown.
+
+    The box is the text between the last two rule lines, and its first line must start
+    with the prompt glyph. Dim (SGR 2) text is Claude's grey prompt suggestion, not input.
+    Anything else, including a missing box or another prompt glyph, is unknown.
+    """
+    plain, visible = [], []
+    dim = False
+    for line in screen.replace("\r", "").split("\n"):
+        text, undimmed, position = [], [], 0
+        for match in [*ANSI_PATTERN.finditer(line), None]:
+            chunk = line[position:match.start() if match else len(line)]
+            text.append(chunk)
+            if not dim:
+                undimmed.append(chunk)
+            if match is None:
+                break
+            position = match.end()
+            if not (match.group(0).startswith("\x1b[") and match.group(0).endswith("m")):
+                continue
+            codes = (match.group(1) or "0").replace(":", ";").split(";")
+            index = 0
+            while index < len(codes):
+                code = codes[index]
+                if code in ("38", "48", "58"):
+                    # Extended colour: 5;n or 2;r;g;b. Its parameters are not attributes.
+                    index += 3 if codes[index + 1:index + 2] == ["5"] else 5
+                    continue
+                if code in ("", "0", "22"):
+                    dim = False
+                elif code == "2":
+                    dim = True
+                index += 1
+        plain.append("".join(text).rstrip())
+        visible.append("".join(undimmed))
+    rules = [index for index, line in enumerate(plain) if RULE_PATTERN.fullmatch(line)]
+    if len(rules) < 2 or rules[-1] - rules[-2] < 2 or not plain[rules[-2] + 1].startswith("❯"):
+        return "unknown"
+    box = visible[rules[-2] + 1:rules[-1]]
+    box[0] = box[0].replace("❯", "", 1)
+    return "typing" if any(line.strip() for line in box) else "empty"
+
+
+def _claude_input(destination, run):
+    argv = ["herdr", "pane", "read", destination["pane"], "--source", "visible", "--format", "ansi"]
+    completed = run(argv, capture_output=True, text=True, timeout=30)
+    if completed.returncode != 0:
+        raise ValueError("herdr pane read failed: " + (completed.stderr.strip() or completed.stdout.strip()))
+    return _claude_input_state(completed.stdout)
+
+
 def _accepted_claude_run(completed):
     # Observed on the installed herdr CLI: a successful pane run exits 0 and
     # emits no stdout/stderr. Any other result is not proof of acceptance.
@@ -388,17 +455,43 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep):
     token = ": PICSEE_LISTENER_EVENT_" + config["event"]
     attempts = config.get("max_delivery_attempts", 5)
     initial_backoff = config.get("initial_backoff_seconds", 5)
+    typing_retry = config.get("typing_retry_seconds", 5)
+    typing_hold = config.get("typing_defer_seconds", 900)
+    held = 0
     errors = []
-    for attempt in range(1, attempts + 1):
+    attempt = 1
+    while attempt <= attempts:
         _atomic_json(event_dir / "status.json", {
             "state": "delivering", "event": config["event"], "attempt": attempt,
         })
         try:
             _checked_claude_pane(destination, run)
+            # Read last, just before the send, to keep the race with a human short.
+            input_state = _claude_input(destination, run)
         except Exception as error:
             errors.append(type(error).__name__ + ": " + str(error))
             if attempt < attempts:
                 sleep(min(initial_backoff * (2 ** (attempt - 1)), 300))
+            attempt += 1
+            continue
+
+        # Text in the box (or a screen we cannot read) may be a human typing. Hold the
+        # send without touching the box; holding does not use a delivery attempt.
+        if input_state != "empty":
+            if held >= typing_hold:
+                _atomic_json(event_dir / "status.json", {
+                    "state": "deferred-user-typing", "event": config["event"],
+                    "input": input_state, "deferred_seconds": held,
+                })
+                raise DeliveryDeferred(
+                    "Claude input box not empty ({}) for {}s; nothing sent, event kept for a later run".format(
+                        input_state, held))
+            _atomic_json(event_dir / "status.json", {
+                "state": "waiting-user-typing", "event": config["event"],
+                "input": input_state, "deferred_seconds": held, "retry_in_seconds": typing_retry,
+            })
+            sleep(typing_retry)
+            held += typing_retry
             continue
 
         # Persist uncertainty *before* entering the transport. A crash, timeout,
@@ -589,6 +682,10 @@ def _build_parser():
                        help="report mode: time to surface idle without a fresh report")
     start.add_argument("--max-delivery-attempts", type=_positive_int, default=5)
     start.add_argument("--initial-backoff-seconds", type=float, default=5)
+    start.add_argument("--typing-retry-seconds", type=float, default=5,
+                       help="claude-pane: re-check interval while the input box holds text")
+    start.add_argument("--typing-defer-seconds", type=float, default=900,
+                       help="claude-pane: hold time before recording deferred-user-typing")
     start.add_argument(
         "--state-root",
         type=Path,
@@ -651,6 +748,8 @@ def _config_from_args(args):
         "created_at": created_at,
         "max_delivery_attempts": args.max_delivery_attempts,
         "initial_backoff_seconds": args.initial_backoff_seconds,
+        "typing_retry_seconds": args.typing_retry_seconds,
+        "typing_defer_seconds": args.typing_defer_seconds,
     }
 
 
