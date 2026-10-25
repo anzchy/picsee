@@ -31,7 +31,7 @@ _Avoid_: recent grant, history bookmark
 ### Browsing
 
 **Grid**（网格）:
-The thumbnail view of one folder's images, in the active sort and filter order; opening a folder lands here.
+The thumbnail view of one folder's images, in the active sort and filter order.
 _Avoid_: gallery, thumbnail list, "browser" when the grid is meant
 
 **Reading State**（读取状态）:
@@ -49,7 +49,7 @@ _Avoid_: highlighted items, current item
 ### Viewing
 
 **Preview Set**（预览集合）:
-The ordered list of images the viewer pages through, fixed when the viewer opens: the whole filtered and sorted folder for a single selection, or only the selected images in grid order for a multi-selection.
+The ordered list of images the viewer pages through, fixed when the viewer opens: the whole filtered and sorted folder, starting at the Current Item, when nothing or a single image is selected, or only the selected images in grid order for a multi-selection.
 _Avoid_: playlist, range, "all images" when only a selection was meant
 
 ## Relationships
@@ -59,9 +59,9 @@ _Avoid_: playlist, range, "all images" when only a selection was meant
 - Granting an **Access Root** does not add a **Library Folder**; only the explicit "Add Folder" action does.
 - A **Preview Set** never grows after the viewer opens; deleted or unauthorized items drop out of it.
 - Opening a folder shows the **Reading State** until the scan completes, then the **Grid** with the first image in the sort order as the **Current Item** and nothing selected.
-- The sort order is one app-wide preference shared by every window and folder and kept across relaunch; an extension filter belongs to one folder in one window, survives rescans of that folder and clears when another folder is opened.
+- The sort order is one app-wide preference shared by every window and folder and kept across relaunch; an extension filter belongs to one folder in one window, survives rescans of that folder and clears when another folder is opened or the app relaunches.
 - Cancelling the **Reading State** returns to whatever was shown before; it never shows a partly scanned folder.
-- Esc from an image opened on its own returns to its folder's **Grid** only when that folder lies inside an **Access Root**.
+- Esc from an image opened on its own returns to its folder's **Grid** only when that folder lies inside an **Access Root**, through the **Reading State** if the folder has not been scanned, with that image as the **Current Item**.
 - A **Recent Item** confers no access; reopening one outside every **Access Root** asks the user to grant its folder.
 
 ## Example dialogue
