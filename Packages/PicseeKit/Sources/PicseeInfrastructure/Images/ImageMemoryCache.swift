@@ -82,6 +82,9 @@ public actor ImageMemoryCache {
     }
     func pin(_ key: RenderKey, image: DecodedImage, context: ResourceSnapshotContext? = nil) {
         guard image.itemID == key.itemID, image.revision == key.revision else { return }
+        epoch += 1
+        recent[key.itemID] = (epoch, key.revision)
+        pruneObservations()
         if let index = entries.firstIndex(where: { $0.key == key }) {
             if entries[index].image.image !== image.image,
                !entries[index].variants.contains(where: { $0.image === image.image }) {
@@ -127,7 +130,11 @@ public actor ImageMemoryCache {
             observations.values.contains { ($0.itemID == nil || $0.itemID == item) && $0.epoch < value.epoch }
         }
     }
-    func lookup(_ key: RenderKey, observation: UUID? = nil, context: ResourceSnapshotContext? = nil) -> ImageCacheRequest {
+    func lookup(_ key: RenderKey, observation: UUID? = nil, sourceRevalidated: Bool = false,
+                context: ResourceSnapshotContext? = nil) -> ImageCacheRequest {
+        guard !Task.isCancelled else {
+            return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
+        }
         guard !entries.contains(where: { $0.key.itemID == key.itemID && $0.key.revision == key.revision && $0.stale }) else {
             return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true)
         }
@@ -138,6 +145,11 @@ public actor ImageMemoryCache {
             }
             if let latest = recent[key.itemID], latest.epoch > validation.epoch, latest.revision != key.revision {
                 // Either header may have been delayed. Only a new leased source read can resolve this.
+                return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true, requiresSourceValidation: true)
+            }
+            if !sourceRevalidated && entries.contains(where: {
+                $0.key.itemID == key.itemID && $0.key.revision != key.revision && $0.pins > 0
+            }) {
                 return ImageCacheRequest(key: key, id: UUID(), image: nil, sourceChanged: true, requiresSourceValidation: true)
             }
         }
