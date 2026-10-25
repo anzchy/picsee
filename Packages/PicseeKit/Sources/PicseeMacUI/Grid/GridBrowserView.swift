@@ -81,7 +81,8 @@ import PicseeCore
     private var columns: Int {
         guard let layout = collectionViewLayout as? NSCollectionViewFlowLayout else { return 1 }
         let inset = layout.sectionInset.left + layout.sectionInset.right
-        return max(1, Int((bounds.width - inset + layout.minimumInteritemSpacing) /
+        let viewportWidth = enclosingScrollView?.bounds.width ?? visibleRect.width
+        return max(1, Int((viewportWidth - inset + layout.minimumInteritemSpacing) /
             (layout.itemSize.width + layout.minimumInteritemSpacing)))
     }
 }
