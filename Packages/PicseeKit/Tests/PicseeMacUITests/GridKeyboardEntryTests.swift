@@ -82,6 +82,4 @@ import PicseeApplication
         isARepeat: false, keyCode: 123))
     unactivated.collectionView.keyDown(with: left)
     #expect(unactivated.currentItemID == a.itemID)
-    #expect(gridViewportWidth(enclosing: nil, visible: 300) == 300)
-    #expect(gridViewportWidth(enclosing: 640, visible: 300) == 640)
 }

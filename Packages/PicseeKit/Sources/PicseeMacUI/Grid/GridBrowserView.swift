@@ -106,8 +106,6 @@ import PicseeCore
     }
 }
 
-func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclosing ?? visible }
-
 /// Page 11/12 inlined CSS: `.grid-scroll`, `.photo-grid`, `.photo-cell`,
 /// `.thumbnail-wrap`, and `.layout-exploration .photo-name` (grid-light/dark.html).
 private struct GridGeometry: Equatable {
@@ -127,7 +125,8 @@ private struct GridGeometry: Equatable {
         let minColumnWidth: CGFloat = width <= 720 ? 145 : 220
         let available = max(0, contentWidth - 2 * horizontalInset)
         columns = width <= 480 ? 1 : max(1, Int((available + columnGap) / (minColumnWidth + columnGap)))
-        let cellWidth = max(0, (available - CGFloat(columns - 1) * columnGap) / CGFloat(columns))
+        // Leave one representable step of slack so flow layout does not wrap an exact-fit row.
+        let cellWidth = max(0, ((available - CGFloat(columns - 1) * columnGap) / CGFloat(columns)).nextDown)
         let tileHeight: CGFloat
         if width <= 720 { tileHeight = 150 }
         else if narrow { tileHeight = 165 }
@@ -140,23 +139,17 @@ private struct GridGeometry: Equatable {
 
 @MainActor private final class GridCollectionView: NSCollectionView {
     var onArrow: ((Int) -> Void)?
+    var columnStep = 1
     override func keyDown(with event: NSEvent) {
         let delta: Int
         switch event.keyCode {
         case 123: delta = -1
         case 124: delta = 1
-        case 125: delta = columns
-        case 126: delta = -columns
+        case 125: delta = columnStep
+        case 126: delta = -columnStep
         default: super.keyDown(with: event); return
         }
         onArrow?(delta)
-    }
-    private var columns: Int {
-        guard let layout = collectionViewLayout as? NSCollectionViewFlowLayout else { return 1 }
-        let inset = layout.sectionInset.left + layout.sectionInset.right
-        let viewportWidth = gridViewportWidth(enclosing: enclosingScrollView?.contentSize.width, visible: visibleRect.width)
-        return max(1, Int((viewportWidth - inset + layout.minimumInteritemSpacing) /
-            (layout.itemSize.width + layout.minimumInteritemSpacing)))
     }
 }
 
@@ -228,6 +221,7 @@ private struct GridGeometry: Equatable {
         let next = GridGeometry(viewportWidth: bounds.width, contentWidth: scrollView.contentSize.width)
         guard next != geometry, let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
         geometry = next
+        (collectionView as? GridCollectionView)?.columnStep = next.columns
         layout.itemSize = next.itemSize
         layout.minimumInteritemSpacing = next.columnGap
         layout.minimumLineSpacing = next.rowGap
