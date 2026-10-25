@@ -76,8 +76,8 @@ Low only. Never touch mdpro or its tmux `dtrack`.
    unless a request asks for a lane re-run, so the delegator supplies and reruns owner gate evidence.
 5. **Apply verdict** — C/H block → fix + fresh-context confirm by `opus-auditor` (≤3 rounds). User-visible/AC Medium → one fix round, no
    confirm. Other Medium/Low → PR "Still open". If consulting
-   [confirm-and-fix-templates.md](references/templates/confirm-and-fix-templates.md), use only its Opus path while the
-   override is active and replace dual-verdict assumptions with the sole verdict.
+   [confirm-and-fix-templates.md](references/templates/confirm-and-fix-templates.md), fill its `<auditor>` placeholders with
+   opus-auditor while the override is active and replace dual-verdict assumptions with the sole verdict.
 6. **Rebase** — `$SK/scripts/rebase-ledger.sh` in the PR worktree (never pipe `git rebase`); confirm code unchanged
    vs the audited head; rerun all gates yourself (guide §5.2 item 7).
 7. **Gardener** — `picsee-doc-gardener` (Claude subagent on Haiku / Codex custom agent), mode `pr`, `base..head`. UPDATED →

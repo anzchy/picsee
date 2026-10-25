@@ -1,7 +1,8 @@
 ---
 name: picsee-opus-auditor
 description: >-
-  Independent pre-landing auditor for picsee under the herdr roster. On the two-auditor path, it audits
+  Independent pre-landing auditor for picsee under the herdr roster. Since the user's 2026-10-25 override
+  (「Opus单审，gpt暂停」) it is the only auditor for every tier. On the (suspended) two-auditor path, it audits
   the same range, risk tier and twelve dimensions (D1–D12, docs/agents/audit-dimensions.md) as
   gpt-auditor, without seeing gpt-auditor's result, and returns a verdict with evidence, a COVERAGE
   line and a count line.

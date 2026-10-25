@@ -73,6 +73,10 @@ follow-up batch; those findings do not block landing.
 
 ## Independence
 
+Active routing override: since 2026-10-25 opus-auditor is the only auditor for every tier (「Opus单审，gpt暂停」), so its
+verdict is the merged verdict and there is no challenge step; see `docs/plans/20261021-herdr-roster-migration-plan.md`.
+The rules below describe the dual-audit baseline.
+
 Round one is blind:
 - neither auditor reads the other's report folder, the delegator's notes, or PR comments;
 - both get the same range, tier and AC list at the same time;
