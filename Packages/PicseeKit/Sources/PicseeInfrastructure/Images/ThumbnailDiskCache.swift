@@ -169,8 +169,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         guard let destination = CGImageDestinationCreateWithData(bytes, UTType.png.identifier as CFString, 1, nil) else { return }
         CGImageDestinationAddImage(destination, image.image, nil) // No original EXIF/GPS metadata.
         guard CGImageDestinationFinalize(destination) else { return }
-        let payload = bytes as Data
-        guard payload.count > 0, payload.count <= Self.maximumPayloadBytes else { return }
+        guard let payload = Self.removingPNGMetadata(from: bytes as Data),
+              payload.count > 0, payload.count <= Self.maximumPayloadBytes else { return }
         // Re-read after decode and encoding. Metadata alone cannot prove same-inode writes.
         guard try sourceMatches(ticket, render: render) else {
             throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
@@ -232,6 +232,22 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         let after = try FileRevisionReader.read(url)
         guard count == before.byteCount, after == before else { return nil }
         return sha.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func removingPNGMetadata(from data: Data) -> Data? {
+        let signature = Data([137, 80, 78, 71, 13, 10, 26, 10])
+        guard data.starts(with: signature) else { return nil }
+        let metadataChunks: Set<String> = ["eXIf", "tEXt", "zTXt", "iTXt"]
+        var result = signature, offset = 8
+        while offset + 12 <= data.count {
+            let length = data[offset..<(offset + 4)].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+            let end = offset + 12 + Int(length)
+            guard end <= data.count else { return nil }
+            let type = String(decoding: data[(offset + 4)..<(offset + 8)], as: UTF8.self)
+            if !metadataChunks.contains(type) { result.append(data[offset..<end]) }
+            offset = end
+        }
+        return offset == data.count ? result : nil
     }
 
     private func digest(_ data: Data) -> String {

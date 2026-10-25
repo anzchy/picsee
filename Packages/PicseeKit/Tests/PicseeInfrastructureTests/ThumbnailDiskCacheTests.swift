@@ -178,8 +178,66 @@ private func pngPaddedToExactLength(_ source: Data, targetLength: Int) throws ->
     #expect((bytes as Data).count == storedPayload.count)
     try (bytes as Data).write(to: cacheDirectory.appendingPathComponent(ticket.key.filename + ".png"))
     #expect(try await cache.load(ticket).map { _ in true } == nil)
+    #expect(!FileManager.default.fileExists(atPath: cacheDirectory.appendingPathComponent(ticket.key.filename + ".png").path))
     try Data("not sqlite".utf8).write(to: cacheDirectory.appendingPathComponent("index.sqlite3"))
     #expect(try await ThumbnailDiskCache(directory: cacheDirectory).load(ticket).map { _ in true } == nil)
+}
+
+@Test func p303StoredPayloadDropsSourceMetadata() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let context = try #require(CGContext(data: nil, width: 8, height: 8,
+        bitsPerComponent: 8, bytesPerRow: 8 * 4,
+        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    context.setFillColor(CGColor(red: 0.25, green: 0.5, blue: 0.75, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+    let pixels = try #require(context.makeImage())
+    let sourceBytes = NSMutableData()
+    let destination = try #require(CGImageDestinationCreateWithData(sourceBytes, UTType.jpeg.identifier as CFString, 1, nil))
+    let metadata: [CFString: Any] = [
+        kCGImagePropertyExifDictionary: [kCGImagePropertyExifDateTimeOriginal: "2026:10:25 00:00:00"],
+        kCGImagePropertyGPSDictionary: [kCGImagePropertyGPSLatitude: 31.25, kCGImagePropertyGPSLatitudeRef: "N"],
+        kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFMake: "picsee-test"],
+        kCGImagePropertyIPTCDictionary: [kCGImagePropertyIPTCObjectName: "metadata-test"],
+    ]
+    CGImageDestinationAddImage(destination, pixels, metadata as CFDictionary)
+    #expect(CGImageDestinationFinalize(destination))
+    let file = folder.appendingPathComponent("metadata.jpg")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    try (sourceBytes as Data).write(to: file)
+    let metadataKeys: [CFString] = [kCGImagePropertyExifDictionary, kCGImagePropertyGPSDictionary,
+        kCGImagePropertyTIFFDictionary, kCGImagePropertyIPTCDictionary]
+    let originalSource = try #require(CGImageSourceCreateWithData(sourceBytes as CFData, nil))
+    let originalProperties = try #require(CGImageSourceCopyPropertiesAtIndex(originalSource, 0, nil) as? [CFString: Any])
+    for key in metadataKeys { #expect(originalProperties[key] != nil) }
+
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: 8, identityRoot: root)
+    let decoded = try await pipeline.image(for: request)
+    let cache = ThumbnailDiskCache(directory: cacheDirectory)
+    let ticket = try #require(try await cache.prepare(request))
+    try await cache.store(decoded, for: ticket)
+    let payload = try Data(contentsOf: cacheDirectory.appendingPathComponent(ticket.key.filename + ".png"))
+    let storedSource = try #require(CGImageSourceCreateWithData(payload as CFData, nil))
+    let storedProperties = try #require(CGImageSourceCopyPropertiesAtIndex(storedSource, 0, nil) as? [CFString: Any])
+    #expect(storedProperties[kCGImagePropertyGPSDictionary] == nil)
+    #expect(storedProperties[kCGImagePropertyIPTCDictionary] == nil)
+    let syntheticKeys: Set<String> = ["ColorSpace", "PixelXDimension", "PixelYDimension"]
+    for key in [kCGImagePropertyExifDictionary, kCGImagePropertyTIFFDictionary] {
+        let dictionary = storedProperties[key] as? [CFString: Any]
+        #expect(dictionary == nil || Set(dictionary!.keys.map { $0 as String }).isSubset(of: syntheticKeys))
+    }
+    var chunkTypes: [String] = []
+    var offset = 8
+    while offset + 12 <= payload.count {
+        let length = payload[offset..<(offset + 4)].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+        chunkTypes.append(String(decoding: payload[(offset + 4)..<(offset + 8)], as: UTF8.self))
+        offset += 12 + Int(length)
+    }
+    #expect(offset == payload.count)
+    #expect(Set(chunkTypes).isDisjoint(with: ["eXIf", "tEXt", "zTXt", "iTXt"]))
 }
 
 @Test func p303SourceEligibilityIsBoundedAndCancellationStopsHashing() async throws {
