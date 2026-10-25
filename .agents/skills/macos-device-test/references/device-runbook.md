@@ -317,7 +317,11 @@ Every run produces one row per criterion and entry point, keyed by ledger row ID
 - **Escape and other keys:** in mdpro (a WebView) the computer-use `key escape` arrived only as a key-up.
   In Picsee, native Esc sent through `kc.sh "$RUN_DIR" 53` worked in the P1-08 device run (rows 5 and 9).
   Keep the direct computer-use `key escape` path distinct and unverified; use the proven key-code helper.
-- **Input method:** switch to ABC before key checks; an IME can swallow keys.
+- **Input method:** switch to ABC before key checks; an IME can swallow keys. Never switch it from a script:
+  on 2026-10-25 a Chinese IME (Doubao Pinyin) turned a typed open-panel path into
+  `…095720-跑01-grid-explore、fixtures、grid` and the panel never navigated. `panel-choose.sh` now pastes the path through
+  the pasteboard (⌘A ⌘V) instead of typing it, prints the active `input-source:` read-only for the record, refuses a
+  pasteboard that holds non-text types, and restores the previous text byte-for-byte on every exit (non-zero otherwise).
 
 ## 14. Proving this skill (do once, then after big changes)
 
