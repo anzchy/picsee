@@ -3,6 +3,7 @@ import CryptoKit
 import Darwin
 import Foundation
 import ImageIO
+import os
 import PicseeCore
 import SQLite3
 import UniformTypeIdentifiers
@@ -10,6 +11,11 @@ import UniformTypeIdentifiers
 /// Re-creatable small renders only. Actor isolation serializes SQLite and payload operations;
 /// the actor never inherits MainActor from its caller.
 public actor ThumbnailDiskCache: ThumbnailCaching {
+    public struct WriteDiagnostics: Sendable, Equatable {
+        public let failureCount: Int
+        public let skippedWriteCount: Int
+        public let lastFailure: String?
+    }
     enum IntegrityDecision: Equatable { case healthy, confirmedCorrupt, unconfirmedFailure }
     static func integrityDecision(prepareCode: Int32, firstStepCode: Int32?, diagnostic: String?) -> IntegrityDecision {
         if isCorruptSQLite(prepareCode) { return .confirmedCorrupt }
@@ -44,6 +50,10 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     private let afterReadLeaseAcquired: (@Sendable () async -> Void)?
     private let afterOrphanSnapshot: (@Sendable () async -> Void)?
     private var didSweepOrphans = false
+    private var writeFailureCount = 0
+    private var skippedWriteCount = 0
+    private var lastWriteFailure: String?
+    private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "thumbnail-cache")
 
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Picsee/Thumbnails", isDirectory: true)) {
@@ -91,8 +101,83 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         self.afterOrphanSnapshot = afterOrphanSnapshot
     }
 
+    /// Logical bytes of cache-owned regular files. A failed measurement is an error, not zero.
+    public func sizeBytes() throws -> Int64 {
+        try withIndexLock {
+            try requireSafeDirectory()
+            guard FileManager.default.fileExists(atPath: directory.path) else { return 0 }
+            let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            var total: Int64 = 0
+            for name in names where Self.isOwnedName(name) {
+                let url = directory.appendingPathComponent(name)
+                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                guard attributes[.type] as? FileAttributeType == .typeRegular else { continue }
+                let bytes = (attributes[.size] as! NSNumber).int64Value
+                let (sum, overflow) = total.addingReportingOverflow(bytes)
+                total = overflow ? Int64.max : sum
+            }
+            return total
+        }
+    }
+    public func writeDiagnostics() -> WriteDiagnostics {
+        WriteDiagnostics(failureCount: writeFailureCount, skippedWriteCount: skippedWriteCount,
+                         lastFailure: lastWriteFailure)
+    }
+
+    /// Advances the generation before removing any files, so old work can never publish later.
+    public func clear() throws {
+        try withIndexLock {
+            try requireSafeDirectory()
+            CacheIndexLocks.shared.advanceGeneration(for: directory)
+            guard FileManager.default.fileExists(atPath: directory.path) else { return }
+            for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) where Self.isOwnedName(name) {
+                let url = directory.appendingPathComponent(name)
+                guard url.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL,
+                      (try? FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType) == .typeRegular,
+                      (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) == nil else { continue }
+                try PayloadLeaseRegistry.shared.removeWhenUnleased(url.path)
+            }
+            didSweepOrphans = false
+        }
+        writeFailureCount = 0
+        skippedWriteCount = 0
+        lastWriteFailure = nil
+    }
+
+    /// Used by Settings after Clear so its next measurement includes deferred lease cleanup.
+    public func waitForPendingDeletions() async {
+        await PayloadLeaseRegistry.shared.waitForPendingDeletions(in: directory)
+    }
+    public func deferredClearFailure() -> String? {
+        PayloadLeaseRegistry.shared.deferredClearFailure(in: directory)
+    }
+
+    func waitForPendingDeletions(onRegistered: @escaping @Sendable () -> Void) async {
+        await PayloadLeaseRegistry.shared.waitForPendingDeletions(in: directory, onRegistered: onRegistered)
+    }
+
+    private static func isOwnedName(_ name: String) -> Bool {
+        if ["index.sqlite3", "index.sqlite3-wal", "index.sqlite3-shm"].contains(name) { return true }
+        if name.hasPrefix(".tmp-") { return UUID(uuidString: String(name.dropFirst(5))) != nil }
+        guard name.hasSuffix(".png"), name.utf8.count == 68 else { return false }
+        return name.dropLast(4).utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+    }
+
+    private func requireSafeDirectory() throws {
+        var prefix = "/"
+        for component in directory.standardizedFileURL.pathComponents.dropFirst() {
+            prefix = (prefix as NSString).appendingPathComponent(component)
+            // macOS exposes its system-owned /var and /tmp aliases in temporary paths.
+            if prefix == "/var" || prefix == "/tmp" { continue }
+            if (try? FileManager.default.destinationOfSymbolicLink(atPath: prefix)) != nil {
+                throw CachePathError.symbolicLinkDirectory
+            }
+        }
+    }
+
     public func prepare(_ request: ImageDecodeRequest) async throws -> ThumbnailCacheTicket? {
         try Task.checkCancellation()
+        let generation = CacheIndexLocks.shared.generation(for: directory)
         guard let render = request.renderKey,
               render.itemID.stableEncoding.hasPrefix("id1:root:"),
               render.policy == .orientedSDR, render.frameIndex == 0,
@@ -105,11 +190,13 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         try Task.checkCancellation()
         guard let digest, let key = DurableThumbnailKey(renderKey: render, sourceSHA256: digest,
                                                        encoderVersion: Self.encoderVersion) else { return nil }
-        return ThumbnailCacheTicket(request: request, key: key, sourceSHA256: digest)
+        return ThumbnailCacheTicket(request: request, key: key, sourceSHA256: digest,
+                                    generation: generation)
     }
 
     public func load(_ ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
         try Task.checkCancellation()
+        guard ticket.generation == CacheIndexLocks.shared.generation(for: directory) else { return nil }
         guard let render = ticket.request.renderKey,
               let expectedKey = DurableThumbnailKey(renderKey: render, sourceSHA256: ticket.sourceSHA256,
                                                     encoderVersion: Self.encoderVersion),
@@ -187,6 +274,15 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
         }
         try Task.checkCancellation()
+        guard ticket.generation == CacheIndexLocks.shared.generation(for: directory) else { return }
+        guard lastWriteFailure == nil else {
+            skippedWriteCount += 1
+            return
+        }
+        do {
+        try withIndexLock {
+        guard ticket.generation == CacheIndexLocks.shared.generation(for: directory) else { return }
+        try requireSafeDirectory()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = ticket.key.filename + ".png"
         guard let url = payloadURL(forKey: ticket.key.filename) else { return }
@@ -218,6 +314,19 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
                          payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
                          sourceHeight: Int(image.sourcePixelSize.height))
+        }
+        }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as ImageLoadError where error.kind == .sourceChanged {
+            throw error
+        } catch let error as ThumbnailStoreError where !error.isPersistentWriteFailure {
+            logger.error("Thumbnail cache store failed; retry remains available: \(String(describing: error), privacy: .public)")
+            throw error
+        } catch {
+            writeFailureCount += 1
+            lastWriteFailure = String(describing: error)
+            logger.error("Thumbnail cache writes disabled: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -315,7 +424,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
             var db: OpaquePointer?
             let opened = sqlite3_open_v2(index, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil)
             defer { if let db { sqlite3_close(db) } }
-            guard opened == SQLITE_OK else { throw ThumbnailStoreError.database }
+            guard opened == SQLITE_OK else { throw ThumbnailStoreError.database(opened) }
             var statement: OpaquePointer?
             let prepared = sqlite3_prepare_v2(db, "PRAGMA quick_check", -1, &statement, nil)
             defer { sqlite3_finalize(statement) }
@@ -325,7 +434,9 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
                 diagnostic = String(cString: status)
             }
             let decision = Self.integrityDecision(prepareCode: prepared, firstStepCode: result, diagnostic: diagnostic)
-            guard decision != .unconfirmedFailure else { throw ThumbnailStoreError.database }
+            guard decision != .unconfirmedFailure else {
+                throw ThumbnailStoreError.database(prepared == SQLITE_OK ? result! : prepared)
+            }
             return decision
         }()
         guard decision == .confirmedCorrupt else { return }
@@ -509,17 +620,17 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     }
     private func writeRow(_ ticket: ThumbnailCacheTicket, payloadPath: String, payloadBytes: Int,
                           payloadSHA256: String, sourceWidth: Int, sourceHeight: Int) throws {
-        guard let db = openDatabase(create: true) else { throw ThumbnailStoreError.database }
+        guard let db = openDatabase(create: true) else { throw ThumbnailStoreError.database(SQLITE_CANTOPEN) }
         defer { sqlite3_close(db) }
         let schema = "CREATE TABLE IF NOT EXISTS thumbnails (key TEXT PRIMARY KEY, item_id TEXT NOT NULL, source_sha256 TEXT NOT NULL, payload TEXT NOT NULL, byte_count INTEGER NOT NULL, payload_sha256 TEXT NOT NULL, last_access REAL NOT NULL, cache_version INTEGER NOT NULL, source_width INTEGER NOT NULL, source_height INTEGER NOT NULL, row_sha256 TEXT)"
-        guard sqlite3_exec(db, schema, nil, nil, nil) == SQLITE_OK else { throw ThumbnailStoreError.database }
+        guard sqlite3_exec(db, schema, nil, nil, nil) == SQLITE_OK else { throw ThumbnailStoreError.database(sqlite3_errcode(db)) }
         // Older re-creatable indexes lack this column. Their version-1 rows remain misses.
         _ = sqlite3_exec(db, "ALTER TABLE thumbnails ADD COLUMN row_sha256 TEXT", nil, nil, nil)
         var statement: OpaquePointer?
         let sql = "INSERT OR REPLACE INTO thumbnails (key,item_id,source_sha256,payload,byte_count,payload_sha256,last_access,cache_version,source_width,source_height,row_sha256) VALUES (?,?,?,?,?, ?, (SELECT COALESCE(MAX(last_access),0)+1 FROM thumbnails), ?,?,?,?)"
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw ThumbnailStoreError.database }
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw ThumbnailStoreError.database(sqlite3_errcode(db)) }
         defer { sqlite3_finalize(statement) }
-        guard let renderKey = ticket.request.renderKey else { throw ThumbnailStoreError.database }
+        guard let renderKey = ticket.request.renderKey else { throw ThumbnailStoreError.database(SQLITE_MISUSE) }
         bind(ticket.key.filename, to: statement, at: 1)
         bind(renderKey.itemID.stableEncoding, to: statement, at: 2)
         bind(ticket.sourceSHA256, to: statement, at: 3)
@@ -532,20 +643,42 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         bind(rowChecksum(key: ticket.key.filename, item: renderKey.itemID.stableEncoding,
             source: ticket.sourceSHA256, path: payloadPath, byteCount: payloadBytes,
             payloadSHA256: payloadSHA256, width: sourceWidth, height: sourceHeight), to: statement, at: 10)
-        guard sqlite3_step(statement) == SQLITE_DONE else { throw ThumbnailStoreError.database }
+        guard sqlite3_step(statement) == SQLITE_DONE else { throw ThumbnailStoreError.database(sqlite3_errcode(db)) }
         sqlite3_finalize(statement)
         statement = nil
         evictIfNeeded(using: db)
     }
 }
 
-private enum ThumbnailStoreError: Error { case database }
+private enum ThumbnailStoreError: Error {
+    case database(Int32)
+
+    var isPersistentWriteFailure: Bool {
+        guard case .database(let code) = self else { return false }
+        let primary = code & 0xff
+        return primary == SQLITE_FULL || primary == SQLITE_IOERR || primary == SQLITE_READONLY
+    }
+}
+private enum CachePathError: Error { case symbolicLinkDirectory }
 
 /// Every app-owned SQLite connection for one cache directory uses this lock.
 private final class CacheIndexLocks: @unchecked Sendable {
     static let shared = CacheIndexLocks()
     private let mapLock = NSLock()
     private var locks: [String: NSRecursiveLock] = [:]
+    private var generations: [String: UInt64] = [:]
+
+    func generation(for directory: URL) -> UInt64 {
+        mapLock.lock()
+        defer { mapLock.unlock() }
+        return generations[directory.standardizedFileURL.path, default: 0]
+    }
+
+    func advanceGeneration(for directory: URL) {
+        mapLock.lock()
+        defer { mapLock.unlock() }
+        generations[directory.standardizedFileURL.path, default: 0] &+= 1
+    }
 
     func withLock<T>(for directory: URL, _ body: () throws -> T) rethrows -> T {
         let key = directory.standardizedFileURL.path
@@ -570,6 +703,10 @@ private final class PayloadLeaseRegistry: @unchecked Sendable {
     // Positive values count readers; -1 is the sole writer.
     private var claims: [String: Int] = [:]
     private var deleting = Set<String>()
+    private var pendingDeletion = Set<String>()
+    private var failedDeletions: [String: String] = [:]
+    private var drainWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "thumbnail-cache")
 
     func acquire(_ path: String) -> Bool {
         lock.lock()
@@ -587,7 +724,10 @@ private final class PayloadLeaseRegistry: @unchecked Sendable {
         // Every release follows a successful acquire; fail fast on an unbalanced lease.
         let count = claims[key]!
         precondition(count > 0)
-        if count == 1 { claims.removeValue(forKey: key) }
+        if count == 1 {
+            claims.removeValue(forKey: key)
+            finishPendingDeletion(key)
+        }
         else { claims[key] = count - 1 }
     }
 
@@ -606,6 +746,65 @@ private final class PayloadLeaseRegistry: @unchecked Sendable {
         let key = URL(fileURLWithPath: path).standardizedFileURL.path
         precondition(claims[key] == -1)
         claims.removeValue(forKey: key)
+        finishPendingDeletion(key)
+    }
+
+    func removeWhenUnleased(_ path: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        let key = URL(fileURLWithPath: path).standardizedFileURL.path
+        guard claims[key] == nil else {
+            pendingDeletion.insert(key)
+            return
+        }
+        guard !deleting.contains(key) else { return }
+        deleting.insert(key)
+        defer { deleting.remove(key) }
+        try FileManager.default.removeItem(atPath: key)
+        failedDeletions.removeValue(forKey: key)
+    }
+
+    private func finishPendingDeletion(_ key: String) {
+        guard pendingDeletion.remove(key) != nil else { return }
+        deleting.insert(key)
+        defer { deleting.remove(key) }
+        do {
+            try FileManager.default.removeItem(atPath: key)
+            failedDeletions.removeValue(forKey: key)
+        } catch {
+            failedDeletions[key] = String(describing: error)
+            logger.error("Deferred thumbnail cache deletion failed: \(String(describing: error), privacy: .public)")
+        }
+        resumeDrainedWaiters()
+    }
+
+    func deferredClearFailure(in directory: URL) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        let prefix = directory.standardizedFileURL.path + "/"
+        for (path, message) in failedDeletions where path.hasPrefix(prefix) { return message }
+        return nil
+    }
+
+    func waitForPendingDeletions(in directory: URL, onRegistered: (@Sendable () -> Void)? = nil) async {
+        let prefix = directory.standardizedFileURL.path + "/"
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if pendingDeletion.contains(where: { $0.hasPrefix(prefix) }) {
+                drainWaiters[prefix, default: []].append(continuation)
+                onRegistered?()
+            } else {
+                continuation.resume()
+            }
+            lock.unlock()
+        }
+    }
+
+    private func resumeDrainedWaiters() {
+        for prefix in Array(drainWaiters.keys) where !pendingDeletion.contains(where: { $0.hasPrefix(prefix) }) {
+            let ready = drainWaiters.removeValue(forKey: prefix)!
+            for continuation in ready { continuation.resume() }
+        }
     }
 
     func beginDeletion(_ path: String) -> Bool {

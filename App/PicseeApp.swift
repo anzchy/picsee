@@ -9,13 +9,15 @@ import PicseeMacUI
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let imagePipeline = ImageIOPipeline(cacheTrace: UntestedNativeResourceSnapshotTrace(),
-                                                thumbnailCache: ThumbnailDiskCache())
+    private let thumbnailCache = ThumbnailDiskCache()
+    private lazy var imagePipeline = ImageIOPipeline(cacheTrace: UntestedNativeResourceSnapshotTrace(),
+                                                     thumbnailCache: thumbnailCache)
     private lazy var memoryPressure = UntestedNativeMemoryPressureForwarder(pipeline: imagePipeline)
     private let displayPreferences = UserDefaultsDisplayPreferencesStore(defaults: .standard)
     private lazy var appearanceAdapter = WindowAppearanceAdapter(preferencesStore: displayPreferences)
     private lazy var motionPolicy = MotionPolicy(source: UntestedNativeReduceMotionSource())
     private var commandMenu: CommandMenu?
+    private var cacheSettingsWindow: CacheSettingsWindow?
     private var windowController: CanvasWindowController?
     private lazy var accessServices: Task<AccessServices, Error> = {
         let sha = Bundle.main.object(forInfoDictionaryKey: "PicseeGitSHA") as? String ?? "unknown"
@@ -38,9 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logger.notice("Picsee launch git=\(sha, privacy: .public)")
         _ = memoryPressure
 
-        commandMenu = CommandMenu(preferencesStore: displayPreferences) { [weak self] in
-            self?.viewer().route(.open, from: .menu)
-        }
+        commandMenu = CommandMenu(preferencesStore: displayPreferences,
+                                  openWithoutWindow: { [weak self] in self?.viewer().route(.open, from: .menu) },
+                                  openSettings: { [weak self] in self?.showSettings() })
         viewer().showWindow(nil)
         viewer().refreshRecents()
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -71,6 +73,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         windowController = controller
         return controller
+    }
+
+    private func showSettings() {
+        if cacheSettingsWindow == nil {
+            cacheSettingsWindow = CacheSettingsWindow(cache: thumbnailCache, appearanceAdapter: appearanceAdapter)
+        }
+        cacheSettingsWindow?.show()
     }
 }
 

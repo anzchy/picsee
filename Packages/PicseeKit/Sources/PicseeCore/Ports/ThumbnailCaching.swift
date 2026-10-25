@@ -5,8 +5,9 @@ public struct ThumbnailCacheTicket: Sendable {
     public let request: ImageDecodeRequest
     public let key: DurableThumbnailKey
     public let sourceSHA256: String
-    public init(request: ImageDecodeRequest, key: DurableThumbnailKey, sourceSHA256: String) {
-        self.request = request; self.key = key; self.sourceSHA256 = sourceSHA256
+    public let generation: UInt64
+    public init(request: ImageDecodeRequest, key: DurableThumbnailKey, sourceSHA256: String, generation: UInt64 = 0) {
+        self.request = request; self.key = key; self.sourceSHA256 = sourceSHA256; self.generation = generation
     }
 }
 

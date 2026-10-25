@@ -38,6 +38,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     private let preferencesStore: any DisplayPreferencesStore
     private var trackingMenus: Set<ObjectIdentifier> = []
     private let openWithoutWindow: () -> Void
+    private let openSettings: () -> Void
     private(set) var isTracking = false
     private let recentFolders = NSMenu(title: String(localized: "Open Recent"))
     private let recentTarget = RecentFolderMenuTarget()
@@ -45,9 +46,11 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     private weak var folderViewMenu: NSMenu?
     private var folderSubmenuItems: [NSMenuItem] = []
 
-    init(preferencesStore: any DisplayPreferencesStore, openWithoutWindow: @escaping () -> Void) {
+    init(preferencesStore: any DisplayPreferencesStore, openWithoutWindow: @escaping () -> Void,
+         openSettings: @escaping () -> Void) {
         self.preferencesStore = preferencesStore
         self.openWithoutWindow = openWithoutWindow
+        self.openSettings = openSettings
         super.init()
         let main = CommandMainMenu(title: "Picsee")
         func submenu(_ title: String) -> NSMenu {
@@ -60,6 +63,11 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         }
         let app = submenu("Picsee")
         app.addItem(withTitle: String(localized: "About Picsee"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(.separator())
+        let settings = app.addItem(withTitle: String(localized: "Settings…"), action: #selector(showSettings(_:)), keyEquivalent: ",")
+        settings.target = self
+        settings.keyEquivalentModifierMask = [.command]
+        settings.setAccessibilityIdentifier("settings.menu")
         app.addItem(.separator())
         app.addItem(withTitle: String(localized: "Hide Picsee"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = app.addItem(withTitle: String(localized: "Hide Others"), action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
@@ -178,6 +186,8 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         } else if id == .open { openWithoutWindow() }
     }
 
+    @objc private func showSettings(_ item: NSMenuItem) { openSettings() }
+
     @objc private func toggleAlwaysShowTools(_ item: NSMenuItem) {
         var value = preferencesStore.value
         value.alwaysShowTools.toggle()
@@ -211,6 +221,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         session.setFolderRecursiveEnabled(changed.recursiveEnabled)
     }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(showSettings(_:)) { return true }
         if let action = item.representedObject as? FolderMenuAction {
             let session = (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session
             let selection = FolderMenuSelection(conditions: session?.folderConditions ?? .init(),
