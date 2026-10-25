@@ -174,14 +174,14 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| GRID-01 | 网格浏览 | Partial | 单元 | P3-01、P3-10 | `Packages/PicseeKit/Sources/PicseeApplication/Browser/FolderGridProjection.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridBrowserView.swift`、`App/CanvasWindowController.swift` | 打开目录显示 11/12 页网格：紧凑标题、底部工具，没有顶部横幅；文件名单行显示。限制：快照、cell 复用、响应式几何（含 legacy/overlay 滚动条、浮点整列边界与实际 cell 帧）、缩略图选择描边、文件名末尾截断、当前项环、常驻标题栏与浅深底块仅单元；缩略图待 P3-02，侧栏/底栏待 P3-10，显示与收藏待 P3-11/14；本轮签名真机、@2x、VoiceOver、中英文未验。 |
+| GRID-01 | 网格浏览 | Partial | 单元 | P3-01、P3-10 | `Packages/PicseeKit/Sources/PicseeApplication/Browser/FolderGridProjection.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridBrowserView.swift`、`App/CanvasWindowController.swift` | 打开目录显示 11/12 页网格：紧凑标题、底部工具，没有顶部横幅；文件名单行显示。限制：快照、cell 复用、响应式几何（含 legacy/overlay 滚动条、浮点整列边界与实际 cell 帧）、缩略图选择描边、文件名末尾截断、当前项环、常驻标题栏与浅深底块仅单元；缩略图待 P3-02，侧栏/底栏框架仅单元（P3-10 slice 1），搜索、排序、信息与显示待后续 slice/P3-11，收藏待 P3-14；本轮签名真机、@2x、VoiceOver、中英文未验。 |
 | GRID-02 | 网格与大图来回切换 | Partial | 单元 | P3-01 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerSession.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Browser/FolderGridProjection.swift`、`App/CanvasWindowController.swift` | 选中一张按 Space 或 Enter 看大图，按 Esc 回网格，选择、当前项和滚动位置都恢复。限制：连续方向键后单一选择、滚动条宽度变化及浮点整列边界的方向键列步长、选择/当前项/滚动恢复、预览中删除、单图 Esc 顺序与取消读取恢复仅单元（App 接线无测试）；本轮原生按键、像素、VoiceOver、中英文未验；多选待 P3-09。 |
 | GRID-03 | 快速滚动不串图 | Absent | 无 | P3-02 | — | 在 S2 里快速来回滚动，每个格子的图和文件名始终对得上 |
 | GRID-04 | 多选 | Absent | 无 | P3-09 | — | ⌘点击切换单项，Shift 点击从锚点选一段；计数正确，当前项与选择集合分开显示（32 页） |
 | GRID-05 | 多选后的预览范围 | Absent | 无 | P3-09 | — | 选 3 张按 Space，翻图只在这 3 张内；Esc 回来后仍是这 3 张被选中 |
-| GRID-06 | 目录侧栏 | Absent | 无 | P3-10 | — | 侧栏可拖宽、可收起，从左下角入口重新打开；退出重开保留宽度 |
+| GRID-06 | 目录侧栏 | Absent | 无 | P3-10 | — | 侧栏可拖宽、可收起，从左下角入口重新打开；退出重开保留宽度。限制：160–320 pt 拖拽、底栏入口、UserDefaults 重启往返仅单元；签名真机与中英文操作待批次验收。 |
 | GRID-07 | 搜索与清除 | Absent | 无 | P3-10 | — | ⌘F 在“搜索当前文件夹”里按文件名搜索；无结果时显示 23 页，点“清除搜索”后内容恢复，当前项合理 |
-| GRID-08 | 小窗口布局 | Absent | 无 | P3-10 | — | 窗口缩到 800×680，侧栏、工具、长文件名都不重叠（29 页） |
+| GRID-08 | 小窗口布局 | Absent | 无 | P3-10 | — | 窗口缩到 800×680，侧栏、工具、长文件名都不重叠（29 页）。限制：本 slice 仅验侧栏、40 pt 底栏及单行文件名的 800×680 帧；后续工具加入后须复验，签名真机未验。 |
 | GRID-09 | 图片右键菜单 | Absent | 无 | P3-12 | — | 右键显示快速查看、在访达中显示、拷贝路径、收藏、图片信息五项；能用键盘操作，Esc 关闭后焦点回到原处（31 页） |
 | GRID-10 | 在访达中显示 | Absent | 无 | P3-12 | — | 右键选“在访达中显示”，Finder 打开并选中该文件 |
 | GRID-11 | 拷贝路径 | Absent | 无 | P3-12 | — | 右键选“拷贝路径”，粘贴到文本编辑出现该文件的完整路径 |
