@@ -94,6 +94,54 @@ private func pngPaddedToExactLength(_ source: Data, targetLength: Int) throws ->
     #expect(try await reopened.load(ticket).map { _ in true } == nil)
 }
 
+@Test func p303DiskCacheHitIsMaterializedBeforeDraw() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let edge = 1024
+    let context = try #require(CGContext(data: nil, width: edge, height: edge,
+        bitsPerComponent: 8, bytesPerRow: edge * 4,
+        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    var state: UInt32 = 0x30304
+    let pixels = context.data!.assumingMemoryBound(to: UInt8.self)
+    for index in stride(from: 0, to: edge * edge * 4, by: 4) {
+        state = state &* 1_664_525 &+ 1_013_904_223
+        pixels[index] = UInt8(truncatingIfNeeded: state)
+        pixels[index + 1] = UInt8(truncatingIfNeeded: state >> 8)
+        pixels[index + 2] = UInt8(truncatingIfNeeded: state >> 16)
+        pixels[index + 3] = 255
+    }
+    let sourceImage = try #require(context.makeImage())
+    let png = NSMutableData()
+    let destination = try #require(CGImageDestinationCreateWithData(png, UTType.png.identifier as CFString, 1, nil))
+    CGImageDestinationAddImage(destination, sourceImage, nil)
+    #expect(CGImageDestinationFinalize(destination))
+    let file = folder.appendingPathComponent("noise.png")
+    let cacheDirectory = folder.appendingPathComponent("cache")
+    try (png as Data).write(to: file)
+    let root = ItemIdentityRoot(id: AccessRootID(), url: folder)
+    let pipeline = ImageIOPipeline()
+    let request = try await pipeline.request(for: file, maximumPixelSize: edge, identityRoot: root)
+    let decoded = try await pipeline.image(for: request)
+    let cache = ThumbnailDiskCache(directory: cacheDirectory)
+    let ticket = try #require(try await cache.prepare(request))
+    try await cache.store(decoded, for: ticket)
+    let hit = try #require(try await ThumbnailDiskCache(directory: cacheDirectory).load(ticket))
+
+    func drawDuration(_ image: CGImage) -> Double {
+        let target = CGContext(data: nil, width: image.width, height: image.height,
+            bitsPerComponent: 8, bytesPerRow: image.width * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let start = ProcessInfo.processInfo.systemUptime
+        target.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return ProcessInfo.processInfo.systemUptime - start
+    }
+    _ = drawDuration(decoded.image)
+    let forced = drawDuration(decoded.image)
+    let firstHitDraw = drawDuration(hit.image)
+    #expect(firstHitDraw < forced * 4 + 0.002)
+}
+
 @Test func p303ValidForeignPayloadAndBrokenIndexAreCacheMisses() async throws {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
