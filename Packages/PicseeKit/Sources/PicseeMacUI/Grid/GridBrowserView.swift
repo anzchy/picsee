@@ -51,13 +51,15 @@ import PicseeCore
         guard isViewLoaded else { return }
         var accent = NSColor.clear.cgColor
         var fill = NSColor.clear.cgColor
+        var background = NSColor.clear.cgColor
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             accent = DesignColor.accent.nsColor.cgColor
             fill = DesignColor.selectionFill.nsColor.cgColor
+            background = NSColor.controlBackgroundColor.cgColor
         }
         view.layer?.borderWidth = isSelected ? 2 : 0
         view.layer?.borderColor = accent
-        view.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        view.layer?.backgroundColor = background
         nameLabel.layer?.backgroundColor = isSelected ? fill : NSColor.clear.cgColor
         view.setAccessibilityValue(isSelected ? String(localized: "Selected") : "")
     }
