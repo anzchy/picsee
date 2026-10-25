@@ -2,6 +2,15 @@ import Foundation
 import Observation
 import PicseeCore
 
+struct FolderScanRestorePoint {
+    let source: FolderSnapshot
+    let conditions: FolderViewConditions
+    let loopEnabled: Bool
+    let inputURL: URL?
+    let currentItemID: ItemID?
+    let currentURL: URL?
+}
+
 /// One scan owner per window. The scanning task retains its lease until enumeration really exits.
 @MainActor @Observable public final class FolderScanCoordinator {
     public private(set) var snapshot: FolderSnapshot?
@@ -152,6 +161,23 @@ import PicseeCore
         pendingDirection = direction
         advancePending()
         return true
+    }
+    /// A complete folder source Cancel Reading can put back; nil while scanning or after a cancel.
+    var restorePoint: FolderScanRestorePoint? {
+        guard let sourceSnapshot, sourceSnapshot.isComplete else { return nil }
+        return FolderScanRestorePoint(source: sourceSnapshot, conditions: conditions, loopEnabled: loopEnabled,
+            inputURL: inputURL, currentItemID: currentItemID, currentURL: currentURL)
+    }
+    /// Restores without scanning and without an active generation, so a cancelled scan's late events stay ignored.
+    func restore(_ point: FolderScanRestorePoint) {
+        stop(.cancelled)
+        conditions = point.conditions
+        loopEnabled = point.loopEnabled
+        inputURL = point.inputURL
+        currentItemID = point.currentItemID
+        currentURL = point.currentURL
+        sourceSnapshot = point.source
+        snapshot = point.source.applying(point.conditions)
     }
     public func cancel() { end() }
     public func end() { stop(.cancelled) }

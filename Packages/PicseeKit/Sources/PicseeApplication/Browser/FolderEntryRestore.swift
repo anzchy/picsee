@@ -10,21 +10,25 @@ public enum FolderEntryRestoreTarget: Equatable, Sendable {
 
 struct FolderEntryRestorePoint {
     let target: FolderEntryRestoreTarget
+    let browsing: ViewerSession.BrowsingState
+    let scan: FolderScanRestorePoint?
 }
 
 extension ViewerSession {
     /// Records what the window shows before a folder entry replaces it; an entry already reading keeps its first point.
     public func beginFolderEntry(shownImage: URL?, hasCompleteGrid: Bool) {
         guard folderEntryRestore == nil else { return }
-        let target: FolderEntryRestoreTarget = hasCompleteGrid ? .grid : shownImage.map { .viewer($0) } ?? .empty
-        folderEntryRestore = FolderEntryRestorePoint(target: target)
+        // A shown image wins, including one previewed from a grid; the grid's state is restored with it.
+        let target: FolderEntryRestoreTarget = shownImage.map { .viewer($0) } ?? (hasCompleteGrid ? .grid : .empty)
+        folderEntryRestore = FolderEntryRestorePoint(target: target, browsing: browsingState, scan: folderScan?.restorePoint)
     }
-    /// Stops the reading scan once; nil when no entry is reading.
+    /// Stops the reading scan once and puts back the browsing state and folder source; nil when no entry is reading.
     public func cancelFolderEntry() -> FolderEntryRestoreTarget? {
         guard let point = folderEntryRestore else { return nil }
         folderEntryRestore = nil
         cancelFolderReading()
-        leaveBrowsing()
+        if let scan = point.scan { folderScan?.restore(scan) }
+        restoreBrowsingState(point.browsing)
         return point.target
     }
     public func completeFolderEntry() { folderEntryRestore = nil }
