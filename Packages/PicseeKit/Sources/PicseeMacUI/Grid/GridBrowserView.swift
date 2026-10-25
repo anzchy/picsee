@@ -65,6 +65,8 @@ import PicseeCore
     }
 }
 
+func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclosing ?? visible }
+
 @MainActor private final class GridCollectionView: NSCollectionView {
     var onArrow: ((Int) -> Void)?
     override func keyDown(with event: NSEvent) {
@@ -81,7 +83,7 @@ import PicseeCore
     private var columns: Int {
         guard let layout = collectionViewLayout as? NSCollectionViewFlowLayout else { return 1 }
         let inset = layout.sectionInset.left + layout.sectionInset.right
-        let viewportWidth = enclosingScrollView?.bounds.width ?? visibleRect.width
+        let viewportWidth = gridViewportWidth(enclosing: enclosingScrollView?.bounds.width, visible: visibleRect.width)
         return max(1, Int((viewportWidth - inset + layout.minimumInteritemSpacing) /
             (layout.itemSize.width + layout.minimumInteritemSpacing)))
     }

@@ -73,4 +73,15 @@ import PicseeApplication
     grid.activate(currentItemID: session.selection.currentItemID)
     #expect(window.firstResponder === grid.collectionView)
     #expect(grid.currentItemID == b.itemID)
+
+    let unactivated = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 300, height: 480))
+    unactivated.display(snapshot, selectedItemID: nil)
+    let left = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: 0, windowNumber: window.windowNumber, context: nil,
+        characters: "\u{F702}", charactersIgnoringModifiers: "\u{F702}",
+        isARepeat: false, keyCode: 123))
+    unactivated.collectionView.keyDown(with: left)
+    #expect(unactivated.currentItemID == a.itemID)
+    #expect(gridViewportWidth(enclosing: nil, visible: 300) == 300)
+    #expect(gridViewportWidth(enclosing: 640, visible: 300) == 640)
 }
