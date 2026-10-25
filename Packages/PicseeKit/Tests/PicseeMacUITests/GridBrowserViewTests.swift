@@ -85,3 +85,35 @@ import PicseeCore
     #expect(lightBorder != darkBorder && lightFill != darkFill)
     #expect(cell.isSelected && cell.view.window?.firstResponder !== cell.view)
 }
+
+@Test @MainActor func gridCellTileBackgroundUsesEffectiveWindowAppearance() throws {
+    let application = NSApplication.shared
+    let previous = application.appearance
+    defer { application.appearance = previous }
+    let folder = URL(fileURLWithPath: "/tmp/picsee-grid-tile")
+    let entry = FolderEntry(url: folder.appendingPathComponent("A.jpg"),
+        root: .init(id: AccessRootID(rawValue: UUID()), url: folder))
+    let cell = GridPhotoItem()
+    cell.configure(entry)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 200),
+        styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = cell.view
+    for (override, inherited) in [(NSAppearance.Name?.some(.aqua), NSAppearance.Name.aqua),
+        (.some(.darkAqua), .aqua), (nil, .darkAqua)] {
+        application.appearance = try #require(NSAppearance(named: inherited))
+        window.appearance = override.flatMap(NSAppearance.init(named:))
+        cell.view.viewDidChangeEffectiveAppearance()
+        var expected: CGColor?
+        cell.view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            expected = NSColor.controlBackgroundColor.cgColor
+        }
+        let actualCG = try #require(cell.view.layer?.backgroundColor)
+        let expectedCG = try #require(expected)
+        let actualColor = try #require(NSColor(cgColor: actualCG)?.usingColorSpace(.sRGB))
+        let expectedColor = try #require(NSColor(cgColor: expectedCG)?.usingColorSpace(.sRGB))
+        #expect(actualColor.redComponent == expectedColor.redComponent)
+        #expect(actualColor.greenComponent == expectedColor.greenComponent)
+        #expect(actualColor.blueComponent == expectedColor.blueComponent)
+        #expect(actualColor.alphaComponent == expectedColor.alphaComponent)
+    }
+}
