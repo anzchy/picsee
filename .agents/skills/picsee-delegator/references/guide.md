@@ -125,20 +125,47 @@ does not restore the paused `gpt-auditor`.
   prevents a changed pane observed by either check from getting a success receipt; it does not bind the send to a
   terminal or session. Do not reuse an old target after a Claude restart.
 
-  **Hold while the user types (#154).** After the identity check and immediately before the send, the listener
-  reads `herdr pane read <pane> --source visible --format ansi` and sends only when the Claude input box is
+  **Hold while the user types (#154).** After the identity check, the listener reads
+  `herdr pane read <pane> --source visible --format ansi` and sends only when the Claude input box is
   **empty**. The box is the text between the last two full-width `─` rule lines (the top one may end in
   ` <label> ─`); its first line must start with `❯`. Text drawn dim (SGR 2) is Claude's grey prompt suggestion and
   does not count; any other non-blank character in the box, including continuation lines and a
-  `[Pasted text …]` placeholder, is **typing**. No box, a different prompt glyph (`!` shell mode, a menu), or a
-  scrolled-up viewport is **unknown** and is held like typing. While held, `status.json` is `waiting-user-typing`
-  with `input` (`typing`/`unknown`) and the time held; the listener re-checks identity and the box every
-  `--typing-retry-seconds` (default 5) without using a delivery attempt and never sends keys, clears or edits the
-  user's text. After `--typing-defer-seconds` (default 900) it records `deferred-user-typing` and exits without
-  sending: no receipt, `poll-result.json` and `notification.txt` kept. Resume with the identical `start` command
-  (or `listen-notify.py run --event-dir <dir>`) once the box is empty. A failed `pane read` is a preflight failure.
-  Limits: the check and the send are separate herdr calls, so a keystroke in that gap can still be joined by the
-  token; a Claude Code redesign of the box makes every read `unknown`, which fails safe (held, then deferred).
+  `[Pasted text …]` placeholder, is **typing**. Dim counts only for SGR encodings the parser recognises in full
+  (`;` parameters, 38/48/58 colours in `;` or ITU `:` form, 0/00/22 resets, the neutral attribute and colour
+  codes); any other SGR (unknown code, unpaired colour, other colon sub-parameters, private marker,
+  intermediate byte) ends dim, so the text after it is **typing**, never empty. No box, a different prompt
+  glyph (`!` shell mode, a menu), or a scrolled-up viewport is **unknown** and is held like typing.
+
+  When that read is empty, the listener writes `delivery-uncertain`, reads the box once more (the **gate read**)
+  and runs `herdr pane run` straight after it only if the gate read is also empty; otherwise it returns to the
+  hold, nothing sent. A failed list or read is a preflight failure (bounded attempts). While held, `status.json`
+  is `waiting-user-typing` with `input` (`typing`/`unknown`) and `deferred_seconds`, the real elapsed time on a
+  monotonic clock since the box was first seen non-empty, including herdr call time; the listener re-checks
+  identity and the box every `--typing-retry-seconds` (default 5, the last sleep capped to the deadline)
+  without using a delivery attempt and never sends keys, clears or edits the user's text. After
+  `--typing-defer-seconds` (default 900) the state becomes `deferred-user-typing` (`retrying: true`) and the
+  worker keeps re-checking every 60 s until `--typing-give-up-seconds` (default the larger of 14400 and the
+  defer time); then it records `deferred-user-typing` with `retrying: false` and exits without sending: no
+  receipt, `poll-result.json` and `notification.txt` kept. A send that was held adds a `Send held <n>s …` line
+  to `notification.txt`.
+
+  Run `listen-notify.py status` (same `--state-root`) at each loop and before ending a turn: it prints one line
+  per undelivered event and exits 3 when any line is `attention` (`deferred-user-typing`, `delivery-uncertain`,
+  `delivery-failed`, `launch-failed`, or a stopped worker). For a deferral, check the box, then resume with the
+  identical `start` command (or `listen-notify.py run --event-dir <dir>`); a still-running worker answers
+  `already-running` and sends on its next check. Resuming keeps the event's registered `--typing-*` values;
+  different flags on the `start` command are ignored for an existing event.
+
+  Limits: herdr 0.9.5 has no conditional send and every route into Claude (`pane run`, `send-text`,
+  `send_input`, `agent prompt`) goes through the input box, so the race cannot be closed. The remaining window
+  runs from the moment herdr snapshots the screen for the gate read to the moment it writes the token: the rest
+  of that `pane read` call, the in-process classification, and the start of the `pane run` call, with no file
+  write or other call between. Each herdr CLI call measured 3.3–4.3 ms (median 3.5 ms) on the delegator Mac on
+  2026-10-26, so the window is a few milliseconds when idle, but nothing bounds it under load. A keystroke in
+  it is joined by the token and submitted with Enter. A crash between the `delivery-uncertain` write and the
+  send leaves an uncertain event with nothing sent (reconcile it by hand), and `start` during that instant
+  refuses with `DeliveryUncertain`. A Claude Code redesign of the box makes every read `unknown`, which fails
+  safe (held, deferred, then surfaced by `status`).
 
   On receiving the event token, the Claude delegator reads that event's `config.json`, `poll-result.json` and
   `notification.txt`; checks the route's pane ID, terminal ID and cwd against its current pane (after checking the

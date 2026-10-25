@@ -43,7 +43,14 @@ PANE_PATTERN = re.compile(r"^w[0-9]+:p[0-9]+$")
 TERMINAL_PATTERN = re.compile(r"^term_[A-Za-z0-9_-]+$")
 # Claude Code's input box sits between two full-width rules; the top one may end in " <label> ─".
 RULE_PATTERN = re.compile(r"^─{20,}(?: [^\n]* ─)?$")
-ANSI_PATTERN = re.compile(r"\x1b\[([0-9;:?]*)[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]")
+ANSI_PATTERN = re.compile(r"\x1b\[([0-?]*)([ -/]*)([@-~])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]")
+# SGR codes that change neither intensity nor visibility: bold, italic, underline, blink, inverse,
+# hidden, strike, their resets, and the basic/bright colours with their defaults.
+NEUTRAL_SGR = frozenset([1, 3, 4, 5, 7, 8, 9, 23, 24, 25, 27, 28, 29, 39, 49, 59,
+                         *range(30, 38), *range(40, 48), *range(90, 98), *range(100, 108)])
+TYPING_GIVE_UP_SECONDS = 14400
+TYPING_SLOW_RETRY_SECONDS = 60
+ATTENTION_STATES = ("deferred-user-typing", "delivery-uncertain", "delivery-failed", "launch-failed")
 REPORT_SPEC = importlib.util.spec_from_file_location(
     "picsee_poll_report", Path(__file__).with_name("poll-report.py")
 )
@@ -144,11 +151,27 @@ def _validate_config(config):
     if (not isinstance(hold, (int, float)) or isinstance(hold, bool) or not math.isfinite(hold)
             or hold < 0 or hold > 86400):
         raise ValueError("typing_defer_seconds must be between 0 and 86400")
+    give_up = _typing_give_up_seconds(config)
+    if (not isinstance(give_up, (int, float)) or isinstance(give_up, bool) or not math.isfinite(give_up)
+            or give_up < 0 or give_up > 86400):
+        raise ValueError("typing_give_up_seconds must be between 0 and 86400")
+    if give_up < hold:
+        raise ValueError("typing_give_up_seconds must be at least typing_defer_seconds")
     deadline = config.get("poll_deadline_seconds")
     if deadline is not None and (
         not isinstance(deadline, (int, float)) or not math.isfinite(deadline) or deadline <= 0
     ):
         raise ValueError("poll_deadline_seconds must be finite and positive")
+
+
+def _typing_give_up_seconds(config):
+    # Events registered before this bound existed keep retrying for at least four hours.
+    return config.get("typing_give_up_seconds",
+                      max(TYPING_GIVE_UP_SECONDS, config.get("typing_defer_seconds", 900)))
+
+
+def _seconds(value):
+    return "{:g}".format(value)
 
 
 def _thread_lock(path):
@@ -383,12 +406,62 @@ def _checked_claude_pane(destination, run):
         raise ValueError("malformed herdr pane list") from error
 
 
+def _sgr_dim(params, dim):
+    """Apply one SGR parameter string to the dim flag.
+
+    Only encodings recognised in full keep text dim. Anything else clears the flag, so an
+    unrecognised style can make text count as typed, never as an empty box.
+    """
+    if not re.fullmatch(r"[0-9;:]*", params):
+        return False
+    codes = params.split(";")
+    index = 0
+    while index < len(codes):
+        code = codes[index]
+        if ":" in code:
+            # ITU colon form keeps one colour in a single parameter: 38:5:n or 38:2:[space]:r:g:b.
+            parts = code.split(":")
+            if parts[0] not in ("38", "48", "58"):
+                return False
+            if parts[1:2] == ["5"] and len(parts) == 3 and parts[2].isdigit():
+                pass
+            elif (parts[1:2] == ["2"] and len(parts) in (5, 6) and all(p.isdigit() for p in parts[-3:])
+                    and (len(parts) == 5 or parts[2] == "" or parts[2].isdigit())):
+                pass
+            else:
+                return False
+            index += 1
+            continue
+        if code in ("38", "48", "58"):
+            # Extended colour: 5;n or 2;r;g;b. Its parameters are not attributes.
+            if codes[index + 1:index + 2] == ["5"] and codes[index + 2:index + 3] and codes[index + 2].isdigit():
+                index += 3
+            elif (codes[index + 1:index + 2] == ["2"] and len(codes[index + 2:index + 5]) == 3
+                    and all(p.isdigit() for p in codes[index + 2:index + 5])):
+                index += 5
+            else:
+                return False
+            continue
+        if code and not code.isdigit():
+            return False
+        value = int(code or 0)
+        if value in (0, 22):
+            dim = False
+        elif value == 2:
+            dim = True
+        elif value not in NEUTRAL_SGR:
+            return False
+        index += 1
+    return dim
+
+
 def _claude_input_state(screen):
     """Classify the Claude Code input box in an ANSI pane snapshot: empty, typing or unknown.
 
     The box is the text between the last two rule lines, and its first line must start
-    with the prompt glyph. Dim (SGR 2) text is Claude's grey prompt suggestion, not input.
-    Anything else, including a missing box or another prompt glyph, is unknown.
+    with the prompt glyph. Dim (SGR 2) text is Claude's grey prompt suggestion, not input;
+    an SGR encoding it does not fully recognise ends dim text (see `_sgr_dim`). Anything
+    else, including a missing box or another prompt glyph, is unknown.
     """
     plain, visible = [], []
     dim = False
@@ -402,21 +475,8 @@ def _claude_input_state(screen):
             if match is None:
                 break
             position = match.end()
-            if not (match.group(0).startswith("\x1b[") and match.group(0).endswith("m")):
-                continue
-            codes = (match.group(1) or "0").replace(":", ";").split(";")
-            index = 0
-            while index < len(codes):
-                code = codes[index]
-                if code in ("38", "48", "58"):
-                    # Extended colour: 5;n or 2;r;g;b. Its parameters are not attributes.
-                    index += 3 if codes[index + 1:index + 2] == ["5"] else 5
-                    continue
-                if code in ("", "0", "22"):
-                    dim = False
-                elif code == "2":
-                    dim = True
-                index += 1
+            if match.group(3) == "m":
+                dim = False if match.group(2) else _sgr_dim(match.group(1), dim)
         plain.append("".join(text).rstrip())
         visible.append("".join(undimmed))
     rules = [index for index, line in enumerate(plain) if RULE_PATTERN.fullmatch(line)]
@@ -448,7 +508,7 @@ def _uncertain(event_dir, config, reason):
     raise DeliveryUncertain("Claude delivery uncertain; inspect pane and event before a new event: " + reason)
 
 
-def _deliver_claude(event_dir, config, destination, message, run, sleep):
+def _deliver_claude(event_dir, config, destination, message, run, sleep, clock):
     # Keep the full message out of pane input: if the terminal became a shell,
     # ':' is a no-op and the event ID cannot contain shell metacharacters.
     _atomic_text(event_dir / "notification.txt", message + "\n")
@@ -457,7 +517,8 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep):
     initial_backoff = config.get("initial_backoff_seconds", 5)
     typing_retry = config.get("typing_retry_seconds", 5)
     typing_hold = config.get("typing_defer_seconds", 900)
-    held = 0
+    give_up = _typing_give_up_seconds(config)
+    hold_start = None
     errors = []
     attempt = 1
     while attempt <= attempts:
@@ -466,40 +527,61 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep):
         })
         try:
             _checked_claude_pane(destination, run)
-            # Read last, just before the send, to keep the race with a human short.
             input_state = _claude_input(destination, run)
+            if input_state == "empty":
+                if hold_start is not None:
+                    _atomic_text(event_dir / "notification.txt", message + "\nSend held {}s while the Claude "
+                                 "input box was not empty.\n".format(_seconds(round(clock() - hold_start, 1))))
+                # Persist uncertainty *before* the gate read, so nothing but that read sits
+                # between the last look at the box and the send. A crash here leaves the
+                # event uncertain with nothing sent, which is the safe direction.
+                _atomic_json(event_dir / "status.json", {
+                    "state": "delivery-uncertain", "event": config["event"],
+                    "attempt": attempt, "reason": "gate read entered; pane run follows only if the box is empty",
+                })
+                input_state = _claude_input(destination, run)
         except Exception as error:
             errors.append(type(error).__name__ + ": " + str(error))
+            # Nothing was sent: a failed list or read never reaches the transport.
+            _atomic_json(event_dir / "status.json", {
+                "state": "delivering", "event": config["event"], "attempt": attempt, "last_error": errors[-1],
+            })
             if attempt < attempts:
                 sleep(min(initial_backoff * (2 ** (attempt - 1)), 300))
             attempt += 1
             continue
 
         # Text in the box (or a screen we cannot read) may be a human typing. Hold the
-        # send without touching the box; holding does not use a delivery attempt.
+        # send without touching the box; holding does not use a delivery attempt. The
+        # hold runs on a monotonic deadline, so slow herdr calls count toward it.
         if input_state != "empty":
-            if held >= typing_hold:
+            now = clock()
+            hold_start = now if hold_start is None else hold_start
+            held = round(now - hold_start, 1)
+            if held >= give_up:
                 _atomic_json(event_dir / "status.json", {
                     "state": "deferred-user-typing", "event": config["event"],
-                    "input": input_state, "deferred_seconds": held,
+                    "input": input_state, "deferred_seconds": held, "retrying": False,
                 })
                 raise DeliveryDeferred(
                     "Claude input box not empty ({}) for {}s; nothing sent, event kept for a later run".format(
-                        input_state, held))
+                        input_state, _seconds(held)))
+            # Past the hold window the event is reported as deferred but still re-checked,
+            # less often, until the give-up bound.
+            if held < typing_hold:
+                state, wait = "waiting-user-typing", min(typing_retry, typing_hold - held)
+            else:
+                state, wait = "deferred-user-typing", max(typing_retry, TYPING_SLOW_RETRY_SECONDS)
+            wait = min(wait, give_up - held)
             _atomic_json(event_dir / "status.json", {
-                "state": "waiting-user-typing", "event": config["event"],
-                "input": input_state, "deferred_seconds": held, "retry_in_seconds": typing_retry,
+                "state": state, "event": config["event"], "input": input_state,
+                "deferred_seconds": held, "retry_in_seconds": wait, "retrying": True,
             })
-            sleep(typing_retry)
-            held += typing_retry
+            sleep(wait)
             continue
 
-        # Persist uncertainty *before* entering the transport. A crash, timeout,
+        # Uncertainty is already persisted before the transport. A crash, timeout,
         # lost response, or receipt-write failure can never trigger a replay.
-        _atomic_json(event_dir / "status.json", {
-            "state": "delivery-uncertain", "event": config["event"],
-            "attempt": attempt, "reason": "pane run entered; awaiting result and postflight",
-        })
         argv = ["herdr", "pane", "run", destination["pane"], token]
         try:
             completed = run(argv, capture_output=True, text=True, timeout=30)
@@ -530,7 +612,7 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep):
         attempts, errors[-1]))
 
 
-def _deliver(event_dir, config, poll_result, run, sleep):
+def _deliver(event_dir, config, poll_result, run, sleep, clock):
     receipt_path = event_dir / "queue-receipt.json"
     with _locked(event_dir / "delivery.lock"):
         if receipt_path.exists():
@@ -541,7 +623,7 @@ def _deliver(event_dir, config, poll_result, run, sleep):
         message = _notification_message(config, poll_result)
         destination = _destination(config)
         if destination["kind"] == "claude-pane":
-            return _deliver_claude(event_dir, config, destination, message, run, sleep)
+            return _deliver_claude(event_dir, config, destination, message, run, sleep, clock)
         attempts = config.get("max_delivery_attempts", 5)
         initial_backoff = config.get("initial_backoff_seconds", 5)
         errors = []
@@ -594,7 +676,7 @@ def _deliver(event_dir, config, poll_result, run, sleep):
         raise DeliveryError("queue delivery failed after {} attempts: {}".format(attempts, errors[-1]))
 
 
-def run_event(event_dir, run=subprocess.run, sleep=time.sleep):
+def run_event(event_dir, run=subprocess.run, sleep=time.sleep, clock=time.monotonic):
     """Run or reuse the poll result, then deliver one serialized queue notification."""
     event_dir = Path(event_dir)
     config = _read_json(event_dir / "config.json")
@@ -603,7 +685,7 @@ def run_event(event_dir, run=subprocess.run, sleep=time.sleep):
         return "already-delivered"
     poll_path = event_dir / "poll-result.json"
     poll_result = _read_json(poll_path) if poll_path.exists() else _run_poll(event_dir, config, run)
-    return _deliver(event_dir, config, poll_result, run, sleep)
+    return _deliver(event_dir, config, poll_result, run, sleep, clock)
 
 
 def _pid_is_running(path):
@@ -651,6 +733,34 @@ def start_listener(event_dir, config, launch=subprocess.Popen):
         return "started"
 
 
+def listener_status(state_root):
+    """One line per undelivered event; an `attention` line needs the delegator."""
+    lines, attention = [], False
+    root = Path(state_root)
+    for event_dir in sorted(root.iterdir()) if root.is_dir() else []:
+        if not (event_dir / "config.json").is_file():
+            continue
+        try:
+            status = _read_json(event_dir / "status.json")
+        except (OSError, ValueError):
+            status = {}
+        state = status.get("state", "missing")
+        if state == "delivered":
+            continue
+        running = _pid_is_running(event_dir / "pid")
+        flag = "attention" if state in ATTENTION_STATES or not running else "active"
+        attention = attention or flag == "attention"
+        line = "{} {} state={} worker={}".format(flag, event_dir.name, state, "running" if running else "stopped")
+        for field in ("input", "deferred_seconds", "retrying", "reason", "last_error"):
+            if field in status:
+                value = status[field]
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    value = _seconds(value)
+                line += " {}={}".format(field, value)
+        lines.append(line)
+    return lines, attention
+
+
 def _positive_int(value):
     parsed = int(value)
     if parsed < 1:
@@ -686,11 +796,12 @@ def _build_parser():
                        help="claude-pane: re-check interval while the input box holds text")
     start.add_argument("--typing-defer-seconds", type=float, default=900,
                        help="claude-pane: hold time before recording deferred-user-typing")
-    start.add_argument(
-        "--state-root",
-        type=Path,
-        default=Path.home() / ".picsee" / "herdr" / "delegator" / "listeners",
-    )
+    start.add_argument("--typing-give-up-seconds", type=float,
+                       help="claude-pane: stop re-checking a deferred send (default max(14400, defer))")
+    default_root = Path.home() / ".picsee" / "herdr" / "delegator" / "listeners"
+    start.add_argument("--state-root", type=Path, default=default_root)
+    status = subparsers.add_parser("status", help="list undelivered events; exit 3 if any needs attention")
+    status.add_argument("--state-root", type=Path, default=default_root)
     run = subparsers.add_parser("run", help="internal detached worker")
     run.add_argument("--event-dir", required=True, type=Path)
     return parser
@@ -750,6 +861,8 @@ def _config_from_args(args):
         "initial_backoff_seconds": args.initial_backoff_seconds,
         "typing_retry_seconds": args.typing_retry_seconds,
         "typing_defer_seconds": args.typing_defer_seconds,
+        "typing_give_up_seconds": (args.typing_give_up_seconds if args.typing_give_up_seconds is not None
+                                   else max(TYPING_GIVE_UP_SECONDS, args.typing_defer_seconds)),
     }
 
 
@@ -762,6 +875,11 @@ def main(argv=None):
             print(type(error).__name__ + ": " + str(error), file=sys.stderr, flush=True)
             return 1
         return 0
+    if args.command == "status":
+        lines, attention = listener_status(args.state_root.expanduser())
+        for line in lines:
+            print(line)
+        return 3 if attention else 0
     try:
         config = _config_from_args(args)
         event_dir = args.state_root.expanduser().resolve() / args.event
