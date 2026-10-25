@@ -124,6 +124,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public func select(_ id: ItemID, modifier: SelectionModifier = .plain) {
         selection.click(id, modifier: modifier, in: orderedItemIDs)
     }
+    public func focus(_ id: ItemID) { selection.focus(id, in: orderedItemIDs) }
     public func contextMenuTarget(for id: ItemID) -> ContextMenuTarget {
         ContextMenuTarget(clickedItemID: id, selection: selection, items: orderedItemIDs)
     }

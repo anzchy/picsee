@@ -23,6 +23,10 @@ public struct BrowserSelection: Equatable, Sendable {
         currentItemID = id
         anchorItemID = id
     }
+    /// Moves the Current Item for keyboard entry or Esc return; selection and anchor stay.
+    public mutating func focus(_ id: ItemID, in items: [ItemID]) {
+        if items.contains(id) { currentItemID = id }
+    }
     public mutating func reconcile(with items: [ItemID]) {
         let remaining = Set(items)
         selectedItemIDs.formIntersection(remaining)
