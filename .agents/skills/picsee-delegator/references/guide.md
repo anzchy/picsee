@@ -125,6 +125,21 @@ does not restore the paused `gpt-auditor`.
   prevents a changed pane observed by either check from getting a success receipt; it does not bind the send to a
   terminal or session. Do not reuse an old target after a Claude restart.
 
+  **Hold while the user types (#154).** After the identity check and immediately before the send, the listener
+  reads `herdr pane read <pane> --source visible --format ansi` and sends only when the Claude input box is
+  **empty**. The box is the text between the last two full-width `─` rule lines (the top one may end in
+  ` <label> ─`); its first line must start with `❯`. Text drawn dim (SGR 2) is Claude's grey prompt suggestion and
+  does not count; any other non-blank character in the box, including continuation lines and a
+  `[Pasted text …]` placeholder, is **typing**. No box, a different prompt glyph (`!` shell mode, a menu), or a
+  scrolled-up viewport is **unknown** and is held like typing. While held, `status.json` is `waiting-user-typing`
+  with `input` (`typing`/`unknown`) and the time held; the listener re-checks identity and the box every
+  `--typing-retry-seconds` (default 5) without using a delivery attempt and never sends keys, clears or edits the
+  user's text. After `--typing-defer-seconds` (default 900) it records `deferred-user-typing` and exits without
+  sending: no receipt, `poll-result.json` and `notification.txt` kept. Resume with the identical `start` command
+  (or `listen-notify.py run --event-dir <dir>`) once the box is empty. A failed `pane read` is a preflight failure.
+  Limits: the check and the send are separate herdr calls, so a keystroke in that gap can still be joined by the
+  token; a Claude Code redesign of the box makes every read `unknown`, which fails safe (held, then deferred).
+
   On receiving the event token, the Claude delegator reads that event's `config.json`, `poll-result.json` and
   `notification.txt`; checks the route's pane ID, terminal ID and cwd against its current pane (after checking the
   GUI lock status before `herdr pane list`); then inspects the named report, task identity and SHA. An unexpected
@@ -197,7 +212,8 @@ exit 0 with **empty stdout/stderr** after `pane run` delivered text plus Enter t
 returned exit 1 with JSON error. The listener accepts only that observed success shape and requires the post-send
 pane check. Any timeout, nonempty unknown success, error or post-send identity change is `delivery-uncertain` with
 no receipt. It is never automatically replayed: inspect the pane and event, then use a new event ID only after
-manual reconciliation. Preflight failures happen before any send and may retry within the configured bound.
+manual reconciliation. Preflight failures happen before any send and may retry within the configured bound;
+`deferred-user-typing` is also a no-send state and may be resumed.
 
 A `queue-receipt.json` proves only transport acceptance under those limits; it is
 not the delegator's ACK and poll completion is not audit acceptance. Before relying on a new host or environment,

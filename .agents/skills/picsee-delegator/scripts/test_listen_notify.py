@@ -20,6 +20,22 @@ REPORT_SCRIPT = Path(__file__).with_name("poll-report.py")
 REPORT_SPEC = importlib.util.spec_from_file_location("poll_report", REPORT_SCRIPT)
 poll_report = importlib.util.module_from_spec(REPORT_SPEC)
 REPORT_SPEC.loader.exec_module(poll_report)
+# Shapes copied from `herdr pane read --source visible --format ansi` on live Claude Code panes (2026-10-25).
+GREY = "\x1b[0m\x1b[38;2;136;136;136m"
+EMPTY_BOX = "❯\xa0"
+BUSY_EMPTY_BOX = "\x1b[0m\x1b[38;2;153;153;153m❯\xa0\x1b[0m"
+TYPED_BOX = "\x1b[0m\x1b[38;2;153;153;153m❯\xa0\x1b[0mhalf-typed message"
+SUGGESTION_BOX = "❯\xa0\x1b[0m\x1b[2m把 README 和 AGENTS.md 的改动开个 PR\x1b[0m"
+READ_ARGV = ["herdr", "pane", "read", "w1:p1", "--source", "visible", "--format", "ansi"]
+
+
+def claude_screen(*box, label=" picsee-delegator ─"):
+    lines = ["✻ Crunched for 2m 3s · done 11:14 PM",
+             " " * 80 + "✘ Auto-update failed · Run claude doctor",
+             GREY + "─" * 100 + label + "\x1b[0m", *box, GREY + "─" * 120 + "\x1b[0m",
+             "  ⚠ picsee-timeline: ⏭ P2-05 · ◆ P0 已齐", "  [Opus 5.5] │ picsee git:(main*)",
+             "  Context ███░░░░░░░ 33% │ Usage █░░░░░░░░░ 7%", "  ⏵⏵ auto mode on (shift+tab to cycle)"]
+    return "\r\n".join(lines) + "\r\n"
 
 
 class ListenerTests(unittest.TestCase):
@@ -125,6 +141,24 @@ class ListenerTests(unittest.TestCase):
             "cwd": cwd, "foreground_cwd": cwd if foreground is None else foreground,
         }]}}
 
+    def claude_transport(self, screens, calls, on_read=None):
+        """Fake herdr: pane list matches, pane read returns `screens` in turn (last one repeats), run succeeds."""
+        screens = list(screens)
+
+        def run(argv, **_):
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            if argv[:3] == ["herdr", "pane", "read"]:
+                self.assertEqual(argv, READ_ARGV)
+                if on_read:
+                    on_read()
+                return self.completed(argv, stdout=screens.pop(0) if len(screens) > 1 else screens[0])
+            self.assertEqual(argv[:4], ["herdr", "pane", "run", "w1:p1"])
+            return self.completed(argv)
+
+        return run
+
     def test_claude_route_checks_pane_then_sends_once_with_receipt(self):
         config = self.claude_config()
         calls = []
@@ -133,6 +167,9 @@ class ListenerTests(unittest.TestCase):
             calls.append(argv)
             if argv == ["herdr", "pane", "list"]:
                 return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            if argv[:3] == ["herdr", "pane", "read"]:
+                self.assertEqual(argv, READ_ARGV)
+                return self.completed(argv, stdout=claude_screen(EMPTY_BOX))
             self.assertEqual(argv[:4], ["herdr", "pane", "run", "w1:p1"])
             self.assertEqual(argv[4], ": PICSEE_LISTENER_EVENT_" + config["event"])
             return self.completed(argv)
@@ -140,14 +177,14 @@ class ListenerTests(unittest.TestCase):
         self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "delivered")
         self.assertEqual(listen_notify.run_event(self.event_dir, run=run), "already-delivered")
         self.assertEqual([call[:3] for call in calls],
-                         [["herdr", "pane", "list"], ["herdr", "pane", "run"],
-                          ["herdr", "pane", "list"]])
+                         [["herdr", "pane", "list"], ["herdr", "pane", "read"],
+                          ["herdr", "pane", "run"], ["herdr", "pane", "list"]])
         receipt = json.loads((self.event_dir / "queue-receipt.json").read_text())
         self.assertEqual(receipt["destination"], config["destination"])
         self.assertNotIn("thread", receipt)
         self.assertIn(config["event"], (self.event_dir / "notification.txt").read_text())
         self.assertIn(str(self.handoff), (self.event_dir / "notification.txt").read_text())
-        self.assertNotIn(str(self.handoff), calls[1][4])
+        self.assertNotIn(str(self.handoff), calls[2][4])
 
     def test_claude_route_refuses_stale_or_malformed_pane_before_send(self):
         config = self.claude_config()
@@ -188,6 +225,8 @@ class ListenerTests(unittest.TestCase):
             calls.append(argv)
             if argv == ["herdr", "pane", "list"]:
                 return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            if argv[:3] == ["herdr", "pane", "read"]:
+                return self.completed(argv, stdout=claude_screen(EMPTY_BOX))
             return self.completed(argv, stdout=json.dumps({
                 "id": "cli:pane:run", "error": {"code": "pane_replaced"},
             }))
@@ -216,6 +255,8 @@ class ListenerTests(unittest.TestCase):
             calls.append(argv)
             if argv == ["herdr", "pane", "list"]:
                 return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            if argv[:3] == ["herdr", "pane", "read"]:
+                return self.completed(argv, stdout=claude_screen(EMPTY_BOX))
             raise subprocess.TimeoutExpired(argv, 30)
 
         with self.assertRaises(listen_notify.DeliveryUncertain):
@@ -239,12 +280,148 @@ class ListenerTests(unittest.TestCase):
             if argv == ["herdr", "pane", "list"]:
                 terminal = "term_123abc" if len(calls) == 1 else "term_replacement"
                 return self.completed(argv, stdout=json.dumps(self.pane_list(terminal=terminal)))
+            if argv[:3] == ["herdr", "pane", "read"]:
+                return self.completed(argv, stdout=claude_screen(EMPTY_BOX))
             return self.completed(argv)
 
         with self.assertRaises(listen_notify.DeliveryUncertain):
             listen_notify.run_event(self.event_dir, run=run, sleep=lambda _: None)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 4)
         self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+
+    def test_claude_input_box_classifier_reads_only_undimmed_text_inside_the_box(self):
+        state = listen_notify._claude_input_state
+        for screen in (claude_screen(EMPTY_BOX), claude_screen(BUSY_EMPTY_BOX),
+                       claude_screen("❯ "), claude_screen(SUGGESTION_BOX),
+                       claude_screen(EMPTY_BOX, label="")):
+            with self.subTest(screen=screen):
+                self.assertEqual(state(screen), "empty")
+        for screen in (claude_screen(TYPED_BOX), claude_screen("❯\xa0x"),
+                       claude_screen(EMPTY_BOX, "  second line typed"),
+                       claude_screen("❯\xa0\x1b[2msuggestion\x1b[22m typed after"),
+                       claude_screen("❯\xa0\x1b[2m\x1b[0mtyped after reset"),
+                       claude_screen("❯\xa0[Pasted text #1 +5 lines]"),
+                       claude_screen("❯\xa0\x1b[38;2;2;2;2mcoloured typed"),
+                       claude_screen("❯\xa0\x1b[2m", "\x1b[0m  typed on a dim-reset line")):
+            with self.subTest(screen=screen):
+                self.assertEqual(state(screen), "typing")
+        for screen in ("", "plain shell $ \r\n", claude_screen("! ls"),
+                       claude_screen(EMPTY_BOX).split(GREY + "─" * 120)[0],
+                       "Back to bottom; older activity\r\n" + GREY + "─" * 100 + "\x1b[0m\r\n",
+                       claude_screen("  1. Yes", "❯ 2. No")):
+            with self.subTest(screen=screen):
+                self.assertEqual(state(screen), "unknown")
+
+    def test_claude_empty_input_sends_and_never_edits_the_box(self):
+        self.claude_config()
+        calls = []
+        run = self.claude_transport([claude_screen(SUGGESTION_BOX)], calls)
+        self.assertEqual(listen_notify.run_event(self.event_dir, run=run, sleep=self.fail), "delivered")
+        self.assertEqual([c[:3] for c in calls], [["herdr", "pane", "list"], ["herdr", "pane", "read"],
+                                                  ["herdr", "pane", "run"], ["herdr", "pane", "list"]])
+        self.assertTrue((self.event_dir / "queue-receipt.json").exists())
+
+    def test_claude_typing_defers_without_touching_input_then_sends_once_empty(self):
+        config = self.claude_config()
+        config.update(typing_retry_seconds=5, typing_defer_seconds=60, max_delivery_attempts=1)
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        calls, sleeps, waiting = [], [], []
+
+        def sleep(seconds):
+            sleeps.append(seconds)
+            waiting.append(json.loads((self.event_dir / "status.json").read_text()))
+            self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+
+        run = self.claude_transport(
+            [claude_screen(TYPED_BOX), claude_screen(EMPTY_BOX, "  more"), claude_screen(EMPTY_BOX)], calls)
+        self.assertEqual(listen_notify.run_event(self.event_dir, run=run, sleep=sleep), "delivered")
+        self.assertEqual(sleeps, [5, 5])
+        self.assertEqual([w["state"] for w in waiting], ["waiting-user-typing"] * 2)
+        self.assertEqual(waiting[0]["input"], "typing")
+        self.assertEqual([c[:3] for c in calls], [
+            ["herdr", "pane", "list"], ["herdr", "pane", "read"],
+            ["herdr", "pane", "list"], ["herdr", "pane", "read"],
+            ["herdr", "pane", "list"], ["herdr", "pane", "read"],
+            ["herdr", "pane", "run"], ["herdr", "pane", "list"]])
+        self.assertEqual(json.loads((self.event_dir / "status.json").read_text())["state"], "delivered")
+
+    def test_claude_typing_past_deadline_records_deferral_and_keeps_event(self):
+        config = self.claude_config()
+        config.update(typing_retry_seconds=5, typing_defer_seconds=10)
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        poll_before = (self.event_dir / "poll-result.json").read_text()
+        for screen, reason in ((claude_screen(TYPED_BOX), "typing"), ("unparseable", "unknown")):
+            with self.subTest(reason=reason):
+                (self.event_dir / "status.json").unlink(missing_ok=True)
+                calls, sleeps = [], []
+                run = self.claude_transport([screen], calls)
+                with self.assertRaises(listen_notify.DeliveryDeferred):
+                    listen_notify.run_event(self.event_dir, run=run, sleep=sleeps.append)
+                self.assertEqual(sleeps, [5, 5])
+                self.assertEqual(sum(c[:3] == ["herdr", "pane", "read"] for c in calls), 3)
+                self.assertFalse(any(c[:3] == ["herdr", "pane", "run"] for c in calls))
+                self.assertTrue(all(c[:3] in (["herdr", "pane", "list"], ["herdr", "pane", "read"])
+                                    for c in calls))
+                status = json.loads((self.event_dir / "status.json").read_text())
+                self.assertEqual(status["state"], "deferred-user-typing")
+                self.assertEqual(status["input"], reason)
+                self.assertEqual(status["deferred_seconds"], 10)
+                self.assertFalse((self.event_dir / "queue-receipt.json").exists())
+                self.assertEqual((self.event_dir / "poll-result.json").read_text(), poll_before)
+                self.assertTrue((self.event_dir / "notification.txt").exists())
+        launches = []
+
+        class Process:
+            pid = 99999999
+
+        self.assertEqual(listen_notify.start_listener(
+            self.event_dir, config, launch=lambda *a, **k: launches.append(a) or Process()), "started")
+        self.assertEqual(len(launches), 1)
+        calls = []
+        self.assertEqual(listen_notify.run_event(
+            self.event_dir, run=self.claude_transport([claude_screen(EMPTY_BOX)], calls)), "delivered")
+        self.assertEqual(sum(c[:3] == ["herdr", "pane", "run"] for c in calls), 1)
+
+    def test_claude_unreadable_input_is_a_preflight_failure_before_send(self):
+        config = self.claude_config()
+        config["max_delivery_attempts"] = 2
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        calls, sleeps = [], []
+
+        def run(argv, **_):
+            calls.append(argv)
+            if argv == ["herdr", "pane", "list"]:
+                return self.completed(argv, stdout=json.dumps(self.pane_list()))
+            if argv[:3] == ["herdr", "pane", "read"]:
+                return self.completed(argv, returncode=1, stderr="pane read failed")
+            self.fail("must not send after a failed read")
+
+        with self.assertRaisesRegex(listen_notify.DeliveryError, "pane read failed"):
+            listen_notify.run_event(self.event_dir, run=run, sleep=sleeps.append)
+        self.assertEqual(sleeps, [1])
+        self.assertEqual(json.loads((self.event_dir / "status.json").read_text())["state"], "delivery-failed")
+
+    def test_typing_hold_settings_are_validated_and_set_from_cli(self):
+        config = self.claude_config()
+        for field, value in (("typing_retry_seconds", 0), ("typing_retry_seconds", 301),
+                             ("typing_retry_seconds", "5"), ("typing_defer_seconds", -1),
+                             ("typing_defer_seconds", 86401), ("typing_defer_seconds", float("nan"))):
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
+                listen_notify._validate_config(dict(config, **{field: value}))
+        listen_notify._validate_config(dict(config, typing_retry_seconds=0.5, typing_defer_seconds=0))
+        args = listen_notify._build_parser().parse_args([
+            "start", "--event", "typing-cli", "--task", "typing-cli", "--agent", "gpt-auditor",
+            "--handoff", str(self.handoff), "--poll", "idle", "--route", "claude-pane",
+            "--pane", "w1:p1", "--terminal-id", "term_123abc", "--cwd", "/tmp/picsee",
+            "--typing-retry-seconds", "3", "--typing-defer-seconds", "120",
+        ])
+        built = listen_notify._config_from_args(args)
+        self.assertEqual((built["typing_retry_seconds"], built["typing_defer_seconds"]), (3, 120))
+        defaults = listen_notify._config_from_args(listen_notify._build_parser().parse_args([
+            "start", "--event", "typing-cli", "--task", "typing-cli", "--agent", "gpt-auditor",
+            "--handoff", str(self.handoff), "--poll", "idle", "--route", "claude-pane",
+            "--pane", "w1:p1", "--terminal-id", "term_123abc", "--cwd", "/tmp/picsee"]))
+        self.assertEqual((defaults["typing_retry_seconds"], defaults["typing_defer_seconds"]), (5, 900))
 
     def test_claude_cli_keeps_copied_symlink_alias_for_preflight(self):
         real_cwd = self.root / "real-picsee"
