@@ -26,7 +26,7 @@ import PicseeCore
         // Page 11 `.thumbnail-wrap`: a quiet surface tile with the inner radius inside a transparent cell.
         tile.frame = NSRect(x: 8, y: 36, width: 204, height: 140)
         tile.wantsLayer = true
-        tile.layer?.cornerRadius = CGFloat(DesignMetrics.radii["inner"] ?? 4)
+        tile.layer?.cornerRadius = DesignMetrics.radii["inner"]!
         tile.autoresizingMask = [.width, .height]
         placeholder.frame = NSRect(x: 8, y: 36, width: 204, height: 140)
         placeholder.alignment = .center
@@ -41,7 +41,7 @@ import PicseeCore
         // TOKEN_MAPPING: forced native focus is an inner 2pt focusRing stroke; inset so Selection's edge border stays separate.
         currentRing.frame = surface.bounds.insetBy(dx: 3, dy: 3)
         currentRing.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        currentRing.cornerRadius = CGFloat(DesignMetrics.radii["inner"] ?? 4)
+        currentRing.cornerRadius = DesignMetrics.radii["inner"]!
         currentRing.borderWidth = 2
         currentRing.isHidden = true
         surface.layer?.addSublayer(currentRing)
