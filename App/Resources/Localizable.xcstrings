@@ -2367,6 +2367,34 @@
         }
       }
     },
+    "Cache cleanup failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cache cleanup failed. Try clearing again." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "缓存清理未完成，请重试。" } }
+      }
+    },
+    "Cache write failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cache could not save thumbnails. It will retry automatically." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "缩略图缓存写入失败，将自动重试。" } }
+      }
+    },
+    "Cache size unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cache size is unavailable. Try again later." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法读取缓存占用，请稍后重试。" } }
+      }
+    },
+    "Cache clear failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cache could not be cleared. Try again." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法清理缓存，请重试。" } }
+      }
+    },
     "Cache operation failed": {
       "extractionState": "manual",
       "localizations": {

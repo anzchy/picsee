@@ -72,6 +72,8 @@ Apple说明外观可沿App→Window→View继承，并可在相应层覆盖：[N
 
 ## 4. 焦点、命令和可见性
 
+设置窗口（P3-07）无浏览器原型页：由 AppKit 持有单个 460×190 原生窗口，SwiftUI 表单显示真实缓存占用、清理按钮及可访问的本地化失败原因。⌘, 打开设置；⌘W、Esc 关闭设置窗口。首次打开与再次显示各测量一次；清理和租约排空期间禁用按钮。
+
 SwiftUI侧可用[FocusState](https://developer.apple.com/documentation/swiftui/focusstate)描述本地焦点目标；AppKit侧与窗口first responder/key view路径协调。它们反映同一当前焦点，不能各自持续抢焦点或在每次切图时强制focus。
 
 流程契约：
