@@ -89,3 +89,69 @@ import PicseeApplication
     kept.focus(.ephemeral(UUID()))
     #expect(kept.selection.currentItemID == c.itemID)
 }
+
+@Test @MainActor func gridDrawsCurrentItemRingDistinctFromSelection() throws {
+    _ = NSApplication.shared
+    let scene = CurrentItemScene()
+    let a = scene.entry("A.jpg"), b = scene.entry("B.jpg"), c = scene.entry("C.jpg")
+    func rgba(_ color: CGColor?) -> [CGFloat] {
+        guard let color = color.flatMap({ NSColor(cgColor: $0)?.usingColorSpace(.sRGB) }) else { return [] }
+        return [color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent]
+    }
+    func close(_ actual: [CGFloat], _ token: DesignColor, _ theme: DesignTheme) -> Bool {
+        let expected = token.components(theme).map { CGFloat($0) }
+        return actual.count == 4 && zip(actual, expected).allSatisfy { abs($0 - $1) < 0.002 }
+    }
+
+    let cell = GridPhotoItem()
+    cell.configure(a)
+    cell.view.appearance = NSAppearance(named: .aqua)
+    #expect(cell.currentRingLayer.isHidden)
+    cell.isSelected = true
+    #expect(cell.view.layer?.borderWidth == 2)
+    #expect(cell.currentRingLayer.isHidden, "Selection alone draws no Current Item ring")
+    cell.isSelected = false
+    cell.isCurrent = true
+    #expect(!cell.currentRingLayer.isHidden)
+    #expect(cell.currentRingLayer.borderWidth == 2)
+    #expect(cell.currentRingLayer.frame == cell.view.bounds.insetBy(dx: 3, dy: 3))
+    #expect(close(rgba(cell.currentRingLayer.borderColor), .focusRing, .light))
+    #expect(cell.view.layer?.borderWidth == 0, "Current Item alone keeps the Selection border off")
+    cell.isSelected = true
+    #expect(!cell.currentRingLayer.isHidden && cell.view.layer?.borderWidth == 2)
+    cell.view.appearance = NSAppearance(named: .darkAqua)
+    cell.view.viewDidChangeEffectiveAppearance()
+    #expect(close(rgba(cell.currentRingLayer.borderColor), .focusRing, .dark))
+    cell.isCurrent = false
+    #expect(cell.currentRingLayer.isHidden)
+
+    let grid = scene.grid
+    func current() -> [String] {
+        grid.layoutSubtreeIfNeeded()
+        grid.collectionView.layoutSubtreeIfNeeded()
+        let items = grid.collectionView.visibleItems().compactMap { $0 as? GridPhotoItem }
+        #expect(items.count == 3)
+        #expect(items.allSatisfy { $0.isCurrent == !$0.currentRingLayer.isHidden })
+        return items.filter(\.isCurrent).map(\.filename).sorted()
+    }
+    grid.display(scene.snapshot([a, b, c]), selectedItemID: nil)
+    grid.activate()
+    #expect(current() == ["A.jpg"], "after entry")
+    grid.activate(currentItemID: b.itemID)
+    #expect(current() == ["B.jpg"], "after Esc return")
+    let right = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: 0, windowNumber: scene.window.windowNumber, context: nil,
+        characters: "\u{F703}", charactersIgnoringModifiers: "\u{F703}", isARepeat: false, keyCode: 124))
+    grid.collectionView.keyDown(with: right)
+    #expect(current() == ["C.jpg"], "while moving with arrows")
+    grid.collectionView(grid.collectionView, didSelectItemsAt: [IndexPath(item: 0, section: 0)])
+    #expect(current() == ["A.jpg"], "after a click")
+    grid.display(scene.snapshot([a, b, c], generation: 2), selectedItemID: a.itemID)
+    #expect(current() == ["A.jpg"], "after a reload")
+    let made = try #require(grid.collectionView(grid.collectionView,
+        itemForRepresentedObjectAt: IndexPath(item: 1, section: 0)) as? GridPhotoItem)
+    #expect(!made.isCurrent && made.currentRingLayer.isHidden)
+    let madeCurrent = try #require(grid.collectionView(grid.collectionView,
+        itemForRepresentedObjectAt: IndexPath(item: 0, section: 0)) as? GridPhotoItem)
+    #expect(madeCurrent.isCurrent && !madeCurrent.currentRingLayer.isHidden)
+}
