@@ -4,11 +4,22 @@ import PicseeApplication
 /// One owner for which surface the window shows: viewer (canvas, chrome, states), Reading State, or grid.
 @MainActor public final class GridViewerPresentation {
     private let canvas: NSView, chrome: NSView, state: NSView, grid: NSView, inspector: NSView
-    public init(canvas: NSView, chrome: NSView, state: NSView, grid: NSView, inspector: NSView) {
+    private let shell: GridShellView?
+    public init(canvas: NSView, chrome: NSView, state: NSView, grid: NSView, inspector: NSView,
+                shell: GridShellView? = nil) {
         self.canvas = canvas; self.chrome = chrome; self.state = state; self.grid = grid; self.inspector = inspector
+        self.shell = shell
+        shell?.onMainFrameChange = { [weak shell, weak state] main in
+            guard let shell, !shell.isHidden, let state, !state.isHidden,
+                  let parent = state.superview else { return }
+            state.frame = shell.convert(main, to: parent)
+        }
     }
     public var isGridVisible: Bool { !grid.isHidden }
     public func showViewer() {
+        shell?.isHidden = true
+        state.autoresizingMask = [.width, .height]
+        if let parent = state.superview { state.frame = parent.bounds }
         grid.isHidden = true
         grid.setAccessibilityHidden(true)
         canvas.isHidden = false
@@ -17,6 +28,12 @@ import PicseeApplication
         state.setAccessibilityHidden(false)
     }
     public func showGrid(reading: Bool) {
+        shell?.isHidden = false
+        shell?.layoutSubtreeIfNeeded()
+        if reading, let shell, let parent = state.superview {
+            state.autoresizingMask = []
+            state.frame = shell.convert(shell.mainFrame, to: parent)
+        }
         canvas.isHidden = true
         chrome.isHidden = true
         inspector.isHidden = true

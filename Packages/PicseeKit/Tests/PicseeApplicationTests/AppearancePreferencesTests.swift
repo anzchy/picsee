@@ -13,18 +13,18 @@ import PicseeApplication
     let encoder = JSONEncoder()
     encoder.outputFormatting = .sortedKeys
     let cases: [(DisplayAppearance, Bool, Bool, String)] = [
-        (.system, false, false, #"{"alwaysShowTools":false,"appearance":"system","filmstripExpanded":false}"#),
-        (.system, false, true, #"{"alwaysShowTools":false,"appearance":"system","filmstripExpanded":true}"#),
-        (.system, true, false, #"{"alwaysShowTools":true,"appearance":"system","filmstripExpanded":false}"#),
-        (.system, true, true, #"{"alwaysShowTools":true,"appearance":"system","filmstripExpanded":true}"#),
-        (.light, false, false, #"{"alwaysShowTools":false,"appearance":"light","filmstripExpanded":false}"#),
-        (.light, false, true, #"{"alwaysShowTools":false,"appearance":"light","filmstripExpanded":true}"#),
-        (.light, true, false, #"{"alwaysShowTools":true,"appearance":"light","filmstripExpanded":false}"#),
-        (.light, true, true, #"{"alwaysShowTools":true,"appearance":"light","filmstripExpanded":true}"#),
-        (.dark, false, false, #"{"alwaysShowTools":false,"appearance":"dark","filmstripExpanded":false}"#),
-        (.dark, false, true, #"{"alwaysShowTools":false,"appearance":"dark","filmstripExpanded":true}"#),
-        (.dark, true, false, #"{"alwaysShowTools":true,"appearance":"dark","filmstripExpanded":false}"#),
-        (.dark, true, true, #"{"alwaysShowTools":true,"appearance":"dark","filmstripExpanded":true}"#),
+        (.system, false, false, #"{"alwaysShowTools":false,"appearance":"system","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.system, false, true, #"{"alwaysShowTools":false,"appearance":"system","filmstripExpanded":true,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.system, true, false, #"{"alwaysShowTools":true,"appearance":"system","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.system, true, true, #"{"alwaysShowTools":true,"appearance":"system","filmstripExpanded":true,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.light, false, false, #"{"alwaysShowTools":false,"appearance":"light","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.light, false, true, #"{"alwaysShowTools":false,"appearance":"light","filmstripExpanded":true,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.light, true, false, #"{"alwaysShowTools":true,"appearance":"light","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.light, true, true, #"{"alwaysShowTools":true,"appearance":"light","filmstripExpanded":true,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.dark, false, false, #"{"alwaysShowTools":false,"appearance":"dark","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.dark, false, true, #"{"alwaysShowTools":false,"appearance":"dark","filmstripExpanded":true,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.dark, true, false, #"{"alwaysShowTools":true,"appearance":"dark","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
+        (.dark, true, true, #"{"alwaysShowTools":true,"appearance":"dark","filmstripExpanded":true,"gridSidebarVisible":true,"gridSidebarWidth":196}"#),
     ]
     for (appearance, tools, filmstrip, literal) in cases {
         let value = DisplayPreferences(alwaysShowTools: tools, filmstripExpanded: filmstrip, appearance: appearance)

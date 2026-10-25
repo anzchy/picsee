@@ -9,19 +9,26 @@ public struct DisplayPreferences: Codable, Equatable, Sendable {
     public var alwaysShowTools: Bool
     public var filmstripExpanded: Bool
     public var appearance: DisplayAppearance
-    public init(alwaysShowTools: Bool = false, filmstripExpanded: Bool = false, appearance: DisplayAppearance = .system) {
+    public var gridSidebarWidth: Double
+    public var gridSidebarVisible: Bool
+    public init(alwaysShowTools: Bool = false, filmstripExpanded: Bool = false, appearance: DisplayAppearance = .system,
+                gridSidebarWidth: Double = 196, gridSidebarVisible: Bool = true) {
         self.alwaysShowTools = alwaysShowTools
         self.filmstripExpanded = filmstripExpanded
         self.appearance = appearance
+        self.gridSidebarWidth = gridSidebarWidth
+        self.gridSidebarVisible = gridSidebarVisible
     }
 
-    private enum CodingKeys: String, CodingKey { case alwaysShowTools, filmstripExpanded, appearance }
+    private enum CodingKeys: String, CodingKey { case alwaysShowTools, filmstripExpanded, appearance, gridSidebarWidth, gridSidebarVisible }
 
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         alwaysShowTools = try values.decode(Bool.self, forKey: .alwaysShowTools)
         filmstripExpanded = try values.decode(Bool.self, forKey: .filmstripExpanded)
         appearance = DisplayAppearance(rawValue: try values.decodeIfPresent(String.self, forKey: .appearance) ?? "") ?? .system
+        gridSidebarWidth = try values.decodeIfPresent(Double.self, forKey: .gridSidebarWidth) ?? 196
+        gridSidebarVisible = try values.decodeIfPresent(Bool.self, forKey: .gridSidebarVisible) ?? true
     }
 }
 

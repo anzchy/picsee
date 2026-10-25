@@ -28,6 +28,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var chromeHasImage = false
     private var gridProjection = FolderGridProjection()
     private var gridView: GridBrowserView!
+    private var gridShell: GridShellView!
     private var presentation: GridViewerPresentation!
     private var gridFolderRoot: AccessRootID?
     private var gridFolderURL: URL?
@@ -112,8 +113,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         chromeOverlay.autoresizingMask = [.width, .height]
         chromeOverlay.setAccessibilityIdentifier("chrome.tools")
         content.addSubview(chromeOverlay)
-        gridView = GridBrowserView(frame: NSRect(x: 0, y: 0, width: content.bounds.width,
-                                                  height: content.bounds.height - 28))
+        gridShell = GridShellView(frame: NSRect(x: 0, y: 0, width: content.bounds.width,
+                                                height: content.bounds.height - 28), preferencesStore: preferencesStore)
+        gridShell.autoresizingMask = [.width, .height]
+        gridShell.isHidden = true
+        content.addSubview(gridShell)
+        gridView = GridBrowserView(frame: NSRect(x: 0, y: 0, width: content.bounds.width - 196,
+                                                  height: content.bounds.height - 68))
         gridView.autoresizingMask = [.width, .height]
         gridView.isHidden = true
         gridView.setAccessibilityHidden(true)
@@ -125,9 +131,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             guard let self, let current = session.selection.currentItemID else { return }
             session.select(current, modifier: .command)
         }
-        content.addSubview(gridView)
+        gridShell.mainContent.addSubview(gridView)
+        content.addSubview(stateHost, positioned: .above, relativeTo: gridShell)
+        content.addSubview(inspectorHost, positioned: .above, relativeTo: stateHost)
+        content.addSubview(chromeOverlay, positioned: .above, relativeTo: inspectorHost)
         presentation = GridViewerPresentation(canvas: canvas, chrome: chromeOverlay, state: stateHost,
-            grid: gridView, inspector: inspectorHost)
+            grid: gridView, inspector: inspectorHost, shell: gridShell)
         window.contentView = content
         chromeOverlay.linkKeyViews(to: canvas)
         stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
@@ -167,7 +176,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     required init?(coder: NSCoder) { nil }
 
-    func windowDidResize(_ notification: Notification) { canvas.synchronizeViewport() }
+    func windowDidResize(_ notification: Notification) {
+        gridShell.layoutSubtreeIfNeeded()
+        canvas.synchronizeViewport()
+    }
     func windowDidEnterFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
     func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
 
@@ -276,6 +288,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         inspector.hasImage = false
         gridFolderRoot = rootID
         gridFolderURL = folder
+        gridShell.showFolder(folder.lastPathComponent)
         gridProjection = FolderGridProjection()
         let pending = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: 0),
             entries: [], isComplete: false)
