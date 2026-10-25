@@ -1,5 +1,6 @@
 import CoreGraphics
 import CryptoKit
+import Darwin
 import Foundation
 import ImageIO
 import PicseeCore
@@ -26,6 +27,14 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
     public static let maximumPixelEdge = 1024
     private static let cacheVersion = 2
     private static let encoderVersion = 2
+    private static let tempSweepCutoff: Date = {
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0 else { return .distantFuture }
+        let started = info.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: TimeInterval(started.tv_sec) + TimeInterval(started.tv_usec) / 1_000_000)
+    }()
     private let directory: URL
     private let highWaterBytes: Int
     private let lowWaterBytes: Int
@@ -181,7 +190,14 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         guard let url = payloadURL(forKey: ticket.key.filename) else { return }
         guard PayloadLeaseRegistry.shared.acquireWrite(url.path) else { return }
         defer { PayloadLeaseRegistry.shared.releaseWrite(url.path) }
-        try payload.write(to: url, options: .atomic)
+        let temporary = directory.appendingPathComponent(".tmp-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try payload.write(to: temporary)
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary)
+        } else {
+            try FileManager.default.moveItem(at: temporary, to: url)
+        }
         try afterPayloadWrite?()
         // Catch a source mutation during payload publication before indexing the bytes.
         let unchanged: Bool
@@ -359,11 +375,23 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         await afterOrphanSnapshot?()
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
         var deferred = false
+        for name in names where name.hasPrefix(".tmp-") {
+            let temporary = directory.appendingPathComponent(name)
+            guard let modified = (try? FileManager.default.attributesOfItem(atPath: temporary.path)[.modificationDate] as? Date),
+                  modified < Self.tempSweepCutoff else { continue }
+            if !withIndexLock({ removeStaleTemp(temporary) }) { deferred = true }
+        }
         for name in names where name.hasSuffix(".png") && name.count == 68 && !referenced.contains(name) {
             guard let payload = payloadURL(forKey: String(name.dropLast(4))) else { continue }
             if !withIndexLock({ removeOrphanIfUnindexed(payload) }) { deferred = true }
         }
         didSweepOrphans = !deferred
+    }
+    private func removeStaleTemp(_ temporary: URL) -> Bool {
+        guard PayloadLeaseRegistry.shared.beginDeletion(temporary.path) else { return false }
+        defer { PayloadLeaseRegistry.shared.endDeletion(temporary.path) }
+        try? FileManager.default.removeItem(at: temporary)
+        return !FileManager.default.fileExists(atPath: temporary.path)
     }
     private func removeOrphanIfUnindexed(_ payload: URL) -> Bool {
         guard PayloadLeaseRegistry.shared.beginDeletion(payload.path) else { return false }
