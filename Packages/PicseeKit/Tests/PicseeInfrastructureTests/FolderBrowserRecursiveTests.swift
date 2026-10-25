@@ -96,6 +96,29 @@ private struct RecursiveTree {
     #expect(await result.entries.isEmpty)
 }
 
+@Test @MainActor func p204R3UnreadableSubdirectoryRetainsPartialFailureSurface() async throws {
+    let tree = try RecursiveTree()
+    let blocked = try tree.directory("blocked")
+    defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: blocked.path)
+        tree.cleanup()
+    }
+    _ = try tree.image("top.png")
+    _ = try tree.image("blocked/nested.png")
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: blocked.path)
+    #expect(!FileManager.default.isReadableFile(atPath: blocked.path))
+    let coordinator = FolderScanCoordinator(access: RecursiveRootLease(root: tree.root), scanner: FolderBrowser())
+    let session = ViewerSession()
+    session.folderScan = coordinator
+    _ = coordinator.setRecursiveEnabled(true)
+    let task = coordinator.begin(folder: tree.root, rootID: tree.rootID)
+    do { try await task.value } catch { }
+    #expect(coordinator.failure != nil)
+    #expect(coordinator.failureReason == "Folder access denied")
+    #expect(coordinator.sourceSnapshot?.navigationEntries.map(\.relativePath) == ["top.png"])
+    #expect(session.imageStatus == .folderScanFailed("Folder access denied", 1))
+}
+
 @Test func recursiveScanRejectsOutsideLinksAndCyclesWithoutDuplicateIdentity() async throws {
     let tree = try RecursiveTree(); defer { tree.cleanup() }
     let sub = try tree.directory("sub")
