@@ -118,14 +118,14 @@ private struct GridGeometry: Equatable {
     let horizontalInset: CGFloat
     let topInset: CGFloat = 16
 
-    init(viewportWidth width: CGFloat) {
+    init(viewportWidth width: CGFloat, contentWidth: CGFloat) {
         let narrow = width <= 1050
         let wide = width >= 1600
         horizontalInset = narrow ? 16 : (wide ? 32 : 24)
         columnGap = narrow ? 12 : (wide ? 22 : 16)
         rowGap = narrow ? 12 : (wide ? 22 : 18)
         let minColumnWidth: CGFloat = width <= 720 ? 145 : 220
-        let available = max(0, width - 2 * horizontalInset)
+        let available = max(0, contentWidth - 2 * horizontalInset)
         columns = width <= 480 ? 1 : max(1, Int((available + columnGap) / (minColumnWidth + columnGap)))
         let cellWidth = max(0, (available - CGFloat(columns - 1) * columnGap) / CGFloat(columns))
         let tileHeight: CGFloat
@@ -154,7 +154,7 @@ private struct GridGeometry: Equatable {
     private var columns: Int {
         guard let layout = collectionViewLayout as? NSCollectionViewFlowLayout else { return 1 }
         let inset = layout.sectionInset.left + layout.sectionInset.right
-        let viewportWidth = gridViewportWidth(enclosing: enclosingScrollView?.bounds.width, visible: visibleRect.width)
+        let viewportWidth = gridViewportWidth(enclosing: enclosingScrollView?.contentSize.width, visible: visibleRect.width)
         return max(1, Int((viewportWidth - inset + layout.minimumInteritemSpacing) /
             (layout.itemSize.width + layout.minimumInteritemSpacing)))
     }
@@ -196,12 +196,28 @@ private struct GridGeometry: Equatable {
         scrollView.frame = bounds
         scrollView.autoresizingMask = [.width, .height]
         scrollView.hasVerticalScroller = true
+        scrollView.contentView.postsFrameChangedNotifications = true
         scrollView.backgroundColor = DesignColor.canvasBackground.nsColor
         scrollView.documentView = collectionView
         addSubview(scrollView)
+        NotificationCenter.default.addObserver(self, selector: #selector(clipFrameChanged),
+            name: NSView.frameDidChangeNotification, object: scrollView.contentView)
+        NotificationCenter.default.addObserver(self, selector: #selector(scrollerStyleChanged),
+            name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil)
         updateGeometry()
     }
     public required init?(coder: NSCoder) { nil }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func clipFrameChanged() {
+        updateGeometry()
+    }
+
+    @objc private func scrollerStyleChanged() {
+        scrollView.tile()
+        updateGeometry()
+    }
 
     public override func layout() {
         super.layout()
@@ -209,7 +225,7 @@ private struct GridGeometry: Equatable {
     }
 
     private func updateGeometry() {
-        let next = GridGeometry(viewportWidth: bounds.width)
+        let next = GridGeometry(viewportWidth: bounds.width, contentWidth: scrollView.contentSize.width)
         guard next != geometry, let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
         geometry = next
         layout.itemSize = next.itemSize
