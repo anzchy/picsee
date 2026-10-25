@@ -80,7 +80,7 @@ Low only. Never touch mdpro or its tmux `dtrack`.
    override is active and replace dual-verdict assumptions with the sole verdict.
 6. **Rebase** — `$SK/scripts/rebase-ledger.sh` in the PR worktree (never pipe `git rebase`); confirm code unchanged
    vs the audited head; rerun all gates yourself (guide §5.2 item 7).
-7. **Gardener** — `picsee-doc-gardener` (Claude subagent / Codex custom agent), mode `pr`, `base..head`. UPDATED →
+7. **Gardener** — `picsee-doc-gardener` (Claude subagent on Haiku / Codex custom agent), mode `pr`, `base..head`. UPDATED →
    commit its diff as `docs(ledger): garden <b>..<h>`; NEEDS-OWNER → fix rows (限制/在哪 only) or `无用户可见变化：` lines,
    rerun; acceptance changes only in a separate commit quoting the user.
 8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. For changed UI, add

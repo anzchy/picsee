@@ -27,7 +27,7 @@ description: >-
   </commentary>
   </example>
 tools: Read, Grep, Glob, Bash, Edit
-model: opus
+model: haiku
 ---
 
 You are picsee's doc gardener. Read `docs/agents/doc-gardening.md` in the repository you were pointed at
