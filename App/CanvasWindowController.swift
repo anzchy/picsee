@@ -30,6 +30,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var gridView: GridBrowserView!
     private var gridFolderRoot: AccessRootID?
     private var gridFolderURL: URL?
+    private var gridPreviewScrollOffset: NSPoint?
     private var gridSelectedItemID: ItemID? {
         guard let id = session.selection.currentItemID, session.selection.selectedItemIDs.contains(id) else { return nil }
         return id
@@ -392,6 +393,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     @discardableResult
     func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
         if !gridView.isHidden && (command == .preview || command == .enter) {
+            gridPreviewScrollOffset = gridView.contentOffset
             session.beginBrowsing(items: gridProjection.snapshot?.navigationEntries.map(\.itemID) ?? [],
                 sourceVersion: .init(gridProjection.snapshot?.version.generation ?? 0),
                 scrollAnchor: gridView.firstVisibleItemID())
@@ -437,7 +439,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         if let window { GridWindowIdentity.showFolder(folder, in: window) }
         if let snapshot = gridProjection.snapshot {
             gridView.display(snapshot, selectedItemID: gridSelectedItemID)
-            if let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }
+            if let offset = gridPreviewScrollOffset { gridView.restoreContentOffset(offset) }
+            else if let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }
         }
     }
     private func showGrid() {
@@ -622,7 +625,6 @@ extension CanvasWindowController: FolderScanHost {
                 session.updateItems(snapshot.navigationEntries.map(\.itemID),
                     sourceVersion: .init(snapshot.version.generation))
                 gridView.display(snapshot, selectedItemID: gridSelectedItemID)
-                if let anchor = gridProjection.scrollAnchor { gridView.scrollTo(anchor) }
             }
         } onChange: { [weak self, weak scan] in
             Task { @MainActor [weak self, weak scan] in

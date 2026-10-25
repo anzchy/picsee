@@ -155,6 +155,11 @@ import PicseeCore
     public func itemID(at index: Int) -> ItemID? { entries.indices.contains(index) ? entries[index].itemID : nil }
     public func index(for id: ItemID) -> Int? { indices[id] }
     public func entry(for id: ItemID) -> FolderEntry? { indices[id].map { entries[$0] } }
+    public var contentOffset: NSPoint { scrollView.contentView.bounds.origin }
+    public func restoreContentOffset(_ point: NSPoint) {
+        scrollView.contentView.setBoundsOrigin(point)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
     public func scrollTo(_ id: ItemID) {
         guard let index = indices[id] else { return }
         collectionView.scrollToItems(at: [IndexPath(item: index, section: 0)], scrollPosition: .top)
