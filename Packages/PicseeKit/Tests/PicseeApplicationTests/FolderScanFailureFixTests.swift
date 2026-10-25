@@ -45,3 +45,26 @@ import PicseeCore
     #expect(await fixture.access.balance == [1, 1])
     session.closeImage()
 }
+
+@Test @MainActor func p204R3ImageFirstRetryKeepsInputAndViewingSurface() async throws {
+    let fixture = FolderScanFixture(), host = FolderNavigationHost()
+    let coordinator = fixture.coordinator, session = ViewerSession(host: host)
+    session.folderScan = coordinator; coordinator.host = host
+    let input = fixture.folder.appendingPathComponent("img2.png")
+    let first = coordinator.begin(folder: fixture.folder, rootID: fixture.id, input: input)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["img1.png", "img2.png", "img10.png"])
+    await fixture.scanner.finish(failing: true)
+    await #expect(throws: FolderScanTestError.expected) { try await first.value }
+    #expect(session.imageStatus == .folderScanFailed("Folder scan failed", 3))
+    let retry = try #require(coordinator.retry())
+    #expect(!coordinator.isReadingFolder)
+    #expect(coordinator.inputURL == input && coordinator.currentURL == input)
+    await fixture.scanner.waitForStart(1)
+    #expect(!coordinator.isReadingFolder && session.imageStatus != .readingFolder)
+    try await fixture.scanner.deliver(["img1.png", "img2.png", "img10.png"], at: 1)
+    await fixture.scanner.finish(1); try await retry.value
+    #expect(coordinator.currentURL == input)
+    #expect(host.opens.isEmpty)
+    #expect(await fixture.access.balance == [2, 2])
+}
