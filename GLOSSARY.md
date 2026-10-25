@@ -28,6 +28,24 @@ _Avoid_: source, location
 A record that a file or folder was recently viewed, which reopens without asking only while it is still inside an Access Root.
 _Avoid_: recent grant, history bookmark
 
+### Browsing
+
+**Grid**（网格）:
+The thumbnail view of one folder's images, in the active sort and filter order; opening a folder lands here.
+_Avoid_: gallery, thumbnail list, "browser" when the grid is meant
+
+**Reading State**（读取状态）:
+What the Grid's content area shows while a folder is still being scanned; it shows no partial results and can be cancelled.
+_Avoid_: loading grid, partial grid, progress percentage
+
+**Current Item**（当前项）:
+The one image that keyboard navigation and Space/Enter act on; it can be outside the Selection.
+_Avoid_: focused image, active image, selected image
+
+**Selection**（选择集合）:
+The set of images the user has picked in the Grid, possibly empty or several.
+_Avoid_: highlighted items, current item
+
 ### Viewing
 
 **Preview Set**（预览集合）:
@@ -40,6 +58,10 @@ _Avoid_: playlist, range, "all images" when only a selection was meant
 - A **Library Folder** lies inside exactly one **Access Root**; adding a Library Folder inside an existing Access Root creates no new grant.
 - Granting an **Access Root** does not add a **Library Folder**; only the explicit "Add Folder" action does.
 - A **Preview Set** never grows after the viewer opens; deleted or unauthorized items drop out of it.
+- Opening a folder shows the **Reading State** until the scan completes, then the **Grid** with the first image in the sort order as the **Current Item** and nothing selected.
+- The sort order is one app-wide preference shared by every window and folder and kept across relaunch; an extension filter belongs to one folder in one window, survives rescans of that folder and clears when another folder is opened.
+- Cancelling the **Reading State** returns to whatever was shown before; it never shows a partly scanned folder.
+- Esc from an image opened on its own returns to its folder's **Grid** only when that folder lies inside an **Access Root**.
 - A **Recent Item** confers no access; reopening one outside every **Access Root** asks the user to grant its folder.
 
 ## Example dialogue
