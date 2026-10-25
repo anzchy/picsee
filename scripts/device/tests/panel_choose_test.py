@@ -67,6 +67,9 @@ elif name == 'osascript':
         print(os.environ.get('FAKE_INPUT_SOURCE', 'com.apple.keylayout.ABC'))
     elif 'NSPasteboard' in script and 'changeCount' in script and 'types' not in script:
         n = count()
+        if nth('FAKE_COUNT_FAIL', n):
+            print('execution error: pasteboard unavailable', file=sys.stderr)
+            sys.exit(1)
         changes = state / 'changes'
         print((int(changes.read_text()) if changes.exists() else 0) + (n if os.environ.get('FAKE_CHANGE_DURING_SAVE') else 0))
     elif 'NSPasteboard' in script and 'types' in script:
@@ -86,6 +89,10 @@ elif name == 'kc.sh':
     tmp = Path(os.environ['TMPDIR'])
     modes = sorted(oct(p.stat().st_mode & 0o777) for p in tmp.rglob('*') if p.is_file())
     log(n=n, args=sys.argv[2:], run=sys.argv[1], clip=clip.read_bytes().hex(), modes=modes)
+    if nth('FAKE_KC_USER_COPY', n):
+        clip.write_bytes(b'user copy')
+        changes = state / 'changes'
+        changes.write_text(str(int(changes.read_text()) + 1 if changes.exists() else 1))
     signal_parent('FAKE_KC_SIGNAL', n)
     if nth('FAKE_KC_FAIL', n):
         print('FAIL input — fake', file=sys.stderr)
@@ -182,6 +189,43 @@ class PanelChoose(unittest.TestCase):
         self.assertEqual(self.calls('pbcopy'), [])
         self.assertEqual(self.keys(), [])
         self.assertIn('pasteboard changed', self.err)
+
+    def test_copy_during_the_keys_is_never_overwritten(self):
+        # The user copies while the helper holds the pasteboard: their copy wins, and the run fails loudly.
+        for at in range(1, 6):
+            with self.subTest(at=at):
+                for f in self.state.iterdir():
+                    f.unlink()
+                self.assertEqual(self.run_helper('/tmp/x', FAKE_KC_USER_COPY=str(at)), 1)
+                self.assertEqual(self.keys(), KEYS)
+                self.assertEqual(self.clip(), b'user copy')
+                self.assertEqual(len(self.calls('pbcopy')), 1, 'no restore over the newer copy')
+                self.assertIn('pasteboard changed by someone else', self.err)
+                self.assertIn('not restored', self.err)
+
+    def test_copy_during_the_keys_then_failure_or_interrupt_is_not_overwritten(self):
+        for env, code in ((dict(FAKE_KC_USER_COPY='2', FAKE_KC_FAIL='3'), 1),
+                          (dict(FAKE_KC_USER_COPY='2', FAKE_KC_SIGNAL='3:INT'), 130)):
+            with self.subTest(env=env):
+                for f in self.state.iterdir():
+                    f.unlink()
+                self.assertEqual(self.run_helper('/tmp/x', **env), code, self.err)
+                self.assertEqual(self.clip(), b'user copy')
+                self.assertEqual(len(self.calls('pbcopy')), 1)
+                self.assertIn('not restored', self.err)
+
+    def test_unreadable_change_count_after_set_or_at_restore_fails_loudly(self):
+        # changeCount reads: 1 = re-check after save, 2 = after setting the path, 3 = before restoring.
+        self.assertEqual(self.run_helper('/tmp/x', FAKE_COUNT_FAIL='2'), 1)
+        self.assertEqual(self.keys(), [])
+        self.assertEqual(self.clip(), b'old clip\n')
+        self.assertIn('nothing pasted', self.err)
+        for f in self.state.iterdir():
+            f.unlink()
+        self.assertEqual(self.run_helper('/tmp/x', FAKE_COUNT_FAIL='3'), 1)
+        self.assertEqual(self.keys(), KEYS)
+        self.assertEqual(self.clip(), b'/tmp/x')
+        self.assertIn('not restored', self.err)
 
     def test_unreadable_pasteboard_refuses_before_touching(self):
         self.assertNotEqual(self.run_helper('/tmp/x', FAKE_PBPASTE_FAIL='1'), 0)

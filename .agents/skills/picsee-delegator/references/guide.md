@@ -495,7 +495,10 @@ Driving tools (all synthetic input, which must be disclosed in the record):
 - `.agents/skills/picsee-delegator/scripts/panel-choose.sh RUN PATH`: in an open NSOpenPanel or powerbox, press ⌘⇧G, paste the path
   (⌘A ⌘V through the pasteboard, never `keystroke`, so an input method cannot convert it), then Return twice. It prints
   `input-source: <id>` (read-only) for the record, refuses a pasteboard holding anything but plain text, and restores the
-  previous text with a byte compare on every exit (non-zero if the restore fails or differs).
+  previous text with a byte compare on every exit except SIGKILL (non-zero if the restore fails or differs). If someone else
+  copies while the path is on the pasteboard, it keeps their copy, does not restore, and exits non-zero
+  (`pasteboard changed by someone else … not restored`); say so in the run record. The absolute path passes through the
+  pasteboard, so clipboard-history tools and Universal Clipboard may record it.
 - `.agents/skills/picsee-delegator/scripts/drag2.sh X0 Y0 X1 Y1`: a CGEvent drag from a Finder list-view row with a press-hold. Finder starts a real
   drag session. computer-use drags never arrived.
 - `.agents/skills/picsee-delegator/scripts/menus.sh PID` (menu item enabled states), `scripts/axlist.sh PID`, `scripts/click.sh`/`move.sh X Y`, AX clicks via
@@ -596,9 +599,10 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 | `log show` failed with "too many arguments" | zsh builtin `log` shadows `/usr/bin/log` | call `/usr/bin/log` |
 | Coverage awk printed `lines /` | wrong lcov path | `swift-lcov.sh` writes `coverage/lcov.info` |
 | `key.sh` typed letters instead of Tab/Esc | `key.sh` is single-character only | `kc.sh` with keycodes |
-| Open panel path couldn't be typed | `key.sh` is one character | `scripts/panel-choose.sh` (pasteboard paste; disclose it) |
+| Open panel path couldn't be typed | `key.sh` is one character | `.agents/skills/picsee-delegator/scripts/panel-choose.sh` (pasteboard paste; disclose it) |
 | Open panel showed `…095720-跑01-grid-explore、fixtures、grid` and never navigated (2026-10-25) | `panel-choose.sh` typed the path with `keystroke` under a Chinese IME (Doubao Pinyin) | Fixed in #119: the helper pastes via the pasteboard and restores it; never switch the user's input source |
 | `panel-choose.sh` refused: `holds public.png …` | non-text pasteboard contents cannot be restored from text | copy plain text (or ask the user) and rerun |
+| `panel-choose.sh` failed: `pasteboard changed by someone else during the run; not restored` | a copy landed while the path was on the pasteboard | nothing to undo (their copy is kept); record it, check the panel went where intended, rerun the step if not |
 | `launch.sh` failed in a relaunch dir | missing `bundle.path`/`build.json` | copy both from the first run dir |
 | Doctor `window` FAIL at end of run | title is a non-fixture file name | disclose; doctor only knows fixture names |
 | Doctor `fixtures` FAIL | files added after hashing, or `.DS_Store` from Finder | hash after copying; keep Finder-touched files outside `fixtures/` |
