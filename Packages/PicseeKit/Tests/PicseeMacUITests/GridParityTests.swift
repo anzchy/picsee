@@ -49,6 +49,9 @@ import PicseeCore
 
 @Test @MainActor func gridResponsiveGeometryMatchesPageElevenAndTwelve() throws {
     let (grid, _, window) = parityGrid(width: 1280)
+    let scroll = try #require(grid.subviews.compactMap { $0 as? NSScrollView }.first)
+    scroll.scrollerStyle = .overlay
+    scroll.tile()
     let cases: [(CGFloat, Int, CGFloat, CGFloat, CGFloat)] = [
         (1280.0, 5, 16.0, 24.0, 188.16),
         (1036.0, 4, 12.0, 16.0, 165.0),
@@ -106,6 +109,26 @@ import PicseeCore
     }
 }
 
+@Test @MainActor func gridArrowStepMatchesRenderedColumnsAtFractionalWidths() throws {
+    for (width, style) in [(789.0, NSScroller.Style.overlay), (804.0, .legacy)] {
+        let (grid, entries, window) = parityGrid(width: width)
+        let scroll = try #require(grid.subviews.compactMap { $0 as? NSScrollView }.first)
+        scroll.scrollerStyle = style
+        scroll.tile()
+        grid.layoutSubtreeIfNeeded()
+        grid.collectionView.layoutSubtreeIfNeeded()
+        let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
+        let first = try #require(layout.layoutAttributesForItem(at: IndexPath(item: 0, section: 0)))
+        let rowTwo = try #require(layout.layoutAttributesForItem(at: IndexPath(item: 3, section: 0)))
+        #expect(abs(rowTwo.frame.minX - first.frame.minX) < 0.1)
+        #expect(rowTwo.frame.minY > first.frame.minY)
+        try parityArrow(125, in: grid, window: window)
+        #expect(grid.currentItemID == entries[3].itemID)
+        try parityArrow(126, in: grid, window: window)
+        #expect(grid.currentItemID == entries[0].itemID)
+    }
+}
+
 @Test @MainActor func gridRelayoutsWhenScrollerOrClipChangesWithoutOuterResize() throws {
     let (grid, _, _) = parityGrid(width: 1280)
     let scroll = try #require(grid.subviews.compactMap { $0 as? NSScrollView }.first)
@@ -116,12 +139,16 @@ import PicseeCore
     grid.collectionView.layoutSubtreeIfNeeded()
     let overlayWidth = layout.itemSize.width
 
+    // Suppress the clip notification so only the scroller-style handler can relayout.
+    scroll.contentView.postsFrameChangedNotifications = false
     scroll.scrollerStyle = .legacy
     scroll.tile()
+    #expect(layout.itemSize.width == overlayWidth)
     NotificationCenter.default.post(name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil)
     #expect(scroll.contentSize.width < grid.bounds.width)
     #expect(layout.itemSize.width < overlayWidth)
 
+    scroll.contentView.postsFrameChangedNotifications = true
     let legacyWidth = layout.itemSize.width
     scroll.contentView.setFrameSize(NSSize(width: 1250, height: scroll.contentView.frame.height))
     #expect(scroll.contentSize.width == 1250)
