@@ -91,6 +91,11 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         always.target = self
         always.identifier = NSUserInterfaceItemIdentifier("chrome.always-show-tools")
         always.setAccessibilityIdentifier("chrome.always-show-tools.menu")
+        let sidebar = view.addItem(withTitle: String(localized: "Hide sidebar"), action: #selector(toggleSidebar(_:)), keyEquivalent: "s")
+        sidebar.keyEquivalentModifierMask = [.control, .command]
+        sidebar.target = self
+        sidebar.identifier = NSUserInterfaceItemIdentifier("grid.sidebar.toggle.menu")
+        sidebar.setAccessibilityIdentifier("grid.sidebar.toggle.menu")
         let appearanceMenu = NSMenu(title: String(localized: "Appearance"))
         appearanceMenu.delegate = self
         let appearanceItem = NSMenuItem(title: String(localized: "Appearance"), action: nil, keyEquivalent: "")
@@ -178,6 +183,9 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         value.alwaysShowTools.toggle()
         preferencesStore.value = value
     }
+    @objc private func toggleSidebar(_ item: NSMenuItem) {
+        (NSApp.keyWindow?.windowController as? CanvasWindowController)?.toggleGridSidebar()
+    }
     @objc private func selectAppearance(_ item: NSMenuItem) {
         guard let raw = item.representedObject as? String, let appearance = DisplayAppearance(rawValue: raw) else { return }
         preferencesStore.value.appearance = appearance
@@ -221,6 +229,10 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         if item.identifier?.rawValue == "chrome.always-show-tools" {
             item.state = preferencesStore.value.alwaysShowTools ? .on : .off
             return true
+        }
+        if item.identifier?.rawValue == "grid.sidebar.toggle.menu" {
+            item.title = String(localized: preferencesStore.value.gridSidebarVisible ? "Hide sidebar" : "Show sidebar")
+            return (NSApp.keyWindow?.windowController as? CanvasWindowController)?.gridShellVisible == true
         }
         guard let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return false }
         let target = NSApp.keyWindow?.windowController as? CanvasWindowController
