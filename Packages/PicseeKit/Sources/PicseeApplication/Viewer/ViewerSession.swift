@@ -92,6 +92,22 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         self.scrollAnchor = scrollAnchor
         updateItems(items, sourceVersion: sourceVersion)
     }
+    struct BrowsingState {
+        let mode: ViewerMode, selection: BrowserSelection, previewSet: PreviewSet?, scrollAnchor: ItemID?
+        let items: [ItemID], sourceVersion: PreviewSourceVersion
+    }
+    var browsingState: BrowsingState {
+        BrowsingState(mode: mode, selection: selection, previewSet: previewSet, scrollAnchor: scrollAnchor,
+            items: orderedItemIDs, sourceVersion: sourceVersion)
+    }
+    func restoreBrowsingState(_ state: BrowsingState) {
+        mode = state.mode
+        selection = state.selection
+        previewSet = state.previewSet
+        scrollAnchor = state.scrollAnchor
+        orderedItemIDs = state.items
+        sourceVersion = state.sourceVersion
+    }
     public func leaveBrowsing() {
         mode = .viewing
         previewSet = nil

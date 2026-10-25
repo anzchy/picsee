@@ -484,39 +484,31 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         guard let target = session.cancelFolderEntry() else { session.cancelFolderReading(); return }
         restore?(target)
     }
-    /// Native half of the restore point; the Session records the target and stops the scan.
+    /// Native half of the restore point; the Session records the target, stops the scan and restores its own state.
     private func makeFolderEntryRestore() -> ((FolderEntryRestoreTarget) -> Void) {
-        let projection = gridProjection, selection = session.selection
-        let offset = gridView.contentOffset, previewOffset = gridPreviewScrollOffset
+        let completeGrid = gridFolderRoot != nil && gridProjection.snapshot?.isComplete == true
+        let root = completeGrid ? gridFolderRoot : nil, folder = completeGrid ? gridFolderURL : nil
+        let projection = completeGrid ? gridProjection : FolderGridProjection()
+        let offset = gridView.contentOffset, previewOffset = completeGrid ? gridPreviewScrollOffset : nil
         let request = retryIntent?.accessRequest, fromFolder = retryFromFolderScan
-        session.beginFolderEntry(shownImage: fileURL,
-            hasCompleteGrid: gridFolderRoot != nil && projection.snapshot?.isComplete == true)
+        session.beginFolderEntry(shownImage: fileURL, hasCompleteGrid: completeGrid)
         return { [weak self] target in
             guard let self else { return }
+            gridFolderRoot = root
+            gridFolderURL = folder
+            gridProjection = projection
+            gridPreviewScrollOffset = previewOffset
             switch target {
             case .grid:
                 guard let snapshot = projection.snapshot else { return }
-                gridFolderRoot = snapshot.version.rootID
-                gridFolderURL = snapshot.version.folder
-                gridProjection = projection
-                gridPreviewScrollOffset = previewOffset
-                session.beginBrowsing(items: snapshot.navigationEntries.map(\.itemID),
-                    sourceVersion: .init(snapshot.version.generation), scrollAnchor: session.scrollAnchor)
-                if let id = selection.currentItemID {
-                    session.select(id)
-                    if !selection.selectedItemIDs.contains(id) { session.select(id, modifier: .command) }
-                }
                 gridView.display(snapshot, selectedItemID: gridSelectedItemID)
                 gridView.restoreContentOffset(offset)
                 showGrid()
                 if let window { GridWindowIdentity.showFolder(snapshot.version.folder, in: window) }
             case .viewer(let file):
-                gridFolderRoot = nil
-                gridFolderURL = nil
-                gridProjection = FolderGridProjection()
-                gridPreviewScrollOffset = nil
+                // A grid preview reopens inside its restored grid; Esc still returns there.
                 presentation.show(target)
-                open(file, accessRequest: request, fromFolderScan: fromFolder)
+                open(file, accessRequest: request, fromFolderScan: fromFolder || root != nil)
             case .empty:
                 restoreEmptyFolderEntry()
             }
@@ -707,8 +699,9 @@ extension CanvasWindowController: FolderScanHost {
     }
     private func observeGridSnapshot(_ scan: FolderScanCoordinator) {
         withObservationTracking {
+            // A restored source equals the projection already shown; repainting it would cover a restored viewer.
             if let snapshot = scan.snapshot, gridFolderRoot == snapshot.version.rootID,
-               gridProjection.apply(snapshot), snapshot.isComplete {
+               snapshot != gridProjection.snapshot, gridProjection.apply(snapshot), snapshot.isComplete {
                 let anchor = gridView.firstVisibleItemID() ?? gridProjection.scrollAnchor
                 gridProjection.setScrollAnchor(anchor)
                 session.updateItems(snapshot.navigationEntries.map(\.itemID),
