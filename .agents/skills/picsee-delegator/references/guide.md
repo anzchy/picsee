@@ -256,7 +256,7 @@ Risk tier decides the audits:
 |---|---|---|
 | Low | docs, ledger wording, mechanical renames, tiny scripts, Low audit follow-ups | opus-auditor alone, one blind round; apply the shared severity policy in §5.5 to every finding |
 | Medium | ordinary features, UI states, navigation, scanning | opus-auditor alone; one fix round for user-visible/AC Mediums, no confirm |
-| High | FileAccess/sandbox/bookmarks, entitlements, concurrency core, anything that can lose data or access | opus-auditor alone; every C/H gets a fresh-context confirm; cap of three rounds |
+| High | FileAccess/sandbox/bookmarks, entitlements, concurrency core, anything that can lose data or access | opus-auditor alone; every C/H gets a fresh-context confirm; at most 2 auditor rounds, then the user decides |
 
 Raise the tier if a change touches FileAccess, AccessIntent, the loader, entitlements, Info.plist or signing.
 This Opus-only table is an active user override (2026-10-25: 「Opus单审，gpt暂停」). It replaced the 2026-10-24 GPT-only override
@@ -369,7 +369,10 @@ then use the required fresh-context opus-auditor confirm.
 
 ### 5.5 Applying the verdict and severity policy
 
-- **Critical/High** blocks. Fix round, then a fresh-context confirm from opus-auditor; cap of three rounds.
+- **Critical/High** blocks. Fix round, then a fresh-context confirm from opus-auditor. At most **2 auditor rounds** per
+  item: round 1 is the blind audit, round 2 the confirm. If any Critical/High is still open (or newly raised) after
+  round 2, do not brief another fix or confirm: report the open findings, their traces and the options to the user, who
+  decides whether to continue (user decision 2026-10-25: 「opus auditor 最多2个round，之后如果还有critical/high，交给user来抉择是否继续」).
 - **Medium** that is user-visible or breaks an AC: one fix round, no confirm. Other Mediums go to the PR's
   "Still open" and the next Low batch.
 - **Low:** fold in only the cheap, obvious ones; the rest go to Still open.

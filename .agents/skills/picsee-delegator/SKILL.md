@@ -74,7 +74,8 @@ Low only. Never touch mdpro or its tmux `dtrack`.
    Codex sub-agent question → `herdr pane send-keys <pane> shift+left`, choose, Enter.
 4. **Audit** — all tiers use `opus-auditor` alone. `/clear` it before every audit or confirm; it runs no Swift tests
    unless a request asks for a lane re-run, so the delegator supplies and reruns owner gate evidence.
-5. **Apply verdict** — C/H block → fix + fresh-context confirm by `opus-auditor` (≤3 rounds). User-visible/AC Medium → one fix round, no
+5. **Apply verdict** — C/H block → fix + fresh-context confirm by `opus-auditor`; at most 2 auditor rounds
+   per item (blind audit + one confirm). C/H still open after round 2 → stop and ask the user whether to continue. User-visible/AC Medium → one fix round, no
    confirm. Other Medium/Low → PR "Still open". If consulting
    [confirm-and-fix-templates.md](references/templates/confirm-and-fix-templates.md), fill its `<auditor>` placeholders with
    opus-auditor while the override is active and replace dual-verdict assumptions with the sole verdict.

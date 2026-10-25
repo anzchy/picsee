@@ -47,7 +47,11 @@
 用户决定（2026-10-25，替换上一条临时审计覆盖）：
 - 「Opus单审，gpt暂停」。所有风险级别只由 `opus-auditor` 独立审计；`gpt-auditor` 暂停派活，直至用户明确恢复，
   Codex 额度恢复不自动解除。其余（C/H 阻断与全新上下文 confirm、三轮上限、Medium 政策、gardener、owner gates、
-  CI、无 challenge）不变。下文“只由 gpt-auditor”的表述按本条读作 `opus-auditor`。
+  CI、无 challenge）不变（轮数上限见下一条）。下文“只由 gpt-auditor”的表述按本条读作 `opus-auditor`。
+
+用户决定（2026-10-25，审计轮数）：
+- 「opus auditor 最多2个round，之后如果还有critical/high，交给user来抉择是否继续」。每个工作项 opus-auditor 最多两轮：第 1 轮盲审，第 2 轮 confirm。第 2 轮后仍有（或新出现）Critical/High，
+  delegator 不再派修复或 confirm，把未关闭的发现、trace 和可选做法交给用户决定。替换此前的三轮上限。
 
 ## 1. 为什么不能直接复制
 
@@ -68,7 +72,7 @@
 | Brief 与自验收 | M71 Briefs and self-acceptance + mdpro ADR-0131 | 6 节 brief 结构照搬；Background 引用开发计划工作包、mockup 编号、DESIGN 条款和 ADR；测试矩阵、对抗审查四步照搬，skill 改为 `$picsee-tdd-workflow`；每份 handoff 列出曾拒绝的方法及原因 |
 | 测试矩阵用例清单 | M71 | 换成 picsee 的高风险用例：A→B→C 乱序返回、generation 过期、continuation 恰好恢复一次、security-scoped 访问范围释放、bookmark stale、cell 复用串图、取消前/排队中/执行中、1×/2× backing scale、浅深主题、Reduce Motion |
 | 提交与合入 | M70 Commits and branches 1–5 | 主干 `main`；合入条件：verifier PASS、合并后的结论无阻断级 Critical/High、PR head 等于该 SHA 且 CI 绿。树身份校验改看 `:Sources :Tests :Picsee.xcodeproj`（或 `Package.swift`）。去掉 frontend-backend-redesign、release/x.y 等历史 |
-| 审计 | M70 item 4 + M71 Audits under herdr + mdpro ADR-0131 | 临时覆盖（2026-10-25 起）：所有风险级别只由 `opus-auditor` 做独立盲审，其单份 verdict 即 merged verdict；不派 `gpt-auditor`，额度恢复也不自动恢复。C/H 阻断，修复后 `/clear` `opus-auditor` 到全新上下文再 confirm，最多三轮；confirm 请求携带全部 open finding 原文、fix diff、counter-proof，并检查 fix 新引入的 C/H。Medium 政策不变：影响用户可见行为或违背 AC 的项目修一轮、不 confirm；其余 Medium 与 Low 写入 PR `Still open`。单审期间无 challenge；降级仍须复现或反证。opus-auditor 除非请求要求否则不运行 build/test，delegator 负责重跑 owner gates；gardener 与 CI 不变。旧双审/Opus 文本只作历史基线，不是活跃派活规则 |
+| 审计 | M70 item 4 + M71 Audits under herdr + mdpro ADR-0131 | 临时覆盖（2026-10-25 起）：所有风险级别只由 `opus-auditor` 做独立盲审，其单份 verdict 即 merged verdict；不派 `gpt-auditor`，额度恢复也不自动恢复。C/H 阻断，修复后 `/clear` `opus-auditor` 到全新上下文再 confirm；每个工作项最多 2 轮审计（盲审 + 一次 confirm），第 2 轮后仍有 Critical/High 即停止，交用户决定是否继续（2026-10-25）；confirm 请求携带全部 open finding 原文、fix diff、counter-proof，并检查 fix 新引入的 C/H。Medium 政策不变：影响用户可见行为或违背 AC 的项目修一轮、不 confirm；其余 Medium 与 Low 写入 PR `Still open`。单审期间无 challenge；降级仍须复现或反证。opus-auditor 除非请求要求否则不运行 build/test，delegator 负责重跑 owner gates；gardener 与 CI 不变。旧双审/Opus 文本只作历史基线，不是活跃派活规则 |
 | 风险分级 | ADR-0121 映射 | **High**：FileAccess/sandbox/bookmark、磁盘缓存/SQLite、文件写入（导出、Trash、编辑另存）、entitlements、签名/公证、CI、依赖、未列出的路径。**Medium**：其余 `Sources/`。**Low**：文档、设计稿、预览、纯展示测试 |
 | 编号预留 | M70 Reserving numbers | ADR、F 编号和 receipt id 前缀（`P1-05-WI-2`）由 delegator 统一分配 |
 | 会话轮换 | M70 Session rotation + mdpro ADR-0131 | handoff 路径改为 `~/.picsee/handoff/`；hook 是否移植见第 3 节。安静时、没有 landing 进行且每次 wait 都已记录后，delegator 请用户输入 `/compact`，并点名保留 open findings、SHAs 和 waits |
