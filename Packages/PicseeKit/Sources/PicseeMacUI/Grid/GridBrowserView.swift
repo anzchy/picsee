@@ -14,6 +14,7 @@ import PicseeCore
     public private(set) var representedItemID: ItemID?
     public private(set) var filename = ""
     private let tile = NSView()
+    private let currentRing = CALayer()
     private let placeholder = NSTextField(labelWithString: String(localized: "Thumbnail pending"))
     private let nameLabel = NSTextField(labelWithString: "")
 
@@ -37,6 +38,13 @@ import PicseeCore
         nameLabel.maximumNumberOfLines = 1
         nameLabel.wantsLayer = true
         nameLabel.autoresizingMask = [.width, .maxYMargin]
+        // TOKEN_MAPPING: forced native focus is an inner 2pt focusRing stroke; inset so Selection's edge border stays separate.
+        currentRing.frame = surface.bounds.insetBy(dx: 3, dy: 3)
+        currentRing.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        currentRing.cornerRadius = CGFloat(DesignMetrics.radii["inner"] ?? 4)
+        currentRing.borderWidth = 2
+        currentRing.isHidden = true
+        surface.layer?.addSublayer(currentRing)
         surface.addSubview(tile)
         surface.addSubview(placeholder)
         surface.addSubview(nameLabel)
@@ -45,6 +53,9 @@ import PicseeCore
     }
 
     var tileLayer: CALayer? { tile.layer }
+    var currentRingLayer: CALayer { currentRing }
+    /// Current Item (where arrows, Space and Enter act); distinct from Selection.
+    public var isCurrent = false { didSet { updateSelection() } }
     public func configure(_ entry: FolderEntry) {
         representedItemID = entry.itemID
         filename = entry.url.lastPathComponent
@@ -60,7 +71,9 @@ import PicseeCore
         var accent = NSColor.clear.cgColor
         var fill = NSColor.clear.cgColor
         var surface = NSColor.clear.cgColor
+        var ring = NSColor.clear.cgColor
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            ring = DesignColor.focusRing.nsColor.cgColor
             accent = DesignColor.accent.nsColor.cgColor
             fill = DesignColor.selectionFill.nsColor.cgColor
             surface = DesignColor.sidebarBackground.nsColor.cgColor
@@ -68,6 +81,8 @@ import PicseeCore
         view.layer?.borderWidth = isSelected ? 2 : 0
         view.layer?.borderColor = accent
         tile.layer?.backgroundColor = surface
+        currentRing.borderColor = ring
+        currentRing.isHidden = !isCurrent
         nameLabel.layer?.backgroundColor = isSelected ? fill : NSColor.clear.cgColor
         view.setAccessibilityValue(isSelected ? String(localized: "Selected") : "")
     }
@@ -100,7 +115,7 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
 /// Data source retains identity separately from position; native collection view handles reuse.
 @MainActor public final class GridBrowserView: NSView, NSCollectionViewDataSource, NSCollectionViewDelegate {
     public private(set) var collectionView: NSCollectionView = GridCollectionView()
-    public private(set) var currentItemID: ItemID?
+    public private(set) var currentItemID: ItemID? { didSet { drawCurrent() } }
     public var onSelect: ((ItemID) -> Void)?
     public var onDeselect: (() -> Void)?
     /// The grid's Current Item changed without a selection (entry, Esc return, removal fallback).
@@ -180,6 +195,11 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
         updating = false
         onSelect?(id)
     }
+    private func drawCurrent() {
+        for case let item as GridPhotoItem in collectionView.visibleItems() {
+            item.isCurrent = item.representedItemID != nil && item.representedItemID == currentItemID
+        }
+    }
     public func itemID(at index: Int) -> ItemID? { entries.indices.contains(index) ? entries[index].itemID : nil }
     public func index(for id: ItemID) -> Int? { indices[id] }
     public func entry(for id: ItemID) -> FolderEntry? { indices[id].map { entries[$0] } }
@@ -200,7 +220,10 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
     public func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int { entries.count }
     public func collectionView(_ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath) -> NSCollectionViewItem {
         let item = collectionView.makeItem(withIdentifier: Self.reuseID, for: indexPath)
-        if let photo = item as? GridPhotoItem { photo.configure(entries[indexPath.item]) }
+        if let photo = item as? GridPhotoItem {
+            photo.configure(entries[indexPath.item])
+            photo.isCurrent = entries[indexPath.item].itemID == currentItemID
+        }
         return item
     }
     public func collectionView(_ collectionView: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>) {
