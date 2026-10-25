@@ -5,6 +5,9 @@ public final class ChromeDragStrip: NSView {
 }
 
 public enum ChromeTitlebarPolicy {
+    public static func trafficLightsVisible(isGridVisible: Bool, viewerVisible: Bool) -> Bool {
+        isGridVisible || viewerVisible
+    }
     public static func apply(to window: NSWindow, visible: Bool, fullScreen: Bool) {
         // Smallest wrapped layout: 206pt widest group + 16pt side margins, three 40pt rows.
         window.contentMinSize = NSSize(width: 238, height: 168)

@@ -478,7 +478,12 @@ extension CanvasWindowController: ViewerChromeHost {
     func applyChrome(toolsVisible: Bool, trafficLightsVisible: Bool) {
         chromeOverlay.setToolsVisible(toolsVisible)
         stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
-        if let window { ChromeTitlebarPolicy.apply(to: window, visible: trafficLightsVisible, fullScreen: window.styleMask.contains(.fullScreen)) }
+        if let window {
+            ChromeTitlebarPolicy.apply(to: window,
+                visible: ChromeTitlebarPolicy.trafficLightsVisible(
+                    isGridVisible: !gridView.isHidden, viewerVisible: trafficLightsVisible),
+                fullScreen: window.styleMask.contains(.fullScreen))
+        }
     }
     func focusChromeTool(reverse: Bool, entering: Bool) -> Bool {
         ViewerStateFocus.move(reverse: reverse, entering: entering, state: stateHost, chrome: chromeOverlay)
