@@ -7,6 +7,36 @@ import UniformTypeIdentifiers
 import PicseeCore
 @testable import PicseeInfrastructure
 
+@Test func p304IntegrityClassifierPreservesIndexOnUnconfirmedFailures() {
+    typealias Decision = ThumbnailDiskCache.IntegrityDecision
+    let classify = ThumbnailDiskCache.integrityDecision
+    #expect(classify(SQLITE_BUSY, nil, nil) == .unconfirmedFailure)
+    #expect(classify(SQLITE_LOCKED, nil, nil) == .unconfirmedFailure)
+    #expect(classify(SQLITE_IOERR, nil, nil) == .unconfirmedFailure)
+    #expect(classify(SQLITE_OK, SQLITE_BUSY, nil) == .unconfirmedFailure)
+    #expect(classify(SQLITE_OK, SQLITE_LOCKED, nil) == .unconfirmedFailure)
+    #expect(classify(SQLITE_OK, SQLITE_IOERR, nil) == .unconfirmedFailure)
+    #expect(classify(SQLITE_CORRUPT, nil, nil) == .confirmedCorrupt)
+    #expect(classify(SQLITE_NOTADB, nil, nil) == .confirmedCorrupt)
+    #expect(classify(SQLITE_OK, SQLITE_CORRUPT, nil) == .confirmedCorrupt)
+    #expect(classify(SQLITE_OK, SQLITE_NOTADB, nil) == .confirmedCorrupt)
+    #expect(classify(SQLITE_OK, SQLITE_ROW, "ok") == .healthy)
+    #expect(classify(SQLITE_OK, SQLITE_ROW, "*** in database main ***") == .confirmedCorrupt)
+    #expect(classify(SQLITE_OK, SQLITE_ROW, nil) == .unconfirmedFailure)
+    #expect(classify(SQLITE_OK, SQLITE_DONE, nil) == .unconfirmedFailure)
+    #expect(Decision.healthy != .confirmedCorrupt)
+}
+
+@Test func p304MissingRemovalClassifierDoesNotDiscardUnrelatedFailures() {
+    let cocoa = NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileNoSuchFile.rawValue)
+    let posix = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOENT))
+    #expect(ThumbnailDiskCache.isMissingRemovalError(cocoa))
+    #expect(ThumbnailDiskCache.isMissingRemovalError(posix))
+    #expect(!ThumbnailDiskCache.isMissingRemovalError(NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileReadNoPermission.rawValue)))
+    #expect(!ThumbnailDiskCache.isMissingRemovalError(NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))))
+    #expect(!ThumbnailDiskCache.isMissingRemovalError(NSError(domain: "other", code: Int(ENOENT))))
+}
+
 private func pngPaddedToExactLength(_ source: Data, targetLength: Int) throws -> Data {
     let input = [UInt8](source)
     let iend: [UInt8] = [0, 0, 0, 0, 73, 69, 78, 68]
