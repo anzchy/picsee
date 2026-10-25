@@ -106,20 +106,20 @@
 
 1. **FOLDER-01 与网格入口**：改验收（单独提交、引用原话），还是让网格入口满足现有验收（显示读取层并自动打开首张）。
 2. **page24 与 P2-04 的合入顺序**：等 P3-10 完成后一起 PASS，还是只对照读取层先合。
-3. **推送规则**：只授权走 `push-guard.py`（接受 dry-run 观察不自洽），还是先修规则加载与 skill 文本。
-4. **审计配置**：本次复核恢复了 opus-auditor。今后新工作回到双审，还是继续 gpt 单审；鉴于 §3.1，建议 High 级别恢复双审。
-5. **清理授权**：移除已合并的 worktree 与远端分支；丢弃 Kimi 的旧 P2-03 改动。
+3. ~~推送规则~~ **已决定（2026-10-25）**：「只授权 push-guard.py」。delegator 不直接 `git push`；skill 中对 Claude 通道的前置观察说法另开 Low 工单修正。
+4. ~~审计配置~~ **已决定（2026-10-25）**：「Opus单审，gpt暂停」。所有风险级别只由 opus-auditor 独立盲审，gpt-auditor 不再派活；skill、guide 与 roster 计划里的“gpt 单审”文本需另提文档 PR 更新。
+5. ~~清理授权~~ **已决定（2026-10-25）**：「移除10个已合并临时worktree, 丢弃Kimi旧P2-03改动, 主checkout回main, 删除已合并的远端分支」。执行结果见 §6 第 1 步。
 
 ## 6. 清理与继续的计划
 
 **第 0 步 · 等复审收齐（进行中）**：opus-auditor 依次完成 P3-04、P3-01、P2-04 与已合并 PR 的盲审；更新本文 §3。
 
-**第 1 步 · 清理现场（得到 §5-⑤ 授权后）**
-1. 主 checkout 回到 main；P2-04 移到 `picsee-wt/p204`。
-2. 移除已合并且干净的 worktree；导出并按决定处理 Kimi 的旧改动。
-3. 删除已合并的远端分支；编辑 #109 描述。
-4. gpt-auditor 选“保持当前模型”；重写 `audit-queue.json` 与 `~/.picsee/timeline.json`。
-5. 修 `panel-choose.sh`（Low，gpt-imple-3 或 Kimi）。
+**第 1 步 · 清理现场（2026-10-25 执行）**
+1. ✅ 主 checkout 已回到 main（快进到 `00a5c6d`）；P2-04 分支移到 `picsee-wt/p204`。
+2. ✅ 10 个已合并临时 worktree 已用 `git worktree remove` 移除（逐个复查干净、无未合入提交；`--force` 仅因工具状态目录 `.claude/`、`.tokenize/`、`.build/`）。
+3. ✅ Kimi 的旧 P2-03 改动已导出补丁备份到 `~/.picsee/handoff/20261025-kimi-p203-discard/` 后还原，`kimi-imple-1` 工作区干净。
+4. 远端分支：67 个非 main 远端分支全部对应已 MERGED 的 PR，且远端 tip 与 PR 最终 head 一致，经 GitHub API 删除（不经 `git push`）；未合入的 p2/p3 分支从未推送，不受影响。
+5. 待办：编辑 #109 描述去掉本机路径（需用户同意）；重写 `audit-queue.json` 与 `~/.picsee/timeline.json`；修 `panel-choose.sh`（Low）；文档 PR 把 roster/skill 的审计规则改为 Opus 单审。gpt-auditor 暂停，pane 上的换模型提示不作答。
 
 **第 2 步 · 修复并合入本地工作（按依赖顺序）**
 1. **P3-03 + P3-04 作为一组**：修 H1 与面向用户的 Medium（M1/M3/M4 至少写清范围），P3-04 rebase 后完成分类器重构与 100% 覆盖率，独立安全复审；两者一起合入，避免无淘汰的缓存单独上线。
