@@ -35,7 +35,7 @@ public actor FolderBrowser: FolderScanning {
                 errorHandler: { _, error in enumerationError = error; return false }) else { throw FileAccessError.invalidFolder }
             while let file = enumerator.nextObject() as? URL {
                 try Task.checkCancellation()
-                if visitedEntries >= options.maxVisitedEntries {
+                if options.recursive && visitedEntries >= options.maxVisitedEntries {
                     if !batch.isEmpty {
                         let pending = batch; batch.removeAll(keepingCapacity: true)
                         try await emit(pending); try Task.checkCancellation()

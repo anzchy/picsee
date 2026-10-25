@@ -81,6 +81,21 @@ private struct RecursiveTree {
     #expect(Set(await on.entries.map(\.relativePath)) == ["top.png", "sub/nested.png"])
 }
 
+@Test func p204R3FlatFolderBeyondRecursiveEntryLimitStillCompletes() async throws {
+    let tree = try RecursiveTree(); defer { tree.cleanup() }
+    let source = tree.root.appendingPathComponent("seed.txt")
+    try Data().write(to: source)
+    for index in 0..<100_000 {
+        try FileManager.default.linkItem(at: source,
+            to: tree.root.appendingPathComponent(String(format: "%06d.txt", index)))
+    }
+    let result = RecursiveResults()
+    try await FolderBrowser().scan(in: tree.root, root: tree.identity, options: .init(recursive: false)) {
+        await result.append($0)
+    }
+    #expect(await result.entries.isEmpty)
+}
+
 @Test func recursiveScanRejectsOutsideLinksAndCyclesWithoutDuplicateIdentity() async throws {
     let tree = try RecursiveTree(); defer { tree.cleanup() }
     let sub = try tree.directory("sub")
