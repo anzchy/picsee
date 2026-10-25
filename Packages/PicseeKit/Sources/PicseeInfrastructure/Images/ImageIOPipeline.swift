@@ -173,7 +173,10 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Thu
         let context = await snapshotContext()
         if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
         let result = await cache.lookup(key, observation: observation, context: context)
-        if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
+        if Task.isCancelled {
+            _ = await cache.finish(result, image: nil, context: context)
+            throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision)
+        }
         guard result.requiresSourceValidation else { return result }
         // One bounded reread, inside the caller's existing lease. Observe BEFORE reading so a
         // conflicting lookup during this validation still rejects us, including after eviction.
@@ -188,7 +191,10 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Thu
             let context = await self.snapshotContext()
             if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
             let result = await self.cache.lookup(key, observation: freshObservation, sourceRevalidated: true, context: context)
-            if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
+            if Task.isCancelled {
+                _ = await self.cache.finish(result, image: nil, context: context)
+                throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision)
+            }
             return result
         }
     }
