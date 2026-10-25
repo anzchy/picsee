@@ -32,6 +32,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var gridFolderURL: URL?
     private var gridPreviewScrollOffset: NSPoint?
     private var folderEntryRestore: (() -> Void)?
+    private var pendingGridCurrentItemID: ItemID?
     private var gridSelectedItemID: ItemID? {
         guard let id = session.selection.currentItemID, session.selection.selectedItemIDs.contains(id) else { return nil }
         return id
@@ -261,8 +262,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    private func openFolder(_ folder: URL, rootID: AccessRootID) {
+    private func openFolder(_ folder: URL, rootID: AccessRootID, currentItemID: ItemID? = nil) {
         folderEntryRestore = makeFolderEntryRestore()
+        pendingGridCurrentItemID = currentItemID
         let operation = accessIntent.begin()
         if let window { GridWindowIdentity.enterFolder(folder, session: session, canvas: canvas, window: window) }
         else { session.enterFolderGrid(items: [], sourceVersion: .init(0)); canvas.showFailure() }
@@ -395,6 +397,11 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     @discardableResult
     func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
+        if command == .escape, gridView.isHidden, session.previewSet == nil,
+           session.filePreviewSet == nil, let file = fileURL {
+            returnSingleImageToFolder(file)
+            return true
+        }
         if !gridView.isHidden && (command == .preview || command == .enter) {
             gridPreviewScrollOffset = gridView.contentOffset
             session.beginBrowsing(items: gridProjection.snapshot?.navigationEntries.map(\.itemID) ?? [],
@@ -405,6 +412,28 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         session.updateFocus(focusContext)
         session.setMenuTracking(menuTracking())
         return router.route(command, from: entry, to: session)
+    }
+    private func returnSingleImageToFolder(_ file: URL) {
+        let operation = accessIntent.navigation()
+        navigationTask?.cancel()
+        let current = generation
+        navigationTask = Task { [self] in
+            do {
+                let services = try await operation.wait { try await accessServices.value }
+                guard let root = try await operation.wait({ await services.files.rootCovering(file) }) else { return }
+                try operation.check()
+                guard generation == current else { return }
+                let destination = try await operation.wait {
+                    try await services.files.withLease(.root(root, file: file)) { lease in
+                        GridSingleImageReturnPolicy.destination(for: file,
+                            root: ItemIdentityRoot(id: root, url: lease.url))
+                    }
+                }
+                openFolder(destination.folder, rootID: root, currentItemID: destination.currentItemID)
+            } catch {
+                if operation.isCurrent, generation == current { showAccessError(error) }
+            }
+        }
     }
     func performCanvas(_ command: CommandID, from entry: CommandEntry) {
         _ = canvas.apply(command, from: entry)
@@ -458,13 +487,16 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             stateHost.display(.readingFolder)
             if let cancel = stateHost.buttons.first { window?.makeFirstResponder(cancel) }
         } else {
-            gridView.activate(currentItemID: session.selection.currentItemID)
+            let current = pendingGridCurrentItemID ?? session.selection.currentItemID
+            pendingGridCurrentItemID = nil
+            gridView.activate(currentItemID: current)
         }
     }
     private func cancelFolderEntry() {
         session.cancelFolderReading()
         let restore = folderEntryRestore
         folderEntryRestore = nil
+        pendingGridCurrentItemID = nil
         restore?()
     }
     private func makeFolderEntryRestore() -> (() -> Void) {
