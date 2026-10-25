@@ -116,6 +116,12 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
         defer { if leaseHeld { PayloadLeaseRegistry.shared.release(payload.path) } }
         await afterReadLeaseAcquired?()
         try Task.checkCancellation()
+        let decodeOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: ticket.request.maximumPixelSize,
+        ]
         guard let size = (try? FileManager.default.attributesOfItem(atPath: payload.path)[.size] as? NSNumber)?.intValue,
               size == row.byteCount, size <= Self.maximumPayloadBytes,
               let data = try? Data(contentsOf: payload), data.count == row.byteCount,
@@ -124,7 +130,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching {
               CGImageSourceGetCount(source) == 1,
               (CGImageSourceGetType(source) as String?) == UTType.png.identifier,
               CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, decodeOptions as CFDictionary),
               image.width > 0, image.height > 0,
               image.width <= ticket.request.maximumPixelSize,
               image.height <= ticket.request.maximumPixelSize else {
