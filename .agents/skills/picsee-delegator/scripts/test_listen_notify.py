@@ -600,6 +600,38 @@ class ListenerTests(unittest.TestCase):
             self.assertEqual(listen_notify.main(["status", "--state-root", str(quiet)]), 0)
         self.assertEqual(output, [])
 
+    def test_status_survives_non_object_status_and_foreign_pid(self):
+        root = self.root / "listeners"
+        for name, raw in (("a-list", "[]"), ("b-scalar", "5"), ("c-foreign", '{"state": "polling"}'),
+                          ("d-ok", '{"state": "polling"}')):
+            directory = root / name
+            directory.mkdir(parents=True)
+            (directory / "config.json").write_text(json.dumps({"event": name}))
+            (directory / "status.json").write_text(raw)
+            (directory / "pid").write_text(("424242" if name == "c-foreign" else str(os.getpid())) + "\n")
+        real_kill = os.kill
+
+        def kill(pid, signal):
+            if pid == 424242:
+                raise PermissionError(1, "Operation not permitted")
+            return real_kill(pid, signal)
+
+        output = []
+        with patch.object(listen_notify.os, "kill", kill), \
+                patch("builtins.print", lambda *a, **_k: output.append(" ".join(map(str, a)))):
+            code = listen_notify.main(["status", "--state-root", str(root)])
+            # A stale pid reused by another user's process is not our worker: start launches a new one.
+            (self.event_dir / "pid").write_text("424242\n")
+            self.assertEqual(listen_notify.start_listener(
+                self.event_dir, self.config, launch=lambda *a, **k: type("P", (), {"pid": 4242})()), "started")
+        self.assertEqual(code, 3)
+        lines = {line.split()[1]: line for line in output}
+        self.assertEqual(sorted(lines), ["a-list", "b-scalar", "c-foreign", "d-ok"])
+        self.assertTrue(lines["a-list"].startswith("attention a-list state=invalid worker=running"))
+        self.assertTrue(lines["b-scalar"].startswith("attention b-scalar state=invalid worker=running"))
+        self.assertTrue(lines["c-foreign"].startswith("attention c-foreign state=polling worker=foreign"))
+        self.assertTrue(lines["d-ok"].startswith("active d-ok state=polling worker=running"))
+
     def test_claude_unreadable_input_is_a_preflight_failure_before_send(self):
         config = self.claude_config()
         config["max_delivery_attempts"] = 2
