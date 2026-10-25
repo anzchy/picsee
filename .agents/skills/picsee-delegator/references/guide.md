@@ -144,17 +144,19 @@ does not restore the paused `gpt-auditor`.
   identity and the box every `--typing-retry-seconds` (default 5, the last sleep capped to the deadline)
   without using a delivery attempt and never sends keys, clears or edits the user's text. After
   `--typing-defer-seconds` (default 900) the state becomes `deferred-user-typing` (`retrying: true`) and the
-  worker keeps re-checking every 60 s until `--typing-give-up-seconds` (default the larger of 14400 and the
-  defer time); then it records `deferred-user-typing` with `retrying: false` and exits without sending: no
+  worker keeps re-checking at least 60 s apart, or the configured `--typing-retry-seconds` if longer, until
+  `--typing-give-up-seconds` (default the larger of 14400 and the defer time); then it records `deferred-user-typing` with `retrying: false` and exits without sending: no
   receipt, `poll-result.json` and `notification.txt` kept. A send that was held adds a `Send held <n>s …` line
   to `notification.txt`.
 
   Run `listen-notify.py status` (same `--state-root`) at each loop and before ending a turn: it prints one line
   per undelivered event and exits 3 when any line is `attention` (`deferred-user-typing`, `delivery-uncertain`,
-  `delivery-failed`, `launch-failed`, or a stopped worker). For a deferral, check the box, then resume with the
-  identical `start` command (or `listen-notify.py run --event-dir <dir>`); a still-running worker answers
+  `delivery-failed`, `launch-failed`, a `status.json` that is not a JSON object (`state=invalid`), or a worker
+  that is stopped or `foreign` — a stale pid now owned by another user's process). For a deferral, check the
+  box, then resume with the identical `start` command (or `listen-notify.py run --event-dir <dir>`); a still-running worker answers
   `already-running` and sends on its next check. Resuming keeps the event's registered `--typing-*` values;
-  different flags on the `start` command are ignored for an existing event.
+  different flags on the `start` command are ignored for an existing event. A resumed worker restarts the hold
+  clock: `deferred_seconds` counts only the current run, not the time since the event first parked.
 
   Limits: herdr 0.9.5 has no conditional send and every route into Claude (`pane run`, `send-text`,
   `send_input`, `agent prompt`) goes through the input box, so the race cannot be closed. The remaining window

@@ -688,13 +688,20 @@ def run_event(event_dir, run=subprocess.run, sleep=time.sleep, clock=time.monoto
     return _deliver(event_dir, config, poll_result, run, sleep, clock)
 
 
-def _pid_is_running(path):
+def _worker_state(path):
+    """`running`, `stopped`, or `foreign` when a stale pid now belongs to another user's process."""
     try:
         pid = int(Path(path).read_text())
         os.kill(pid, 0)
-        return True
+        return "running"
+    except PermissionError:
+        return "foreign"
     except (FileNotFoundError, ProcessLookupError, ValueError):
-        return False
+        return "stopped"
+
+
+def _pid_is_running(path):
+    return _worker_state(path) == "running"
 
 
 def start_listener(event_dir, config, launch=subprocess.Popen):
@@ -744,13 +751,15 @@ def listener_status(state_root):
             status = _read_json(event_dir / "status.json")
         except (OSError, ValueError):
             status = {}
-        state = status.get("state", "missing")
+        state = status.get("state", "missing") if isinstance(status, dict) else "invalid"
         if state == "delivered":
             continue
-        running = _pid_is_running(event_dir / "pid")
-        flag = "attention" if state in ATTENTION_STATES or not running else "active"
+        if not isinstance(status, dict):
+            status = {}
+        worker = _worker_state(event_dir / "pid")
+        flag = "attention" if state in ATTENTION_STATES + ("invalid",) or worker != "running" else "active"
         attention = attention or flag == "attention"
-        line = "{} {} state={} worker={}".format(flag, event_dir.name, state, "running" if running else "stopped")
+        line = "{} {} state={} worker={}".format(flag, event_dir.name, state, worker)
         for field in ("input", "deferred_seconds", "retrying", "reason", "last_error"):
             if field in status:
                 value = status[field]
