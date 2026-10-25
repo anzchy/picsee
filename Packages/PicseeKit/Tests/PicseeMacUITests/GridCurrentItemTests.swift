@@ -108,17 +108,18 @@ import PicseeApplication
     cell.view.appearance = NSAppearance(named: .aqua)
     #expect(cell.currentRingLayer.isHidden)
     cell.isSelected = true
-    #expect(cell.view.layer?.borderWidth == 2)
+    let outline = cell.view.layer?.sublayers?.first { $0.borderWidth == 2 }
+    #expect(outline?.isHidden == false)
     #expect(cell.currentRingLayer.isHidden, "Selection alone draws no Current Item ring")
     cell.isSelected = false
     cell.isCurrent = true
     #expect(!cell.currentRingLayer.isHidden)
     #expect(cell.currentRingLayer.borderWidth == 2)
-    #expect(cell.currentRingLayer.frame == cell.view.bounds.insetBy(dx: 3, dy: 3))
+    #expect(cell.currentRingLayer.frame == cell.tileLayer?.bounds.insetBy(dx: 3, dy: 3))
     #expect(close(rgba(cell.currentRingLayer.borderColor), .focusRing, .light))
-    #expect(cell.view.layer?.borderWidth == 0, "Current Item alone keeps the Selection border off")
+    #expect(outline?.isHidden == true, "Current Item alone keeps the Selection outline off")
     cell.isSelected = true
-    #expect(!cell.currentRingLayer.isHidden && cell.view.layer?.borderWidth == 2)
+    #expect(!cell.currentRingLayer.isHidden && outline?.isHidden == false)
     cell.view.appearance = NSAppearance(named: .darkAqua)
     cell.view.viewDidChangeEffectiveAppearance()
     #expect(close(rgba(cell.currentRingLayer.borderColor), .focusRing, .dark))

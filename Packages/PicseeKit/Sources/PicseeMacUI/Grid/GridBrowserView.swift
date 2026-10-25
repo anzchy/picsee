@@ -3,6 +3,11 @@ import PicseeCore
 
 @MainActor private final class GridPhotoSurface: NSView {
     var onAppearanceChange: (() -> Void)?
+    var onLayout: (() -> Void)?
+    override func layout() {
+        super.layout()
+        onLayout?()
+    }
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         onAppearanceChange?()
@@ -15,41 +20,54 @@ import PicseeCore
     public private(set) var filename = ""
     private let tile = NSView()
     private let currentRing = CALayer()
+    private let selectionOutline = CALayer()
     private let placeholder = NSTextField(labelWithString: String(localized: "Thumbnail pending"))
     private let nameLabel = NSTextField(labelWithString: "")
 
     public override func loadView() {
         let surface = GridPhotoSurface(frame: NSRect(x: 0, y: 0, width: 220, height: 184))
         surface.onAppearanceChange = { [weak self] in self?.updateSelection() }
+        surface.onLayout = { [weak self] in self?.layoutContent() }
         surface.wantsLayer = true
-        surface.layer?.cornerRadius = 7
         // Page 11 `.thumbnail-wrap`: a quiet surface tile with the inner radius inside a transparent cell.
-        tile.frame = NSRect(x: 8, y: 36, width: 204, height: 140)
+        tile.frame = NSRect(x: 4, y: 32, width: 212, height: 148)
         tile.wantsLayer = true
         tile.layer?.cornerRadius = DesignMetrics.radii["inner"]!
-        tile.autoresizingMask = [.width, .height]
-        placeholder.frame = NSRect(x: 8, y: 36, width: 204, height: 140)
+        placeholder.frame = tile.frame
         placeholder.alignment = .center
         placeholder.textColor = .secondaryLabelColor
         placeholder.maximumNumberOfLines = 1
-        placeholder.autoresizingMask = [.width, .height]
-        nameLabel.frame = NSRect(x: 8, y: 6, width: 204, height: 22)
-        nameLabel.lineBreakMode = .byTruncatingMiddle
+        nameLabel.frame = NSRect(x: 4, y: 4, width: 212, height: 21)
+        nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.maximumNumberOfLines = 1
         nameLabel.wantsLayer = true
-        nameLabel.autoresizingMask = [.width, .maxYMargin]
-        // TOKEN_MAPPING: forced native focus is an inner 2pt focusRing stroke; inset so Selection's edge border stays separate.
-        currentRing.frame = surface.bounds.insetBy(dx: 3, dy: 3)
-        currentRing.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        // Selection follows page 11/12's tile outline; Current Item is an inset ring.
+        selectionOutline.borderWidth = 2
+        selectionOutline.cornerRadius = DesignMetrics.radii["inner"]! + 4
+        selectionOutline.isHidden = true
+        surface.layer?.addSublayer(selectionOutline)
+        currentRing.frame = tile.bounds.insetBy(dx: 3, dy: 3)
         currentRing.cornerRadius = DesignMetrics.radii["inner"]!
         currentRing.borderWidth = 2
         currentRing.isHidden = true
-        surface.layer?.addSublayer(currentRing)
+        tile.layer?.addSublayer(currentRing)
         surface.addSubview(tile)
         surface.addSubview(placeholder)
         surface.addSubview(nameLabel)
         surface.setAccessibilityRole(.button)
         view = surface
+        layoutContent()
+    }
+
+    private func layoutContent() {
+        guard isViewLoaded else { return }
+        let width = max(0, view.bounds.width - 8)
+        let height = max(0, view.bounds.height - 36)
+        tile.frame = NSRect(x: 4, y: 32, width: width, height: height)
+        placeholder.frame = tile.frame
+        nameLabel.frame = NSRect(x: 4, y: 4, width: width, height: 21)
+        selectionOutline.frame = tile.frame.insetBy(dx: -4, dy: -4)
+        currentRing.frame = tile.bounds.insetBy(dx: 3, dy: 3)
     }
 
     var tileLayer: CALayer? { tile.layer }
@@ -78,8 +96,8 @@ import PicseeCore
             fill = DesignColor.selectionFill.nsColor.cgColor
             surface = DesignColor.sidebarBackground.nsColor.cgColor
         }
-        view.layer?.borderWidth = isSelected ? 2 : 0
-        view.layer?.borderColor = accent
+        selectionOutline.borderColor = accent
+        selectionOutline.isHidden = !isSelected
         tile.layer?.backgroundColor = surface
         currentRing.borderColor = ring
         currentRing.isHidden = !isCurrent
@@ -89,6 +107,36 @@ import PicseeCore
 }
 
 func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclosing ?? visible }
+
+/// Page 11/12 inlined CSS: `.grid-scroll`, `.photo-grid`, `.photo-cell`,
+/// `.thumbnail-wrap`, and `.layout-exploration .photo-name` (grid-light/dark.html).
+private struct GridGeometry: Equatable {
+    let columns: Int
+    let itemSize: NSSize
+    let columnGap: CGFloat
+    let rowGap: CGFloat
+    let horizontalInset: CGFloat
+    let topInset: CGFloat = 16
+
+    init(viewportWidth width: CGFloat) {
+        let narrow = width <= 1050
+        let wide = width >= 1600
+        horizontalInset = narrow ? 16 : (wide ? 32 : 24)
+        columnGap = narrow ? 12 : (wide ? 22 : 16)
+        rowGap = narrow ? 12 : (wide ? 22 : 18)
+        let minColumnWidth: CGFloat = width <= 720 ? 145 : 220
+        let available = max(0, width - 2 * horizontalInset)
+        columns = width <= 480 ? 1 : max(1, Int((available + columnGap) / (minColumnWidth + columnGap)))
+        let cellWidth = max(0, (available - CGFloat(columns - 1) * columnGap) / CGFloat(columns))
+        let tileHeight: CGFloat
+        if width <= 720 { tileHeight = 150 }
+        else if narrow { tileHeight = 165 }
+        else if wide { tileHeight = 200 }
+        else { tileHeight = min(225, max(135, width * 0.147)) }
+        // Cell padding 4+4; name margin 7, padded line 21, bottom padding 4.
+        itemSize = NSSize(width: cellWidth, height: tileHeight + 36)
+    }
+}
 
 @MainActor private final class GridCollectionView: NSCollectionView {
     var onArrow: ((Int) -> Void)?
@@ -124,15 +172,16 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
     private var entries: [FolderEntry] = []
     private var indices: [ItemID: Int] = [:]
     private var updating = false
+    private var geometry: GridGeometry?
     private static let reuseID = NSUserInterfaceItemIdentifier("grid.photo")
 
     public override init(frame: NSRect) {
         super.init(frame: frame)
         let layout = NSCollectionViewFlowLayout()
         layout.itemSize = NSSize(width: 220, height: 184)
-        layout.minimumInteritemSpacing = 12
-        layout.minimumLineSpacing = 16
-        layout.sectionInset = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        layout.minimumInteritemSpacing = 16
+        layout.minimumLineSpacing = 18
+        layout.sectionInset = NSEdgeInsets(top: 16, left: 24, bottom: 30, right: 24)
         collectionView.collectionViewLayout = layout
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = false
@@ -150,8 +199,26 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
         scrollView.backgroundColor = DesignColor.canvasBackground.nsColor
         scrollView.documentView = collectionView
         addSubview(scrollView)
+        updateGeometry()
     }
     public required init?(coder: NSCoder) { nil }
+
+    public override func layout() {
+        super.layout()
+        updateGeometry()
+    }
+
+    private func updateGeometry() {
+        let next = GridGeometry(viewportWidth: bounds.width)
+        guard next != geometry, let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
+        geometry = next
+        layout.itemSize = next.itemSize
+        layout.minimumInteritemSpacing = next.columnGap
+        layout.minimumLineSpacing = next.rowGap
+        layout.sectionInset = NSEdgeInsets(top: next.topInset, left: next.horizontalInset,
+            bottom: 30, right: next.horizontalInset)
+        layout.invalidateLayout()
+    }
 
     public func display(_ snapshot: FolderSnapshot, selectedItemID: ItemID?) {
         if !snapshot.isComplete {
@@ -170,6 +237,7 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
         }
         updating = true
         collectionView.reloadData()
+        collectionView.deselectAll(nil)
         if let selectedItemID, let index = indices[selectedItemID] {
             collectionView.selectItems(at: [IndexPath(item: index, section: 0)], scrollPosition: [])
         } else {
@@ -191,6 +259,7 @@ func gridViewportWidth(enclosing: CGFloat?, visible: CGFloat) -> CGFloat { enclo
         guard next != current || currentItemID == nil, let id = itemID(at: next) else { return }
         currentItemID = id
         updating = true
+        collectionView.deselectAll(nil)
         collectionView.selectItems(at: [IndexPath(item: next, section: 0)], scrollPosition: [])
         updating = false
         onSelect?(id)
