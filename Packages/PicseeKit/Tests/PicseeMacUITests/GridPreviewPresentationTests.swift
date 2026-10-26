@@ -66,3 +66,40 @@ import PicseeApplication
     #expect(grid.currentItemID == session.selection.currentItemID)
     #expect(grid.contentOffset == offset)
 }
+
+@Test @MainActor func gridSpaceEntryKeepsMultiSelectionAndUsesVisibleGridOrder() {
+    _ = NSApplication.shared
+    let folder = URL(fileURLWithPath: "/tmp/picsee-space-entry")
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
+    let entries = (0..<7).map { FolderEntry(url: folder.appendingPathComponent("\($0).jpg"), root: root) }
+    let ids = entries.map(\.itemID)
+    let session = ViewerSession()
+    session.beginBrowsing(items: ids, sourceVersion: .init(1), scrollAnchor: ids[0])
+    session.select(ids[1]); session.select(ids[3], modifier: .command); session.select(ids[5], modifier: .command)
+    let selected = session.selection
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+    let presentation = GridViewerPresentation(canvas: NSView(), chrome: NSView(), state: NSView(),
+        grid: grid, inspector: NSView())
+    let remaining = entries.filter { $0.itemID != ids[3] }
+    let snapshot = FolderSnapshot(version: .init(rootID: root.id, folder: folder, generation: 2),
+        entries: remaining, isComplete: true)
+    grid.display(snapshot, selection: selected)
+    presentation.beginPreview(session, snapshot: snapshot, scrollAnchor: ids[5])
+    #expect(session.selection.selectedItemIDs == [ids[1], ids[5]])
+    #expect(CommandRouter().route(.preview, from: .key, to: session))
+    #expect(session.previewSet?.itemIDs == [ids[1], ids[5]])
+}
+
+@Test @MainActor func gridSpaceEntryWithoutSnapshotDropsStaleSelection() {
+    _ = NSApplication.shared
+    let session = ViewerSession()
+    let id = ItemID.ephemeral(UUID())
+    session.beginBrowsing(items: [id], sourceVersion: .init(1), scrollAnchor: id)
+    session.select(id)
+    let presentation = GridViewerPresentation(canvas: NSView(), chrome: NSView(), state: NSView(),
+        grid: GridBrowserView(frame: NSRect(x: 0, y: 0, width: 400, height: 300)), inspector: NSView())
+    presentation.beginPreview(session, snapshot: nil, scrollAnchor: nil)
+    #expect(session.selection.selectedItemIDs.isEmpty)
+    #expect(session.selection.currentItemID == nil)
+    #expect(session.scrollAnchor == nil)
+}

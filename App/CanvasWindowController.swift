@@ -436,8 +436,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
         if !gridView.isHidden && (command == .preview || command == .enter) {
             gridPreviewScrollOffset = gridView.contentOffset
-            session.beginBrowsing(items: gridProjection.snapshot?.navigationEntries.map(\.itemID) ?? [],
-                sourceVersion: .init(gridProjection.snapshot?.version.generation ?? 0),
+            presentation.beginPreview(session, snapshot: gridProjection.snapshot,
                 scrollAnchor: gridView.firstVisibleItemID())
         }
         session.updateFocus(focusContext)
