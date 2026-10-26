@@ -182,6 +182,17 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
                               unreadableKind: .corruptImage)
         }
     }
+    /// A durable hit decodes its payload inside the shared budget: it reserves the square bound for its edge
+    /// (the payload's real ratio is unknown until it is read), capped at the budget.
+    package func cachedImage(for ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
+        guard let thumbnailCache, let key = ticket.request.renderKey else { return nil }
+        let edge = ticket.request.maximumPixelSize
+        let cost = (try? DecodeBudget.outputCost(width: edge, height: edge, maximumPixelSize: edge, bytesPerPixel: 4,
+            budget: configuration.budget)) ?? configuration.budget
+        return try await admission.staged(ticket.request, key: key, cost: cost, priority: ticket.request.priority) {
+            try await thumbnailCache.load(ticket)
+        }
+    }
     private func lookup(_ request: ImageDecodeRequest, key: RenderKey, observation: UUID) async throws -> ImageCacheRequest {
         let context = await snapshotContext()
         if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }

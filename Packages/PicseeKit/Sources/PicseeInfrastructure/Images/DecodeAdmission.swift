@@ -121,6 +121,8 @@ public actor DecodeAdmission {
         var admitted: DecodePriority?
         var subscribers: [UUID: DecodeDelivery]
         var cancelled: Set<UUID> = []
+        /// A staged job resumes its caller when admitted instead of submitting a decode.
+        var hold: CheckedContinuation<Void, Error>?
     }
     private var jobs: [UUID: Job] = [:]
     private var pending: [UUID] = []
@@ -178,6 +180,12 @@ public actor DecodeAdmission {
             pending.removeAll { $0 == id }
             let request = jobs[id]!.request, decoder = decoder, trace = jobs[id]!.trace
             trace.reserve(jobs[id]!.cost)
+            if let hold = jobs[id]!.hold {
+                jobs[id]!.hold = nil
+                trace.staged("DecodeQueueWait")
+                hold.resume()
+                continue
+            }
             executor.submit {
                 let result = trace.decode(request, decoder: decoder)
                 Task { await self.finished(id, result: result) }
@@ -196,6 +204,38 @@ public actor DecodeAdmission {
             self.releasing = false
             self.drain()
         }
+    }
+    /// Holds `cost` of staging while `load` decodes outside the executor (a disk-cache payload, #139). It waits in the
+    /// same queue and under the same rules as a source decode, and frees the room when `load` returns or throws.
+    func staged(_ request: ImageDecodeRequest, key: RenderKey, cost: Int, priority: DecodePriority,
+                load: @Sendable () async throws -> DecodedImage?) async throws -> DecodedImage? {
+        try Task.checkCancellation()
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (hold: CheckedContinuation<Void, Error>) in
+                jobs[id] = Job(id: id, trace: DecodeTrace(), request: request, key: key, cost: cost, heavy: false,
+                               priority: priority, subscribers: [:], hold: hold)
+                pending.append(id)
+                drain()
+            }
+        } onCancel: {
+            Task { await self.cancelStaged(id) }
+        }
+        defer {
+            let job = jobs.removeValue(forKey: id)!
+            memory?.unreserve(job.cost)
+            job.trace.staged("MemoryReservation")
+            drain()
+        }
+        return try await load()
+    }
+    private func cancelStaged(_ id: UUID) {
+        guard let job = jobs[id], job.admitted == nil else { return }
+        jobs.removeValue(forKey: id)
+        pending.removeAll { $0 == id }
+        job.trace.cancelWaiting()
+        job.hold?.resume(throwing: CancellationError())
+        drain()
     }
     private func finished(_ id: UUID, result: Result<DecodedImage, Error>) async {
         let job = jobs.removeValue(forKey: id)!

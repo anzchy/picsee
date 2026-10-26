@@ -41,6 +41,10 @@ final class DecodeTrace: @unchecked Sendable {
         logger.notice("Decode outcome=\(status, privacy: .public) bytes=\(bytes, privacy: .public) pixels=\(width, privacy: .public)x\(height, privacy: .public) format=\(format, privacy: .public) file=\(request.fileURL.lastPathComponent, privacy: .private)")
         return result
     }
+    /// Ends an interval for a reservation held outside the executor (a disk-cache payload decode).
+    func staged(_ name: StaticString) {
+        os_signpost(.end, log: Self.log, name: name, signpostID: id, "outcome=staged")
+    }
     func release(_ result: Result<DecodedImage, Error>) {
         os_signpost(.end, log: Self.log, name: "MemoryReservation", signpostID: id, "outcome=%{public}s", outcome(result))
     }

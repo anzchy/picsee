@@ -23,4 +23,12 @@ package protocol ThumbnailCacheProviding: ImagePipeline {
     var thumbnailCache: (any ThumbnailCaching)? { get }
     /// Decode a disk miss from source without reusing session memory or an in-flight keyed decode.
     func imageFresh(for request: ImageDecodeRequest) async throws -> DecodedImage
+    /// Loads a durable hit; a pipeline with a shared memory budget reserves room for the payload decode first.
+    func cachedImage(for ticket: ThumbnailCacheTicket) async throws -> DecodedImage?
+}
+
+package extension ThumbnailCacheProviding {
+    func cachedImage(for ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
+        try await thumbnailCache?.load(ticket)
+    }
 }
