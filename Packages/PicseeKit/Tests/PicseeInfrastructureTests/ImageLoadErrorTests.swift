@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import Testing
 import PicseeCore
 @testable import PicseeInfrastructure
@@ -55,18 +56,31 @@ func loadError(_ kind: ImageLoadError.Kind) -> @Sendable (any Error) -> Bool {
 @Test func loadErrorsRejectPNGWithoutEndChunk() async throws {
     let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
     defer { try? FileManager.default.removeItem(at: file) }
-    // Complete IHDR, no image data or IEND. Independently truncate at PNG's first chunk boundary.
-    try Data(contentsOf: fixture("alpha-gradient.png")).prefix(33).write(to: file)
+    let complete = try Data(contentsOf: fixture("alpha-gradient.png"))
+    #expect(Array(complete.suffix(8).prefix(4)) == [73, 69, 78, 68]) // IEND
+    try Data(complete.dropLast(12)).write(to: file)
+
+    // ImageIO still sees a complete image. The missing terminal chunk is the only
+    // reason the header reader can reject these otherwise intact PNG bytes.
+    let source = try #require(CGImageSourceCreateWithURL(file as CFURL,
+        [kCGImageSourceShouldCache: false] as CFDictionary))
+    #expect(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) != nil)
+    #expect(CGImageSourceGetStatus(source) == .statusComplete)
+    #expect(CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete)
+    _ = try ImageSourceHeader.read(ImageDecodeRequest(fileURL: fixture("alpha-gradient.png"), maximumPixelSize: 128),
+        budget: 1_000_000, itemID: .ephemeral(UUID()))
+    #expect(throws: ImageDecodeError.unreadableImage) {
+        try ImageSourceHeader.read(ImageDecodeRequest(fileURL: file, maximumPixelSize: 128),
+            budget: 1_000_000, itemID: .ephemeral(UUID()))
+    }
     do {
         _ = try await ImageIOPipeline().image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 128))
         Issue.record("Expected missing PNG end chunk failure")
     } catch {
         let failure = try #require(error as? ImageLoadError)
         #expect(failure.kind == .corruptImage)
-        // These are populated only after identity resolution succeeded and the header failure
-        // was followed by a successful revision read; kind alone also accepted earlier failures.
         #expect(failure.itemID != nil)
-        #expect(failure.revision?.byteCount == 33)
+        #expect(failure.revision?.byteCount == complete.count - 12)
     }
 }
 
