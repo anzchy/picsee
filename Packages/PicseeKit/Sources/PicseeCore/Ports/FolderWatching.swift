@@ -1,0 +1,22 @@
+import Foundation
+
+public enum FolderChangeHint: Equatable, Sendable { case changed(URL), mustRescan }
+public protocol FolderEventStream: Sendable { func stop() }
+/// Delivers hints on an arbitrary thread until stop() returns.
+public protocol FolderEventSource: Sendable {
+    func start(watching url: URL, onHints: @escaping @Sendable ([FolderChangeHint]) -> Void) -> any FolderEventStream
+}
+public protocol WatchCancellable: Sendable { func cancel() }
+/// Monotonic milliseconds; actions run on an arbitrary thread.
+public protocol WatchScheduling: Sendable {
+    var nowMilliseconds: Int { get }
+    func schedule(afterMilliseconds: Int, _ action: @escaping @Sendable () -> Void) -> any WatchCancellable
+}
+public protocol FolderWatchSubscription: Sendable { func cancel() async }
+public protocol FolderWatching: Sendable {
+    /// Leases `.root(rootID, file: folder)` while any subscriber of that root is live; onChange gets one window's hints.
+    func subscribe(rootID: AccessRootID, folder: URL, recursive: Bool,
+        onChange: @escaping @Sendable ([FolderChangeHint]) -> Void) async throws -> any FolderWatchSubscription
+    /// Foreground reconcile: one immediate [.mustRescan] to every live subscriber.
+    func reconcileAll()
+}
