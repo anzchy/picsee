@@ -20,8 +20,8 @@ import PicseeApplication
 
     @Test func coverageRequestUsesOrientedRatio() async throws {
         let pipeline = ImageIOPipeline(), tile = ThumbnailCoverage(width: 64, height: 32)
-        // 1 and 3 keep the raw 128×96 ratio; 6 and 8 store 96×128 and rotate it upright.
-        for orientation in [1, 3, 6, 8] {
+        // 1 and 3 keep the raw 128×96 ratio; 5 to 8 store 96×128 and rotate it upright.
+        for orientation in [1, 3, 5, 6, 7, 8] {
             let request = try await pipeline.request(for: fixture("orientation-\(orientation).tiff"), covering: tile, identityRoot: nil)
             #expect(request.maximumPixelSize == 64, "orientation \(orientation)")
             let image = try await pipeline.image(for: request).image
