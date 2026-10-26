@@ -233,6 +233,8 @@ struct FolderScanRestorePoint {
     /// Keeps the Current Item, else moves to its successor (then predecessor) in the previous navigation order.
     private func applyRefresh(_ fresh: FolderSnapshot) {
         let previous = snapshot?.navigationEntries
+        // Conditions may have started reads against the old source while the refresh was scanning.
+        if sourceSnapshot?.version != fresh.version { cancelMetadataWork() }
         retainMetadata(matching: fresh)
         sourceSnapshot = fresh
         let snapshot = fresh.applying(conditions, metadata: metadata)
