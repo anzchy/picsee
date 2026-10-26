@@ -40,6 +40,7 @@ public struct DisplayPreferences: Codable, Equatable, Sendable {
         try values.encode(appearance, forKey: .appearance)
         try values.encode(gridSidebarWidth, forKey: .gridSidebarWidth)
         try values.encode(gridSidebarVisible, forKey: .gridSidebarVisible)
+        // Omit defaults to keep existing preference encodings stable.
         if folderSort != .name { try values.encode(folderSort, forKey: .folderSort) }
         if folderSortDirection != .ascending { try values.encode(folderSortDirection, forKey: .folderSortDirection) }
     }

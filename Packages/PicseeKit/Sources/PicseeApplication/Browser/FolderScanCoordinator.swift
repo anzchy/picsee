@@ -22,6 +22,8 @@ struct FolderScanRestorePoint {
     public private(set) var snapshot: FolderSnapshot?
     public private(set) var sourceSnapshot: FolderSnapshot?
     public private(set) var conditions = FolderViewConditions()
+    // Keep the filter's folder identity across end() during single-image admission.
+    private var conditionsFolder: URL?
     public var isMetadataSortPending: Bool {
         guard sourceSnapshot != nil, conditions.sort == .captureDate || conditions.sort == .pixelDimensions else { return false }
         return activeGeneration != nil || refreshTask != nil || !pendingMetadataIDs.isEmpty
@@ -312,12 +314,15 @@ struct FolderScanRestorePoint {
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool,
         preserveConditions: Bool) -> Task<Void, any Error> {
         let previousConditions = conditions
-        let previousFolder = activeFolder?.url ?? sourceSnapshot?.version.folder
-        let sameFolder = previousFolder?.standardizedFileURL == folder.standardizedFileURL
+        // A resolved path treats a directory and a symlink to it as the same folder.
+        let previousFolder = activeFolder?.url ?? sourceSnapshot?.version.folder ?? conditionsFolder
+        let sameFolder = previousFolder?.resolvingSymlinksInPath().standardizedFileURL ==
+            folder.resolvingSymlinksInPath().standardizedFileURL
         stop(.replaced, successor: true)
         if !preserveConditions { excludedPresentationNeedsReconciliation = false }
         conditions = FolderViewConditions(sort: previousConditions.sort, direction: previousConditions.direction,
             selectedExtensions: preserveConditions || sameFolder ? previousConditions.selectedExtensions : nil)
+        conditionsFolder = folder
         generation &+= 1
         let token = generation
         activeGeneration = token
@@ -443,9 +448,11 @@ struct FolderScanRestorePoint {
             canPresent: automaticPresentationAllowed, folder: sourceFolder)
     }
     /// Restores without scanning and without an active generation, so a cancelled scan's late events stay ignored.
-    func restore(_ point: FolderScanRestorePoint) {
+    func restore(_ point: FolderScanRestorePoint, sort: FolderSortKey, direction: FolderSortDirection) {
         stop(.cancelled, successor: point.folder != nil)
-        conditions = point.conditions
+        conditions = FolderViewConditions(sort: sort, direction: direction,
+            selectedExtensions: point.conditions.selectedExtensions)
+        conditionsFolder = point.source.version.folder
         loopEnabled = point.loopEnabled
         recursiveEnabled = point.recursiveEnabled
         inputURL = point.inputURL
@@ -454,7 +461,7 @@ struct FolderScanRestorePoint {
         sourceSnapshot = point.source
         // A still-current authority keeps the restored source rescannable (an Include Subfolders toggle from the grid).
         automaticPresentationAllowed = point.canPresent.flatMap { $0() ? $0 : nil }
-        snapshot = point.source.applying(point.conditions, metadata: metadata)
+        snapshot = point.source.applying(conditions, metadata: metadata)
         enqueueMetadata()
         sourceFolder = point.folder
         guard let folder = point.folder else { return }
