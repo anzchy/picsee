@@ -47,3 +47,13 @@ import PicseeApplication
         #expect(image.image.width == 444 && image.image.height == 296)
     }
 }
+
+// The header read only learns the ratio; the budget is checked against the edge actually chosen.
+@Test func coverageRequestChecksBudgetAtTheChosenEdgeNotTheCeiling() async throws {
+    let tile = ThumbnailCoverage(width: 16, height: 12)
+    let cost = try DecodeBudget.outputCost(width: 1280, height: 960, maximumPixelSize: 16, bytesPerPixel: 4, budget: .max)
+    let pipeline = ImageIOPipeline(configuration: DecodeConfiguration(budget: 2 * cost))
+    let request = try await pipeline.request(for: fixture("coordinate-grid.png"), covering: tile, identityRoot: nil)
+    #expect(request.maximumPixelSize == 16)
+    #expect(try await pipeline.image(for: request).image.width == 16)
+}

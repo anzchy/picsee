@@ -134,10 +134,11 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
         let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: maximumPixelSize)
         return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, renderKey: key, identityRoot: identityRoot)
     }
-    /// One header read chooses the edge from the upright source ratio (#161).
+    /// One header read chooses the edge from the upright source ratio (#161). The read itself asks for a
+    /// one-pixel edge; the decode checks the budget at the edge chosen here.
     public func request(for fileURL: URL, covering: ThumbnailCoverage, identityRoot: ItemIdentityRoot?) async throws -> ImageDecodeRequest {
         if Task.isCancelled { throw ImageLoadError(.cancelled) }
-        let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: covering.ceiling, identityRoot: identityRoot))
+        let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: 1, identityRoot: identityRoot))
         let (width, height) = header.rotated ? (header.height, header.width) : (header.width, header.height)
         let edge = covering.edge(sourceWidth: Double(width), sourceHeight: Double(height))
         let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: edge)
