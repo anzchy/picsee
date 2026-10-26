@@ -117,6 +117,7 @@ struct FolderScanRestorePoint {
     private let scanner: any FolderScanning
     private let metadataReader: (any FolderMetadataReading)?
     private var metadata: [ItemID: FolderImageMetadata] = [:]
+    private var metadataEntries: [ItemID: FolderEntry] = [:]
     private var metadataQueue: [FolderEntry] = []
     private var metadataQueueIndex = 0
     private var metadataSinceProjection = 0
@@ -168,7 +169,7 @@ struct FolderScanRestorePoint {
               let folder = sourceFolder else { return nil }
         refreshPending = false
         refreshTask?.cancel()
-        invalidateMetadata()
+        cancelMetadataWork()
         generation &+= 1
         let token = generation, rootID = source.version.rootID, buffer = RefreshBuffer()
         let options = FolderScanOptions(recursive: recursiveEnabled)
@@ -232,6 +233,7 @@ struct FolderScanRestorePoint {
     /// Keeps the Current Item, else moves to its successor (then predecessor) in the previous navigation order.
     private func applyRefresh(_ fresh: FolderSnapshot) {
         let previous = snapshot?.navigationEntries
+        retainMetadata(matching: fresh)
         sourceSnapshot = fresh
         let snapshot = fresh.applying(conditions, metadata: metadata)
         self.snapshot = snapshot
@@ -508,13 +510,30 @@ struct FolderScanRestorePoint {
         if let ending { trace?.end(outcome: outcome, generation: ending) }
         host?.folderScanDidEnd()
     }
-    private func invalidateMetadata() {
+    private func cancelMetadataWork() {
         metadataRevision &+= 1
         if metadataTask != nil { metadataDrain = metadataTask }
         metadataTask?.cancel(); metadataTask = nil
         metadataQueue.removeAll(); metadataQueueIndex = 0; metadataSinceProjection = 0
         pendingMetadataIDs.removeAll()
-        metadata.removeAll(); metadataUnknownItemIDs.removeAll()
+    }
+    private func invalidateMetadata() {
+        cancelMetadataWork()
+        metadata.removeAll(); metadataEntries.removeAll(); metadataUnknownItemIDs.removeAll()
+    }
+    private func retainMetadata(matching fresh: FolderSnapshot) {
+        var entries: [ItemID: [FolderEntry]] = [:]
+        for entry in fresh.entries {
+            entries[entry.itemID, default: []].append(entry)
+        }
+        let stale = metadataEntries.compactMap { id, oldEntry in
+            entries[id]?.contains(oldEntry) == true ? nil : id
+        }
+        for id in stale {
+            metadata.removeValue(forKey: id)
+            metadataEntries.removeValue(forKey: id)
+            metadataUnknownItemIDs.remove(id)
+        }
     }
     private func enqueueMetadata(candidates: [FolderEntry]? = nil) {
         guard metadataReader != nil,
@@ -565,6 +584,7 @@ struct FolderScanRestorePoint {
                     continue
                 }
                 metadata[entry.itemID] = result ?? .init()
+                metadataEntries[entry.itemID] = entry
                 let missingChosenValue = conditions.sort == .captureDate ? result?.captureDate == nil
                     : result?.pixelWidth == nil || result?.pixelHeight == nil
                 if missingChosenValue {
