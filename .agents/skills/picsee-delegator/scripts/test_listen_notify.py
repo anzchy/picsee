@@ -28,7 +28,7 @@ TYPED_BOX = "\x1b[0m\x1b[38;2;153;153;153m❯\xa0\x1b[0mhalf-typed message"
 SUGGESTION_BOX = "❯\xa0\x1b[0m\x1b[2m把 README 和 AGENTS.md 的改动开个 PR\x1b[0m"
 READ_ARGV = ["herdr", "pane", "read", "w1:p1", "--source", "visible", "--format", "ansi"]
 # Whole visible reads saved from live panes on 2026-10-26 (#157): a scratch Claude Code 2.1.310 pane,
-# the delegator pane w1:p1 (read only) and the short opus-imple-1 pane w1:p9.
+# the delegator pane w1:p1 (read only) and the short opus-imple-1 pane w1:p9. Per-machine names are placeholders.
 SCREENS = Path(__file__).with_name("fixtures") / "claude-screens"
 DIALOG_SCREEN = (SCREENS / "dialog-ask-one.ansi").read_text()
 
@@ -367,6 +367,14 @@ class ListenerTests(unittest.TestCase):
         for footer in ("Enter to select", "Press Enter to select · Esc to cancel", "Esc to cancel"):
             with self.subTest(footer=footer):
                 self.assertEqual(listen_notify._claude_input_state("─" * 40 + "\r\n" + footer), "unknown")
+        # A conversation line identical to the footer, with the box scrolled out of view, is not a dialog:
+        # a dialog also needs a rule above it and a selection cursor below that rule.
+        footer = "Enter to select · ↑/↓ to navigate · Esc to cancel"
+        for screen in ("⏺ The dialog footer reads:\r\n  " + footer + "\r\n",
+                       "❯ quote the footer\r\n⏺ Here it is:\r\n  " + footer + "\r\n",
+                       "❯ quote the footer\r\n" + "─" * 40 + "\r\n  1. Red\r\n" + footer + "\r\n"):
+            with self.subTest(screen=screen):
+                self.assertEqual(listen_notify._claude_input_state(screen), "unknown")
 
     def test_claude_first_unreadable_screen_is_saved_once_per_run_and_bounded(self):
         config = self.claude_config()
@@ -389,17 +397,39 @@ class ListenerTests(unittest.TestCase):
 
         # A later run overwrites it, keeping only the tail of a huge read (the box is at the bottom).
         (self.event_dir / "status.json").unlink()
-        huge = "x" * 100_000 + "\r\n" + "tail line"
+        # Both files are bounded in bytes: wide characters take three bytes each.
+        huge = "界" * 100_000 + "\r\n" + "tail line"
         clock, sleep, _, _ = self.fake_clock()
         with self.assertRaises(listen_notify.DeliveryDeferred):
             listen_notify.run_event(self.event_dir, run=self.claude_transport([huge], []), sleep=sleep, clock=clock)
-        saved = (self.event_dir / "input-snapshot.ansi").read_bytes().decode()
-        self.assertEqual(len(saved), listen_notify.SNAPSHOT_CHARS)
-        self.assertTrue(saved.endswith("tail line"))
+        saved = (self.event_dir / "input-snapshot.ansi").read_bytes()
+        self.assertLessEqual(len(saved), listen_notify.SNAPSHOT_BYTES)
+        self.assertGreater(len(saved), listen_notify.SNAPSHOT_BYTES - 3)
+        self.assertTrue(saved.decode().endswith("tail line"))
+        self.assertLessEqual(len((self.event_dir / "input-snapshot.json").read_bytes()), listen_notify.SNAPSHOT_BYTES)
         snapshot = json.loads((self.event_dir / "input-snapshot.json").read_text())
         self.assertEqual(snapshot["truncated"], True)
         self.assertLessEqual(len(snapshot["lines"]), listen_notify.SNAPSHOT_LINES)
         self.assertEqual(snapshot["lines"][-1], "tail line")
+
+        # An oversized unreadable box is cut to the same bound; what is kept is the tail of `lines`.
+        for box in ("! " + "y" * 200_000, "\r\n".join("! line {} ".format(n) + "z" * 2000 for n in range(150))):
+            with self.subTest(box=box[:12]):
+                (self.event_dir / "status.json").unlink()
+                screen = "─" * 40 + "\r\n" + box + "\r\n" + "─" * 40 + "\r\nfooter"
+                clock, sleep, _, _ = self.fake_clock()
+                with self.assertRaises(listen_notify.DeliveryDeferred):
+                    listen_notify.run_event(self.event_dir, run=self.claude_transport([screen], []),
+                                            sleep=sleep, clock=clock)
+                encoded = (self.event_dir / "input-snapshot.json").read_bytes()
+                self.assertLessEqual(len(encoded), listen_notify.SNAPSHOT_BYTES)
+                snapshot = json.loads(encoded)
+                self.assertEqual(snapshot["truncated"], True)
+                self.assertEqual(snapshot["lines"][-1], "footer")
+                kept = snapshot["lines"]
+                self.assertEqual(snapshot["rules"][-1], len(kept) - 2)
+                self.assertTrue(all(kept[index] == "─" * 40 for index in snapshot["rules"]))
+                self.assertEqual(kept[len(kept) - 2 - len(snapshot["box"]):len(kept) - 2], snapshot["box"])
 
         # Typed text and a recognised dialog are not saved.
         for screen in (claude_screen(TYPED_BOX), DIALOG_SCREEN):
@@ -458,6 +488,40 @@ class ListenerTests(unittest.TestCase):
                                     sleep=sleep, clock=clock)
         self.assertFalse(attention_log.exists())
         self.assertNotIn("attention", json.loads((self.event_dir / "status.json").read_text()))
+
+    def test_claude_attention_flag_survives_later_status_writes(self):
+        config = self.claude_config()
+        config.update(typing_retry_seconds=5, typing_defer_seconds=60, typing_give_up_seconds=60,
+                      attention_after_seconds=10)
+        (self.event_dir / "config.json").write_text(json.dumps(config))
+        clock, sleep, _, _ = self.fake_clock()
+        reads = [0]
+        transport = self.claude_transport(["unparseable"], [])
+
+        def run(argv, **kwargs):
+            if argv[:3] == ["herdr", "pane", "read"]:
+                reads[0] += 1
+                if reads[0] == 5:
+                    return self.completed(argv, returncode=1, stderr="read failed")
+            return transport(argv, **kwargs)
+
+        writes = []
+        real = listen_notify._atomic_json
+
+        def record(path, value):
+            if Path(path).name == "status.json":
+                writes.append(value)
+            real(path, value)
+
+        with patch.object(listen_notify, "_atomic_json", record), \
+                self.assertRaises(listen_notify.DeliveryDeferred):
+            listen_notify.run_event(self.event_dir, run=run, sleep=sleep, clock=clock)
+        first = next(index for index, value in enumerate(writes) if value.get("attention"))
+        later = writes[first:]
+        # The loop-top and read-error `delivering` writes after the alert keep the flag too.
+        self.assertIn("last_error", [key for value in later for key in value])
+        self.assertGreater(sum(value["state"] == "delivering" for value in later), 1)
+        self.assertEqual([value.get("attention") for value in later], [True] * len(later))
 
     def test_claude_empty_input_sends_and_never_edits_the_box(self):
         self.claude_config()
@@ -783,7 +847,8 @@ class ListenerTests(unittest.TestCase):
                              ("typing_give_up_seconds", True), ("typing_give_up_seconds", 86401),
                              ("typing_give_up_seconds", float("inf")), ("typing_give_up_seconds", 899),
                              ("attention_after_seconds", 0), ("attention_after_seconds", 86401),
-                             ("attention_after_seconds", "600"), ("attention_after_seconds", False)):
+                             ("attention_after_seconds", "600"), ("attention_after_seconds", False),
+                             ("attention_after_seconds", float("nan")), ("attention_after_seconds", float("inf"))):
             with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
                 listen_notify._validate_config(dict(config, **{field: value}))
         listen_notify._validate_config(dict(config, typing_retry_seconds=0.5, typing_defer_seconds=0))

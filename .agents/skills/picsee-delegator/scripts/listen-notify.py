@@ -51,11 +51,14 @@ NEUTRAL_SGR = frozenset([1, 3, 4, 5, 7, 8, 9, 23, 24, 25, 27, 28, 29, 39, 49, 59
 # The last line Claude Code draws under an open selection dialog (AskUserQuestion, folder trust),
 # seen on 2.1.310: "Enter to select · ↑/↓ to navigate · Esc to cancel" or "Enter to confirm · Esc to cancel".
 DIALOG_FOOTER_PATTERN = re.compile(r"^Enter to (?:select|confirm) · (?:[^\n]* · )?Esc to cancel$")
+# The selection cursor on a dialog option, e.g. "❯ 1. Red" or " ❯ No, exit".
+DIALOG_CURSOR_PATTERN = re.compile(r"^\s*❯\s+\S")
 TYPING_GIVE_UP_SECONDS = 14400
 TYPING_SLOW_RETRY_SECONDS = 60
 ATTENTION_AFTER_SECONDS = 600
-# One saved unreadable read per event: the tail of the raw ANSI text and of its plain lines.
-SNAPSHOT_CHARS = 65536
+# One saved unreadable read per event: the tail of the raw ANSI text and of its plain lines,
+# each file at most SNAPSHOT_BYTES of UTF-8.
+SNAPSHOT_BYTES = 65536
 SNAPSHOT_LINES = 200
 ATTENTION_STATES = ("deferred-user-typing", "delivery-uncertain", "delivery-failed", "launch-failed")
 REPORT_SPEC = importlib.util.spec_from_file_location(
@@ -491,16 +494,20 @@ def _parse_screen(screen):
 def _claude_input_state(screen):
     """Classify the Claude Code input box in an ANSI pane snapshot: empty, typing, dialog or unknown.
 
-    A last drawn line that is a selection-dialog footer is a dialog. Otherwise the box is the
+    A dialog needs its footer as the last drawn line, a rule line above it, and a selection
+    cursor between the rule that opens it and the footer: the second-last rule for
+    AskUserQuestion, the last for a trust prompt. Otherwise the box is the
     text between the last two rule lines, and its first line must start with the prompt glyph.
     Dim (SGR 2) text is Claude's grey prompt suggestion, not input; an SGR encoding it does not
     fully recognise ends dim text (see `_sgr_dim`). Anything else, including a missing box or
     another prompt glyph, is unknown. Only empty lets a send through.
     """
     plain, visible, rules = _parse_screen(screen)
-    drawn = [line.strip() for line in plain if line.strip()]
-    if drawn and DIALOG_FOOTER_PATTERN.fullmatch(drawn[-1]):
-        return "dialog"
+    drawn = [index for index, line in enumerate(plain) if line.strip()]
+    if drawn and rules and DIALOG_FOOTER_PATTERN.fullmatch(plain[drawn[-1]].strip()):
+        opening = rules[-2] if len(rules) >= 2 else rules[-1]
+        if any(DIALOG_CURSOR_PATTERN.match(line) for line in plain[opening + 1:drawn[-1]]):
+            return "dialog"
     if len(rules) < 2 or rules[-1] - rules[-2] < 2 or not plain[rules[-2] + 1].startswith("❯"):
         return "unknown"
     box = visible[rules[-2] + 1:rules[-1]]
@@ -521,17 +528,28 @@ def _utc_now():
 
 
 def _save_input_snapshot(event_dir, destination, screen, input_state):
-    """Keep the read that classified as unknown, so the screen can be reproduced offline."""
+    """Keep the read that classified as unknown, so the screen can be reproduced offline.
+
+    Each file holds at most SNAPSHOT_BYTES: the ANSI file keeps the tail of the read, and the
+    JSON file drops plain lines from the top (the box with them) until it fits.
+    """
+    raw = screen.encode()
+    _atomic_text(event_dir / "input-snapshot.ansi", raw[-SNAPSHOT_BYTES:].decode(errors="ignore"))
     plain, _, rules = _parse_screen(screen)
-    box = plain[rules[-2] + 1:rules[-1]] if len(rules) >= 2 else []
+    box_lines = range(rules[-2] + 1, rules[-1]) if len(rules) >= 2 else range(0)
     first_line = max(0, len(plain) - SNAPSHOT_LINES)
-    _atomic_text(event_dir / "input-snapshot.ansi", screen[-SNAPSHOT_CHARS:])
-    _atomic_json(event_dir / "input-snapshot.json", {
-        "input": input_state, "pane": destination["pane"], "captured_at": _utc_now(),
-        "truncated": len(screen) > SNAPSHOT_CHARS or first_line > 0,
-        "lines": plain[first_line:], "rules": [index - first_line for index in rules if index >= first_line],
-        "box": box,
-    })
+    captured_at = _utc_now()
+    while True:
+        snapshot = {
+            "input": input_state, "pane": destination["pane"], "captured_at": captured_at,
+            "truncated": len(raw) > SNAPSHOT_BYTES or first_line > 0,
+            "lines": plain[first_line:], "rules": [index - first_line for index in rules if index >= first_line],
+            "box": [plain[index] for index in box_lines if index >= first_line],
+        }
+        if len((json.dumps(snapshot, indent=2, sort_keys=True) + "\n").encode()) <= SNAPSHOT_BYTES:
+            break
+        first_line += 1
+    _atomic_json(event_dir / "input-snapshot.json", snapshot)
 
 
 def _log_attention(event_dir, config, destination, input_state, held):
@@ -572,8 +590,10 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep, clock):
     errors = []
     attempt = 1
     while attempt <= attempts:
+        # Once the alert is logged, every later status write keeps the flag for `status`.
+        flag = {"attention": True} if alerted else {}
         _atomic_json(event_dir / "status.json", {
-            "state": "delivering", "event": config["event"], "attempt": attempt,
+            "state": "delivering", "event": config["event"], "attempt": attempt, **flag,
         })
         try:
             _checked_claude_pane(destination, run)
@@ -597,6 +617,7 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep, clock):
             # Nothing was sent: a failed list or read never reaches the transport.
             _atomic_json(event_dir / "status.json", {
                 "state": "delivering", "event": config["event"], "attempt": attempt, "last_error": errors[-1],
+                **flag,
             })
             if attempt < attempts:
                 sleep(min(initial_backoff * (2 ** (attempt - 1)), 300))
