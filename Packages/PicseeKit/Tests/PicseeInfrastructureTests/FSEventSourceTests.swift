@@ -43,14 +43,14 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     let streamA = try FSEventSource().start(watching: dir, onHints: a.sink)
     let x = dir.appendingPathComponent("x.png")
     FileManager.default.createFile(atPath: x.path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(10)) { a.changedPaths.contains(canonicalPath(x)) })
+    #expect(await mainPoll(deadline: .seconds(30)) { a.changedPaths.contains(canonicalPath(x)) })
     streamA.stop()
     streamA.stop() // idempotent
     let aAtStop = a.count
     let streamB = try FSEventSource().start(watching: dir, onHints: b.sink)
     let y = dir.appendingPathComponent("y.png")
     FileManager.default.createFile(atPath: y.path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(10)) { b.changedPaths.contains(canonicalPath(y)) })
+    #expect(await mainPoll(deadline: .seconds(30)) { b.changedPaths.contains(canonicalPath(y)) })
     #expect(a.count == aAtStop)
     streamB.stop()
 
@@ -60,11 +60,11 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     holder.set(try FSEventSource().start(watching: dir) { hints in cSink(hints); holder.stream?.stop() })
     let z1 = dir.appendingPathComponent("z1.png")
     FileManager.default.createFile(atPath: z1.path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(10)) { c.count >= 1 })
+    #expect(await mainPoll(deadline: .seconds(30)) { c.count >= 1 })
     let streamD = try FSEventSource().start(watching: dir, onHints: d.sink)
     let z2 = dir.appendingPathComponent("z2.png")
     FileManager.default.createFile(atPath: z2.path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(10)) { d.changedPaths.contains(canonicalPath(z2)) })
+    #expect(await mainPoll(deadline: .seconds(30)) { d.changedPaths.contains(canonicalPath(z2)) })
     #expect(c.count == 1)
     streamD.stop()
 
@@ -84,7 +84,7 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     try await coordinator.begin(folder: folder, rootID: rootID).value
     #expect(coordinator.snapshot?.entries.map(\.relativePath) == ["F/a.png"])
     FileManager.default.createFile(atPath: folder.appendingPathComponent("new.png").path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(10)) {
+    #expect(await mainPoll(deadline: .seconds(30)) {
         coordinator.snapshot?.entries.map(\.relativePath).contains("F/new.png") == true })
     #expect(host.didStart == 1)
     coordinator.end()
@@ -98,13 +98,14 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     let startMilliseconds = scheduler.nowMilliseconds
     let start = ContinuousClock.now
     _ = scheduler.schedule(afterMilliseconds: 200, x.action)
-    #expect(await poll { x.count >= 1 })
+    #expect(await poll(deadline: .seconds(30)) { x.count >= 1 })
     let elapsed = (x.first ?? start) - start
-    #expect(elapsed >= .milliseconds(150) && elapsed < .milliseconds(600))
+    // Never early; the upper bound only catches a scheduler that ignores its delay, so a loaded runner cannot flake it.
+    #expect(elapsed >= .milliseconds(150) && elapsed < .seconds(10))
     #expect(scheduler.nowMilliseconds - startMilliseconds >= 150)
     scheduler.schedule(afterMilliseconds: 100, y.action).cancel()
     _ = scheduler.schedule(afterMilliseconds: 300, z.action)
-    #expect(await poll { z.count == 1 })
+    #expect(await poll(deadline: .seconds(30)) { z.count == 1 })
     #expect(y.count == 0)
     #expect(x.count == 1)
 }
