@@ -213,7 +213,7 @@ private struct GridGeometry: Equatable {
     var onNativeSelectionChange: (() -> Void)?
     var columnStep = 1
     override func mouseDown(with event: NSEvent) {
-        guard event.clickCount == 1 else { return }
+        guard event.clickCount == 1, !event.modifierFlags.contains(.control) else { return }
         let point = convert(event.locationInWindow, from: nil)
         let modifier: SelectionModifier = event.modifierFlags.contains(.shift) ? .shift
             : event.modifierFlags.contains(.command) ? .command : .plain

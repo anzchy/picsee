@@ -198,3 +198,25 @@ import PicseeApplication
     #expect(session.selection.currentItemID == ids[0])
     #expect(session.scrollAnchor == ids[0])
 }
+
+@Test @MainActor func gridControlClickDoesNotReplaceSelection() throws {
+    _ = NSApplication.shared
+    let folder = URL(fileURLWithPath: "/tmp/picsee-control-click")
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
+    let entries = (0..<2).map { FolderEntry(url: folder.appendingPathComponent("\($0).jpg"), root: root) }
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 700, height: 400))
+    let window = NSWindow(contentRect: grid.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = grid
+    grid.display(FolderSnapshot(version: .init(rootID: root.id, folder: folder, generation: 1),
+        entries: entries, isComplete: true), selectedItemID: entries[0].itemID)
+    grid.layoutSubtreeIfNeeded(); grid.collectionView.layoutSubtreeIfNeeded()
+    let frame = try #require(grid.collectionView.collectionViewLayout?
+        .layoutAttributesForItem(at: IndexPath(item: 1, section: 0))).frame
+    let point = grid.collectionView.convert(NSPoint(x: frame.midX, y: frame.midY), to: nil)
+    let event = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point,
+        modifierFlags: .control, timestamp: 0, windowNumber: window.windowNumber,
+        context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+    grid.collectionView.mouseDown(with: event)
+    #expect(grid.selection.selectedItemIDs == [entries[0].itemID])
+    #expect(grid.collectionView.selectionIndexPaths == [IndexPath(item: 0, section: 0)])
+}
