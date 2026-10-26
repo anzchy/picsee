@@ -126,13 +126,14 @@ P0 技术验证、设计映射与命令底座
 | 状态或事件 | 规则 | 来源 | 证明测试函数 |
 | --- | --- | --- | --- |
 | 普通点击 / 无效 ID | 单选并设置 current、anchor；不在列表的 ID 不改变状态 | §1.4 选择模型 | `browserSelectionModifiersAndReconciliation` |
-| ⌘点击 | 切换一个 ID；current 可不在选择内；anchor 移到点击项 | §1.4 修饰键；anchor 规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `browserSelectionModifiersAndReconciliation` |
-| Shift 点击 | 以 anchor 到点击项的双向闭区间替换选择；anchor 不动；缺失 anchor 回退普通点击 | §1.4 修饰键；替换规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `browserSelectionModifiersAndReconciliation` |
+| ⌘点击 | 切换一个 ID；current 可不在选择内；anchor 移到点击项 | §1.4 修饰键；P3-09 已在 NSCollectionView 复核 | `browserSelectionModifiersAndReconciliation`、`gridMouseModifiersDrawExactlyTheSessionSelection` |
+| Shift 点击 | 以 anchor 到点击项的双向闭区间替换选择；anchor 不动；缺失 anchor 回退普通点击 | §1.4 修饰键；P3-09 已在 NSCollectionView 复核 | `browserSelectionModifiersAndReconciliation`、`gridMouseModifiersDrawExactlyTheSessionSelection` |
+| 网格 Shift/⌘ + 方向键 | 仅移动 current，保留已有选择集合与 anchor；普通方向键单选 | P3-09 原生实现与测试；这是本工作包的键盘规则记录 | `gridModifiedArrowKeepsMultiSelection`、`gridEntryDefinesCurrentWithoutSelectionThenArrowsPreviewAndEscUseIt` |
 | 列表更新 | selected、current、anchor 扣除离开列表的 ID | §1.4 选择与快照协调 | `browserSelectionModifiersAndReconciliation` |
 | Space / Enter 进入 | 零/单选冻结整个过滤排序列表；多选冻结列表顺序中的选中项；保存版本、选择、current、滚动锚点 | §1.4 Preview Set | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
-| 多选起点 | current 在集合内从它开始，否则从首个选中项开始 | §1.4 Preview Set；P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
-| ← / → | 只在冻结集合内移动，首尾停止不循环 | §1.4 基础命令；首尾规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
-| 预览期间新增 / 移除 | 新列表不扩大或重排集合；删除/失权项移除；当前项移除后取后继，否则前驱，否则空 | §1.4 Preview Set；回退规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
+| 多选起点 | current 在集合内从它开始，否则从首个选中项开始 | §1.4 Preview Set；P3-09 已覆盖模型与网格选择，App 全链路待真机 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape`、`gridMultiPreviewFreezesOrderAndRestoresSelection` |
+| ← / → | 只在冻结集合内移动，首尾停止不循环 | §1.4 基础命令；P3-09 已覆盖模型，App 全链路待真机 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape` |
+| 预览期间新增 / 移除 | 新列表不扩大或重排集合；删除/失权项移除；当前项移除后取后继，否则前驱，否则空 | §1.4 Preview Set；P3-09 已覆盖模型，App 全链路待真机 | `previewSetFrozenOrderRemovalAndOrigin`、`sessionRouterPreviewAndEscape`、`gridMultiPreviewFreezesOrderAndRestoresSelection` |
 | Esc | 菜单先消费；否则面板焦点回画布；否则恢复来源（扣除移除项）；单文件无来源则无动作；一次只做一件事 | §1.4 Preview Set / 基础命令；原生映射 §4 | `sessionRouterPreviewAndEscape`、`commandRouting`、`inspectorFocusTransitions` |
 | 无活动 / 活动 | 约 2.5 秒可调整原型参数；恰到期限隐藏，活动显现并重新计时；仅暴露期限，不启动调度器 | §1.4 ViewerChromeState；DESIGN.md 大图 | `chromeClockBoundariesActivityAndLocks` |
 | 常驻 / 交互锁 | 菜单、Inspector、Filmstrip、工具/面板键盘焦点各自保持可见；最后锁释放重计时 | §1.4 ViewerChromeState；释放规则为 P0-09 暂定，P3-09 在 NSCollectionView 上复核 | `chromeClockBoundariesActivityAndLocks`、`sessionChromeLocksAndWindowIsolation` |

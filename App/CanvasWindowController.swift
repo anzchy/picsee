@@ -493,13 +493,12 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         session.closeImage()
         canvas.showFailure()
         fileURL = nil
-        showGrid()
-        if let window { GridWindowIdentity.showFolder(folder, in: window) }
         if let snapshot = gridProjection.snapshot {
-            gridView.display(snapshot, selection: session.selection)
-            if let offset = gridPreviewScrollOffset { gridView.restoreContentOffset(offset) }
-            else if let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }
-        }
+            presentation.restoreGrid(snapshot, selection: session.selection, offset: gridPreviewScrollOffset)
+            showGrid()
+            if gridPreviewScrollOffset == nil, let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }
+        } else { showGrid() }
+        if let window { GridWindowIdentity.showFolder(folder, in: window) }
     }
     private func showGrid(reading: Bool = false) {
         presentation.showGrid(reading: reading)
