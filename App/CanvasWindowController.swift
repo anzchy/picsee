@@ -60,7 +60,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     var gridShellVisible: Bool { gridShell != nil && !gridShell.isHidden }
     func toggleGridSidebar() { if gridShellVisible { gridShell.toggleSidebar() } }
     var gridSearchAvailable: Bool { gridShellVisible && !gridView.isHidden }
-    private var inspectorHost: NSHostingView<MotionPolicyContent<InspectorPlaceholder>>!
+    private var inspectorHost: NSHostingView<MotionPolicyContent<InspectorPanel>>!
     var onOpenRequest: (() -> Void)?
     var menuTracking: () -> Bool = { false }
     var appearanceAdapter: WindowAppearanceAdapter?
@@ -78,7 +78,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         self.accessServices = accessServices
         session = ViewerSession(preferencesStore: preferencesStore, imageLoader: ViewerImageLoader(trace: NativeFirstPreviewTrace(), presentation: pipeline as? any ImagePresentationPinning))
         canvas = CanvasInputBridge(frame: .zero, session: session)
-        inspector = InspectorModel(session: session)
+        inspector = InspectorModel(reader: WindowInspectorReader(services: accessServices))
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -117,12 +117,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         dragStrip.autoresizingMask = [.width, .minYMargin]
         dragStrip.setAccessibilityIdentifier("chrome.drag-strip")
         content.addSubview(dragStrip)
-        inspectorHost = NSHostingView(rootView: MotionPolicyContent(policy: motionPolicy) { InspectorPlaceholder(model: inspector, route: { [weak self] id in
-            self?.route(id, from: .button)
+        inspectorHost = NSHostingView(rootView: MotionPolicyContent(policy: motionPolicy) { InspectorPanel(model: inspector, session: session, close: { [weak self] in
+            _ = self?.route(.inspector, from: .button)
         }, restoreCanvasFocus: { [weak self] in
             self?.window?.makeFirstResponder(self?.canvas)
+        }, updateFocus: { [weak self] focus in
+            self?.session.updateFocus(focus)
         }) })
-        inspectorHost.frame = NSRect(x: content.bounds.width - 272, y: 0, width: 272, height: content.bounds.height)
+        inspectorHost.frame = InspectorPanelLayout.frame(in: content.bounds, grid: false)
         inspectorHost.autoresizingMask = [.minXMargin, .height]
         inspectorHost.isHidden = true
         content.addSubview(inspectorHost)
@@ -168,13 +170,18 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridView.onSelectionGesture = { [weak self] id, modifier in
             guard let self else { return BrowserSelection() }
             self.session.select(id, modifier: modifier)
+            self.syncInspector()
             return self.session.selection
         }
         gridView.onClearSelection = { [weak self] in
             self?.session.clearSelection()
+            self?.syncInspector()
             return self?.session.selection ?? BrowserSelection()
         }
-        gridView.onCurrentChange = { [weak self] id in self?.session.focus(id) }
+        gridView.onCurrentChange = { [weak self] id in
+            self?.session.focus(id)
+            self?.syncInspector()
+        }
         gridView.onDeselect = { [weak self] in
             guard let self else { return }
             self.session.clearSelection()
@@ -228,6 +235,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         gridShell.layoutSubtreeIfNeeded()
         canvas.synchronizeViewport()
+        layoutInspector()
     }
     func windowDidEnterFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
     func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
@@ -241,6 +249,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             gridFolderRoot = nil
             gridFolderURL = nil
             presentation.showViewer()
+            inspectorHost.isHidden = !inspectorVisible
+            layoutInspector()
         }
         retryIntent = ViewerRetryIntent(fileURL: url, accessRequest: accessRequest)
         retryFromFolderScan = fromFolderScan
@@ -249,6 +259,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         filesystemLogger.notice("Open file=\(url.lastPathComponent, privacy: .private)")
         fileURL = url
         window?.representedURL = url
+        syncInspector(refresh: true)
         if !fromFolderScan { navigationTask?.cancel() }
         let scale = window?.backingScaleFactor ?? 1
         let maximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
@@ -270,6 +281,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         gridView.stopThumbnails()
+        inspector.select(itemID: nil, url: nil, access: nil)
         gridFolderRoot = nil
         gridFolderURL = nil
         endInput()
@@ -340,7 +352,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         retryIntent = nil
         retryFromFolderScan = false
         fileURL = nil
-        inspector.hasImage = false
+        inspector.select(itemID: nil, url: nil, access: nil)
         gridFolderRoot = rootID
         gridFolderURL = folder
         gridShell.showFolder(folder.lastPathComponent)
@@ -508,8 +520,31 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     func requestOpen() { onOpenRequest?() }
     func showInspector(_ visible: Bool) {
-        inspector.hasImage = canvas.hasImage
+        layoutInspector()
         inspectorHost.isHidden = !visible
+        syncInspector()
+    }
+    /// Public toggle for the grid footer's later info button.
+    func toggleInspector() { _ = route(.inspector, from: .button) }
+    private func layoutInspector() {
+        guard inspectorHost != nil, let bounds = window?.contentView?.bounds else { return }
+        inspectorHost.frame = InspectorPanelLayout.frame(in: bounds, grid: !gridView.isHidden)
+    }
+    private func syncInspector(refresh: Bool = false) {
+        guard session.inspectorFocus.isVisible else {
+            inspector.select(itemID: nil, url: nil, access: nil); return
+        }
+        if !gridView.isHidden {
+            guard let id = session.selection.currentItemID, let entry = gridProjection.entry(for: id),
+                  let root = gridFolderRoot else {
+                inspector.select(itemID: nil, url: nil, access: nil); return
+            }
+            inspector.select(itemID: id, url: entry.url, access: .root(root, file: entry.url), refresh: refresh)
+        } else if let fileURL {
+            let access = retryIntent?.accessRequest ?? gridFolderRoot.map { AccessRequest.root($0, file: fileURL) } ?? .fileGrant(fileURL)
+            inspector.select(itemID: session.currentItemID ?? session.imageLoader.presented?.key.itemID,
+                url: fileURL, access: access, refresh: refresh)
+        } else { inspector.select(itemID: nil, url: nil, access: nil) }
     }
     func applyFocus(_ focus: FocusContext) {
         guard focus == .canvas else { return }
@@ -520,6 +555,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
               gridProjection.snapshot?.version.rootID == rootID else { return }
         searchProjection.cancel()
         presentation.showViewer()
+        inspectorHost.isHidden = !inspectorVisible
+        layoutInspector()
         open(entry.url, accessRequest: .root(rootID, file: entry.url), fromFolderScan: true)
     }
     func returnToGrid() {
@@ -539,6 +576,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     private func showGrid(reading: Bool = false) {
         presentation.showGrid(reading: reading)
+        inspectorHost.isHidden = reading || !inspectorVisible
+        layoutInspector()
         if reading {
             showReadingState()
         } else {
@@ -546,6 +585,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             pendingGridCurrentItemID = nil
             gridView.activate(currentItemID: current)
         }
+        syncInspector(refresh: !reading)
     }
     private func updateGridSearch(_ term: String) {
         guard gridSearchAvailable else { gridShell.setSearchTerm(gridSearch.term); return }
@@ -622,6 +662,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             case .viewer(let file):
                 // A grid preview reopens inside its restored grid; Esc still returns there.
                 presentation.show(target)
+                inspectorHost.isHidden = !inspectorVisible
+                layoutInspector()
                 open(file, accessRequest: request, fromFolderScan: fromFolder || root != nil)
             case .empty:
                 restoreEmptyFolderEntry()
@@ -664,7 +706,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             stateHost.isHidden = true
             stateHost.setAccessibilityHidden(true)
         }
-        if inspector.hasImage != canvas.hasImage { inspector.hasImage = canvas.hasImage }
+        if inspectorVisible { syncInspector() }
         if chromeGeneration != generation || chromeHasImage != canvas.hasImage {
             let opened = chromeGeneration != generation
             chromeGeneration = generation; chromeHasImage = canvas.hasImage

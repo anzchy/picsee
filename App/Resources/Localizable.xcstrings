@@ -596,23 +596,6 @@
         }
       }
     },
-    "Search current folder": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search current folder"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "搜索当前文件夹"
-          }
-        }
-      }
-    },
     "Clear search": {
       "extractionState": "manual",
       "localizations": {
@@ -626,23 +609,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "清除搜索"
-          }
-        }
-      }
-    },
-    "No matching images": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No matching images"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没有匹配的图片"
           }
         }
       }
@@ -813,23 +779,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "搜索图片"
-          }
-        }
-      }
-    },
-    "Sort images": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sort images"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "图片排序"
           }
         }
       }
@@ -1024,8 +973,18 @@
     "Search: %@ · %lld results": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "%2$lld results · Search: %1$@" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%2$lld 个结果 · 搜索：%1$@" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld results · Search: %1$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld 个结果 · 搜索：%1$@"
+          }
+        }
       }
     },
     "Always Show Tools": {
@@ -1740,23 +1699,6 @@
         }
       }
     },
-    "Focus test (not saved)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Focus test (not saved)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "焦点测试（不保存）"
-          }
-        }
-      }
-    },
     "Open One Folder at a Time": {
       "extractionState": "manual",
       "localizations": {
@@ -1981,36 +1923,86 @@
     "Capture Date": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Capture Date" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "拍摄日期" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capture Date"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拍摄日期"
+          }
+        }
       }
     },
     "Pixel Area (Width × Height)": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Pixel Area (Width × Height)" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "像素面积（宽 × 高）" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pixel Area (Width × Height)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "像素面积（宽 × 高）"
+          }
+        }
       }
     },
     "Sort unfinished": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Sort unfinished" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "排序未完成" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort unfinished"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排序未完成"
+          }
+        }
       }
     },
     "Sort metadata unavailable": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Sort metadata unavailable" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "部分排序元数据无法读取" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort metadata unavailable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分排序元数据无法读取"
+          }
+        }
       }
     },
     "Sort by pixel area; equal areas use width, height, then natural name. Unknown last.": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Sort by pixel area; equal areas use width, height, then natural name. Unknown last." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "按像素面积排序；面积相同时依次按宽、高、自然名称排序。未知值排最后。" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort by pixel area; equal areas use width, height, then natural name. Unknown last."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按像素面积排序；面积相同时依次按宽、高、自然名称排序。未知值排最后。"
+          }
+        }
       }
     },
     "Type": {
@@ -2135,57 +2127,137 @@
     "Include Subfolders": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Include Subfolders" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "包含子文件夹" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include Subfolders"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "包含子文件夹"
+          }
+        }
       }
     },
     "Images: %lld": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Images: %lld" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "图片：%lld 张" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Images: %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片：%lld 张"
+          }
+        }
       }
     },
     "Images found before scan stopped: %lld": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Images found before scan stopped: %lld" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "扫描停止前找到图片：%lld 张" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Images found before scan stopped: %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描停止前找到图片：%lld 张"
+          }
+        }
       }
     },
     "Reading…": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Reading…" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在读取…" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在读取…"
+          }
+        }
       }
     },
     "Scan limit reached": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Scan limit reached" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已达到扫描上限" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan limit reached"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已达到扫描上限"
+          }
+        }
       }
     },
     "Folder access denied": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Folder access denied" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "文件夹访问被拒绝" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder access denied"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹访问被拒绝"
+          }
+        }
       }
     },
     "Folder scan failed": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Folder scan failed" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "文件夹读取失败" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder scan failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹读取失败"
+          }
+        }
       }
     },
     "Unable to finish reading folder": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Unable to finish reading folder" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法完成文件夹读取" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to finish reading folder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法完成文件夹读取"
+          }
+        }
       }
     },
     "Loop Through Folder": {
@@ -2293,15 +2365,35 @@
     "Thumbnail unavailable": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Thumbnail unavailable" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法显示缩略图" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thumbnail unavailable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法显示缩略图"
+          }
+        }
       }
     },
     "thumbnail unavailable": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "thumbnail unavailable" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法显示缩略图" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "thumbnail unavailable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法显示缩略图"
+          }
+        }
       }
     },
     "thumbnail pending": {
@@ -2528,29 +2620,69 @@
     "Cache cleanup failed": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Cache cleanup failed. Try clearing again." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "缓存清理未完成，请重试。" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache cleanup failed. Try clearing again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缓存清理未完成，请重试。"
+          }
+        }
       }
     },
     "Cache write failed": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Cache could not save thumbnails. It will retry automatically." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "缩略图缓存写入失败，将自动重试。" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache could not save thumbnails. It will retry automatically."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缩略图缓存写入失败，将自动重试。"
+          }
+        }
       }
     },
     "Cache size unavailable": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Cache size is unavailable. Try again later." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法读取缓存占用，请稍后重试。" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache size is unavailable. Try again later."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取缓存占用，请稍后重试。"
+          }
+        }
       }
     },
     "Cache clear failed": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Cache could not be cleared. Try again." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法清理缓存，请重试。" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache could not be cleared. Try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法清理缓存，请重试。"
+          }
+        }
       }
     },
     "Cache operation failed": {
@@ -2566,6 +2698,159 @@
           "stringUnit": {
             "state": "translated",
             "value": "缓存操作失败"
+          }
+        }
+      }
+    },
+    "Image Preview": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image Preview"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片预览"
+          }
+        }
+      }
+    },
+    "Image Information": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image Information"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片信息"
+          }
+        }
+      }
+    },
+    "Close Inspector": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Inspector"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭图片信息"
+          }
+        }
+      }
+    },
+    "Dimensions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dimensions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尺寸"
+          }
+        }
+      }
+    },
+    "Created": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Created"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建日期"
+          }
+        }
+      }
+    },
+    "Modified": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modified"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修改日期"
+          }
+        }
+      }
+    },
+    "Unreadable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unreadable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取"
+          }
+        }
+      }
+    },
+    "No Permission": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Permission"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有访问权限"
+          }
+        }
+      }
+    },
+    "Loading…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取中…"
           }
         }
       }
