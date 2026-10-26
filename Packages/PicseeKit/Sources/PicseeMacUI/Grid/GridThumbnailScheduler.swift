@@ -32,6 +32,39 @@ enum GridThumbnailPixelSizing {
     private var currentCoverage: ThumbnailCoverage?
     private var terminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
     var activeItemIDs: Set<ItemID> { Set(records.values.map(\.itemID)) }
+    private enum PinOperation: Sendable {
+        case pin(RenderKey, DecodedImage), unpin(RenderKey), settle(CheckedContinuation<Void, Never>)
+    }
+    private var pinOperations: AsyncStream<PinOperation>.Continuation?
+    /// Held results are this window's share of the shared memory budget. One serial consumer applies
+    /// pins and unpins in the order they were sent, so an unpin never overtakes its pin.
+    var pinning: (any ImagePresentationPinning)? {
+        willSet { cancelAll(); pinOperations?.finish(); pinOperations = nil }
+        didSet {
+            guard let pinning else { return }
+            let (operations, continuation) = AsyncStream<PinOperation>.makeStream()
+            pinOperations = continuation
+            Task {
+                for await operation in operations {
+                    switch operation {
+                    case .pin(let key, let image): await pinning.pin(key, image: image)
+                    case .unpin(let key): await pinning.unpin(key)
+                    case .settle(let waiter): waiter.resume()
+                    }
+                }
+            }
+        }
+    }
+    /// Returns once every pin and unpin sent so far has reached `pinning`.
+    func settlePins() async {
+        guard let pinOperations else { return }
+        await withCheckedContinuation { pinOperations.yield(.settle($0)) }
+    }
+    /// Cancels a dropped record and releases its held result.
+    private func drop(_ record: Record?) {
+        record?.task?.cancel()
+        if let key = record?.result?.0.renderKey { pinOperations?.yield(.unpin(key)) }
+    }
 
     func setSnapshot(_ snapshot: FolderSnapshot?) {
         cancelAll()
@@ -49,7 +82,7 @@ enum GridThumbnailPixelSizing {
         let upper = min(snapshot.navigationEntries.count - 1, last + margin)
         let desired = Set(lower...upper)
         for index in Array(records.keys) where !desired.contains(index) {
-            records.removeValue(forKey: index)?.task?.cancel()
+            drop(records.removeValue(forKey: index))
         }
         // Visible requests enter admission first; prefetch may use remaining non-current slots.
         for index in desired.sorted(by: { (visible.contains($0) ? 0 : 1, $0) < (visible.contains($1) ? 0 : 1, $1) }) {
@@ -61,8 +94,7 @@ enum GridThumbnailPixelSizing {
                     || (record.failed && record.task == nil && !record.wasVisible)) {
                     keepFailure = record.failed
                     previousFailure = record.failedRevision
-                    record.task?.cancel()
-                    records.removeValue(forKey: index)
+                    drop(records.removeValue(forKey: index))
                 } else {
                     records[index]?.wasVisible = isVisible
                     continue
@@ -108,6 +140,7 @@ enum GridThumbnailPixelSizing {
             return
         }
         records[index]?.result = (request, image)
+        if let key = request.renderKey { pinOperations?.yield(.pin(key, image)) }
         records[index]?.task = nil
         records[index]?.failed = false
         records[index]?.failedRevision = nil
@@ -142,9 +175,15 @@ enum GridThumbnailPixelSizing {
 
     func stop() { cancelAll(); snapshot = nil }
     private func cancelAll() {
-        for record in records.values { record.task?.cancel() }
+        for record in records.values { drop(record) }
         records.removeAll()
         for index in Array(terminalWaiters.keys) { resumeTerminalWaiters(at: index) }
     }
-    deinit { for record in records.values { record.task?.cancel() } }
+    deinit {
+        for record in records.values {
+            record.task?.cancel()
+            if let key = record.result?.0.renderKey { pinOperations?.yield(.unpin(key)) }
+        }
+        pinOperations?.finish()
+    }
 }
