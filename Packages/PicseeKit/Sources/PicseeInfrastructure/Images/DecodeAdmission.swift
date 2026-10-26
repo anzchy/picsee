@@ -75,9 +75,19 @@ public actor DecodeAdmission {
     private let configuration: DecodeConfiguration
     private let executor: any DecodeExecuting
     private let decoder: any ImageDecoding
+    private let memory: MemoryBudget?
+    private let release: (@Sendable (Int) async -> Void)?
     public init(configuration: DecodeConfiguration, executor: any DecodeExecuting, decoder: any ImageDecoding) {
-        self.configuration = configuration; self.executor = executor; self.decoder = decoder
+        self.init(configuration: configuration, executor: executor, decoder: decoder, memory: nil, release: nil)
     }
+    /// `release` asks the cache to free at least that many evictable bytes.
+    init(configuration: DecodeConfiguration, executor: any DecodeExecuting, decoder: any ImageDecoding,
+         memory: MemoryBudget?, release: (@Sendable (Int) async -> Void)?) {
+        self.configuration = configuration; self.executor = executor; self.decoder = decoder
+        self.memory = memory; self.release = release
+    }
+    /// Pins were released elsewhere; waiting work may now fit.
+    func retry() { drain() }
     // Internal schedule-control seam: completion has removed the job, delivery has not resumed its waiter.
     private var completionBarrier: (@Sendable () async -> Void)?
     func setCompletionBarrier(_ barrier: @escaping @Sendable () async -> Void) {
@@ -141,22 +151,33 @@ public actor DecodeAdmission {
             heavy: running.filter { $0.heavy }.count,
             reservedBytes: running.reduce(0) { $0 + $1.cost }, waiting: pending.count)
     }
+    private var releasing = false
+    private func eligible(_ job: Job, _ active: DecodeActivity) -> Bool {
+        let sameKeyRunning = jobs.values.contains { $0.key == job.key && $0.admitted != nil }
+        return !sameKeyRunning && active.running < configuration.workers &&
+            (job.priority == .current || active.nonCurrent < configuration.workers - 1) &&
+            (job.priority != .visible || active.visible < configuration.visible) &&
+            (!job.heavy || active.heavy < configuration.heavy)
+    }
+    /// Staging shares the budget with resident pixels. Pins alone may fill it; then only an idle current decode runs.
+    private func fits(_ job: Job, _ active: DecodeActivity) -> Bool {
+        guard let memory else { return job.cost <= configuration.budget - active.reservedBytes }
+        let held = memory.usage
+        return job.cost <= configuration.budget - active.reservedBytes - held.pinned - held.evictable ||
+            (job.priority == .current && active.running == 0 && held.evictable == 0)
+    }
     private func drain() {
         // Stable priority order: FIFO among equal priorities. With finite foreground
         // demand eligible visible work progresses; prefetch has no starvation promise.
-        while let id = pending.sorted(by: { jobs[$0]!.priority.rawValue > jobs[$1]!.priority.rawValue })
-            .first(where: { id in
+        let ordered = { self.pending.sorted(by: { self.jobs[$0]!.priority.rawValue > self.jobs[$1]!.priority.rawValue }) }
+        while let id = ordered().first(where: { id in
                 let job = jobs[id]!, active = activity()
-                let sameKeyRunning = jobs.values.contains { $0.key == job.key && $0.admitted != nil }
-                return !sameKeyRunning && active.running < configuration.workers &&
-                    (job.priority == .current || active.nonCurrent < configuration.workers - 1) &&
-                    (job.priority != .visible || active.visible < configuration.visible) &&
-                    (!job.heavy || active.heavy < configuration.heavy) &&
-                    job.cost <= configuration.budget - active.reservedBytes
+                return eligible(job, active) && fits(job, active)
             }) {
             // No await between checking all resources and taking them.
             jobs[id]!.admitted = jobs[id]!.priority
             pending.removeAll { $0 == id }
+            memory?.reserved(activity().reservedBytes)
             let request = jobs[id]!.request, decoder = decoder, trace = jobs[id]!.trace
             trace.reserve(jobs[id]!.cost)
             executor.submit {
@@ -164,9 +185,22 @@ public actor DecodeAdmission {
                 Task { await self.finished(id, result: result) }
             }
         }
+        // Work that only evictable cache pixels hold back asks the cache for the shortfall, then drains again.
+        guard let memory, let release, !releasing else { return }
+        let active = activity(), held = memory.usage
+        guard held.evictable > 0, let blocked = ordered().first(where: { eligible(jobs[$0]!, active) }) else { return }
+        let shortfall = jobs[blocked]!.cost - (configuration.budget - active.reservedBytes - held.pinned - held.evictable)
+        guard shortfall > 0 else { return }
+        releasing = true
+        Task {
+            await release(shortfall)
+            self.releasing = false
+            self.drain()
+        }
     }
     private func finished(_ id: UUID, result: Result<DecodedImage, Error>) async {
         let job = jobs.removeValue(forKey: id)!
+        memory?.reserved(activity().reservedBytes)
         job.trace.release(result)
         if keyed[job.key] == id { keyed.removeValue(forKey: job.key) }
         drain()

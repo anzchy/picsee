@@ -55,8 +55,8 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
     private let rootResolvers = RootIdentityResolvers()
     private let identityResolver: any ItemIdentityResolving
     private let executor: OperationDecodeExecutor
-    private let admission: DecodeAdmission
-    private let cache: ImageMemoryCache
+    let admission: DecodeAdmission
+    let cache: ImageMemoryCache
     private let cacheTrace: (any ResourceSnapshotTracing)?
     package let thumbnailCache: (any ThumbnailCaching)?
     public init(decoder: any ImageDecoding = ImageIODecoder(), configuration: DecodeConfiguration = DecodeConfiguration(),
@@ -65,14 +65,16 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
                 thumbnailCache: (any ThumbnailCaching)? = nil,
                 pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.configuration = configuration
-        self.cache = cache ?? ImageMemoryCache(capacity: configuration.cacheCapacity,
+        let cache = cache ?? ImageMemoryCache(capacity: configuration.cacheCapacity, budget: MemoryBudget(limit: configuration.budget),
             pressureRecoveryDelay: configuration.pressureRecoveryDelay, pressureClock: pressureClock)
+        self.cache = cache
         self.cacheTrace = cacheTrace
         self.thumbnailCache = thumbnailCache
         self.identityResolver = identityResolver
         let executor = OperationDecodeExecutor(workers: configuration.workers)
         self.executor = executor
-        admission = DecodeAdmission(configuration: configuration, executor: executor, decoder: RevisionReportingDecoder(decoder: decoder))
+        admission = DecodeAdmission(configuration: configuration, executor: executor, decoder: RevisionReportingDecoder(decoder: decoder),
+            memory: cache.budget, release: { [cache] bytes in await cache.release(bytes: bytes) })
     }
     private func snapshotContext() async -> ResourceSnapshotContext? {
         guard let cacheTrace else { return nil }
@@ -85,6 +87,7 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
     public func unpin(_ key: RenderKey) async {
         let context = await snapshotContext()
         await cache.unpin(key, context: context)
+        await admission.retry()
     }
     public func memoryPressure(_ level: MemoryPressureLevel) async {
         let context = await snapshotContext()

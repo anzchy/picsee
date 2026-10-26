@@ -45,9 +45,15 @@ public actor ImageMemoryCache {
     private var observations: [UUID: (epoch: Int, itemID: ItemID?)] = [:]
     // Two distinct revision events suffice to detect a conflict with any still-live observation.
     private var recent: [ItemID: [(epoch: Int, revision: FileRevision)]] = [:]
+    /// Shared with this cache's pipeline admission; nil keeps the cache bounded by its capacity alone.
+    nonisolated let budget: MemoryBudget?
     public init(capacity: Int, pressureRecoveryDelay: TimeInterval = 5,
                 pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
-        precondition(capacity >= 0); self.capacity = capacity; limit = capacity
+        self.init(capacity: capacity, budget: nil, pressureRecoveryDelay: pressureRecoveryDelay, pressureClock: pressureClock)
+    }
+    init(capacity: Int, budget: MemoryBudget?, pressureRecoveryDelay: TimeInterval = 5,
+         pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        precondition(capacity >= 0); self.capacity = capacity; limit = capacity; self.budget = budget
         pressurePolicy = MemoryPressurePolicy(recoveryDelay: pressureRecoveryDelay, clock: pressureClock)
     }
     func pressure(_ level: MemoryPressureLevel, context: ResourceSnapshotContext? = nil) {
@@ -79,7 +85,7 @@ public actor ImageMemoryCache {
     }
     func remove(_ key: RenderKey, context: ResourceSnapshotContext? = nil) {
         guard let index = entries.firstIndex(where: { $0.key == key && $0.pins == 0 }) else { return }
-        entries.remove(at: index); emit(context)
+        entries.remove(at: index); emit(context); account()
     }
     func pin(_ key: RenderKey, image: DecodedImage, context: ResourceSnapshotContext? = nil) {
         guard image.itemID == key.itemID, image.revision == key.revision else { return }
@@ -92,6 +98,7 @@ public actor ImageMemoryCache {
             entries[index].pins += 1
         } else { entries.append(Entry(key: key, image: image, pins: 1)) }
         emit(context)
+        trim(to: limit, context: context)
     }
     func unpin(_ key: RenderKey, context: ResourceSnapshotContext? = nil) {
         guard let index = entries.firstIndex(where: { $0.key == key }), entries[index].pins > 0 else { return }
@@ -104,18 +111,37 @@ public actor ImageMemoryCache {
                 emit(context)
             }
             trim(to: limit, context: context)
+        } else { account() }
+    }
+    /// Frees at least `bytes` of evictable pixels, oldest first, so admission can stage a decode.
+    func release(bytes: Int, context: ResourceSnapshotContext? = nil) {
+        let target = max(0, usage().unpinnedBytes - bytes)
+        while usage().unpinnedBytes > target, let index = entries.firstIndex(where: { $0.pins == 0 }) {
+            entries.remove(at: index); emit(context)
         }
+        account()
     }
     func pinCount(for key: RenderKey) -> Int { entries.first(where: { $0.key == key })?.pins ?? 0 }
     func pendingCount() -> Int { pending.count }
     func trim(to limit: Int, context: ResourceSnapshotContext? = nil) {
         precondition(limit >= 0)
         self.limit = min(capacity, limit)
-        while self.limit == 0 || usage().unpinnedBytes > self.limit {
+        while self.limit == 0 || usage().unpinnedBytes > min(self.limit, evictableRoom()) {
             guard let index = entries.firstIndex(where: { $0.pins == 0 }) else { break }
             entries.remove(at: index)
             emit(context)
         }
+        account()
+    }
+    /// Evictable pixels may use only what pins and admitted decodes leave of the shared budget.
+    private func evictableRoom() -> Int {
+        guard let budget else { return .max }
+        return max(0, budget.limit - usage().pinnedBytes - budget.usage.reserved)
+    }
+    private func account() {
+        guard let budget else { return }
+        let state = usage()
+        budget.resident(pinned: state.pinnedBytes, evictable: state.unpinnedBytes)
     }
     func withObservation<T: Sendable>(itemID: ItemID? = nil,
         _ operation: @Sendable (UUID) async throws -> T) async rethrows -> T {
@@ -177,6 +203,7 @@ public actor ImageMemoryCache {
         while let index = entries.firstIndex(where: { $0.stale && $0.pins == 0 }) {
             entries.remove(at: index); emit(context)
         }
+        account()
         pending = pending.filter { $0.value.itemID != key.itemID || $0.value.revision == key.revision }
         let request = ImageCacheRequest(key: key, id: UUID(), image: image(for: key, context: context))
         if request.image == nil { pending[request.id] = key }
