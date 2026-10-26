@@ -115,7 +115,7 @@ private actor EntrySink {
     #expect(grid.apply(fresh))
     #expect(w.host.didStart == 0)
     #expect(w.host.opened.isEmpty)
-    #expect(samples.values.count >= 2)
+    #expect(await mainPoll { samples.values.count >= 2 }) // the sampler records one MainActor turn after the change
     #expect(samples.values.allSatisfy { $0.snapshot?.isComplete == true && !$0.reading })
 
     // W1/W2: a sibling folder and a flat subfolder never refresh; a positive sentinel ends the negative check.
