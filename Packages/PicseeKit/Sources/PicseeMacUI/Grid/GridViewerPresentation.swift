@@ -20,7 +20,8 @@ import PicseeCore
     public func layoutInspector(visible: Bool) {
         guard let parent = canvas.superview else { return }
         let bounds = parent.bounds
-        let panelWidth: CGFloat = visible ? min(220, bounds.width) : 0
+        let panelWidth: CGFloat = visible && !InspectorPanelLayout.overlaysContent(at: bounds.width)
+            ? min(InspectorPanelLayout.width(for: bounds.width), bounds.width) : 0
         let contentWidth = max(0, bounds.width - panelWidth)
         let content = NSRect(x: bounds.minX, y: bounds.minY, width: contentWidth, height: bounds.height)
         canvas.frame = content

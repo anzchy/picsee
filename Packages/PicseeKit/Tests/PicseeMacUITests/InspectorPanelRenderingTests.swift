@@ -14,9 +14,16 @@ private struct FilledInspectorReader: InspectorMetadataReading {
 }
 
 @Test func issue136InspectorFrameLeavesGridTitleAndFooterVisible() {
-    let bounds = NSRect(x: 0, y: 0, width: 960, height: 640)
-    #expect(InspectorPanelLayout.frame(in: bounds, grid: true) == NSRect(x: 740, y: 0, width: 220, height: 640))
-    #expect(InspectorPanelLayout.frame(in: bounds, grid: false) == NSRect(x: 740, y: 0, width: 220, height: 640))
+    // Both pinned pages: default 220; max-width:1050px 195; max-width:720px 220 overlay.
+    for (windowWidth, expected) in [
+        (1280.0, NSRect(x: 1060, y: 0, width: 220, height: 640)),
+        (960.0, NSRect(x: 765, y: 0, width: 195, height: 640)),
+        (700.0, NSRect(x: 480, y: 38, width: 220, height: 515))
+    ] {
+        let bounds = NSRect(x: 0, y: 0, width: windowWidth, height: 640)
+        #expect(InspectorPanelLayout.frame(in: bounds, grid: true) == expected)
+        #expect(InspectorPanelLayout.frame(in: bounds, grid: false) == expected)
+    }
 }
 
 @Test func issue136InspectorTypeNamesUseKnownExtensionOrHonestIdentifier() {

@@ -15,14 +15,14 @@ import PicseeApplication
         grid: grid, inspector: inspector, shell: shell)
     presentation.showViewer()
     presentation.layoutInspector(visible: true)
-    #expect(canvas.frame.width == 740)
-    #expect(state.frame.width == 740)
-    #expect(chrome.frame.width == 740)
+    #expect(canvas.frame.width == 765)
+    #expect(state.frame.width == 765)
+    #expect(chrome.frame.width == 765)
     #expect(inspector.frame.minX == canvas.frame.maxX)
     #expect(canvas.frame.union(inspector.frame) == host.bounds)
     presentation.showGrid(reading: false)
     presentation.layoutInspector(visible: true)
-    #expect(shell.frame.width == 740)
+    #expect(shell.frame.width == 765)
     #expect(inspector.frame.minX == shell.frame.maxX)
     #expect(inspector.frame.minY == host.bounds.minY)
     #expect(inspector.frame.maxY == host.bounds.maxY)
@@ -34,19 +34,21 @@ import PicseeApplication
     presentation.showGrid(reading: false)
     presentation.layoutInspector(visible: true)
     #expect(shell.frame.union(inspector.frame) == host.bounds)
-    host.frame.size = NSSize(width: 720, height: 520)
+    host.frame.size = NSSize(width: 700, height: 520)
     presentation.layoutInspector(visible: true)
-    #expect(shell.frame.union(inspector.frame) == host.bounds) // live resize
+    #expect(shell.frame.width == 700) // narrow design overlays the panel
+    #expect(canvas.frame.width == 700)
+    #expect(inspector.frame == NSRect(x: 480, y: 38, width: 220, height: 395))
     presentation.layoutInspector(visible: false)
-    #expect(shell.frame.width == 720)
+    #expect(shell.frame.width == 700)
     presentation.showViewer()
     presentation.layoutInspector(visible: false)
-    #expect(canvas.frame.width == 720)
+    #expect(canvas.frame.width == 700)
     // Pages 16/34: a presentation without a Grid shell still sizes its Reading State to the stage.
     let bare = GridViewerPresentation(canvas: canvas, chrome: chrome, state: state,
         grid: grid, inspector: inspector)
     bare.layoutInspector(visible: true)
-    #expect(state.frame == NSRect(x: 0, y: 0, width: 500, height: 520))
+    #expect(state.frame == NSRect(x: 0, y: 0, width: 700, height: 520))
 }
 
 @Test @MainActor func cancelReadingRestoresVisibleViewerForFolderNavigatedImage() {
