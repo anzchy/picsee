@@ -115,3 +115,20 @@ private func nearestSurvivor(of current: ItemID?, old: [ItemID], new: [ItemID]) 
     #expect(host.presented == [c])
     #expect(host.returned == 0)
 }
+
+@Test @MainActor func browsingFilterThatHidesCurrentMovesItToTheNearestVisibleItem() {
+    // Chosen rule (audit L1): updateItems gets the navigable IDs, so a filter that hides Current moves it like a deletion.
+    let a = ItemID.ephemeral(UUID()), b = ItemID.ephemeral(UUID()), c = ItemID.ephemeral(UUID()), d = ItemID.ephemeral(UUID())
+    let session = ViewerSession(host: FakeSessionHost())
+    session.beginBrowsing(items: [a, b, c, d], sourceVersion: .init(1), scrollAnchor: nil)
+    session.select(b)
+    session.updateItems([a, d], sourceVersion: .init(1))
+    #expect(session.selection.currentItemID == d)
+    // Clearing the filter keeps the moved Current; the hidden item is not restored.
+    session.updateItems([a, b, c, d], sourceVersion: .init(1))
+    #expect(session.selection.currentItemID == d)
+    // A filter that hides every later item falls back to the nearest earlier one.
+    session.select(c)
+    session.updateItems([a], sourceVersion: .init(1))
+    #expect(session.selection.currentItemID == a)
+}

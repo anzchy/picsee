@@ -16,8 +16,9 @@ public struct FSEventSource: FolderEventSource {
         FSEventStreamCreate(nil, callback, context, [url.path] as CFArray, FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             latency, FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer))
     }
+    /// RootChanged is not here: FSEvents sends it only with WatchRoot, and the root moving is P2-08.
     static let dropFlags = FSEventStreamEventFlags(kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagUserDropped
-        | kFSEventStreamEventFlagKernelDropped | kFSEventStreamEventFlagEventIdsWrapped | kFSEventStreamEventFlagRootChanged)
+        | kFSEventStreamEventFlagKernelDropped | kFSEventStreamEventFlagEventIdsWrapped)
     static func hint(path: String, flags: FSEventStreamEventFlags) -> FolderChangeHint {
         flags & dropFlags != 0 ? .mustRescan : .changed(URL(fileURLWithPath: path))
     }

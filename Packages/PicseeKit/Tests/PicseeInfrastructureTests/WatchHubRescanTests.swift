@@ -5,12 +5,13 @@ import PicseeCore
 @testable import PicseeInfrastructure
 
 @Test func watchHubForcesRescanOnDropFlagsAndReconcile() async throws {
-    // (a) Every subset of 5 drop flags and 4 ordinary flags: mustRescan iff a drop flag is present.
+    // (a) Every subset of 4 drop flags and 5 ordinary flags: mustRescan iff a drop flag is present.
+    // RootChanged is ordinary: FSEvents sends it only with WatchRoot, which the stream does not set.
     func flag(_ value: Int) -> FSEventStreamEventFlags { FSEventStreamEventFlags(value) }
     let drops = [kFSEventStreamEventFlagMustScanSubDirs, kFSEventStreamEventFlagUserDropped, kFSEventStreamEventFlagKernelDropped,
-        kFSEventStreamEventFlagEventIdsWrapped, kFSEventStreamEventFlagRootChanged].map(flag)
+        kFSEventStreamEventFlagEventIdsWrapped].map(flag)
     let ordinary = [kFSEventStreamEventFlagItemCreated, kFSEventStreamEventFlagItemRemoved, kFSEventStreamEventFlagItemRenamed,
-        kFSEventStreamEventFlagItemModified].map(flag)
+        kFSEventStreamEventFlagItemModified, kFSEventStreamEventFlagRootChanged].map(flag)
     let all = drops + ordinary, changed = FolderChangeHint.changed(URL(fileURLWithPath: "/r/x.png"))
     for mask in 0..<(1 << all.count) {
         let flags = all.indices.filter { mask & (1 << $0) != 0 }.reduce(FSEventStreamEventFlags(0)) { $0 | all[$1] }
