@@ -30,10 +30,12 @@ final class MemoryBudget: @unchecked Sendable {
             return current.evictable
         }
     }
+    #if DEBUG
     /// Test seam: sets staging directly, without admission.
     func reserved(_ bytes: Int) {
         lock.withLock { current.reserved = bytes; highest = max(highest, current.total) }
     }
+    #endif
     /// Takes `cost` of staging if it fits beside everything resident, or for an idle current decode
     /// when nothing evictable is left. Check and take happen under one lock.
     func reserve(_ cost: Int, idleCurrent: Bool) -> Bool {
