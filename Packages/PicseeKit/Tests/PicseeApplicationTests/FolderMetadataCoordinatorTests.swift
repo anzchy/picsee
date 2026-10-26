@@ -250,3 +250,40 @@ private struct PartialFolderMetadataReader: FolderMetadataReading {
     #expect(coordinator.snapshot?.entries.count == 1024)
     #expect(coordinator.metadataProjectionCount <= 17)
 }
+
+@Test(.timeLimit(.minutes(1))) @MainActor
+func issue108HeldMetadataHeadersLeaveCooperativeExecutorResponsive() async throws {
+    let reader = HeldFolderMetadataReader()
+    let workerCount = ProcessInfo.processInfo.activeProcessorCount
+    let count = max(4, min(workerCount * 2, 32))
+    var coordinators: [FolderScanCoordinator] = []
+    for _ in 0..<count {
+        let fixture = FolderScanFixture()
+        let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, metadataReader: reader)
+        let scan = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+        await fixture.scanner.waitForStart()
+        try await fixture.scanner.deliver(["a.jpg"])
+        await fixture.scanner.finish()
+        try await scan.value
+        coordinators.append(coordinator)
+    }
+    for coordinator in coordinators { coordinator.setConditions(.init(sort: .captureDate)) }
+    // The probe itself must not need a cooperative worker to release blocked reads.
+    let (started, elapsed) = await withCheckedContinuation { continuation in
+        Thread.detachNewThread {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+            while reader.requested.count < workerCount && ContinuousClock.now < deadline {
+                Thread.sleep(forTimeInterval: 0.005)
+            }
+            let started = reader.requested.count
+            let start = ContinuousClock.now
+            Task.detached { continuation.resume(returning: (started, ContinuousClock.now - start)) }
+            Thread.sleep(forTimeInterval: 0.8)
+            for _ in 0..<count { reader.release() }
+        }
+    }
+    #expect(started >= workerCount)
+    #expect(elapsed < .milliseconds(400))
+    try await Task.sleep(for: .milliseconds(900))
+    for coordinator in coordinators { coordinator.end() }
+}
