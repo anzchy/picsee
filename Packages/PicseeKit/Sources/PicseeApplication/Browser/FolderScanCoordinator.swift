@@ -312,9 +312,12 @@ struct FolderScanRestorePoint {
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool,
         preserveConditions: Bool) -> Task<Void, any Error> {
         let previousConditions = conditions
+        let previousFolder = activeFolder?.url ?? sourceSnapshot?.version.folder
+        let sameFolder = previousFolder?.standardizedFileURL == folder.standardizedFileURL
         stop(.replaced, successor: true)
         if !preserveConditions { excludedPresentationNeedsReconciliation = false }
-        conditions = preserveConditions ? previousConditions : FolderViewConditions()
+        conditions = FolderViewConditions(sort: previousConditions.sort, direction: previousConditions.direction,
+            selectedExtensions: preserveConditions || sameFolder ? previousConditions.selectedExtensions : nil)
         generation &+= 1
         let token = generation
         activeGeneration = token

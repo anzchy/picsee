@@ -77,6 +77,7 @@ extension ViewerSession {
     public func setFolderConditions(_ conditions: FolderViewConditions) {
         guard filePreviewSet == nil, previewSet == nil else { return }
         folderScan?.setConditions(conditions)
+        saveFolderSort(conditions)
     }
     public func setFolderLoopEnabled(_ enabled: Bool) {
         guard filePreviewSet == nil, previewSet == nil else { return }

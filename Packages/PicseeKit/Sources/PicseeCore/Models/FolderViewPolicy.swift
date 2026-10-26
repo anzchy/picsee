@@ -1,6 +1,6 @@
 import Foundation
 
-public enum FolderSortKey: String, CaseIterable, Sendable {
+public enum FolderSortKey: String, CaseIterable, Codable, Sendable {
     case name, modificationDate, type, size, captureDate, pixelDimensions
 }
 
@@ -13,7 +13,7 @@ public struct FolderImageMetadata: Equatable, Sendable {
     }
 }
 
-public enum FolderSortDirection: String, CaseIterable, Sendable {
+public enum FolderSortDirection: String, CaseIterable, Codable, Sendable {
     case ascending, descending
 }
 

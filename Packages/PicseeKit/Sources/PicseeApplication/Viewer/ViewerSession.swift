@@ -29,7 +29,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public private(set) var selection = BrowserSelection()
     public private(set) var previewSet: PreviewSet?
     public internal(set) var filePreviewSet: FilePreviewSet?
-    public var folderScan: FolderScanCoordinator?
+    public var folderScan: FolderScanCoordinator? { didSet { applyPreferredFolderSort() } }
     let inputNavigationIntent = AccessIntent()
     public private(set) var mode: ViewerMode = .viewing
     public private(set) var scrollAnchor: ItemID?
@@ -200,6 +200,24 @@ public enum ViewerMode: Sendable { case browsing, viewing }
             chrome.setLock(.filmstrip, active: preferences.filmstripExpanded, at: clock.now)
         }
         synchronizeChrome()
+        applyPreferredFolderSort()
+    }
+    private func applyPreferredFolderSort() {
+        guard let folderScan else { return }
+        let preferences = preferencesStore.value
+        var conditions = folderScan.conditions
+        guard conditions.sort != preferences.folderSort || conditions.direction != preferences.folderSortDirection else { return }
+        conditions.sort = preferences.folderSort
+        conditions.direction = preferences.folderSortDirection
+        folderScan.setConditions(conditions)
+    }
+    func saveFolderSort(_ conditions: FolderViewConditions) {
+        guard preferencesStore.value.folderSort != conditions.sort ||
+            preferencesStore.value.folderSortDirection != conditions.direction else { return }
+        var preferences = preferencesStore.value
+        preferences.folderSort = conditions.sort
+        preferences.folderSortDirection = conditions.direction
+        preferencesStore.value = preferences
     }
     public func activity() { chrome.activity(at: clock.now); synchronizeChrome() }
     public func advanceChrome() { chrome.advance(to: clock.now); synchronizeChrome() }
