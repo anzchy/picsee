@@ -70,7 +70,6 @@ import PicseeApplication
         entries: [entries[4], entries[3], entries[1], added], isComplete: true), selection: session.selection)
     grid.layoutSubtreeIfNeeded()
     grid.collectionView.layoutSubtreeIfNeeded()
-    grid.synchronizeSelection(session.selection)
     #expect(grid.collectionView.selectionIndexPaths.count == 3)
     #expect(session.selection.selectedItemIDs == [ids[4], ids[3], ids[1]])
     grid.onClearSelection = { session.clearSelection(); return session.selection }
@@ -78,6 +77,78 @@ import PicseeApplication
     #expect(session.selection.selectedItemIDs.isEmpty)
     #expect(session.selection.currentItemID == ids[4])
     #expect(grid.collectionView.selectionIndexPaths.isEmpty)
+}
+
+@Test @MainActor func gridNativeSelectAllCannotDivergeFromSelection() throws {
+    _ = NSApplication.shared
+    let folder = URL(fileURLWithPath: "/tmp/picsee-select-all")
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
+    let entries = (0..<3).map { FolderEntry(url: folder.appendingPathComponent("\($0).jpg"), root: root) }
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+    let window = NSWindow(contentRect: grid.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = grid
+    grid.display(FolderSnapshot(version: .init(rootID: root.id, folder: folder, generation: 1),
+        entries: entries, isComplete: true), selectedItemID: entries[0].itemID)
+    window.makeFirstResponder(grid.collectionView)
+    grid.collectionView.selectAll(nil)
+    #expect(grid.selection.selectedItemIDs == [entries[0].itemID])
+    #expect(grid.collectionView.selectionIndexPaths == [IndexPath(item: 0, section: 0)])
+    grid.collectionView.selectItems(at: [IndexPath(item: 1, section: 0)], scrollPosition: [])
+    #expect(grid.collectionView.selectionIndexPaths == [IndexPath(item: 0, section: 0)])
+}
+
+@Test @MainActor func gridModifiedArrowKeepsMultiSelection() throws {
+    _ = NSApplication.shared
+    let folder = URL(fileURLWithPath: "/tmp/picsee-modified-arrow")
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
+    let entries = (0..<4).map { FolderEntry(url: folder.appendingPathComponent("\($0).jpg"), root: root) }
+    let ids = entries.map(\.itemID)
+    var selection = BrowserSelection()
+    selection.click(ids[0], in: ids)
+    selection.click(ids[2], modifier: .command, in: ids)
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+    let window = NSWindow(contentRect: grid.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = grid
+    grid.display(FolderSnapshot(version: .init(rootID: root.id, folder: folder, generation: 1),
+        entries: entries, isComplete: true), selection: selection)
+    func arrow(_ flags: NSEvent.ModifierFlags) throws {
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: "→", charactersIgnoringModifiers: "→", isARepeat: false, keyCode: 124))
+        grid.collectionView.keyDown(with: event)
+    }
+    try arrow(.shift)
+    #expect(grid.currentItemID == ids[3])
+    #expect(grid.selection.selectedItemIDs == [ids[0], ids[2]])
+    #expect(grid.collectionView.selectionIndexPaths == [IndexPath(item: 0, section: 0), IndexPath(item: 2, section: 0)])
+}
+
+@Test @MainActor func page32BadgeMatchesPinnedRenderedCellInBothAppearances() throws {
+    _ = NSApplication.shared
+    let folder = URL(fileURLWithPath: "/tmp/picsee-badge")
+    let entry = FolderEntry(url: folder.appendingPathComponent("A.jpg"),
+        root: .init(id: AccessRootID(rawValue: UUID()), url: folder))
+    let cell = GridPhotoItem()
+    cell.configure(entry)
+    cell.isSelected = true
+    let badge = try #require(cell.view.subviews.compactMap { $0 as? NSTextField }
+        .first { $0.stringValue == "✓" })
+    let tile = try #require(cell.view.subviews.first { $0.frame.minY == 32 && $0.frame.height > 100 })
+    #expect(badge.frame.size == NSSize(width: 18, height: 18))
+    #expect(tile.frame.maxX - badge.frame.maxX == 7)
+    #expect(tile.frame.maxY - badge.frame.maxY == 7)
+    #expect(badge.layer?.borderWidth == 1)
+    #expect(badge.layer?.borderColor?.components == [1, 1, 1, 1])
+    let appearances: [(NSAppearance.Name, [CGFloat])] = [
+        (.aqua, [37.0 / 255, 99.0 / 255, 235.0 / 255, 1]),
+        (.darkAqua, [29.0 / 255, 78.0 / 255, 216.0 / 255, 1])
+    ]
+    for (appearance, expected) in appearances {
+        cell.view.appearance = NSAppearance(named: appearance)
+        let actual = try #require(badge.layer?.backgroundColor?.components)
+        #expect(zip(actual, expected).allSatisfy { abs($0 - $1) < 0.001 })
+    }
+    #expect(!badge.isAccessibilityElement())
 }
 
 @Test @MainActor func gridStandaloneMouseSelectionAndEmptyClick() throws {

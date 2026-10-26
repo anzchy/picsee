@@ -1,5 +1,6 @@
 import AppKit
 import PicseeApplication
+import PicseeCore
 
 /// One owner for which surface the window shows: viewer (canvas, chrome, states), Reading State, or grid.
 @MainActor public final class GridViewerPresentation {
@@ -50,6 +51,12 @@ import PicseeApplication
         guard reading, isGridVisible else { return false }
         showGrid(reading: true)
         return true
+    }
+    /// Restores the native grid after a preview with the Session's reconciled selection.
+    public func restoreGrid(_ snapshot: FolderSnapshot, selection: BrowserSelection, offset: NSPoint?) {
+        (grid as? GridBrowserView)?.display(snapshot, selection: selection)
+        showGrid(reading: false)
+        if let offset { (grid as? GridBrowserView)?.restoreContentOffset(offset) }
     }
     /// What Cancel Reading returns to.
     public func show(_ target: FolderEntryRestoreTarget) {

@@ -58,6 +58,7 @@ import PicseeApplication
         selectionBadge.layer?.cornerRadius = 9
         selectionBadge.layer?.borderWidth = 1
         selectionBadge.isHidden = true
+        selectionBadge.setAccessibilityElement(false)
         // Selection follows page 11/12's tile outline; Current Item is an inset ring.
         selectionOutline.borderWidth = 2
         selectionOutline.cornerRadius = DesignMetrics.radii["inner"]! + 4
@@ -168,7 +169,7 @@ import PicseeApplication
         currentRing.isHidden = !isCurrent
         nameLabel.layer?.backgroundColor = isSelected ? fill : NSColor.clear.cgColor
         selectionBadge.layer?.backgroundColor = badgeFill
-        selectionBadge.layer?.borderColor = NSColor.white.cgColor
+        selectionBadge.layer?.borderColor = NSColor(calibratedRed: 1, green: 1, blue: 1, alpha: 1).cgColor
         selectionBadge.isHidden = !isSelected
         view.setAccessibilityValue(isSelected ? String(localized: "Selected") : "")
     }
@@ -206,11 +207,13 @@ private struct GridGeometry: Equatable {
     }
 }
 
-@MainActor private final class GridCollectionView: NSCollectionView {
-    var onArrow: ((Int) -> Void)?
+@MainActor private final class GridCollectionView: NSCollectionView, NSUserInterfaceValidations {
+    var onArrow: ((Int, Bool) -> Void)?
     var onClick: ((Int?, SelectionModifier) -> Void)?
+    var onNativeSelectionChange: (() -> Void)?
     var columnStep = 1
     override func mouseDown(with event: NSEvent) {
+        guard event.clickCount == 1 else { return }
         let point = convert(event.locationInWindow, from: nil)
         let modifier: SelectionModifier = event.modifierFlags.contains(.shift) ? .shift
             : event.modifierFlags.contains(.command) ? .command : .plain
@@ -226,7 +229,18 @@ private struct GridGeometry: Equatable {
         case 126: delta = -columnStep
         default: super.keyDown(with: event); return
         }
-        onArrow?(delta)
+        onArrow?(delta, !event.modifierFlags.intersection([.shift, .command]).isEmpty)
+    }
+    // Select All has no defined P3-09 model semantics; keep the native responder action inert.
+    override func selectAll(_ sender: Any?) {}
+    func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        guard let action = item.action else { return false }
+        if action == #selector(selectAll(_:)) { return false }
+        return responds(to: action)
+    }
+    override func selectItems(at indexPaths: Set<IndexPath>, scrollPosition: NSCollectionView.ScrollPosition) {
+        super.selectItems(at: indexPaths, scrollPosition: scrollPosition)
+        onNativeSelectionChange?()
     }
 }
 
@@ -267,11 +281,15 @@ private struct GridGeometry: Equatable {
         collectionView.backgroundColors = [DesignColor.canvasBackground.nsColor]
         collectionView.dataSource = self
         collectionView.delegate = self
-        (collectionView as? GridCollectionView)?.onArrow = { [weak self] delta in
-            self?.moveCurrent(by: delta)
+        (collectionView as? GridCollectionView)?.onArrow = { [weak self] delta, preserveSelection in
+            self?.moveCurrent(by: delta, preservingSelection: preserveSelection)
         }
         (collectionView as? GridCollectionView)?.onClick = { [weak self] index, modifier in
             self?.clickItem(at: index, modifier: modifier)
+        }
+        (collectionView as? GridCollectionView)?.onNativeSelectionChange = { [weak self] in
+            guard let self, !self.updating else { return }
+            self.synchronizeSelection(self.selection)
         }
         collectionView.register(GridPhotoItem.self, forItemWithIdentifier: Self.reuseID)
         collectionView.setAccessibilityIdentifier("grid.collection")
@@ -467,18 +485,22 @@ private struct GridGeometry: Equatable {
         if let current = self.currentItemID { onCurrentChange?(current) }
         window?.makeFirstResponder(collectionView)
     }
-    private func moveCurrent(by delta: Int) {
+    private func moveCurrent(by delta: Int, preservingSelection: Bool) {
         guard !entries.isEmpty else { return }
         let current = currentItemID.flatMap { indices[$0] } ?? 0
         let next = max(0, min(entries.count - 1, current + delta))
         guard next != current || currentItemID == nil, let id = itemID(at: next) else { return }
         currentItemID = id
-        selection.click(id, in: entries.map(\.itemID))
+        if preservingSelection {
+            selection.focus(id, in: entries.map(\.itemID))
+            onCurrentChange?(id)
+        } else {
+            selection.click(id, in: entries.map(\.itemID))
+            onSelect?(id)
+        }
         updating = true
-        collectionView.deselectAll(nil)
-        collectionView.selectItems(at: [IndexPath(item: next, section: 0)], scrollPosition: [])
+        drawSelection()
         updating = false
-        onSelect?(id)
     }
     private func drawCurrent() {
         for case let item as GridPhotoItem in collectionView.visibleItems() {
@@ -522,15 +544,21 @@ private struct GridGeometry: Equatable {
         return item
     }
     public func collectionView(_ collectionView: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>) {
-        guard !updating, let index = indexPaths.first?.item, let id = itemID(at: index) else { return }
-        selection.click(id, in: entries.map(\.itemID))
-        currentItemID = id
-        onSelect?(id)
+        guard !updating else { return }
+        if collectionView.selectionIndexPaths.count <= 1,
+           let index = indexPaths.first?.item, let id = itemID(at: index) {
+            selection.click(id, in: entries.map(\.itemID))
+            currentItemID = id
+            onSelect?(id)
+        }
         synchronizeSelection(selection)
     }
     public func collectionView(_ collectionView: NSCollectionView, didDeselectItemsAt indexPaths: Set<IndexPath>) {
-        guard !updating, collectionView.selectionIndexPaths.isEmpty else { return }
-        selection.clearSelection()
-        onDeselect?()
+        guard !updating else { return }
+        if collectionView.selectionIndexPaths.isEmpty {
+            selection.clearSelection()
+            onDeselect?()
+        }
+        synchronizeSelection(selection)
     }
 }
