@@ -524,7 +524,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         canvas.showFailure()
         fileURL = nil
         if let snapshot = gridProjection.snapshot {
-            gridView.display(gridSearch.project(snapshot), selection: session.selection)
+            GridWatchedSearchRefresh.restoreGrid(snapshot, session: session,
+                search: gridSearch, grid: gridView, shell: gridShell)
             showGrid()
             if let offset = gridPreviewScrollOffset { gridView.restoreContentOffset(offset) }
             else if let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }
@@ -829,13 +830,12 @@ extension CanvasWindowController: FolderScanHost {
                     session.completeFolderEntry()
                 } else if !gridView.isHidden {
                     // Re-filter synchronously without moving keyboard focus out of the search field.
-                    searchProjection.cancel()
-                    presentSearchedGrid(gridSearch.project(snapshot), source: snapshot)
+                    GridWatchedSearchRefresh.apply(snapshot, session: session, search: gridSearch,
+                        scheduler: searchProjection, grid: gridView, shell: gridShell, gridVisible: true)
                     gridView.restoreContentOffset(offset)
                 } else {
-                    // A viewer keeps the full surviving Preview Set until it returns to the filtered grid.
-                    session.updateItems(snapshot.navigationEntries.map(\.itemID),
-                        sourceVersion: .init(snapshot.version.generation))
+                    GridWatchedSearchRefresh.apply(snapshot, session: session, search: gridSearch,
+                        scheduler: searchProjection, grid: gridView, shell: gridShell, gridVisible: false)
                 }
             }
         } onChange: { [weak self, weak scan] in
