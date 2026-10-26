@@ -112,6 +112,22 @@ private func fixturePage(_ css: String) throws -> PinnedDesign {
     }
 }
 
+@Test func issue168RejectsPrefixOrderQualifiersWithoutMatchingClassPrefixes() throws {
+    for qualified in [".state.a", "button.a", ":not(.hidden).a"] {
+        let page = try fixturePage(".a{gap:2px}\(qualified){gap:9px}")
+        do {
+            _ = try page.length(".a", "gap", viewport: 800)
+            Issue.record("Expected ambiguity from \(qualified)")
+        } catch let error as PinnedDesign.Error {
+            for part in ["fixture", "selector '.a'", "property 'gap'", "at 800.0pt", "ambiguous", qualified] {
+                #expect(error.description.contains(part), "Missing \(part): \(error)")
+            }
+        }
+    }
+    let distinct = try fixturePage(".a{gap:2px}.ab{gap:9px}")
+    #expect(try distinct.length(".a", "gap", viewport: 800) == 2)
+}
+
 @Test func issue168RejectsPinnedWorkspaceQualifiedRule() throws {
     let page = try PinnedDesign.page("grid-light")
     do {

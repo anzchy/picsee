@@ -236,21 +236,34 @@ struct PinnedDesign {
     }
 
     private static func sameElementQualifier(in ruleSelector: String, after selector: String) -> String? {
-        guard let match = ruleSelector.range(of: selector, options: .backwards) else { return nil }
-        let before = ruleSelector[..<match.lowerBound]
-        guard before.isEmpty || before.last.map({ " >+~".contains($0) }) == true else { return nil }
-        let suffix = String(ruleSelector[match.upperBound...])
-        guard let first = suffix.first, ".#[:".contains(first) else { return nil }
+        let chars = Array(ruleSelector)
+        let query = Array(selector)
+        guard !query.isEmpty, query.count <= chars.count else { return nil }
+        var compoundStart = 0
         var depth = 0
-        for char in suffix {
+        for (index, char) in chars.enumerated() {
             if char == "(" || char == "[" { depth += 1 }
             if char == ")" || char == "]" { depth -= 1 }
-            if depth == 0 && " >+~".contains(char) { return nil }
+            if depth == 0 && (char.isWhitespace || ">+~,".contains(char)) { compoundStart = index + 1 }
         }
-        if suffix.range(of: "^:(hover|focus[\\w-]*|active|disabled)$", options: .regularExpression) != nil {
-            return nil
+        depth = 0
+        for index in compoundStart..<chars.count {
+            let char = chars[index]
+            if depth == 0, index + query.count <= chars.count,
+               Array(chars[index..<(index + query.count)]) == query {
+                let end = index + query.count
+                guard end == chars.count || ".#[:".contains(chars[end]) else { continue }
+                let qualifier = String(chars[compoundStart..<index] + chars[end...])
+                if qualifier.isEmpty { return nil }
+                if qualifier.range(of: "^:(hover|focus[\\w-]*|active|disabled)$", options: .regularExpression) != nil {
+                    return nil
+                }
+                return qualifier
+            }
+            if char == "(" || char == "[" { depth += 1 }
+            if char == ")" || char == "]" { depth -= 1 }
         }
-        return suffix
+        return nil
     }
 
     private struct Catalog: Decodable {
