@@ -30,6 +30,16 @@ private struct FailingFolderMetadataReader: FolderMetadataReading {
     func read(_ url: URL) throws -> FolderImageMetadata { throw FolderScanTestError.expected }
 }
 
+private struct PartialFolderMetadataReader: FolderMetadataReading {
+    func read(_ url: URL) throws -> FolderImageMetadata { .init(pixelWidth: 4) }
+}
+
+@MainActor private final class CancelledRememberHost: FolderScanHost {
+    func openFolderImage(_ url: URL, rootID: AccessRootID) {}
+    func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { throw CancellationError() }
+    func showEmptyFolder() {}
+}
+
 @Test @MainActor func issue108MetadataSortPendingInvalidatesStaleRepliesAndKeepsBaseList() async throws {
     let fixture = FolderScanFixture(), reader = HeldFolderMetadataReader()
     let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, metadataReader: reader)
@@ -106,10 +116,102 @@ private struct FailingFolderMetadataReader: FolderMetadataReading {
     await fixture.scanner.finish(); try await task.value
     let itemID = try #require(coordinator.snapshot?.entries.first?.itemID)
     coordinator.setConditions(.init(sort: .pixelDimensions))
-    for _ in 0..<100 where coordinator.isMetadataSortPending { try await Task.sleep(for: .milliseconds(5)) }
-    #expect(!coordinator.isMetadataSortPending)
+    for _ in 0..<100 where coordinator.metadataSortState == .pending { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(coordinator.metadataSortState == .incomplete)
     #expect(coordinator.metadataUnknownItemIDs == [itemID])
     #expect(coordinator.snapshot?.entries.first?.itemID == itemID)
+}
+
+@Test @MainActor func issue108MissingChosenFieldRemainsIncomplete() async throws {
+    let fixture = FolderScanFixture()
+    let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner,
+        metadataReader: PartialFolderMetadataReader())
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg"])
+    await fixture.scanner.finish(); try await task.value
+    for sort in [FolderSortKey.captureDate, .pixelDimensions] {
+        coordinator.setConditions(.init(sort: sort))
+        for _ in 0..<100 where coordinator.metadataSortState == .pending { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(coordinator.metadataSortState == .incomplete)
+    }
+}
+
+@Test @MainActor func issue108PartialScanFailureKeepsReadMetadata() async throws {
+    let fixture = FolderScanFixture(), reader = ImmediateFolderMetadataReader()
+    let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, metadataReader: reader)
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id, input: fixture.folder.appendingPathComponent("a.jpg"))
+    await fixture.scanner.waitForStart()
+    coordinator.setConditions(.init(sort: .captureDate))
+    try await fixture.scanner.deliver(["a.jpg", "b.jpg"])
+    for _ in 0..<100 where reader.requested.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
+    for _ in 0..<100 where coordinator.metadataProjectionCount == 0 { try await Task.sleep(for: .milliseconds(5)) }
+    await fixture.scanner.finish(failing: true)
+    await #expect(throws: FolderScanTestError.expected) { try await task.value }
+    #expect(coordinator.snapshot?.entries.map(\.url.lastPathComponent) == ["b.jpg", "a.jpg"])
+}
+
+@Test @MainActor func issue108StaleReplyCannotPopulateNewSortAfterDrain() async throws {
+    let fixture = FolderScanFixture(), reader = HeldFolderMetadataReader()
+    let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, metadataReader: reader)
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg"])
+    await fixture.scanner.finish(); try await task.value
+    coordinator.setConditions(.init(sort: .captureDate))
+    for _ in 0..<100 where reader.requested.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+    coordinator.setConditions(.init(sort: .name))
+    coordinator.setConditions(.init(sort: .captureDate))
+    reader.release()
+    for _ in 0..<100 where reader.requested.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(coordinator.metadataSortState == .pending)
+    reader.release()
+    for _ in 0..<100 where coordinator.metadataSortState == .pending { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(coordinator.metadataSortState == .complete)
+}
+
+@Test @MainActor func issue108CancelledScanDropsSourceAndMetadataWork() async throws {
+    let fixture = FolderScanFixture(), reader = HeldFolderMetadataReader(), host = CancelledRememberHost()
+    let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, metadataReader: reader)
+    coordinator.host = host
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    coordinator.setConditions(.init(sort: .captureDate))
+    try await fixture.scanner.deliver(["a.jpg"])
+    for _ in 0..<100 where reader.requested.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+    await fixture.scanner.finish(); try await task.value
+    #expect(coordinator.snapshot == nil && coordinator.sourceSnapshot == nil)
+    #expect(coordinator.metadataSortState == .idle)
+    reader.release()
+    for _ in 0..<100 {
+        let balance = await fixture.access.balance
+        if balance[0] == balance[1] { break }
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(coordinator.snapshot == nil && coordinator.sourceSnapshot == nil)
+    let balance = await fixture.access.balance
+    #expect(balance[0] == balance[1])
+}
+
+@Test @MainActor func issue108RemovedEntriesDoNotStrandRemainingMetadataQueue() async throws {
+    let fixture = FolderScanFixture(), reader = HeldFolderMetadataReader()
+    let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, metadataReader: reader)
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.jpg", "c.jpg"])
+    await fixture.scanner.finish(); try await task.value
+    coordinator.setConditions(.init(sort: .captureDate))
+    for _ in 0..<100 where reader.requested.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+    let source = try #require(coordinator.sourceSnapshot)
+    coordinator.replaceSourceSnapshot(FolderSnapshot(version: source.version,
+        entries: source.entries.filter { $0.url.lastPathComponent == "c.jpg" }, isComplete: true))
+    reader.release()
+    for _ in 0..<100 where reader.requested.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(reader.requested == ["a.jpg", "c.jpg"])
+    reader.release()
+    for _ in 0..<100 where coordinator.metadataSortState == .pending { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(coordinator.metadataSortState == .complete)
+    #expect(coordinator.snapshot?.entries.map(\.url.lastPathComponent) == ["c.jpg"])
 }
 
 @Test @MainActor func issue108RapidSortChangesKeepAtMostOneReadInFlight() async throws {
@@ -138,12 +240,13 @@ private struct FailingFolderMetadataReader: FolderMetadataReading {
     let coordinator = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, metadataReader: reader)
     let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id)
     await fixture.scanner.waitForStart()
-    let names = (0..<65).map { "img\($0).jpg" }
+    let names = (0..<1024).map { "img\($0).jpg" }
     try await fixture.scanner.deliver(names)
     await fixture.scanner.finish(); try await task.value
     coordinator.setConditions(.init(sort: .captureDate))
-    for _ in 0..<300 where coordinator.isMetadataSortPending { try await Task.sleep(for: .milliseconds(5)) }
+    for _ in 0..<2000 where coordinator.isMetadataSortPending { try await Task.sleep(for: .milliseconds(5)) }
     #expect(!coordinator.isMetadataSortPending)
-    #expect(reader.requested.count == 65)
-    #expect(coordinator.snapshot?.entries.count == 65)
+    #expect(reader.requested.count == 1024)
+    #expect(coordinator.snapshot?.entries.count == 1024)
+    #expect(coordinator.metadataProjectionCount <= 17)
 }

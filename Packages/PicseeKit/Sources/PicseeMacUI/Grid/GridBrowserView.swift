@@ -260,6 +260,7 @@ private struct GridGeometry: Equatable {
     public var onCurrentChange: ((ItemID) -> Void)?
     private let scrollView = NSScrollView()
     let metadataSortNotice = GridSortNoticeLabel(labelWithString: String(localized: "Sort unfinished"))
+    private var displayedMetadataSortState: MetadataSortState = .idle
     private var entries: [FolderEntry] = []
     private var indices: [ItemID: Int] = [:]
     private var updating = false
@@ -358,9 +359,20 @@ private struct GridGeometry: Equatable {
             metadataSortNotice.layer?.backgroundColor = DesignColor.canvasBackground.nsColor.cgColor
         }
     }
+    public func setMetadataSortState(_ state: MetadataSortState) {
+        guard displayedMetadataSortState != state else { return }
+        displayedMetadataSortState = state
+        let visible = state == .pending || state == .incomplete
+        let label = String(localized: state == .incomplete ? "Sort metadata unavailable" : "Sort unfinished")
+        metadataSortNotice.stringValue = label
+        metadataSortNotice.setAccessibilityLabel(label)
+        metadataSortNotice.setAccessibilityIdentifier(state == .incomplete ? "folder.sort.incomplete" : "folder.sort.pending")
+        metadataSortNotice.isHidden = !visible
+        metadataSortNotice.setAccessibilityHidden(!visible)
+        needsLayout = true
+    }
     public func setMetadataSortPending(_ pending: Bool) {
-        metadataSortNotice.isHidden = !pending
-        metadataSortNotice.setAccessibilityHidden(!pending)
+        setMetadataSortState(pending ? .pending : .idle)
     }
 
     public override func viewDidChangeBackingProperties() {

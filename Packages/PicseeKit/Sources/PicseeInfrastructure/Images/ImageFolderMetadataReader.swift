@@ -2,6 +2,8 @@ import Foundation
 import ImageIO
 import PicseeCore
 
+public enum FolderMetadataReadError: Error { case unreadableHeader, changedDuringRead }
+
 /// Reads only source properties; never creates an image or thumbnail.
 public struct ImageFolderMetadataReader: FolderMetadataReading {
     public init() {}
@@ -10,7 +12,7 @@ public struct ImageFolderMetadataReader: FolderMetadataReading {
         guard let source = CGImageSourceCreateWithURL(url as CFURL,
             [kCGImageSourceShouldCache: false] as CFDictionary),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
-            return .init()
+            throw FolderMetadataReadError.unreadableHeader
         }
         let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any]
         let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
@@ -22,7 +24,7 @@ public struct ImageFolderMetadataReader: FolderMetadataReading {
         let date = dateString.flatMap { Self.captureDate($0, offset: offset) }
         let width = properties[kCGImagePropertyPixelWidth] as? Int
         let height = properties[kCGImagePropertyPixelHeight] as? Int
-        guard try FileRevisionReader.read(url) == before else { return .init() }
+        guard try FileRevisionReader.read(url) == before else { throw FolderMetadataReadError.changedDuringRead }
         return .init(captureDate: date, pixelWidth: width.flatMap { $0 > 0 ? $0 : nil },
             pixelHeight: height.flatMap { $0 > 0 ? $0 : nil })
     }
@@ -35,7 +37,7 @@ public struct ImageFolderMetadataReader: FolderMetadataReading {
                   let minutes = Int(String(decoding: bytes[4..<6], as: UTF8.self)),
                   hours <= 23, minutes < 60,
                   let parsed = TimeZone(secondsFromGMT: (bytes[0] == 45 ? -1 : 1) * (hours * 3600 + minutes * 60))
-            else { return nil }
+            else { return captureDate(value) }
             zone = parsed
         } else {
             guard let utc = TimeZone(secondsFromGMT: 0) else { return nil }

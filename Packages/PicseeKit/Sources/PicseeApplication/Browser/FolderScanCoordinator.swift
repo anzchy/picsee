@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import PicseeCore
 
+public enum MetadataSortState: Sendable, Equatable { case idle, pending, incomplete, complete }
+
 struct FolderScanRestorePoint {
     let source: FolderSnapshot
     let conditions: FolderViewConditions
@@ -21,6 +23,11 @@ struct FolderScanRestorePoint {
     public var isMetadataSortPending: Bool {
         guard sourceSnapshot != nil, conditions.sort == .captureDate || conditions.sort == .pixelDimensions else { return false }
         return activeGeneration != nil || !pendingMetadataIDs.isEmpty
+    }
+    public var metadataSortState: MetadataSortState {
+        guard sourceSnapshot != nil, conditions.sort == .captureDate || conditions.sort == .pixelDimensions else { return .idle }
+        if isMetadataSortPending { return .pending }
+        return metadataUnknownItemIDs.isEmpty ? .complete : .incomplete
     }
     public private(set) var metadataUnknownItemIDs: Set<ItemID> = []
     public private(set) var loopEnabled = false
@@ -46,6 +53,13 @@ struct FolderScanRestorePoint {
         conditions = value
         projectSource()
         enqueueMetadata()
+    }
+    /// Accepts a same-version source update, including removals from a future watcher.
+    func replaceSourceSnapshot(_ next: FolderSnapshot, added: [FolderEntry]? = nil) {
+        guard sourceSnapshot?.version == next.version else { return }
+        sourceSnapshot = next
+        projectSource()
+        enqueueMetadata(candidates: added)
     }
     public func setLoopEnabled(_ value: Bool) { loopEnabled = value }
     /// `rereadingFolder` rescans as a folder open (Reading State, first entry on completion) instead of keeping the shown image.
@@ -98,6 +112,9 @@ struct FolderScanRestorePoint {
     private let metadataReader: (any FolderMetadataReading)?
     private var metadata: [ItemID: FolderImageMetadata] = [:]
     private var metadataQueue: [FolderEntry] = []
+    private var metadataQueueIndex = 0
+    private var metadataSinceProjection = 0
+    private(set) var metadataProjectionCount = 0
     private var pendingMetadataIDs: Set<ItemID> = []
     private var metadataTask: Task<Void, Never>?
     private var metadataDrain: Task<Void, Never>?
@@ -155,9 +172,7 @@ struct FolderScanRestorePoint {
                         currentItemID = itemID
                     }, emit: { [self] batch in
                         guard activeGeneration == token, !Task.isCancelled, retainReadingAuthority(), let sourceSnapshot else { return }
-                        self.sourceSnapshot = sourceSnapshot.appending(batch, isComplete: false)
-                        projectSource()
-                        enqueueMetadata()
+                        replaceSourceSnapshot(sourceSnapshot.appending(batch, isComplete: false), added: batch)
                         if !batch.isEmpty, !firstBatchTraced {
                             firstBatchTraced = true
                             trace?.firstBatch(count: batch.count, generation: token)
@@ -217,11 +232,13 @@ struct FolderScanRestorePoint {
                 scanTask = nil
                 if error is CancellationError || Task.isCancelled {
                     activeFolder = nil
+                    invalidateMetadata()
+                    sourceSnapshot = nil
                     snapshot = nil; inputURL = nil; currentItemID = nil; currentURL = nil; pendingDirection = nil
                     trace?.end(outcome: .cancelled, generation: token)
                     return
                 }
-                snapshot = sourceSnapshot?.applying(conditions)
+                snapshot = sourceSnapshot?.applying(conditions, metadata: metadata)
                 pendingDirection = nil
                 failure = error
                 trace?.failure(error, generation: token)
@@ -341,25 +358,32 @@ struct FolderScanRestorePoint {
         metadataRevision &+= 1
         if metadataTask != nil { metadataDrain = metadataTask }
         metadataTask?.cancel(); metadataTask = nil
-        metadataQueue.removeAll(); pendingMetadataIDs.removeAll()
+        metadataQueue.removeAll(); metadataQueueIndex = 0; metadataSinceProjection = 0
+        pendingMetadataIDs.removeAll()
         metadata.removeAll(); metadataUnknownItemIDs.removeAll()
     }
-    private func enqueueMetadata() {
+    private func enqueueMetadata(candidates: [FolderEntry]? = nil) {
         guard metadataReader != nil,
               conditions.sort == .captureDate || conditions.sort == .pixelDimensions,
               let sourceSnapshot else { return }
-        for entry in sourceSnapshot.navigationEntries where metadata[entry.itemID] == nil && !pendingMetadataIDs.contains(entry.itemID) {
+        for entry in candidates ?? sourceSnapshot.navigationEntries
+            where metadata[entry.itemID] == nil && !pendingMetadataIDs.contains(entry.itemID) {
             pendingMetadataIDs.insert(entry.itemID)
             metadataQueue.append(entry)
         }
-        guard metadataTask == nil, !metadataQueue.isEmpty else { return }
+        guard metadataTask == nil, metadataQueueIndex < metadataQueue.count else { return }
         let token = metadataRevision, version = sourceSnapshot.version
         let predecessor = metadataDrain
         metadataTask = Task { [weak self] in
             guard let self else { return }
             await predecessor?.value
-            while !Task.isCancelled, token == metadataRevision, !metadataQueue.isEmpty {
-                let entry = metadataQueue.removeFirst()
+            while !Task.isCancelled, token == metadataRevision, metadataQueueIndex < metadataQueue.count {
+                let entry = metadataQueue[metadataQueueIndex]
+                metadataQueueIndex += 1
+                guard self.sourceSnapshot?.navigationIndex(for: entry.itemID) != nil else {
+                    pendingMetadataIDs.remove(entry.itemID)
+                    continue
+                }
                 guard let reader = metadataReader else { break }
                 let access = access
                 let read = Task.detached {
@@ -373,14 +397,31 @@ struct FolderScanRestorePoint {
                     try? await read.value
                 } onCancel: { read.cancel() }
                 guard !Task.isCancelled, token == metadataRevision,
-                      self.sourceSnapshot?.version == version,
-                      self.sourceSnapshot?.navigationIndex(for: entry.itemID) != nil else { break }
+                      let currentSource = self.sourceSnapshot, currentSource.version == version else { break }
+                guard currentSource.navigationIndex(for: entry.itemID) != nil else {
+                    pendingMetadataIDs.remove(entry.itemID)
+                    continue
+                }
                 metadata[entry.itemID] = result ?? .init()
-                if result == nil { metadataUnknownItemIDs.insert(entry.itemID) }
+                let missingChosenValue = conditions.sort == .captureDate ? result?.captureDate == nil
+                    : result?.pixelWidth == nil || result?.pixelHeight == nil
+                if missingChosenValue {
+                    metadataUnknownItemIDs.insert(entry.itemID)
+                }
                 pendingMetadataIDs.remove(entry.itemID)
-                if pendingMetadataIDs.isEmpty || metadata.count.isMultiple(of: 64) { projectSource() }
+                metadataSinceProjection += 1
+                let interval = max(64, (currentSource.navigationEntries.count + 15) / 16)
+                if pendingMetadataIDs.isEmpty || metadataSinceProjection >= interval {
+                    metadataSinceProjection = 0
+                    metadataProjectionCount += 1
+                    projectSource()
+                }
             }
-            if token == metadataRevision { metadataTask = nil }
+            if token == metadataRevision {
+                metadataQueue.removeAll(keepingCapacity: true)
+                metadataQueueIndex = 0
+                metadataTask = nil
+            }
         }
     }
     /// Explicitly nonisolated: path canonicalization and scanning begin only inside the acquired lease.

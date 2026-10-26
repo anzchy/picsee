@@ -1890,6 +1890,13 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "排序未完成" } }
       }
     },
+    "Sort metadata unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Sort metadata unavailable" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "部分排序元数据无法读取" } }
+      }
+    },
     "Sort by pixel area; equal areas use width, height, then natural name. Unknown last.": {
       "extractionState": "manual",
       "localizations": {
