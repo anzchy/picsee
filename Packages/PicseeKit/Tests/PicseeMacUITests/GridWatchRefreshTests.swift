@@ -16,23 +16,39 @@ import PicseeApplication
 
 /// Holds every thumbnail request until it is cancelled, and records starts and cancellations.
 private actor WatchRefreshThumbnailLog {
-    private(set) var started: [ItemID] = []
-    private(set) var cancelled: Set<ItemID> = []
-    func start(_ id: ItemID) { started.append(id) }
-    func cancel(_ id: ItemID) { cancelled.insert(id) }
-    func starts(of id: ItemID) -> Int { started.filter { $0 == id }.count }
-}
-
-@MainActor private func watchRefreshPoll(_ condition: () async -> Bool) async -> Bool {
-    for _ in 0..<2000 {
-        if await condition() { return true }
-        await Task.yield()
+    struct Counts: Sendable {
+        var starts: [ItemID: Int] = [:]
+        var cancels: [ItemID: Int] = [:]
+        var edges: [ItemID: [Int]] = [:]
+        var priorities: [ItemID: [DecodePriority]] = [:]
+        func live(_ id: ItemID) -> Int { starts[id, default: 0] - cancels[id, default: 0] }
+        func added(since base: Counts, _ id: ItemID) -> Int { starts[id, default: 0] - base.starts[id, default: 0] }
     }
-    return await condition()
+    private var counts = Counts()
+    private var waiters: [UUID: (condition: @Sendable (Counts) -> Bool, continuation: CheckedContinuation<Counts, Never>)] = [:]
+    func start(_ id: ItemID, edge: Int, priority: DecodePriority) {
+        counts.starts[id, default: 0] += 1
+        counts.edges[id, default: []].append(edge)
+        counts.priorities[id, default: []].append(priority)
+        notify()
+    }
+    func cancel(_ id: ItemID) { counts.cancels[id, default: 0] += 1; notify() }
+    /// Returns once the condition holds; awaited on log changes, not polled.
+    func until(_ condition: @escaping @Sendable (Counts) -> Bool) async -> Counts {
+        if condition(counts) { return counts }
+        return await withCheckedContinuation { waiters[UUID()] = (condition, $0) }
+    }
+    private func notify() {
+        for (id, waiter) in waiters where waiter.condition(counts) {
+            waiters.removeValue(forKey: id)
+            waiter.continuation.resume(returning: counts)
+        }
+    }
 }
 
 /// Mirrors the App's grid observer: the session reconciles first, then the grid shows the session's selection.
-@Test @MainActor func watchedRefreshReconcilesMultiSelectionAndCancelsRemovedThumbnails() async throws {
+@Test(.timeLimit(.minutes(1))) @MainActor
+func watchedRefreshReconcilesMultiSelectionAndCancelsRemovedThumbnails() async throws {
     _ = NSApplication.shared
     let folder = URL(fileURLWithPath: "/tmp/picsee-grid-watch-refresh")
     let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
@@ -46,9 +62,9 @@ private actor WatchRefreshThumbnailLog {
     let window = NSWindow(contentRect: grid.bounds, styleMask: [.titled], backing: .buffered, defer: false)
     window.contentView = grid
     let log = WatchRefreshThumbnailLog()
-    grid.thumbnailLoader = { entry, _, _, _ in
-        await log.start(entry.itemID)
-        while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(1)) }
+    grid.thumbnailLoader = { entry, _, edge, priority in
+        await log.start(entry.itemID, edge: edge, priority: priority)
+        try? await Task.sleep(for: .seconds(600))
         await log.cancel(entry.itemID)
         throw CancellationError()
     }
@@ -59,9 +75,15 @@ private actor WatchRefreshThumbnailLog {
     #expect(session.selection.selectedItemIDs == [b, d])
     #expect(session.selection.currentItemID == d)
     grid.display(snapshot(entries, generation: 1), selection: session.selection)
-    grid.setThumbnailsActive(true)
+    // Settle window geometry and backing scale before the first request, so every cell is requested as visible.
+    window.layoutIfNeeded()
     grid.layoutSubtreeIfNeeded()
-    #expect(await watchRefreshPoll { await log.started.count == 4 })
+    grid.setThumbnailsActive(true)
+    // Baseline: each of the four cells has exactly one live request. How many starts it took to get here
+    // depends on the host (screen, scale, layout timing), so later phases assert changes from this point.
+    let base = await log.until { counts in ids.allSatisfy { counts.live($0) == 1 } }
+    let edge = try #require(base.edges[a]?.last)
+    #expect(ids.allSatisfy { base.edges[$0]?.last == edge })
 
     // R1: the selected Current Item is deleted. Current moves to its predecessor; the selection only shrinks.
     let first = snapshot(Array(entries.prefix(3)), generation: 2)
@@ -72,9 +94,11 @@ private actor WatchRefreshThumbnailLog {
     #expect(grid.selection == session.selection)
     #expect(grid.currentItemID == c)
     #expect(grid.collectionView.selectionIndexPaths == [IndexPath(item: 1, section: 0)])
-    #expect(await watchRefreshPoll { await log.cancelled.contains(d) })
-    #expect(await watchRefreshPoll { await log.starts(of: c) == 2 })
-    #expect(await log.starts(of: d) == 1)
+    // The removed item's request is cancelled and never restarted; each survivor restarts once for the new generation.
+    let r1 = await log.until { counts in
+        counts.live(d) == 0 && [a, b, c].allSatisfy { counts.live($0) == 1 && counts.added(since: base, $0) >= 1 }
+    }
+    #expect([a, b, c, d].map { r1.added(since: base, $0) } == [1, 1, 1, 0])
 
     // R2: a selected non-current item is deleted. Current stays; the selection empties without adopting Current.
     let second = snapshot([entries[0], entries[2]], generation: 3)
@@ -84,9 +108,19 @@ private actor WatchRefreshThumbnailLog {
     #expect(session.selection.currentItemID == c)
     #expect(grid.currentItemID == c)
     #expect(grid.collectionView.selectionIndexPaths.isEmpty)
-    #expect(await watchRefreshPoll { await log.cancelled.contains(b) })
-    #expect(await watchRefreshPoll { await log.starts(of: c) == 3 })
-    #expect(await log.starts(of: b) == 2)
-    #expect(await log.starts(of: d) == 1)
+    let r2 = await log.until { counts in
+        counts.live(b) == 0 && [a, c].allSatisfy { counts.live($0) == 1 && counts.added(since: base, $0) >= 2 }
+    }
+    #expect([a, b, c, d].map { r2.added(since: base, $0) } == [2, 1, 2, 0])
+
     grid.stopThumbnails()
+    let end = await log.until { counts in ids.allSatisfy { counts.live($0) == 0 } }
+    // No late restart: totals are exactly the baseline plus the restarts above, all at the baseline edge, all visible.
+    #expect(ids.map { end.added(since: base, $0) } == [2, 1, 2, 0])
+    for id in ids {
+        let skipped = base.starts[id, default: 0]
+        #expect(end.edges[id, default: []].dropFirst(skipped).allSatisfy { $0 == edge })
+        #expect(end.priorities[id, default: []].dropFirst(skipped).allSatisfy { $0 == .visible })
+    }
+    #expect(ids.allSatisfy { base.priorities[$0]?.last == .visible })
 }
