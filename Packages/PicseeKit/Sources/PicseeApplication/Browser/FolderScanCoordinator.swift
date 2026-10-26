@@ -390,7 +390,15 @@ struct FolderScanRestorePoint {
                     try await access.withLease(.root(version.rootID, file: entry.url)) { lease in
                         guard AccessBoundary.contains(entry.url, in: lease.url) else { throw FileAccessError.outsideRoot }
                         try Task.checkCancellation()
-                        return try reader.read(entry.url)
+                        // ImageIO and file metadata reads are synchronous. A held read must not
+                        // occupy a Swift cooperative worker needed by other scans and tests.
+                        let url = entry.url
+                        return try await withCheckedThrowingContinuation { continuation in
+                            DispatchQueue.global(qos: .utility).async {
+                                do { continuation.resume(returning: try reader.read(url)) }
+                                catch { continuation.resume(throwing: error) }
+                            }
+                        }
                     }
                 }
                 let result = await withTaskCancellationHandler {
