@@ -62,7 +62,7 @@ func watchedRefreshReconcilesMultiSelectionAndCancelsRemovedThumbnails() async t
     func snapshot(_ kept: [FolderEntry], generation: UInt64) -> FolderSnapshot {
         FolderSnapshot(version: .init(rootID: root.id, folder: folder, generation: generation), entries: kept, isComplete: true)
     }
-    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 1200, height: 700))
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 640, height: 700))
     let window = NSWindow(contentRect: grid.bounds, styleMask: [.titled], backing: .buffered, defer: false)
     window.contentView = grid
     let log = WatchRefreshThumbnailLog()
@@ -83,9 +83,19 @@ func watchedRefreshReconcilesMultiSelectionAndCancelsRemovedThumbnails() async t
     window.layoutIfNeeded()
     grid.layoutSubtreeIfNeeded()
     grid.setThumbnailsActive(true)
-    // Baseline: each of the four cells has exactly one live request. How many starts it took to get here
-    // depends on the host (screen, scale, layout timing), so later phases assert changes from this point.
-    let base = await log.until { counts in ids.allSatisfy { counts.live($0) == 1 } }
+    _ = await log.until { counts in ids.allSatisfy { counts.live($0) == 1 } }
+    // A headless window may finish sizing after requests begin. Exercise that transition
+    // explicitly and take the refresh baseline only at the final tile edge.
+    window.setContentSize(NSSize(width: 1200, height: 700))
+    window.layoutIfNeeded()
+    grid.layoutSubtreeIfNeeded()
+    grid.collectionView.layoutSubtreeIfNeeded()
+    let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
+    let settledEdge = GridThumbnailPixelSizing.edge(tile: NSSize(width: layout.itemSize.width - 8,
+        height: layout.itemSize.height - 36), backingScale: window.backingScaleFactor)
+    let base = await log.until { counts in ids.allSatisfy {
+        counts.live($0) == 1 && counts.edges[$0]?.last == settledEdge
+    } }
     let edge = try #require(base.edges[a]?.last)
     #expect(ids.allSatisfy { base.edges[$0]?.last == edge })
 
