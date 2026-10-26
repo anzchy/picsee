@@ -127,3 +127,91 @@ private final class Issue124MetadataReader: FolderMetadataReading, @unchecked Se
     #expect(reader.requested == ["a.jpg"])
     #expect(scan.conditions.sort == key)
 }
+
+@Test @MainActor func issue124EndedScanReopensSameFolderWithFilter() async throws {
+    let fixture = FolderScanFixture(), scan = fixture.coordinator
+    let first = scan.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await first.value
+    scan.setConditions(.init(selectedExtensions: ["png"]))
+    scan.end() // App's single-image admission ends the current scan before opening its folder.
+    let same = scan.begin(folder: fixture.folder, rootID: fixture.id, input: fixture.folder.appendingPathComponent("a.jpg"))
+    await fixture.scanner.waitForStart(1)
+    #expect(scan.conditions.selectedExtensions == ["png"])
+    try await fixture.scanner.deliver(["a.jpg", "b.png"], at: 1)
+    await fixture.scanner.finish(1); try await same.value
+    #expect(scan.snapshot?.entries.map(\.url.lastPathComponent) == ["b.png"])
+    scan.end()
+    let other = scan.begin(folder: fixture.root.appendingPathComponent("B"), rootID: fixture.id)
+    await fixture.scanner.waitForStart(2)
+    #expect(scan.conditions.selectedExtensions == nil)
+    await fixture.scanner.finish(2); try await other.value
+}
+
+@Test @MainActor func issue124ResolvedSymlinkFolderKeepsFilter() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let real = root.appendingPathComponent("real"), link = root.appendingPathComponent("link")
+    try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+    let fixture = FolderScanFixture(), scan = fixture.coordinator
+    let first = scan.begin(folder: real, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    await fixture.scanner.finish(); try await first.value
+    scan.setConditions(.init(selectedExtensions: ["png"]))
+    scan.end()
+    let same = scan.begin(folder: link, rootID: fixture.id)
+    await fixture.scanner.waitForStart(1)
+    #expect(scan.conditions.selectedExtensions == ["png"])
+    await fixture.scanner.finish(1); try await same.value
+}
+
+@Test @MainActor func issue124CorruptSortFieldsKeepOtherPreferences() throws {
+    let json = #"{"alwaysShowTools":true,"filmstripExpanded":true,"appearance":"dark","gridSidebarWidth":240,"gridSidebarVisible":false,"folderSort":"unknown","folderSortDirection":42}"#
+    let decoded = try JSONDecoder().decode(DisplayPreferences.self, from: Data(json.utf8))
+    #expect(decoded.folderSort == .name && decoded.folderSortDirection == .ascending)
+    #expect(decoded.alwaysShowTools && decoded.filmstripExpanded)
+    #expect(decoded.appearance == .dark && decoded.gridSidebarWidth == 240 && !decoded.gridSidebarVisible)
+}
+
+@Test @MainActor func issue124CancelReadingRestoresFilterWithCurrentAppSort() async throws {
+    let fixture = FolderScanFixture(), scan = fixture.coordinator
+    let store = InMemoryDisplayPreferencesStore(), session = ViewerSession(preferencesStore: store)
+    session.folderScan = scan
+    let first = scan.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await first.value
+    session.setFolderConditions(.init(selectedExtensions: ["png"]))
+    session.beginFolderEntry(shownImage: nil, hasCompleteGrid: true)
+    let reading = scan.begin(folder: fixture.root.appendingPathComponent("B"), rootID: fixture.id)
+    await fixture.scanner.waitForStart(1)
+    var changed = store.value
+    changed.folderSort = .size; changed.folderSortDirection = .descending
+    store.value = changed
+    #expect(session.cancelFolderEntry() == .grid)
+    #expect(scan.conditions == .init(sort: .size, direction: .descending, selectedExtensions: ["png"]))
+    #expect(scan.snapshot?.entries.map(\.url.lastPathComponent) == ["b.png"])
+    await fixture.scanner.finish(1); try await reading.value
+}
+
+@Test @MainActor func issue124SharedSortDoesNotReorderFrozenPreview() async throws {
+    let fixture = FolderScanFixture(), scan = fixture.coordinator
+    let store = InMemoryDisplayPreferencesStore(), session = ViewerSession(preferencesStore: store)
+    session.folderScan = scan
+    let task = scan.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await task.value
+    let ids = try #require(scan.snapshot?.navigationEntries.map(\.itemID))
+    session.beginBrowsing(items: ids, sourceVersion: .init(1), scrollAnchor: nil)
+    session.select(ids[0])
+    #expect(CommandRouter().route(.preview, from: .key, to: session))
+    let frozen = scan.snapshot
+    var changed = store.value
+    changed.folderSort = .size
+    store.value = changed
+    #expect(scan.snapshot == frozen)
+    #expect(scan.conditions.sort == .name)
+}

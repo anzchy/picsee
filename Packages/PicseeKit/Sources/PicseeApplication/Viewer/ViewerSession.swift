@@ -203,7 +203,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         applyPreferredFolderSort()
     }
     private func applyPreferredFolderSort() {
-        guard let folderScan else { return }
+        guard previewSet == nil, filePreviewSet == nil, let folderScan else { return }
         let preferences = preferencesStore.value
         var conditions = folderScan.conditions
         guard conditions.sort != preferences.folderSort || conditions.direction != preferences.folderSortDirection else { return }
