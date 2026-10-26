@@ -29,21 +29,35 @@ private func thumbnailRequest(_ entry: FolderEntry, edge: Int, revision: Int) ->
 
 private actor GridThumbnailRequestLog {
     private var requested: Set<ItemID> = []
-    func add(_ id: ItemID) { requested.insert(id) }
+    private var waiters: [ItemID: [CheckedContinuation<Void, Never>]] = [:]
+    func add(_ id: ItemID) {
+        requested.insert(id)
+        for waiter in waiters.removeValue(forKey: id) ?? [] { waiter.resume() }
+    }
     func contains(_ id: ItemID) -> Bool { requested.contains(id) }
+    func waitFor(_ id: ItemID) async {
+        if requested.contains(id) { return }
+        await withCheckedContinuation { waiters[id, default: []].append($0) }
+    }
 }
 
 private actor HeldGridImagePort {
     private var waiting: [ItemID: CheckedContinuation<(ImageDecodeRequest, DecodedImage), Never>] = [:]
     private var values: [ItemID: (ImageDecodeRequest, DecodedImage)] = [:]
+    private var waiters: [ItemID: [CheckedContinuation<Void, Never>]] = [:]
     func load(_ entry: FolderEntry, edge: Int, revision: Int) async -> (ImageDecodeRequest, DecodedImage) {
         let value = thumbnailRequest(entry, edge: edge, revision: revision)
         return await withCheckedContinuation { continuation in
             values[entry.itemID] = value
             waiting[entry.itemID] = continuation
+            for waiter in waiters.removeValue(forKey: entry.itemID) ?? [] { waiter.resume() }
         }
     }
     func has(_ id: ItemID) -> Bool { waiting[id] != nil }
+    func waitFor(_ id: ItemID) async {
+        if waiting[id] != nil { return }
+        await withCheckedContinuation { waiters[id, default: []].append($0) }
+    }
     func release(_ id: ItemID) { if let value = values.removeValue(forKey: id) { waiting.removeValue(forKey: id)?.resume(returning: value) } }
 }
 
@@ -105,13 +119,8 @@ private actor HeldGridImagePort {
     grid.layoutSubtreeIfNeeded()
     let goodIndex = try #require(grid.index(for: a.itemID))
     let badIndex = try #require(grid.index(for: broken.itemID))
-    for _ in 0..<100 {
-        let loaded = (grid.collectionView.item(at: IndexPath(item: goodIndex, section: 0)) as? GridPhotoItem)?.tileLayer?.contents != nil
-        let failed = (grid.collectionView.item(at: IndexPath(item: badIndex, section: 0)) as? GridPhotoItem)?
-            .view.accessibilityLabel()?.contains("unavailable") == true
-        if loaded && failed { break }
-        await Task.yield()
-    }
+    await grid.waitForThumbnail(at: goodIndex)
+    await grid.waitForThumbnail(at: badIndex)
     let good = try #require(grid.collectionView.item(at: IndexPath(item: goodIndex, section: 0)) as? GridPhotoItem)
     let bad = try #require(grid.collectionView.item(at: IndexPath(item: badIndex, section: 0)) as? GridPhotoItem)
     #expect(good.tileLayer?.contents != nil)
@@ -130,7 +139,19 @@ private actor HeldGridImagePort {
     }
     #expect(bad.tileLayer?.contents == nil)
     #expect(bad.view.accessibilityLabel()?.contains("unavailable") == true)
+    good.configure(a) // A reused visible cell catches up from the completed scheduler record.
+    bad.configure(broken) // A reused failed cell catches up from the retained failure.
+    grid.setThumbnailsActive(true)
+    #expect(good.tileLayer?.contents != nil)
+    #expect(bad.view.accessibilityLabel()?.contains("unavailable") == true)
+    let installsBeforeScrollTick = good.thumbnailInstallCount
     grid.setThumbnailsActive(true) // Reconcile a completed nearby result into an already visible cell.
+    grid.setThumbnailsActive(true)
+    #expect(good.thumbnailInstallCount == installsBeforeScrollTick)
+    grid.collectionView.reloadItems(at: [IndexPath(item: badIndex, section: 0)])
+    grid.layoutSubtreeIfNeeded()
+    let reloadedFailure = try #require(grid.collectionView.item(at: IndexPath(item: badIndex, section: 0)) as? GridPhotoItem)
+    #expect(reloadedFailure.view.accessibilityLabel()?.contains("unavailable") == true)
     grid.collectionView.reloadItems(at: [IndexPath(item: goodIndex, section: 0)])
     grid.layoutSubtreeIfNeeded()
     let reloaded = try #require(grid.collectionView.item(at: IndexPath(item: goodIndex, section: 0)) as? GridPhotoItem)
@@ -162,11 +183,37 @@ private actor HeldGridImagePort {
     let clip = try #require(grid.collectionView.enclosingScrollView?.contentView)
     clip.setBoundsOrigin(NSPoint(x: 0, y: max(0, grid.collectionView.bounds.height - clip.bounds.height)))
     grid.collectionView.enclosingScrollView?.reflectScrolledClipView(clip)
-    for _ in 0..<100 {
-        if await log.contains(last.itemID) { break }
-        await Task.yield()
-    }
+    await log.waitFor(last.itemID)
     #expect(await log.contains(last.itemID))
+    grid.stopThumbnails()
+}
+
+@Test @MainActor func gridOffscreenFailureAppearsWhenScrolledIntoView() async throws {
+    _ = NSApplication.shared
+    let rootID = AccessRootID(rawValue: UUID())
+    let root = ItemIdentityRoot(id: rootID, url: URL(fileURLWithPath: "/tmp/grid-offscreen-failure"))
+    let entries = (0..<100).map { FolderEntry(url: root.url.appendingPathComponent("\($0).jpg"), root: root) }
+    let snapshot = FolderSnapshot(version: .init(rootID: rootID, folder: root.url, generation: 1),
+        entries: entries, isComplete: true)
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 700, height: 550))
+    let window = NSWindow(contentRect: grid.bounds, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = grid
+    grid.thumbnailLoader = { _, _, _, _ in throw ImageLoadError(.corruptImage) }
+    grid.display(snapshot, selectedItemID: nil)
+    grid.setThumbnailsActive(true)
+    grid.layoutSubtreeIfNeeded()
+    let attributes = try #require(grid.collectionView.collectionViewLayout?.layoutAttributesForElements(in: grid.collectionView.visibleRect))
+    let lastVisibleIndex = attributes.compactMap { $0.indexPath?.item }.max()
+    let lastVisible = try #require(lastVisibleIndex)
+    let target = lastVisible + 4
+    #expect(grid.collectionView.item(at: IndexPath(item: target, section: 0)) == nil)
+    await grid.waitForThumbnail(at: target)
+    grid.collectionView.scrollToItems(at: [IndexPath(item: target, section: 0)], scrollPosition: .centeredVertically)
+    grid.layoutSubtreeIfNeeded()
+    await grid.waitForThumbnail(at: target)
+    let cell = try #require(grid.collectionView.item(at: IndexPath(item: target, section: 0)) as? GridPhotoItem)
+    #expect(cell.representedItemID == entries[target].itemID)
+    #expect(cell.view.accessibilityLabel()?.contains("unavailable") == true)
     grid.stopThumbnails()
 }
 
@@ -191,29 +238,19 @@ private actor HeldGridImagePort {
     grid.display(first, selectedItemID: nil)
     grid.setThumbnailsActive(true)
     grid.layoutSubtreeIfNeeded()
-    for _ in 0..<100 {
-        if await port.has(old.itemID) { break }
-        await Task.yield()
-    }
+    await port.waitFor(old.itemID)
     #expect(await port.has(old.itemID))
     grid.display(second, selectedItemID: nil)
-    for _ in 0..<100 {
-        if await port.has(fresh.itemID) { break }
-        await Task.yield()
-    }
+    await port.waitFor(fresh.itemID)
     #expect(await port.has(fresh.itemID))
     await port.release(fresh.itemID)
-    for _ in 0..<100 {
-        let cell = grid.collectionView.item(at: IndexPath(item: 0, section: 0)) as? GridPhotoItem
-        if cell?.tileLayer?.contents != nil { break }
-        await Task.yield()
-    }
+    await grid.waitForThumbnail(at: 0)
     let cell = try #require(grid.collectionView.item(at: IndexPath(item: 0, section: 0)) as? GridPhotoItem)
     #expect(cell.representedItemID == fresh.itemID)
     let freshImage = try #require(cell.tileLayer?.contents) as! CGImage
     let freshPixels = try #require(freshImage.dataProvider?.data as Data?)
     await port.release(old.itemID) // The port intentionally ignores cancellation.
-    for _ in 0..<20 { await Task.yield() }
+    await Task.yield()
     #expect(cell.representedItemID == fresh.itemID)
     let lateImage = try #require(cell.tileLayer?.contents) as! CGImage
     #expect(lateImage.dataProvider?.data as Data? == freshPixels)

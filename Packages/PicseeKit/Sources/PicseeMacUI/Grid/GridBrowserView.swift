@@ -21,6 +21,9 @@ import PicseeCore
     public private(set) var thumbnailToken = UUID()
     public private(set) var thumbnailGeneration: UInt64 = 0
     public private(set) var thumbnailPixelEdge = 0
+    private(set) var thumbnailInstallCount = 0
+    private(set) var thumbnailFailed = false
+    var thumbnailHasImage: Bool { tile.layer?.contents != nil }
     private let tile = NSView()
     private let currentRing = CALayer()
     private let selectionOutline = CALayer()
@@ -85,6 +88,7 @@ import PicseeCore
         placeholder.stringValue = String(localized: "Thumbnail pending")
         placeholder.isHidden = false
         thumbnailPixelEdge = 0
+        thumbnailFailed = false
         representedItemID = entry.itemID
         filename = entry.url.lastPathComponent
         nameLabel.stringValue = filename
@@ -97,6 +101,7 @@ import PicseeCore
         thumbnailToken = token
         thumbnailGeneration = generation
         thumbnailPixelEdge = pixelEdge
+        thumbnailFailed = false
         tile.layer?.contents = nil
         placeholder.stringValue = String(localized: "Thumbnail pending")
         placeholder.isHidden = false
@@ -113,6 +118,8 @@ import PicseeCore
               image.image.width > 0, image.image.height > 0,
               image.image.width <= pixelEdge, image.image.height <= pixelEdge else { return false }
         tile.layer?.contents = image.image
+        thumbnailFailed = false
+        thumbnailInstallCount += 1
         placeholder.isHidden = true
         view.setAccessibilityLabel(filename)
         return true
@@ -121,6 +128,7 @@ import PicseeCore
     public func thumbnailUnavailable(token: UUID) {
         guard token == thumbnailToken else { return }
         tile.layer?.contents = nil
+        thumbnailFailed = true
         placeholder.stringValue = String(localized: "Thumbnail unavailable")
         placeholder.isHidden = false
         view.setAccessibilityLabel("\(filename), \(String(localized: "thumbnail unavailable"))")
@@ -288,6 +296,7 @@ private struct GridGeometry: Equatable {
     }
 
     public func stopThumbnails() { setThumbnailsActive(false) }
+    func waitForThumbnail(at index: Int) async { await thumbnailScheduler.waitForTerminal(at: index) }
 
     private var thumbnailPixelEdge: Int {
         guard let geometry else { return 0 }
@@ -302,7 +311,6 @@ private struct GridGeometry: Equatable {
             thumbnailScheduler.reconcile(visible: [], columns: 1, pixelEdge: 0, loader: nil)
             return
         }
-        collectionView.layoutSubtreeIfNeeded()
         // The flow layout is installed in init and remains this view's layout.
         let attributes = collectionView.collectionViewLayout!.layoutAttributesForElements(in: collectionView.visibleRect)
         var visible: Set<Int> = []
@@ -322,9 +330,11 @@ private struct GridGeometry: Equatable {
         if item.thumbnailToken != token || item.thumbnailGeneration != thumbnailGeneration || item.thumbnailPixelEdge != edge {
             item.beginThumbnail(generation: thumbnailGeneration, pixelEdge: edge, token: token)
         }
-        if let (request, image) = thumbnailScheduler.result(at: index) {
+        if let (request, image) = thumbnailScheduler.result(at: index), !item.thumbnailHasImage {
             _ = item.installThumbnail(request, image: image, token: token,
                 generation: thumbnailGeneration, pixelEdge: edge)
+        } else if thumbnailScheduler.shouldDisplayFailure(at: index), !item.thumbnailFailed {
+            item.thumbnailUnavailable(token: token)
         }
     }
 
@@ -338,7 +348,8 @@ private struct GridGeometry: Equatable {
 
     private func showThumbnailFailure(at index: Int) {
         guard let token = thumbnailScheduler.token(at: index),
-              let item = collectionView.item(at: IndexPath(item: index, section: 0)) as? GridPhotoItem else { return }
+              let item = collectionView.item(at: IndexPath(item: index, section: 0)) as? GridPhotoItem,
+              entries.indices.contains(index), item.representedItemID == entries[index].itemID else { return }
         item.thumbnailUnavailable(token: token)
     }
 
@@ -437,6 +448,8 @@ private struct GridGeometry: Equatable {
                 if let (request, image) = thumbnailScheduler.result(at: indexPath.item) {
                     _ = photo.installThumbnail(request, image: image, token: token,
                         generation: thumbnailGeneration, pixelEdge: edge)
+                } else if thumbnailScheduler.shouldDisplayFailure(at: indexPath.item) {
+                    photo.thumbnailUnavailable(token: token)
                 }
             }
         }
