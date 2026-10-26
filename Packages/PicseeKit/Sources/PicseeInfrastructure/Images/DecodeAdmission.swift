@@ -188,7 +188,8 @@ public actor DecodeAdmission {
         let active = activity(), held = memory.usage
         guard held.evictable > 0, let blocked = ordered().first(where: { eligible(jobs[$0]!, active) }) else { return }
         let shortfall = jobs[blocked]!.cost - (configuration.budget - active.reservedBytes - held.pinned - held.evictable)
-        guard shortfall > 0 else { return }
+        // Evicting less than the shortfall admits nothing, except an idle current decode, which needs no evictable bytes left.
+        guard shortfall > 0, shortfall <= held.evictable || jobs[blocked]!.priority == .current && active.running == 0 else { return }
         releasing = true
         Task {
             await release(shortfall)
