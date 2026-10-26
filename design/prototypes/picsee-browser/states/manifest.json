@@ -10,7 +10,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "9c10c44b405078ef81b3dae00ce96952d4204517fa3df9d67c6bdfee4921b31d"
     },
     {
       "name": "grid-dark",
@@ -21,7 +22,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "ccd738c4841aa4679b769dce7ceed86ab95137b38c4157df013c17b0ff33baab"
     },
     {
       "name": "viewer-quiet",
@@ -32,7 +34,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "1cb5ee6198cd4333f156095c35fa7e1ea03eccb03e3b0144bfe799794f2cd101"
     },
     {
       "name": "viewer-controls",
@@ -43,7 +46,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "a42fee6602541b08b4fa601c493afcb26a187a95068d7ac4e8ccf983b5c981af"
     },
     {
       "name": "grid-display",
@@ -54,7 +58,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "e94d5046f5327da902c78c547453e3ef0cd0b5294327aaa5363975333cc078a6"
     },
     {
       "name": "viewer-inspector",
@@ -65,7 +70,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "7611b8dd969eabbb9380d584ca1d12239319e8bcc920cd6bb8e2eed9031c76b0"
     },
     {
       "name": "first-launch",
@@ -76,7 +82,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "891606a1d3b3e022cfe6489c19ad81151358c2aae64f3c2d09f1e72e95dccb8e"
     },
     {
       "name": "empty-folder",
@@ -87,7 +94,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "178ae2a2c01bf6c7f719d5351d05bd06dbf8dd20a7855aa9001dbe9256f216f3"
     },
     {
       "name": "search-empty",
@@ -98,7 +106,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "2809bc1aa8936fa5f97908b436624c975127faa7b7366982b13892403d848ddd"
     },
     {
       "name": "folder-loading",
@@ -109,7 +118,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "80d4e86a7f83fb8724a5856b5c0df7b227730f82fedc34756dc75b8b8081dbb0"
     },
     {
       "name": "image-error",
@@ -120,7 +130,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "98573fc7914a86e4c55c55b233aa4901a26ba080763ddda92f4474405b7119cb"
     },
     {
       "name": "permission-denied",
@@ -131,7 +142,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "0bfb6a85412a97229ed4840f275466064d5afd0554d3980ede9c3ddd7c1b344b"
     },
     {
       "name": "original-size",
@@ -142,7 +154,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "8b4395816c23ae87fae0aa99efda248db30d09949a76273e2d9c38db6e17aab9"
     },
     {
       "name": "keyboard-focus",
@@ -153,7 +166,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "4651f48a5895f120efb3ff79abe72941ca7019aecb0f2d31e761e5ce0c48909f"
     },
     {
       "name": "compact-grid",
@@ -164,7 +178,8 @@
         "height": 680
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "474bab65053d7f3108da82025d73058661b7576161ec222b2b13b115134e3c37"
     },
     {
       "name": "components",
@@ -175,7 +190,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot"
+      "origin": "accepted-C-snapshot",
+      "sha256": "b7b412926371c9eba6e53243dc2e6f4fd655cfd55d67a1d5873343c6189391f6"
     },
     {
       "name": "grid-context-menu",
@@ -186,7 +202,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "local-C-adaptation"
+      "origin": "local-C-adaptation",
+      "sha256": "82eccb2e4f6284f3d18287d46aa135acee4b9c4abb72525ef9d17dce83cbf9bf"
     },
     {
       "name": "grid-multiselect",
@@ -197,7 +214,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "local-C-adaptation"
+      "origin": "local-C-adaptation",
+      "sha256": "b6d1bc9988ceed05ece98b4d590200ac85e5a2a4c571df887001eb56c419c2c1"
     },
     {
       "name": "viewer-filmstrip",
@@ -208,7 +226,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "local-C-adaptation"
+      "origin": "local-C-adaptation",
+      "sha256": "a3adff92d1bfd4f479a7136486d6b73bc851a6c90e9289435009fdfb0652c2f5"
     },
     {
       "name": "viewer-inspector-light",
@@ -219,7 +238,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "local-C-adaptation"
+      "origin": "local-C-adaptation",
+      "sha256": "a2e2331cef71140452d0d8070a814f0a875f1d5bcf0f697d87758f75a0c9d01e"
     }
   ]
 }
