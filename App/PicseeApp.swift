@@ -48,10 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
-    /// Returning to the foreground reconciles every watched folder (events may have been coalesced or lost).
+    /// Returning to the foreground reconciles every watched folder (events may have been coalesced or lost),
+    /// and a window whose watch failed rescans and subscribes again.
     func applicationDidBecomeActive(_ notification: Notification) {
         let services = accessServices
         Task { try? await services.value.watch.reconcileAll() }
+        windowController?.session.folderScan?.reconcileUnwatched()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
