@@ -50,7 +50,7 @@ public struct ImageIODecoder: ImageDecoding {
     }
 }
 
-public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, ThumbnailCacheProviding, Sendable {
+public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePresentationPinning, ThumbnailCacheProviding, Sendable {
     private let configuration: DecodeConfiguration
     private let rootResolvers = RootIdentityResolvers()
     private let identityResolver: any ItemIdentityResolving
@@ -130,6 +130,15 @@ public final class ImageIOPipeline: ImagePipeline, ImagePresentationPinning, Thu
         let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, identityRoot: identityRoot))
         let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: maximumPixelSize)
         return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: maximumPixelSize, renderKey: key, identityRoot: identityRoot)
+    }
+    /// One header read chooses the edge from the upright source ratio (#161).
+    public func request(for fileURL: URL, covering: ThumbnailCoverage, identityRoot: ItemIdentityRoot?) async throws -> ImageDecodeRequest {
+        if Task.isCancelled { throw ImageLoadError(.cancelled) }
+        let header = try await header(ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: covering.ceiling, identityRoot: identityRoot))
+        let (width, height) = header.rotated ? (header.height, header.width) : (header.width, header.height)
+        let edge = covering.edge(sourceWidth: Double(width), sourceHeight: Double(height))
+        let key = await admission.key(for: header.itemID, revision: header.revision, maximumPixelSize: edge)
+        return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: edge, renderKey: key, identityRoot: identityRoot)
     }
     public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
         try await cache.withObservation(itemID: request.renderKey?.itemID) { observation in

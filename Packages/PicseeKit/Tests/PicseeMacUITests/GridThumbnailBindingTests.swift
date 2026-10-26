@@ -28,6 +28,10 @@ private func thumbnailRequest(_ entry: FolderEntry, edge: Int, revision: Int) ->
     return (request, image)
 }
 
+private func thumbnailRequest(_ entry: FolderEntry, edge coverage: ThumbnailCoverage, revision: Int) -> (ImageDecodeRequest, DecodedImage) {
+    thumbnailRequest(entry, edge: coverage.fallbackEdge, revision: revision)
+}
+
 private actor GridThumbnailRequestLog {
     private var requested: Set<ItemID> = []
     private var waiters: [ItemID: [CheckedContinuation<Void, Never>]] = [:]
@@ -45,6 +49,7 @@ private actor GridThumbnailRequestLog {
 private actor GridThumbnailEdgeLog {
     private var edges: [Int] = []
     func add(_ edge: Int) { edges.append(edge) }
+    func add(_ coverage: ThumbnailCoverage) { edges.append(coverage.fallbackEdge) }
     func contains(_ edge: Int) -> Bool { edges.contains(edge) }
 }
 
@@ -103,7 +108,8 @@ private actor HeldGridImagePort {
     private var waiting: [ItemID: CheckedContinuation<(ImageDecodeRequest, DecodedImage), Never>] = [:]
     private var values: [ItemID: (ImageDecodeRequest, DecodedImage)] = [:]
     private var waiters: [ItemID: [CheckedContinuation<Void, Never>]] = [:]
-    func load(_ entry: FolderEntry, edge: Int, revision: Int) async -> (ImageDecodeRequest, DecodedImage) {
+    func load(_ entry: FolderEntry, edge coverage: ThumbnailCoverage, revision: Int) async -> (ImageDecodeRequest, DecodedImage) {
+        let edge = coverage.fallbackEdge
         let value = thumbnailRequest(entry, edge: edge, revision: revision)
         return await withCheckedContinuation { continuation in
             values[entry.itemID] = value

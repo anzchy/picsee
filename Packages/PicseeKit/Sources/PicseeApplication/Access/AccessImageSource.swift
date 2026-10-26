@@ -22,6 +22,23 @@ public actor AccessImageSource {
     }
     public func image(maximumPixelSize: Int, isPreview: Bool = false,
                       priority: DecodePriority = .current) async throws -> (ImageDecodeRequest, DecodedImage) {
+        try await image(isPreview: isPreview, priority: priority) { pipeline, file, root in
+            try await pipeline.request(for: file, maximumPixelSize: maximumPixelSize, identityRoot: root)
+        }
+    }
+    /// The edge follows the source's ratio when the pipeline can read the header first; otherwise the fallback.
+    public func image(covering coverage: ThumbnailCoverage, isPreview: Bool = false,
+                      priority: DecodePriority = .current) async throws -> (ImageDecodeRequest, DecodedImage) {
+        try await image(isPreview: isPreview, priority: priority) { pipeline, file, root in
+            if let sizing = pipeline as? any CoverageRequesting {
+                return try await sizing.request(for: file, covering: coverage, identityRoot: root)
+            }
+            return try await pipeline.request(for: file, maximumPixelSize: coverage.fallbackEdge, identityRoot: root)
+        }
+    }
+    private func image(isPreview: Bool, priority: DecodePriority,
+                       prepare: @escaping @Sendable (any ImagePipeline, URL, ItemIdentityRoot?) async throws -> ImageDecodeRequest)
+        async throws -> (ImageDecodeRequest, DecodedImage) {
         guard !closed else { throw FileAccessError.startFailed }
         pending += 1
         let file: URL
@@ -32,7 +49,8 @@ public actor AccessImageSource {
         do {
             let result = try await access.withLease(request) { lease in
                 let root = lease.rootID.map { ItemIdentityRoot(id: $0, url: lease.url) }
-                let prepared = try await pipeline.request(for: file, maximumPixelSize: maximumPixelSize, identityRoot: root)
+                let prepared = try await prepare(pipeline, file, root)
+                let maximumPixelSize = prepared.maximumPixelSize
                 try Task.checkCancellation()
                 let request = ImageDecodeRequest(fileURL: file, maximumPixelSize: maximumPixelSize,
                                                  renderKey: prepared.renderKey, priority: priority,
