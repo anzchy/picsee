@@ -1,6 +1,7 @@
 import Foundation
 import os
 import PicseeCore
+import UniformTypeIdentifiers
 
 /// One event stream and one root lease per AccessRootID while any subscriber of that root is live.
 /// Start/stop transitions of a root run strictly one after another, so a stream never outlives its lease.
@@ -22,11 +23,13 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
         init(folder: URL, recursive: Bool, onChange: @escaping @Sendable () -> Void) {
             self.folder = folder; path = WatchHub.canonical(folder); self.recursive = recursive; self.onChange = onChange
         }
-        /// `path` nil means mustRescan. Ancestors, the folder itself and its (direct, unless recursive) contents are relevant.
-        func isRelevant(_ changed: [String]?) -> Bool {
+        /// `changed` nil means mustRescan. Ancestors, the folder itself and its (direct, unless recursive) contents are
+        /// relevant, except below the folder where the scan skips hidden items and package contents.
+        func isRelevant(_ changed: (path: [String], excluded: [Bool])?) -> Bool {
             guard let changed else { return true }
-            let shared = min(changed.count, path.count)
-            return changed.prefix(shared) == path.prefix(shared) && (recursive || changed.count <= path.count + 1)
+            let shared = min(changed.path.count, path.count)
+            return changed.path.prefix(shared) == path.prefix(shared) && (recursive || changed.path.count <= path.count + 1)
+                && !changed.excluded.dropFirst(path.count).contains(true)
         }
     }
     private final class Root: @unchecked Sendable {
@@ -142,8 +145,18 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
         return head.resolvingSymlinksInPath().pathComponents + tail
     }
 
+    /// Mirrors FolderBrowser's `.skipsHiddenFiles` and `.skipsPackageDescendants` by name, so deleted paths judge alike.
+    static func isExcluded(_ component: String) -> Bool {
+        let ext = (component as NSString).pathExtension
+        return component.hasPrefix(".") || !ext.isEmpty && UTType(filenameExtension: ext, conformingTo: .package)?.isDynamic == false
+    }
+
     private func deliver(_ hints: [FolderChangeHint], to root: Root) {
-        let paths = hints.map { hint -> [String]? in if case .changed(let url) = hint { Self.canonical(url) } else { nil } }
+        let paths = hints.map { hint -> (path: [String], excluded: [Bool])? in
+            guard case .changed(let url) = hint else { return nil }
+            let path = Self.canonical(url)
+            return (path, path.map(Self.isExcluded))
+        }
         if paths.contains(where: { $0 == nil }) { log.notice("FolderWatch mustRescan") }
         lock.withLock {
             let now = scheduler.nowMilliseconds
