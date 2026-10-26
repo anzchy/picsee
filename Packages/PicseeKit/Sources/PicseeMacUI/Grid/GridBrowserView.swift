@@ -390,6 +390,11 @@ private struct GridGeometry: Equatable {
     }
 
     public func stopThumbnails() { setThumbnailsActive(false) }
+    /// Drops prefetched thumbnails under memory pressure and requests them again once it ends.
+    public func setMemoryPressure(_ active: Bool) {
+        thumbnailScheduler.setMemoryPressure(active)
+        reconcileThumbnails()
+    }
     func waitForThumbnail(at index: Int) async { await thumbnailScheduler.waitForTerminal(at: index) }
 
     private var thumbnailCoverage: ThumbnailCoverage {

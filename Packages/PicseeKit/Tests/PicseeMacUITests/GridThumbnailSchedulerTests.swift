@@ -163,7 +163,8 @@ private actor GridPriorityPort {
     scheduler.setSnapshot(snapshot)
     var failures: [Int] = []
     scheduler.onFailure = { failures.append($0) }
-    let loader: GridThumbnailScheduler.Loader = { _, _, _, _ in throw ImageLoadError(.cancelled) }
+    // A real failure; a prefetch the pipeline refuses under pressure is deferred instead (#139).
+    let loader: GridThumbnailScheduler.Loader = { _, _, _, _ in throw ImageLoadError(.corruptImage) }
     scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
     await scheduler.waitForTerminal(at: 2)
     #expect(scheduler.hasFailure(at: 2))
@@ -205,7 +206,9 @@ private actor GridPriorityPort {
     }
     scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
     await scheduler.waitForTerminal(at: 2)
-    #expect(scheduler.hasFailure(at: 2))
+    // A refused prefetch is deferred, not shown as a failure (#139).
+    #expect(!scheduler.hasFailure(at: 2) && !scheduler.shouldDisplayFailure(at: 2))
+    #expect(scheduler.result(at: 2) == nil)
     scheduler.reconcile(visible: [2], columns: 1, pixelEdge: 424, loader: loader)
     await scheduler.waitForTerminal(at: 2)
     #expect(!scheduler.hasFailure(at: 2))

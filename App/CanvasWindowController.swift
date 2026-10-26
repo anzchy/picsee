@@ -70,6 +70,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         super.showWindow(sender)
     }
 
+    /// Under memory pressure the grid keeps only visible thumbnails; prefetch resumes when it ends.
+    func memoryPressure(_ active: Bool) { gridView.setMemoryPressure(active) }
+
     init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore, accessServices: Task<AccessServices, Error>, motionPolicy: MotionPolicy) {
         self.pipeline = pipeline
         self.accessServices = accessServices

@@ -12,7 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let thumbnailCache = ThumbnailDiskCache()
     private lazy var imagePipeline = ImageIOPipeline(cacheTrace: UntestedNativeResourceSnapshotTrace(),
                                                      thumbnailCache: thumbnailCache)
-    private lazy var memoryPressure = UntestedNativeMemoryPressureForwarder(pipeline: imagePipeline)
+    private lazy var memoryPressure = UntestedNativeMemoryPressureForwarder(pipeline: imagePipeline) { [weak self] level in
+        self?.windowController?.memoryPressure(level != .normal)
+    }
     private let displayPreferences = UserDefaultsDisplayPreferencesStore(defaults: .standard)
     private lazy var appearanceAdapter = WindowAppearanceAdapter(preferencesStore: displayPreferences)
     private lazy var motionPolicy = MotionPolicy(source: UntestedNativeReduceMotionSource())
