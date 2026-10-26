@@ -1869,6 +1869,34 @@
         }
       }
     },
+    "Capture Date": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Capture Date" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "拍摄日期" } }
+      }
+    },
+    "Pixel Area (Width × Height)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pixel Area (Width × Height)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "像素面积（宽 × 高）" } }
+      }
+    },
+    "Sort unfinished": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Sort unfinished" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "排序未完成" } }
+      }
+    },
+    "Sort by pixel area; equal areas use width, height, then natural name. Unknown last.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Sort by pixel area; equal areas use width, height, then natural name. Unknown last." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "按像素面积排序；面积相同时依次按宽、高、自然名称排序。未知值排最后。" } }
+      }
+    },
     "Type": {
       "extractionState": "manual",
       "localizations": {

@@ -730,7 +730,8 @@ extension CanvasWindowController: ViewerInputHost {
 extension CanvasWindowController: FolderScanHost {
     private func folderScanner(_ services: AccessServices) -> FolderScanCoordinator {
         if let scan = session.folderScan { return scan }
-        let scan = FolderScanCoordinator(access: services.files, scanner: services.browser, trace: NativeFolderScanTrace())
+        let scan = FolderScanCoordinator(access: services.files, scanner: services.browser,
+            trace: NativeFolderScanTrace(), metadataReader: ImageFolderMetadataReader())
         scan.host = self
         session.folderScan = scan
         observeGridSnapshot(scan)
@@ -738,6 +739,7 @@ extension CanvasWindowController: FolderScanHost {
     }
     private func observeGridSnapshot(_ scan: FolderScanCoordinator) {
         withObservationTracking {
+            gridView.setMetadataSortPending(scan.isMetadataSortPending)
             // A restored source equals the projection already shown; repainting it would cover a restored viewer.
             if let snapshot = scan.snapshot, gridFolderRoot == snapshot.version.rootID,
                snapshot != gridProjection.snapshot, gridProjection.apply(snapshot), snapshot.isComplete {

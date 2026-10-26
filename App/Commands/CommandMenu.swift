@@ -208,6 +208,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         item.target = self
         item.representedObject = action
         item.setAccessibilityIdentifier(action.accessibilityIdentifier)
+        if let help = action.helpKey { item.toolTip = String(localized: String.LocalizationValue(help)) }
     }
     @objc private func invokeFolder(_ item: NSMenuItem) {
         guard let action = item.representedObject as? FolderMenuAction,
