@@ -119,6 +119,44 @@ private actor HeldGridImagePort {
     func release(_ id: ItemID) { if let value = values.removeValue(forKey: id) { waiting.removeValue(forKey: id)?.resume(returning: value) } }
 }
 
+@Test @MainActor func gridMultiSelectionKeepsThumbnailAcrossRedrawAndCellReuse() async throws {
+    _ = NSApplication.shared
+    let a = thumbnailFixture("Selected-A.jpg"), b = thumbnailFixture("Selected-B.jpg")
+    let snapshot = FolderSnapshot(version: .init(rootID: AccessRootID(rawValue:
+        UUID(uuidString: "00000000-0000-0000-0000-000000000118")!),
+        folder: a.url.deletingLastPathComponent(), generation: 1), entries: [a, b], isComplete: true)
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 700, height: 550))
+    let window = NSWindow(contentRect: grid.bounds, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = grid
+    grid.thumbnailLoader = { entry, _, edge, _ in thumbnailRequest(entry, edge: edge, revision: 7) }
+    var selection = BrowserSelection()
+    selection.click(a.itemID, in: [a.itemID, b.itemID])
+    selection.click(b.itemID, modifier: .command, in: [a.itemID, b.itemID])
+    grid.display(snapshot, selection: selection)
+    grid.setThumbnailsActive(true)
+    grid.layoutSubtreeIfNeeded()
+    for index in 0..<2 { await grid.waitForThumbnail(at: index) }
+
+    func assertCell(_ index: Int, selected: Bool, phase: String) throws {
+        let cell = try #require(grid.collectionView.item(at: IndexPath(item: index, section: 0)) as? GridPhotoItem)
+        #expect(cell.representedItemID == [a, b][index].itemID)
+        #expect(cell.tileLayer?.contents != nil)
+        #expect(cell.isSelected == selected, "\(phase) cell \(index)")
+        #expect(cell.isSelectionBadgeVisible == selected, "\(phase) cell \(index)")
+    }
+    try assertCell(0, selected: true, phase: "loaded")
+    try assertCell(1, selected: true, phase: "loaded")
+    selection.click(a.itemID, modifier: .command, in: [a.itemID, b.itemID])
+    grid.synchronizeSelection(selection)
+    try assertCell(0, selected: false, phase: "redrawn")
+    try assertCell(1, selected: true, phase: "redrawn")
+    grid.collectionView.reloadItems(at: [IndexPath(item: 0, section: 0), IndexPath(item: 1, section: 0)])
+    grid.layoutSubtreeIfNeeded()
+    try assertCell(0, selected: false, phase: "reloaded")
+    try assertCell(1, selected: true, phase: "reloaded")
+    grid.stopThumbnails()
+}
+
 @Test @MainActor func gridThumbnailBindingRejectsReuseRevisionAndScale() {
     _ = NSApplication.shared
     let a = thumbnailFixture("A.jpg"), b = thumbnailFixture("B.jpg")
