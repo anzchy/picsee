@@ -35,7 +35,13 @@ struct PinnedDesign {
         let styles = matches("(?s)<style\\b[^>]*>(.*?)</style>", in: html).compactMap { $0.first }
         guard !styles.isEmpty else { throw Error("\(entry.file) has no inline CSS") }
         var rules: [Rule] = []
-        for style in styles { try parse(style, min: nil, max: nil, unsupported: nil, into: &rules) }
+        for style in styles {
+            do {
+                try parse(style, min: nil, max: nil, unsupported: nil, into: &rules)
+            } catch let error as Error {
+                throw Error("\(name) CSS load: \(error.description)")
+            }
+        }
         let appearance = html.contains("class=\"theme-dark\"") ? "dark" : "light"
         return Self(name: name, rules: rules, appearance: appearance)
     }
@@ -213,18 +219,38 @@ struct PinnedDesign {
                                sideProperties: Bool = false) throws -> [Rule] {
         let properties = [property] + (sideProperties ? ["top", "right", "bottom", "left"].map { "\(property)-\($0)" } : [])
         let active = rules.filter { ($0.min == nil || viewport >= $0.min!) && ($0.max == nil || viewport <= $0.max!) }
-        for rule in active where properties.contains(where: { rule.declarations[$0] != nil }) {
+        for rule in active.reversed() where properties.contains(where: { rule.declarations[$0] != nil }) {
             let contextual = rule.selector != selector && [" ", ">", "+", "~"].contains {
                 rule.selector.hasSuffix($0 + selector)
             }
-            if let unsupported = rule.unsupported, rule.selector == selector || contextual {
+            let qualifier = Self.sameElementQualifier(in: rule.selector, after: selector)
+            let ambiguous = contextual || qualifier != nil
+            if let unsupported = rule.unsupported, rule.selector == selector || ambiguous {
                 throw Error("\(name) selector '\(selector)' property '\(property)' at \(viewport)pt: unsupported \(unsupported)")
             }
-            if contextual {
+            if ambiguous {
                 throw Error("\(name) selector '\(selector)' property '\(property)' at \(viewport)pt: ambiguous contextual rule '\(rule.selector)'")
             }
         }
         return active.filter { $0.selector == selector && $0.unsupported == nil }
+    }
+
+    private static func sameElementQualifier(in ruleSelector: String, after selector: String) -> String? {
+        guard let match = ruleSelector.range(of: selector, options: .backwards) else { return nil }
+        let before = ruleSelector[..<match.lowerBound]
+        guard before.isEmpty || before.last.map({ " >+~".contains($0) }) == true else { return nil }
+        let suffix = String(ruleSelector[match.upperBound...])
+        guard let first = suffix.first, ".#[:".contains(first) else { return nil }
+        var depth = 0
+        for char in suffix {
+            if char == "(" || char == "[" { depth += 1 }
+            if char == ")" || char == "]" { depth -= 1 }
+            if depth == 0 && " >+~".contains(char) { return nil }
+        }
+        if suffix.range(of: "^:(hover|focus[\\w-]*|active|disabled)$", options: .regularExpression) != nil {
+            return nil
+        }
+        return suffix
     }
 
     private struct Catalog: Decodable {
@@ -237,11 +263,20 @@ struct PinnedDesign {
         let chars = Array(clean)
         var i = 0
         while i < chars.count {
-            while i < chars.count && (chars[i].isWhitespace || chars[i] == "}") { i += 1 }
+            while i < chars.count && chars[i].isWhitespace { i += 1 }
+            guard i < chars.count else { break }
+            if chars[i] == "}" { throw Error("stray closing brace") }
             let start = i
             while i < chars.count && chars[i] != "{" { i += 1 }
-            guard i < chars.count else { break }
+            guard i < chars.count else {
+                let tail = String(chars[start...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if tail.hasPrefix("@"), tail.contains(";") { throw Error("blockless at-statement '\(tail)'") }
+                throw Error("trailing CSS text '\(tail)'")
+            }
             let header = String(chars[start..<i]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if header.hasPrefix("@"), header.contains(";") {
+                throw Error("blockless at-statement in '\(header)'")
+            }
             i += 1
             let bodyStart = i
             var depth = 1
@@ -256,7 +291,7 @@ struct PinnedDesign {
                 let maxWidth = matches("max-width\\s*:\\s*([0-9.]+)px", in: header).first?.first.flatMap(Double.init)
                 let minWidth = matches("min-width\\s*:\\s*([0-9.]+)px", in: header).first?.first.flatMap(Double.init)
                 let widthOnly = header.range(of: "^@media\\s*(\\(\\s*(min|max)-width\\s*:\\s*[0-9.]+px\\s*\\)\\s*(and\\s*)?)+$", options: .regularExpression) != nil
-                try parse(body, min: minWidth ?? min, max: maxWidth ?? max,
+                try parse(body, min: widthOnly ? minWidth ?? min : min, max: widthOnly ? maxWidth ?? max : max,
                           unsupported: widthOnly ? unsupported : header, into: &rules)
             } else if header.hasPrefix("@") && !header.hasPrefix("@keyframes") && !header.hasPrefix("@font-face") {
                 try parse(body, min: min, max: max, unsupported: header, into: &rules)
