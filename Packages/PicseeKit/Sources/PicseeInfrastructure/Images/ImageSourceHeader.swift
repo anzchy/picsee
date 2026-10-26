@@ -9,7 +9,7 @@ struct ImageSourceHeader: Sendable {
     let height: Int
     let revision: FileRevision
     /// EXIF orientations 5…8 rotate the stored pixels a quarter turn.
-    var rotated = false
+    let rotated: Bool
     // ImageIO can return partial pixels for incomplete PNGs. Check chunk boundaries without reading payloads.
     private static func requireCompletePNG(_ url: URL) throws {
         let file = try FileHandle(forReadingFrom: url)
