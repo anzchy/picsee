@@ -46,7 +46,7 @@ extension ViewerSession {
         }
     }
     public var imageStatus: ViewerImageStatus {
-        if folderScan?.isReadingFolder == true { return .readingFolder }
+        if folderScan?.isReadingFolder == true || folderScan?.isAwaitingFilteredMatch == true { return .readingFolder }
         if let reason = folderScan?.failureReason {
             return .folderScanFailed(reason, folderScan?.sourceSnapshot?.navigationEntries.count ?? 0)
         }
