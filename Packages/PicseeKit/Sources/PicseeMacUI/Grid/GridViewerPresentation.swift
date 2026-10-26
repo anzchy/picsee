@@ -17,6 +17,11 @@ import PicseeCore
         }
     }
     public var isGridVisible: Bool { !grid.isHidden }
+    /// Begins a folder preview from the visible grid's ordered snapshot.
+    public func beginPreview(_ session: ViewerSession, snapshot: FolderSnapshot?, scrollAnchor: ItemID?) {
+        session.beginBrowsing(items: snapshot?.navigationEntries.map(\.itemID) ?? [],
+            sourceVersion: .init(snapshot?.version.generation ?? 0), scrollAnchor: scrollAnchor)
+    }
     public func showViewer() {
         shell?.isHidden = true
         state.autoresizingMask = [.width, .height]
