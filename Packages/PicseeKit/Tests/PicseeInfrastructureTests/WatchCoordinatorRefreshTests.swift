@@ -14,6 +14,8 @@ import PicseeApplication
     func clearFolderImageForNoMatches() { cleared += 1 }
     func folderScanDidComplete(count: Int) { completed.append(count) }
     func folderScanDidStart() { didStart += 1 }
+    var ended = 0
+    func folderScanDidEnd() { ended += 1 }
     func reset() { didStart = 0; opened = []; cleared = 0; completed = [] }
 }
 
