@@ -64,6 +64,14 @@ import PicseeCore
         showGrid(reading: false)
         if let offset { (grid as? GridBrowserView)?.restoreContentOffset(offset) }
     }
+    public func showCompletedGrid(_ snapshot: FolderSnapshot, selection: BrowserSelection,
+                                  currentItemID: ItemID?, offset: NSPoint?) {
+        guard let grid = grid as? GridBrowserView else { return }
+        grid.display(snapshot, selection: selection)
+        showGrid(reading: false)
+        grid.activate(currentItemID: currentItemID)
+        if let offset { grid.restoreContentOffset(offset) }
+    }
     /// What Cancel Reading returns to.
     public func show(_ target: FolderEntryRestoreTarget) {
         if target == .grid { showGrid(reading: false) } else { showViewer() }

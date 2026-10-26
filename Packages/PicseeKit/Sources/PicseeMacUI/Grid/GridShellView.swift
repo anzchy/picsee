@@ -40,7 +40,11 @@ import PicseeCore
     public let footer = NSView()
     public let toggleButton: NSButton = GridSidebarToggleButton()
     public let searchField = NSSearchField()
+    public let searchButton: NSButton = GridSidebarToggleButton()
+    public var emptyStateTitle: NSTextField? { emptyTitle }
+    public var emptyStateDetail: NSTextField? { emptyDetail }
     public let sortButton: NSButton = GridSidebarToggleButton()
+    public let searchStatus = NSTextField(labelWithString: "")
     public var onSearchChange: ((String) -> Void)?
     public var onClearSearch: (() -> Void)?
     public var onSort: ((FolderMenuAction) -> Void)?
@@ -70,6 +74,8 @@ import PicseeCore
         addSubview(footer)
         footer.addSubview(toggleButton)
         footer.addSubview(searchField)
+        footer.addSubview(searchButton)
+        footer.addSubview(searchStatus)
         footer.addSubview(sortButton)
         footer.addSubview(footerRule)
         mainContent.addSubview(emptyState)
@@ -79,13 +85,18 @@ import PicseeCore
         emptyState.addSubview(clearSearchButton)
         emptyState.isHidden = true
         emptyState.setAccessibilityIdentifier("grid.search.empty")
-        emptyTitle.font = .systemFont(ofSize: 17, weight: .semibold)
+        emptyTitle.font = .systemFont(ofSize: 16, weight: .medium)
         emptyIcon.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
         emptyIcon.contentTintColor = .secondaryLabelColor
         emptyDetail.textColor = .secondaryLabelColor
+        emptyDetail.font = .systemFont(ofSize: 13)
+        emptyDetail.lineBreakMode = .byTruncatingMiddle
         emptyTitle.alignment = .center
         emptyDetail.alignment = .center
         clearSearchButton.title = String(localized: "Clear Search")
+        clearSearchButton.bezelStyle = .rounded
+        clearSearchButton.isBordered = true
+        clearSearchButton.bezelColor = DesignColor.accent.nsColor
         clearSearchButton.target = self
         clearSearchButton.action = #selector(clearFromButton)
         clearSearchButton.setAccessibilityIdentifier("grid.search.clear")
@@ -95,6 +106,17 @@ import PicseeCore
         searchField.delegate = self
         searchField.target = self
         searchField.action = #selector(searchFieldAction)
+        searchField.isHidden = true
+        searchButton.isBordered = false
+        searchButton.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        searchButton.target = self
+        searchButton.action = #selector(openSearchFromButton)
+        searchButton.setAccessibilityLabel(String(localized: "Search images"))
+        searchButton.setAccessibilityIdentifier("grid.search.button")
+        searchStatus.font = .systemFont(ofSize: 12)
+        searchStatus.textColor = DesignColor.textSecondary.nsColor
+        searchStatus.lineBreakMode = .byTruncatingTail
+        searchStatus.isHidden = true
         sortButton.isBordered = false
         sortButton.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
         sortButton.target = self
@@ -177,17 +199,20 @@ import PicseeCore
         footer.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 40)
         toggleButton.frame = NSRect(x: 8, y: 4, width: 32, height: 32)
         footerRule.frame = NSRect(x: 0, y: 39, width: bounds.width, height: 1)
-        sortButton.frame = NSRect(x: max(48, footer.bounds.width - 40), y: 4, width: 32, height: 32)
-        let searchWidth = min(190, max(0, sortButton.frame.minX - 56))
-        searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - 8, y: 6,
+        sortButton.frame = NSRect(x: max(48, footer.bounds.width - 37), y: 6, width: 30, height: 28)
+        searchButton.frame = NSRect(x: sortButton.frame.minX - 32, y: 6, width: 30, height: 28)
+        let searchWidth = min(190, max(0, sortButton.frame.minX - 58))
+        searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - 2, y: 6,
                                    width: searchWidth, height: 28)
+        searchStatus.frame = NSRect(x: 48, y: 6, width: max(0, (searchField.isHidden ? searchButton.frame.minX : searchField.frame.minX) - 56), height: 28)
         emptyState.frame = mainContent.bounds
         let centerX = emptyState.bounds.midX
         let centerY = emptyState.bounds.midY
-        emptyIcon.frame = NSRect(x: centerX - 16, y: centerY + 56, width: 32, height: 32)
-        emptyTitle.frame = NSRect(x: max(0, centerX - 180), y: centerY + 20, width: 360, height: 25)
-        emptyDetail.frame = NSRect(x: max(0, centerX - 180), y: centerY - 12, width: 360, height: 20)
-        clearSearchButton.frame = NSRect(x: max(0, centerX - 65), y: centerY - 56, width: 130, height: 30)
+        emptyIcon.frame = NSRect(x: centerX - 16, y: centerY + 44, width: 32, height: 32)
+        let emptyWidth = min(360, max(0, emptyState.bounds.width - 48))
+        emptyTitle.frame = NSRect(x: centerX - emptyWidth / 2, y: centerY + 1, width: emptyWidth, height: 25)
+        emptyDetail.frame = NSRect(x: centerX - emptyWidth / 2, y: centerY - 28, width: emptyWidth, height: 20)
+        clearSearchButton.frame = NSRect(x: max(0, centerX - 65), y: centerY - 75, width: 130, height: 30)
         folderName.frame = NSRect(x: 14, y: max(0, sidebar.bounds.height - 53),
                                   width: max(0, sidebar.bounds.width - 28), height: 20)
         divider.frame = NSRect(x: max(0, sidebar.bounds.width - 5), y: 0, width: 5,
@@ -234,23 +259,53 @@ import PicseeCore
     private func updateKeyViewLoop() {
         guard let focusAnchor else { return }
         focusAnchor.nextKeyView = toggleButton
-        let nextAction: NSView = footerActionsEnabled ? searchField : focusAnchor
+        let nextAction: NSView = footerActionsEnabled ? (searchField.isHidden ? searchButton : searchField) : focusAnchor
         toggleButton.nextKeyView = preferencesStore.value.gridSidebarVisible ? divider : nextAction
         divider.nextKeyView = nextAction
+        searchButton.nextKeyView = sortButton
         searchField.nextKeyView = sortButton
         sortButton.nextKeyView = emptyState.isHidden ? focusAnchor : clearSearchButton
         clearSearchButton.nextKeyView = focusAnchor
     }
-    public func focusSearch() { window?.makeFirstResponder(searchField) }
+    public func focusSearch() {
+        searchButton.isHidden = true
+        searchField.isHidden = false
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        updateKeyViewLoop()
+        window?.makeFirstResponder(searchField)
+    }
+    @objc private func openSearchFromButton() { focusSearch() }
+    private func collapseSearch() {
+        searchField.isHidden = true
+        searchButton.isHidden = false
+        searchButton.state = searchField.stringValue.isEmpty ? .off : .on
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        updateKeyViewLoop()
+    }
+    public func controlTextDidEndEditing(_ obj: Notification) { collapseSearch() }
     public func setFooterActionsEnabled(_ enabled: Bool) {
         footerActionsEnabled = enabled
         searchField.isEnabled = enabled
+        searchButton.isEnabled = enabled
         sortButton.isEnabled = enabled
         emptyState.setAccessibilityHidden(!enabled || emptyState.isHidden)
         if !enabled { emptyState.isHidden = true }
         updateKeyViewLoop()
     }
-    public func setSearchTerm(_ term: String) { searchField.stringValue = term }
+    public func setSearchTerm(_ term: String) {
+        searchField.stringValue = term
+        searchButton.state = term.isEmpty ? .off : .on
+        if term.isEmpty { searchStatus.isHidden = true }
+    }
+    public func setSearchStatus(resultCount: Int, term: String) {
+        searchStatus.stringValue = term.isEmpty
+            ? String(format: String(localized: "%lld images"), resultCount)
+            : String(format: String(localized: "Search: %@ · %lld results"), term, resultCount)
+        searchStatus.isHidden = false
+        searchButton.state = term.isEmpty ? .off : .on
+    }
     public func showSearchEmpty(_ visible: Bool, term: String = "") {
         if visible { mainContent.addSubview(emptyState, positioned: .above, relativeTo: nil) }
         if visible { emptyDetail.stringValue = String(format: String(localized: "No images with “%@” in their filename."), term) }
@@ -263,7 +318,7 @@ import PicseeCore
     public func searchFieldDidEndSearching(_ sender: NSSearchField) {
         if sender.stringValue.isEmpty { clearSearch() }
     }
-    @objc private func searchFieldAction() {
+    @objc func searchFieldAction() {
         if searchField.stringValue.isEmpty { clearSearch() }
         else { onSearchChange?(searchField.stringValue) }
     }
@@ -275,6 +330,9 @@ import PicseeCore
     @objc private func clearFromButton() { clearSearch() }
     private func clearSearch() {
         searchField.stringValue = ""
+        if !searchField.isHidden { window?.makeFirstResponder(searchButton) }
+        collapseSearch()
+        searchStatus.isHidden = true
         onSearchChange?("")
         onClearSearch?()
     }
