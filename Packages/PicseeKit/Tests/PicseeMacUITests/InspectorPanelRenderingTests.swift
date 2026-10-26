@@ -49,16 +49,20 @@ private struct FilledInspectorReader: InspectorMetadataReading {
             let image = try #require(renderer.cgImage)
             let pixels = NSBitmapImageRep(cgImage: image)
             let base = theme == .dark ? 15.0/255 : 1.0
-            let ink = (0..<24).flatMap { y in (0..<186).compactMap { x -> Int? in
+            let ink = (0..<24).flatMap { y in (0..<186).compactMap { x -> (Int, Int)? in
                 guard let color = pixels.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
                       abs(color.redComponent - base) > 0.12 else { return nil }
-                return x
+                return (x, y)
             } }
-            let labelInk = ink.filter { $0 < 95 }, valueInk = ink.filter { $0 >= 95 }
-            #expect((labelInk.max() ?? 0) >= range.lowerBound)
-            #expect((labelInk.max() ?? 999) <= range.upperBound)
-            #expect((valueInk.min() ?? 0) >= 100)
-            #expect((valueInk.max() ?? 0) >= 175)
+            let labelInk = ink.filter { $0.0 < 95 }, valueInk = ink.filter { $0.0 >= 95 }
+            #expect((labelInk.map(\.0).max() ?? 0) >= range.lowerBound)
+            #expect((labelInk.map(\.0).max() ?? 999) <= range.upperBound)
+            #expect((valueInk.map(\.0).min() ?? 0) >= 100)
+            #expect((valueInk.map(\.0).max() ?? 0) >= 175)
+            let labelHeight = (labelInk.map(\.1).max() ?? 0) - (labelInk.map(\.1).min() ?? 0) + 1
+            let valueHeight = (valueInk.map(\.1).max() ?? 0) - (valueInk.map(\.1).min() ?? 0) + 1
+            #expect((8...15).contains(labelHeight)) // drawn 12 pt label, pages 16/34
+            #expect((8...15).contains(valueHeight)) // drawn 12 pt monospaced value
         }
     }
 }
