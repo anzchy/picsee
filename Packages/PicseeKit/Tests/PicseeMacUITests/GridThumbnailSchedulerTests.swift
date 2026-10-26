@@ -108,6 +108,32 @@ private actor GridPriorityPort {
     #expect(scheduler.activeItemIDs.isEmpty)
 }
 
+@Test @MainActor func gridSearchFilterCancelsOldThumbnailsAndStartsMatchingRequest() async {
+    let snapshot = gridThumbnailSnapshot(rootID: AccessRootID(rawValue: UUID()), count: 4, generation: 1)
+    let first = snapshot.navigationEntries[0].itemID
+    let match = snapshot.navigationEntries[3].itemID
+    let port = HeldGridThumbnailPort()
+    let scheduler = GridThumbnailScheduler()
+    let loader: GridThumbnailScheduler.Loader = { entry, _, _, _ in try await port.load(entry) }
+
+    scheduler.setSnapshot(snapshot)
+    scheduler.reconcile(visible: [0, 3], columns: 1, pixelEdge: 424, loader: loader)
+    await port.waitStarted(first)
+    let oldMatchToken = scheduler.token(at: 3)
+    #expect(oldMatchToken != nil)
+
+    let filtered = snapshot.filteringFilename("0003")
+    scheduler.setSnapshot(filtered)
+    #expect(scheduler.activeItemIDs.isEmpty)
+    scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
+    await port.waitCancelled(first)
+    await port.waitStarted(match)
+    #expect(scheduler.activeItemIDs == [match])
+    #expect(scheduler.token(at: 0) != oldMatchToken)
+    scheduler.stop()
+    await port.waitCancelled(match)
+}
+
 @Test func gridThumbnailPixelSizingRoundsUpForRetina() {
     #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 212, height: 148), backingScale: 1) >= 318)
     #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 212, height: 148), backingScale: 2) >= 636)

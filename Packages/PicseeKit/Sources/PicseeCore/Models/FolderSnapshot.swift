@@ -44,6 +44,14 @@ public struct FolderSnapshot: Equatable, Sendable {
     public let navigationEntries: [FolderEntry]
     private let navigationIndices: [ItemID: Int]
     public func navigationIndex(for itemID: ItemID) -> Int? { navigationIndices[itemID] }
+    public func filteringFilename(_ term: String) -> Self {
+        guard !term.isEmpty else { return self }
+        let selected = entries.filter {
+            $0.url.lastPathComponent.range(of: term,
+                options: [.caseInsensitive, .diacriticInsensitive], locale: .current) != nil
+        }
+        return Self(version: version, orderedEntries: selected, isComplete: isComplete)
+    }
     public init(version: SnapshotVersion, entries: [FolderEntry], isComplete: Bool) {
         self.init(version: version, orderedEntries: entries.sorted(by: Self.orderedBefore), isComplete: isComplete)
     }

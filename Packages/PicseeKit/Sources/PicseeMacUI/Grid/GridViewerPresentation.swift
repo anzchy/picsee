@@ -36,6 +36,7 @@ import PicseeCore
     }
     public func showGrid(reading: Bool) {
         shell?.isHidden = false
+        shell?.setFooterActionsEnabled(!reading)
         shell?.layoutSubtreeIfNeeded()
         if let grid = grid as? GridBrowserView { shell?.linkKeyViews(from: grid.collectionView) }
         if reading, let shell, let parent = state.superview {

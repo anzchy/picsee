@@ -87,6 +87,11 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         }
         let view = submenu(String(localized: "View"))
         folderViewMenu = view
+        let search = view.addItem(withTitle: String(localized: "Search current folder"),
+            action: #selector(focusGridSearch(_:)), keyEquivalent: "f")
+        search.target = self
+        search.keyEquivalentModifierMask = [.command]
+        search.setAccessibilityIdentifier("grid.search.menu")
         for id in CommandID.menuCommands {
             let item = NSMenuItem(title: id.menuTitle, action: #selector(invoke(_:)), keyEquivalent: id.defaultKey)
             item.keyEquivalentModifierMask = id.usesCommand ? [.command] : []
@@ -196,6 +201,9 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     @objc private func toggleSidebar(_ item: NSMenuItem) {
         (NSApp.keyWindow?.windowController as? CanvasWindowController)?.toggleGridSidebar()
     }
+    @objc private func focusGridSearch(_ item: NSMenuItem) {
+        (NSApp.keyWindow?.windowController as? CanvasWindowController)?.route(.search, from: .menu)
+    }
     @objc private func selectAppearance(_ item: NSMenuItem) {
         guard let raw = item.representedObject as? String, let appearance = DisplayAppearance(rawValue: raw) else { return }
         preferencesStore.value.appearance = appearance
@@ -245,6 +253,9 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         if item.identifier?.rawValue == "grid.sidebar.toggle.menu" {
             item.title = String(localized: preferencesStore.value.gridSidebarVisible ? "Hide sidebar" : "Show sidebar")
             return (NSApp.keyWindow?.windowController as? CanvasWindowController)?.gridShellVisible == true
+        }
+        if item.action == #selector(focusGridSearch(_:)) {
+            return (NSApp.keyWindow?.windowController as? CanvasWindowController)?.gridSearchAvailable == true
         }
         guard let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return false }
         let target = NSApp.keyWindow?.windowController as? CanvasWindowController
