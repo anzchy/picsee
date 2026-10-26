@@ -1021,6 +1021,13 @@
         }
       }
     },
+    "Search: %@ · %lld results": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%2$lld results · Search: %1$@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%2$lld 个结果 · 搜索：%1$@" } }
+      }
+    },
     "Always Show Tools": {
       "localizations": {
         "en": {

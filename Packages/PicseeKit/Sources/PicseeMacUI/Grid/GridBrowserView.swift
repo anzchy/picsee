@@ -551,6 +551,7 @@ private struct GridGeometry: Equatable {
         }
     }
     public func itemID(at index: Int) -> ItemID? { entries.indices.contains(index) ? entries[index].itemID : nil }
+    public var displayedItemIDs: [ItemID] { entries.map(\.itemID) }
     public func index(for id: ItemID) -> Int? { indices[id] }
     public func entry(for id: ItemID) -> FolderEntry? { indices[id].map { entries[$0] } }
     public var contentOffset: NSPoint { scrollView.contentView.bounds.origin }

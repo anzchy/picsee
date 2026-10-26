@@ -31,6 +31,19 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let searchProjection = GridSearchProjectionScheduler()
     private var gridView: GridBrowserView!
     private var gridShell: GridShellView!
+    func completeGridDisplay(_ snapshot: FolderSnapshot, currentItemID: ItemID?, offset: NSPoint?) {
+        searchProjection.cancel()
+        let filtered = gridSearch.project(snapshot)
+        let current = currentItemID ?? gridSearch.currentItemID(in: filtered, currentItemID: gridView.currentItemID)
+        session.updateItems(filtered.navigationEntries.map(\.itemID),
+            sourceVersion: .init(snapshot.version.generation))
+        presentation.showCompletedGrid(filtered, selection: session.selection,
+            currentItemID: current, offset: offset)
+        pendingGridCurrentItemID = nil
+        if let current = gridView.currentItemID { session.focus(current) }
+        gridShell.showSearchEmpty(!gridSearch.term.isEmpty && filtered.navigationEntries.isEmpty, term: gridSearch.term)
+        gridShell.setSearchStatus(resultCount: filtered.navigationEntries.count, term: gridSearch.term)
+    }
     private var presentation: GridViewerPresentation!
     private var gridFolderRoot: AccessRootID?
     private var gridFolderURL: URL?
@@ -452,7 +465,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         if command == .search, gridSearchAvailable { gridShell.focusSearch(); return true }
         if !gridView.isHidden && (command == .preview || command == .enter) {
             gridPreviewScrollOffset = gridView.contentOffset
-            session.beginBrowsing(items: gridProjection.snapshot.map { gridSearch.project($0).navigationEntries.map(\.itemID) } ?? [],
+            session.beginBrowsing(items: gridView.displayedItemIDs,
                 sourceVersion: .init(gridProjection.snapshot?.version.generation ?? 0),
                 scrollAnchor: gridView.firstVisibleItemID())
         }
@@ -536,6 +549,11 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     private func displaySearchedGrid(_ source: FolderSnapshot) {
         let term = gridSearch.term
+        if term.isEmpty {
+            searchProjection.cancel()
+            presentSearchedGrid(source, source: source)
+            return
+        }
         searchProjection.schedule(source, term: term) { [weak self] filtered in
             guard let self, self.gridProjection.snapshot == source,
                   self.gridSearch.term == term else { return }
@@ -546,10 +564,11 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         let current = gridSearch.currentItemID(in: filtered, currentItemID: gridView.currentItemID)
         session.updateItems(filtered.navigationEntries.map(\.itemID),
             sourceVersion: .init(source.version.generation))
-        gridView.display(filtered, selectedItemID: gridSelectedItemID)
+        gridView.display(filtered, selection: session.selection)
         gridView.setCurrentItemID(current)
         if let current { session.focus(current) }
         gridShell.showSearchEmpty(!gridSearch.term.isEmpty && filtered.navigationEntries.isEmpty, term: gridSearch.term)
+        gridShell.setSearchStatus(resultCount: filtered.navigationEntries.count, term: gridSearch.term)
     }
     private func applyGridSort(_ action: FolderMenuAction) {
         guard gridSearchAvailable, session.hasFolderSource,
@@ -592,9 +611,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
                 guard let snapshot = projection.snapshot else { return }
                 gridSearch.setTerm(priorSearchTerm, currentItemID: priorCurrent)
                 gridShell.setSearchTerm(priorSearchTerm)
-                displaySearchedGrid(snapshot)
-                gridView.restoreContentOffset(offset)
-                showGrid()
+                completeGridDisplay(snapshot, currentItemID: priorCurrent, offset: offset)
                 if let window { GridWindowIdentity.showFolder(snapshot.version.folder, in: window) }
             case .viewer(let file):
                 // A grid preview reopens inside its restored grid; Esc still returns there.
@@ -806,17 +823,15 @@ extension CanvasWindowController: FolderScanHost {
                 // A watched refresh only reconciles: an open Preview Set shrinks in place and the grid stays as shown.
                 let entering = folderEntryRestore != nil
                 let offset = gridView.contentOffset
-                if entering || !gridView.isHidden {
-                    // The source changed under an active search; keep its term and project the new snapshot.
-                    displaySearchedGrid(snapshot)
-                    if entering {
-                        folderEntryRestore = nil
-                        session.completeFolderEntry()
-                        showGrid()
-                    } else {
-                        gridView.restoreContentOffset(offset)
-                        gridView.activate(currentItemID: session.selection.currentItemID)
-                    }
+                if entering {
+                    completeGridDisplay(snapshot, currentItemID: pendingGridCurrentItemID, offset: nil)
+                    folderEntryRestore = nil
+                    session.completeFolderEntry()
+                } else if !gridView.isHidden {
+                    // Re-filter synchronously without moving keyboard focus out of the search field.
+                    searchProjection.cancel()
+                    presentSearchedGrid(gridSearch.project(snapshot), source: snapshot)
+                    gridView.restoreContentOffset(offset)
                 } else {
                     // A viewer keeps the full surviving Preview Set until it returns to the filtered grid.
                     session.updateItems(snapshot.navigationEntries.map(\.itemID),

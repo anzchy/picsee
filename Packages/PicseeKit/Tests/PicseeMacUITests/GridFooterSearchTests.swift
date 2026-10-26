@@ -5,6 +5,66 @@ import PicseeApplication
 import PicseeInfrastructure
 @testable import PicseeMacUI
 
+/// grid-light.html / grid-dark.html `.grid-bottom-bar` (40px, 7px inset),
+/// `.grid-toolbar-tools` (2px gap), and primitives.css `.ds-icon-button` (30x28).
+/// search-empty.html `.empty-state` and its h2/p/.mock-primary rules.
+@Test @MainActor func pinnedSearchFooterFramesAndPage23AtBothSizesAndAppearances() throws {
+    _ = NSApplication.shared
+    for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+        for size in [NSSize(width: 1280, height: 800), NSSize(width: 800, height: 680)] {
+            let shell = GridShellView(frame: NSRect(origin: .zero, size: size),
+                preferencesStore: InMemoryDisplayPreferencesStore())
+            shell.appearance = NSAppearance(named: appearance)
+            shell.layoutSubtreeIfNeeded()
+            #expect(shell.footer.frame.height == 40)
+            #expect(shell.sortButton.frame.size == NSSize(width: 30, height: 28))
+            #expect(shell.sortButton.frame.maxX == size.width - 7)
+            #expect(shell.searchButton.frame.size == NSSize(width: 30, height: 28))
+            #expect(shell.searchButton.frame.maxX + 2 == shell.sortButton.frame.minX)
+            #expect(shell.searchField.isHidden)
+            #expect(shell.searchStatus.font?.pointSize == 12)
+            #expect(shell.searchStatus.textColor == DesignColor.textSecondary.nsColor)
+            shell.effectiveAppearance.performAsCurrentDrawingAppearance {
+                #expect(shell.footer.layer?.backgroundColor == DesignColor.sidebarBackground.nsColor.cgColor)
+            }
+            #expect(shell.footer.frame.minX == 0)
+            shell.focusSearch()
+            shell.layoutSubtreeIfNeeded()
+            #expect(!shell.searchField.isHidden)
+            #expect(shell.searchButton.isHidden)
+            #expect(shell.searchField.frame.height == 28)
+            #expect(shell.searchField.frame.maxX + 2 == shell.sortButton.frame.minX)
+            #expect(shell.searchField.frame.minX > shell.toggleButton.frame.maxX)
+            shell.setSearchTerm("旅行")
+            shell.setSearchStatus(resultCount: 4, term: "旅行")
+            #expect(shell.searchStatus.stringValue.contains("4"))
+            #expect(shell.searchStatus.stringValue.contains("旅行"))
+            #expect(!shell.searchStatus.isHidden)
+            shell.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification,
+                object: shell.searchField))
+            #expect(shell.searchField.isHidden)
+            #expect(!shell.searchButton.isHidden)
+            #expect(shell.searchButton.state == .on)
+            shell.focusSearch()
+            shell.showSearchEmpty(true, term: String(repeating: "long-name-", count: 40))
+            let title = try #require(shell.emptyStateTitle)
+            let detail = try #require(shell.emptyStateDetail)
+            #expect(title.font?.pointSize == 16)
+            #expect(detail.font?.pointSize == 13)
+            #expect(title.frame.midX == shell.mainContent.bounds.midX)
+            #expect(detail.frame.midX == shell.mainContent.bounds.midX)
+            #expect(shell.clearSearchButton.frame.midX == shell.mainContent.bounds.midX)
+            #expect(title.frame.minY > shell.mainContent.bounds.minY)
+            #expect(shell.clearSearchButton.frame.maxY < shell.mainContent.bounds.maxY)
+            #expect(detail.frame.minX >= shell.mainContent.bounds.minX)
+            #expect(detail.frame.maxX <= shell.mainContent.bounds.maxX)
+            #expect(shell.clearSearchButton.isBordered)
+            #expect(shell.clearSearchButton.bezelColor != nil)
+            #expect((title.frame.maxY + shell.clearSearchButton.frame.minY) / 2 - shell.mainContent.bounds.midY < 80)
+        }
+    }
+}
+
 @Test @MainActor func gridFooterSearchSortAndEmptyStateFitCompactViewport() throws {
     _ = NSApplication.shared
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
@@ -73,6 +133,34 @@ import PicseeInfrastructure
     #expect(shell.searchField.isEnabled == false)
 }
 
+@Test @MainActor func searchFieldNativeActionAndClickOutsideCollapse() throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 680),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    var terms: [String] = []
+    shell.onSearchChange = { terms.append($0) }
+    shell.searchButton.performClick(nil)
+    #expect(!shell.searchField.isHidden)
+    #expect(!shell.searchField.isHidden)
+    shell.setSearchTerm("cafe")
+    let action = try #require(shell.searchField.action)
+    #expect(shell.searchField.target === shell)
+    #expect(action == #selector(GridShellView.searchFieldAction))
+    shell.searchFieldAction()
+    #expect(terms == ["cafe"])
+    shell.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification,
+        object: shell.searchField))
+    #expect(shell.searchField.isHidden)
+    #expect(shell.searchButton.state == .on)
+    shell.searchButton.performClick(nil)
+    #expect(shell.searchField.stringValue == "cafe")
+    shell.searchField.stringValue = ""
+    shell.searchFieldAction()
+    #expect(terms == ["cafe", ""])
+    #expect(shell.searchButton.state == .off)
+    #expect(shell.searchField.isHidden && !shell.searchButton.isHidden)
+}
+
 @Test @MainActor func footerSortActionsUseFolderMenuActionsAndReflectCurrentConditions() throws {
     _ = NSApplication.shared
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
@@ -103,6 +191,7 @@ import PicseeInfrastructure
     let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 640, height: 600))
     grid.display(FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: 1),
         entries: [first, second], isComplete: true), selectedItemID: nil)
+    #expect(grid.displayedItemIDs == [first.itemID, second.itemID])
     grid.setCurrentItemID(second.itemID)
     #expect(grid.currentItemID == second.itemID)
     grid.setCurrentItemID(nil)
