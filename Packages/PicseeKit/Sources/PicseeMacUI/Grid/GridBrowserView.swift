@@ -1,5 +1,6 @@
 import AppKit
 import PicseeCore
+import PicseeApplication
 
 @MainActor private final class GridPhotoSurface: NSView {
     var onAppearanceChange: (() -> Void)?
@@ -29,6 +30,7 @@ import PicseeCore
     private let selectionOutline = CALayer()
     private let placeholder = NSTextField(labelWithString: String(localized: "Thumbnail pending"))
     private let nameLabel = NSTextField(labelWithString: "")
+    private let selectionBadge = NSTextField(labelWithString: "✓")
 
     public override func loadView() {
         let surface = GridPhotoSurface(frame: NSRect(x: 0, y: 0, width: 220, height: 184))
@@ -49,6 +51,13 @@ import PicseeCore
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.maximumNumberOfLines = 1
         nameLabel.wantsLayer = true
+        selectionBadge.alignment = .center
+        selectionBadge.textColor = .white
+        selectionBadge.font = .systemFont(ofSize: 12, weight: .semibold)
+        selectionBadge.wantsLayer = true
+        selectionBadge.layer?.cornerRadius = 9
+        selectionBadge.layer?.borderWidth = 1
+        selectionBadge.isHidden = true
         // Selection follows page 11/12's tile outline; Current Item is an inset ring.
         selectionOutline.borderWidth = 2
         selectionOutline.cornerRadius = DesignMetrics.radii["inner"]! + 4
@@ -62,6 +71,7 @@ import PicseeCore
         surface.addSubview(tile)
         surface.addSubview(placeholder)
         surface.addSubview(nameLabel)
+        surface.addSubview(selectionBadge)
         surface.setAccessibilityRole(.button)
         view = surface
         layoutContent()
@@ -74,6 +84,8 @@ import PicseeCore
         tile.frame = NSRect(x: 4, y: 32, width: width, height: height)
         placeholder.frame = tile.frame
         nameLabel.frame = NSRect(x: 4, y: 4, width: width, height: 21)
+        selectionBadge.frame = NSRect(x: tile.frame.maxX - 25, y: tile.frame.maxY - 25,
+            width: 18, height: 18)
         selectionOutline.frame = tile.frame.insetBy(dx: -4, dy: -4)
         currentRing.frame = tile.bounds.insetBy(dx: 3, dy: 3)
     }
@@ -140,12 +152,14 @@ import PicseeCore
         var accent = NSColor.clear.cgColor
         var fill = NSColor.clear.cgColor
         var surface = NSColor.clear.cgColor
+        var badgeFill = NSColor.clear.cgColor
         var ring = NSColor.clear.cgColor
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             ring = DesignColor.focusRing.nsColor.cgColor
             accent = DesignColor.accent.nsColor.cgColor
             fill = DesignColor.selectionFill.nsColor.cgColor
             surface = DesignColor.sidebarBackground.nsColor.cgColor
+            badgeFill = DesignColor.primaryFill.nsColor.cgColor
         }
         selectionOutline.borderColor = accent
         selectionOutline.isHidden = !isSelected
@@ -153,8 +167,12 @@ import PicseeCore
         currentRing.borderColor = ring
         currentRing.isHidden = !isCurrent
         nameLabel.layer?.backgroundColor = isSelected ? fill : NSColor.clear.cgColor
+        selectionBadge.layer?.backgroundColor = badgeFill
+        selectionBadge.layer?.borderColor = NSColor.white.cgColor
+        selectionBadge.isHidden = !isSelected
         view.setAccessibilityValue(isSelected ? String(localized: "Selected") : "")
     }
+    public var isSelectionBadgeVisible: Bool { !selectionBadge.isHidden }
 }
 
 /// Page 11/12 inlined CSS: `.grid-scroll`, `.photo-grid`, `.photo-cell`,
@@ -190,7 +208,15 @@ private struct GridGeometry: Equatable {
 
 @MainActor private final class GridCollectionView: NSCollectionView {
     var onArrow: ((Int) -> Void)?
+    var onClick: ((Int?, SelectionModifier) -> Void)?
     var columnStep = 1
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let modifier: SelectionModifier = event.modifierFlags.contains(.shift) ? .shift
+            : event.modifierFlags.contains(.command) ? .command : .plain
+        onClick?(indexPathForItem(at: point)?.item, modifier)
+        window?.makeFirstResponder(self)
+    }
     override func keyDown(with event: NSEvent) {
         let delta: Int
         switch event.keyCode {
@@ -209,6 +235,8 @@ private struct GridGeometry: Equatable {
     public private(set) var collectionView: NSCollectionView = GridCollectionView()
     public private(set) var currentItemID: ItemID? { didSet { drawCurrent() } }
     public var onSelect: ((ItemID) -> Void)?
+    public var onSelectionGesture: ((ItemID, SelectionModifier) -> BrowserSelection)?
+    public var onClearSelection: (() -> BrowserSelection)?
     public var onDeselect: (() -> Void)?
     /// The grid's Current Item changed without a selection (entry, Esc return, removal fallback).
     public var onCurrentChange: ((ItemID) -> Void)?
@@ -216,6 +244,7 @@ private struct GridGeometry: Equatable {
     private var entries: [FolderEntry] = []
     private var indices: [ItemID: Int] = [:]
     private var updating = false
+    public private(set) var selection = BrowserSelection()
     private var geometry: GridGeometry?
     private let thumbnailScheduler = GridThumbnailScheduler()
     public var thumbnailLoader: (@Sendable (FolderEntry, AccessRootID, Int, DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage))? {
@@ -234,12 +263,15 @@ private struct GridGeometry: Equatable {
         layout.sectionInset = NSEdgeInsets(top: 16, left: 24, bottom: 30, right: 24)
         collectionView.collectionViewLayout = layout
         collectionView.isSelectable = true
-        collectionView.allowsMultipleSelection = false
+        collectionView.allowsMultipleSelection = true
         collectionView.backgroundColors = [DesignColor.canvasBackground.nsColor]
         collectionView.dataSource = self
         collectionView.delegate = self
         (collectionView as? GridCollectionView)?.onArrow = { [weak self] delta in
             self?.moveCurrent(by: delta)
+        }
+        (collectionView as? GridCollectionView)?.onClick = { [weak self] index, modifier in
+            self?.clickItem(at: index, modifier: modifier)
         }
         collectionView.register(GridPhotoItem.self, forItemWithIdentifier: Self.reuseID)
         collectionView.setAccessibilityIdentifier("grid.collection")
@@ -367,10 +399,17 @@ private struct GridGeometry: Equatable {
     }
 
     public func display(_ snapshot: FolderSnapshot, selectedItemID: ItemID?) {
+        var next = BrowserSelection()
+        if let selectedItemID { next.click(selectedItemID, in: snapshot.navigationEntries.map(\.itemID)) }
+        display(snapshot, selection: next)
+    }
+
+    public func display(_ snapshot: FolderSnapshot, selection: BrowserSelection) {
         thumbnailScheduler.setSnapshot(snapshot)
         thumbnailGeneration = snapshot.version.generation
         if !snapshot.isComplete {
             entries = []; indices = [:]; currentItemID = nil
+            self.selection = BrowserSelection()
             updating = true
             collectionView.reloadData()
             collectionView.deselectAll(nil)
@@ -380,20 +419,46 @@ private struct GridGeometry: Equatable {
         }
         entries = snapshot.navigationEntries
         indices = Dictionary(uniqueKeysWithValues: entries.enumerated().map { ($0.element.itemID, $0.offset) })
+        self.selection = selection
+        self.selection.reconcile(with: entries.map(\.itemID))
+        if let selectedCurrent = self.selection.currentItemID { currentItemID = selectedCurrent }
         if let currentItemID, indices[currentItemID] == nil {
             self.currentItemID = entries.first?.itemID
             if let first = self.currentItemID { onCurrentChange?(first) }
         }
         updating = true
         collectionView.reloadData()
-        collectionView.deselectAll(nil)
-        if let selectedItemID, let index = indices[selectedItemID] {
-            collectionView.selectItems(at: [IndexPath(item: index, section: 0)], scrollPosition: [])
-        } else {
-            collectionView.deselectAll(nil)
-        }
+        drawSelection()
         updating = false
         reconcileThumbnails()
+    }
+    public func synchronizeSelection(_ selection: BrowserSelection) {
+        self.selection = selection
+        self.selection.reconcile(with: entries.map(\.itemID))
+        if let current = self.selection.currentItemID { currentItemID = current }
+        updating = true
+        drawSelection()
+        updating = false
+    }
+    private func drawSelection() {
+        let paths = Set(selection.selectedItemIDs.compactMap { indices[$0] }
+            .map { IndexPath(item: $0, section: 0) })
+        collectionView.deselectAll(nil)
+        if !paths.isEmpty { collectionView.selectItems(at: paths, scrollPosition: []) }
+    }
+    private func clickItem(at index: Int?, modifier: SelectionModifier) {
+        guard let index, let id = itemID(at: index) else {
+            if let onClearSelection { synchronizeSelection(onClearSelection()) }
+            else { selection.clearSelection(); synchronizeSelection(selection) }
+            return
+        }
+        if let onSelectionGesture {
+            synchronizeSelection(onSelectionGesture(id, modifier))
+        } else {
+            selection.click(id, modifier: modifier, in: entries.map(\.itemID))
+            synchronizeSelection(selection)
+            onSelect?(id)
+        }
     }
     /// A requested Current Item that is filtered out or gone falls back to the first item in sort order.
     public func activate(currentItemID: ItemID? = nil) {
@@ -408,6 +473,7 @@ private struct GridGeometry: Equatable {
         let next = max(0, min(entries.count - 1, current + delta))
         guard next != current || currentItemID == nil, let id = itemID(at: next) else { return }
         currentItemID = id
+        selection.click(id, in: entries.map(\.itemID))
         updating = true
         collectionView.deselectAll(nil)
         collectionView.selectItems(at: [IndexPath(item: next, section: 0)], scrollPosition: [])
@@ -457,11 +523,14 @@ private struct GridGeometry: Equatable {
     }
     public func collectionView(_ collectionView: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>) {
         guard !updating, let index = indexPaths.first?.item, let id = itemID(at: index) else { return }
+        selection.click(id, in: entries.map(\.itemID))
         currentItemID = id
         onSelect?(id)
+        synchronizeSelection(selection)
     }
     public func collectionView(_ collectionView: NSCollectionView, didDeselectItemsAt indexPaths: Set<IndexPath>) {
         guard !updating, collectionView.selectionIndexPaths.isEmpty else { return }
+        selection.clearSelection()
         onDeselect?()
     }
 }

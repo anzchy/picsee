@@ -27,6 +27,8 @@ public struct BrowserSelection: Equatable, Sendable {
     public mutating func focus(_ id: ItemID, in items: [ItemID]) {
         if items.contains(id) { currentItemID = id }
     }
+    /// Empty-space click removes the picked set while retaining keyboard origin.
+    public mutating func clearSelection() { selectedItemIDs.removeAll() }
     public mutating func reconcile(with items: [ItemID]) {
         let remaining = Set(items)
         selectedItemIDs.formIntersection(remaining)

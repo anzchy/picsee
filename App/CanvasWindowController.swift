@@ -35,10 +35,6 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var gridPreviewScrollOffset: NSPoint?
     private var folderEntryRestore: ((FolderEntryRestoreTarget) -> Void)?
     private var pendingGridCurrentItemID: ItemID?
-    private var gridSelectedItemID: ItemID? {
-        guard let id = session.selection.currentItemID, session.selection.selectedItemIDs.contains(id) else { return nil }
-        return id
-    }
     let session: ViewerSession
     private let inspector: InspectorModel
     private let router = CommandRouter()
@@ -141,10 +137,20 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridView.onSelect = { [weak self] id in
             self?.session.select(id)
         }
+        gridView.onSelectionGesture = { [weak self] id, modifier in
+            guard let self else { return BrowserSelection() }
+            self.session.select(id, modifier: modifier)
+            return self.session.selection
+        }
+        gridView.onClearSelection = { [weak self] in
+            self?.session.clearSelection()
+            return self?.session.selection ?? BrowserSelection()
+        }
         gridView.onCurrentChange = { [weak self] id in self?.session.focus(id) }
         gridView.onDeselect = { [weak self] in
-            guard let self, let current = session.selection.currentItemID else { return }
-            session.select(current, modifier: .command)
+            guard let self else { return }
+            self.session.clearSelection()
+            self.gridView.synchronizeSelection(self.session.selection)
         }
         gridShell.mainContent.addSubview(gridView)
         content.addSubview(stateHost, positioned: .above, relativeTo: gridShell)
@@ -433,7 +439,6 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             session.beginBrowsing(items: gridProjection.snapshot?.navigationEntries.map(\.itemID) ?? [],
                 sourceVersion: .init(gridProjection.snapshot?.version.generation ?? 0),
                 scrollAnchor: gridView.firstVisibleItemID())
-            if let selected = gridSelectedItemID { session.select(selected) }
         }
         session.updateFocus(focusContext)
         session.setMenuTracking(menuTracking())
@@ -491,7 +496,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         showGrid()
         if let window { GridWindowIdentity.showFolder(folder, in: window) }
         if let snapshot = gridProjection.snapshot {
-            gridView.display(snapshot, selectedItemID: gridSelectedItemID)
+            gridView.display(snapshot, selection: session.selection)
             if let offset = gridPreviewScrollOffset { gridView.restoreContentOffset(offset) }
             else if let anchor = session.scrollAnchor { gridView.scrollTo(anchor) }
         }
@@ -537,7 +542,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             switch target {
             case .grid:
                 guard let snapshot = projection.snapshot else { return }
-                gridView.display(snapshot, selectedItemID: gridSelectedItemID)
+                gridView.display(snapshot, selection: session.selection)
                 gridView.restoreContentOffset(offset)
                 showGrid()
                 if let window { GridWindowIdentity.showFolder(snapshot.version.folder, in: window) }
@@ -742,7 +747,7 @@ extension CanvasWindowController: FolderScanHost {
                 gridProjection.setScrollAnchor(anchor)
                 session.updateItems(snapshot.navigationEntries.map(\.itemID),
                     sourceVersion: .init(snapshot.version.generation))
-                gridView.display(snapshot, selectedItemID: gridSelectedItemID)
+                gridView.display(snapshot, selection: session.selection)
                 folderEntryRestore = nil
                 session.completeFolderEntry()
                 showGrid()
