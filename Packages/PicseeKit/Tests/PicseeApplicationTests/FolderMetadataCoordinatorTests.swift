@@ -96,7 +96,10 @@ private struct PartialFolderMetadataReader: FolderMetadataReading {
     await fixture.scanner.finish(1); try await new.value
     #expect(coordinator.snapshot?.version.folder == replacement)
     #expect(coordinator.snapshot?.entries.map(\.url.lastPathComponent) == ["new.jpg"])
-    #expect(coordinator.conditions.sort == .name)
+    #expect(coordinator.conditions.sort == .captureDate)
+    for _ in 0..<100 where reader.requested.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(reader.requested.contains("new.jpg"))
+    reader.release()
     for _ in 0..<100 {
         let balance = await fixture.access.balance
         if balance[0] == balance[1] { break }

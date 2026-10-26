@@ -92,6 +92,19 @@ import PicseeInfrastructure
     }
 }
 
+@Test @MainActor func issue124SortSurvivesUserDefaultsStoreRecreation() {
+    withPreferencesDefaults { defaults in
+        let first = UserDefaultsDisplayPreferencesStore(defaults: defaults)
+        var changed = first.value
+        changed.folderSort = .pixelDimensions
+        changed.folderSortDirection = .descending
+        first.value = changed
+        let relaunched = UserDefaultsDisplayPreferencesStore(defaults: defaults)
+        #expect(relaunched.value.folderSort == .pixelDimensions)
+        #expect(relaunched.value.folderSortDirection == .descending)
+    }
+}
+
 @Test @MainActor func preferencesPersistenceWeakObserverAndSurvivingObserver() {
     withPreferencesDefaults { defaults in
         let store = UserDefaultsDisplayPreferencesStore(defaults: defaults)

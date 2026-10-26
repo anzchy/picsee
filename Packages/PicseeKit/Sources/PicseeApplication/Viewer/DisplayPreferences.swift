@@ -1,14 +1,18 @@
+import PicseeCore
+
 public enum DisplayAppearance: String, Codable, Sendable {
     case system, light, dark
 }
 
-/// App-level layout only. Search is deliberately not Codable preference state.
+/// App-level display preferences. Search and per-folder extension filters are transient.
 public struct DisplayPreferences: Codable, Equatable, Sendable {
     public var alwaysShowTools: Bool
     public var filmstripExpanded: Bool
     public var appearance: DisplayAppearance
     public var gridSidebarWidth: Double
     public var gridSidebarVisible: Bool
+    public var folderSort: FolderSortKey
+    public var folderSortDirection: FolderSortDirection
     public init(alwaysShowTools: Bool = false, filmstripExpanded: Bool = false, appearance: DisplayAppearance = .system,
                 gridSidebarWidth: Double = 196, gridSidebarVisible: Bool = true) {
         self.alwaysShowTools = alwaysShowTools
@@ -16,12 +20,28 @@ public struct DisplayPreferences: Codable, Equatable, Sendable {
         self.appearance = appearance
         self.gridSidebarWidth = Self.normalizedSidebarWidth(gridSidebarWidth)
         self.gridSidebarVisible = gridSidebarVisible
+        self.folderSort = .name
+        self.folderSortDirection = .ascending
     }
 
-    private enum CodingKeys: String, CodingKey { case alwaysShowTools, filmstripExpanded, appearance, gridSidebarWidth, gridSidebarVisible }
+    private enum CodingKeys: String, CodingKey {
+        case alwaysShowTools, filmstripExpanded, appearance, gridSidebarWidth, gridSidebarVisible
+        case folderSort, folderSortDirection
+    }
 
     public static func normalizedSidebarWidth(_ width: Double) -> Double {
         width.isFinite ? min(320, max(160, width)) : 196
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(alwaysShowTools, forKey: .alwaysShowTools)
+        try values.encode(filmstripExpanded, forKey: .filmstripExpanded)
+        try values.encode(appearance, forKey: .appearance)
+        try values.encode(gridSidebarWidth, forKey: .gridSidebarWidth)
+        try values.encode(gridSidebarVisible, forKey: .gridSidebarVisible)
+        if folderSort != .name { try values.encode(folderSort, forKey: .folderSort) }
+        if folderSortDirection != .ascending { try values.encode(folderSortDirection, forKey: .folderSortDirection) }
     }
 
     public init(from decoder: any Decoder) throws {
@@ -31,6 +51,8 @@ public struct DisplayPreferences: Codable, Equatable, Sendable {
         appearance = DisplayAppearance(rawValue: try values.decodeIfPresent(String.self, forKey: .appearance) ?? "") ?? .system
         gridSidebarWidth = Self.normalizedSidebarWidth((try? values.decode(Double.self, forKey: .gridSidebarWidth)) ?? 196)
         gridSidebarVisible = (try? values.decode(Bool.self, forKey: .gridSidebarVisible)) ?? true
+        folderSort = (try? values.decode(FolderSortKey.self, forKey: .folderSort)) ?? .name
+        folderSortDirection = (try? values.decode(FolderSortDirection.self, forKey: .folderSortDirection)) ?? .ascending
     }
 }
 
