@@ -37,3 +37,18 @@ import PicseeApplication
     presentation.show(.empty)
     expectViewer("cancel to empty")
 }
+
+@Test @MainActor func p204R4ShowReadingOverGridOnlyWhenGridVisible() {
+    _ = NSApplication.shared
+    let canvas = NSView(), chrome = NSView(), state = NSView(), grid = NSView(), inspector = NSView()
+    let presentation = GridViewerPresentation(canvas: canvas, chrome: chrome, state: state, grid: grid, inspector: inspector)
+    presentation.showViewer()
+    #expect(!presentation.showReadingOverGrid(true))
+    #expect(!canvas.isHidden && grid.isHidden && !state.isHidden)
+    presentation.showGrid(reading: false)
+    #expect(!presentation.showReadingOverGrid(false))
+    #expect(presentation.isGridVisible && state.isHidden)
+    #expect(presentation.showReadingOverGrid(true))
+    #expect(grid.isHidden && grid.isAccessibilityHidden())
+    #expect(!state.isHidden && !state.isAccessibilityHidden() && canvas.isHidden && chrome.isHidden)
+}

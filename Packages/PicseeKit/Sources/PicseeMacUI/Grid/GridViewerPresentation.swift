@@ -25,6 +25,12 @@ import PicseeApplication
         state.isHidden = !reading
         state.setAccessibilityHidden(!reading)
     }
+    /// A folder read that starts while the grid is shown (an Include Subfolders rescan) covers it with the Reading State.
+    public func showReadingOverGrid(_ reading: Bool) -> Bool {
+        guard reading, isGridVisible else { return false }
+        showGrid(reading: true)
+        return true
+    }
     /// What Cancel Reading returns to.
     public func show(_ target: FolderEntryRestoreTarget) {
         if target == .grid { showGrid(reading: false) } else { showViewer() }

@@ -11,7 +11,9 @@ import PicseeCore
         if let previous = snapshot {
             if previous.version.rootID == value.version.rootID,
                previous.version.folder == value.version.folder {
-                guard value.version.generation >= previous.version.generation else { return false }
+                // A rescan's partial snapshots never replace a complete grid; only its completion does.
+                guard value.version.generation >= previous.version.generation,
+                      value.isComplete || !previous.isComplete else { return false }
             } else {
                 selectedItemID = nil
                 scrollAnchor = nil

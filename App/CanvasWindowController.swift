@@ -470,13 +470,16 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     private func showGrid(reading: Bool = false) {
         presentation.showGrid(reading: reading)
         if reading {
-            stateHost.display(.readingFolder)
-            if let cancel = stateHost.buttons.first { window?.makeFirstResponder(cancel) }
+            showReadingState()
         } else {
             let current = pendingGridCurrentItemID ?? session.selection.currentItemID
             pendingGridCurrentItemID = nil
             gridView.activate(currentItemID: current)
         }
+    }
+    private func showReadingState() {
+        stateHost.display(.readingFolder)
+        if let cancel = stateHost.buttons.first { window?.makeFirstResponder(cancel) }
     }
     private func cancelFolderEntry() {
         pendingGridCurrentItemID = nil
@@ -745,7 +748,13 @@ extension CanvasWindowController: FolderScanHost {
     }
     func showEmptyFolder() { showAccessMessage(String(localized: "No Images in This Folder")) }
     func folderScanDidComplete(count: Int) { chromeOverlay.refresh(session: session) }
-    func folderScanDidStart() { chromeOverlay.refresh(session: session) }
+    func folderScanDidStart() {
+        chromeOverlay.refresh(session: session)
+        // An Include Subfolders rescan from the grid; the Session already recorded what Cancel Reading returns to.
+        guard presentation.showReadingOverGrid(session.folderScan?.isReadingFolder == true) else { return }
+        if folderEntryRestore == nil { folderEntryRestore = makeFolderEntryRestore() }
+        showReadingState()
+    }
     func folderScanDidEnd() { chromeOverlay.refresh(session: session) }
 
     /// Untested native os adapter; structured lifecycle is covered at the Application trace port.
