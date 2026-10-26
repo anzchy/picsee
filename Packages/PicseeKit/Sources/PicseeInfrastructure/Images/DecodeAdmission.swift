@@ -160,11 +160,10 @@ public actor DecodeAdmission {
             (!job.heavy || active.heavy < configuration.heavy)
     }
     /// Staging shares the budget with resident pixels. Pins alone may fill it; then only an idle current decode runs.
+    /// With a ledger this takes the reservation, so it is asked only of the job about to be admitted.
     private func fits(_ job: Job, _ active: DecodeActivity) -> Bool {
         guard let memory else { return job.cost <= configuration.budget - active.reservedBytes }
-        let held = memory.usage
-        return job.cost <= configuration.budget - active.reservedBytes - held.pinned - held.evictable ||
-            (job.priority == .current && active.running == 0 && held.evictable == 0)
+        return memory.reserve(job.cost, idleCurrent: job.priority == .current && active.running == 0)
     }
     private func drain() {
         // Stable priority order: FIFO among equal priorities. With finite foreground
@@ -177,7 +176,6 @@ public actor DecodeAdmission {
             // No await between checking all resources and taking them.
             jobs[id]!.admitted = jobs[id]!.priority
             pending.removeAll { $0 == id }
-            memory?.reserved(activity().reservedBytes)
             let request = jobs[id]!.request, decoder = decoder, trace = jobs[id]!.trace
             trace.reserve(jobs[id]!.cost)
             executor.submit {
@@ -200,7 +198,7 @@ public actor DecodeAdmission {
     }
     private func finished(_ id: UUID, result: Result<DecodedImage, Error>) async {
         let job = jobs.removeValue(forKey: id)!
-        memory?.reserved(activity().reservedBytes)
+        memory?.unreserve(job.cost)
         job.trace.release(result)
         if keyed[job.key] == id { keyed.removeValue(forKey: job.key) }
         drain()
