@@ -199,10 +199,14 @@ import PicseeCore
         footer.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 40)
         toggleButton.frame = NSRect(x: 8, y: 4, width: 32, height: 32)
         footerRule.frame = NSRect(x: 0, y: 39, width: bounds.width, height: 1)
-        sortButton.frame = NSRect(x: max(48, footer.bounds.width - 37), y: 6, width: 30, height: 28)
-        searchButton.frame = NSRect(x: sortButton.frame.minX - 32, y: 6, width: 30, height: 28)
+        // grid-light.html: 12pt trailing inset, 7pt only through 480pt;
+        // toolbar gap 6pt, reduced to 2pt through 800pt.
+        let trailingInset: CGFloat = footer.bounds.width <= 480 ? 7 : 12
+        let toolGap: CGFloat = footer.bounds.width <= 800 ? 2 : 6
+        sortButton.frame = NSRect(x: max(48, footer.bounds.width - trailingInset - 30), y: 6, width: 30, height: 28)
+        searchButton.frame = NSRect(x: sortButton.frame.minX - 30 - toolGap, y: 6, width: 30, height: 28)
         let searchWidth = min(190, max(0, sortButton.frame.minX - 58))
-        searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - 2, y: 6,
+        searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - toolGap, y: 6,
                                    width: searchWidth, height: 28)
         searchStatus.frame = NSRect(x: 48, y: 6, width: max(0, (searchField.isHidden ? searchButton.frame.minX : searchField.frame.minX) - 56), height: 28)
         emptyState.frame = mainContent.bounds

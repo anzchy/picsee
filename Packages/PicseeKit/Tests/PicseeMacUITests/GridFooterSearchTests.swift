@@ -5,8 +5,9 @@ import PicseeApplication
 import PicseeInfrastructure
 @testable import PicseeMacUI
 
-/// grid-light.html / grid-dark.html `.grid-bottom-bar` (40px, 7px inset),
-/// `.grid-toolbar-tools` (2px gap), and primitives.css `.ds-icon-button` (30x28).
+/// grid-light.html / grid-dark.html `.grid-bottom-bar` (40px, 12px inset;
+/// 7px only at max-width:480px), `.grid-toolbar-tools` (6px gap;
+/// 2px at max-width:800px), and primitives.css `.ds-icon-button` (30x28).
 /// search-empty.html `.empty-state` and its h2/p/.mock-primary rules.
 @Test @MainActor func pinnedSearchFooterFramesAndPage23AtBothSizesAndAppearances() throws {
     _ = NSApplication.shared
@@ -18,9 +19,10 @@ import PicseeInfrastructure
             shell.layoutSubtreeIfNeeded()
             #expect(shell.footer.frame.height == 40)
             #expect(shell.sortButton.frame.size == NSSize(width: 30, height: 28))
-            #expect(shell.sortButton.frame.maxX == size.width - 7)
+            #expect(shell.sortButton.frame.maxX == size.width - 12)
             #expect(shell.searchButton.frame.size == NSSize(width: 30, height: 28))
-            #expect(shell.searchButton.frame.maxX + 2 == shell.sortButton.frame.minX)
+            let toolGap: CGFloat = size.width <= 800 ? 2 : 6
+            #expect(shell.searchButton.frame.maxX + toolGap == shell.sortButton.frame.minX)
             #expect(shell.searchField.isHidden)
             #expect(shell.searchStatus.font?.pointSize == 12)
             #expect(shell.searchStatus.textColor == DesignColor.textSecondary.nsColor)
@@ -33,7 +35,7 @@ import PicseeInfrastructure
             #expect(!shell.searchField.isHidden)
             #expect(shell.searchButton.isHidden)
             #expect(shell.searchField.frame.height == 28)
-            #expect(shell.searchField.frame.maxX + 2 == shell.sortButton.frame.minX)
+            #expect(shell.searchField.frame.maxX + toolGap == shell.sortButton.frame.minX)
             #expect(shell.searchField.frame.minX > shell.toggleButton.frame.maxX)
             shell.setSearchTerm("旅行")
             shell.setSearchStatus(resultCount: 4, term: "旅行")
@@ -63,6 +65,20 @@ import PicseeInfrastructure
             #expect((title.frame.maxY + shell.clearSearchButton.frame.minY) / 2 - shell.mainContent.bounds.midY < 80)
         }
     }
+}
+
+/// grid-light.html `.grid-bottom-bar` switches to 7px only at
+/// `@media (max-width:480px)`; its tools keep the `max-width:800px` 2px gap.
+@Test @MainActor func pinnedFooterUsesNarrowMediaInsetAt480Points() {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 480, height: 680),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    shell.layoutSubtreeIfNeeded()
+    #expect(shell.sortButton.frame.maxX == CGFloat(480 - 7))
+    #expect(shell.searchButton.frame.maxX + 2 == shell.sortButton.frame.minX)
+    shell.focusSearch()
+    shell.layoutSubtreeIfNeeded()
+    #expect(shell.searchField.frame.maxX + 2 == shell.sortButton.frame.minX)
 }
 
 @Test @MainActor func gridFooterSearchSortAndEmptyStateFitCompactViewport() throws {
