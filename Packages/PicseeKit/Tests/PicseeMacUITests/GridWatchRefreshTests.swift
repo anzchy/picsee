@@ -32,6 +32,10 @@ private actor WatchRefreshThumbnailLog {
         counts.priorities[id, default: []].append(priority)
         notify()
     }
+    /// Pre-#161 assertions compare edges; a coverage's fallback edge is the edge the grid used to request.
+    func start(_ id: ItemID, edge coverage: ThumbnailCoverage, priority: DecodePriority) {
+        start(id, edge: coverage.fallbackEdge, priority: priority)
+    }
     func cancel(_ id: ItemID) { counts.cancels[id, default: 0] += 1; notify() }
     /// Returns once the condition holds; awaited on log changes, not polled.
     func until(_ condition: @escaping @Sendable (Counts) -> Bool) async -> Counts {
