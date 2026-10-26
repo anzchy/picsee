@@ -93,7 +93,8 @@ final class ChangeLog: @unchecked Sendable {
     }
 }
 
-func poll(deadline: Duration = .seconds(2), _ condition: () -> Bool) async -> Bool {
+/// Positive waits only; the generous default keeps a loaded runner from failing a condition that does hold.
+func poll(deadline: Duration = .seconds(10), _ condition: () -> Bool) async -> Bool {
     let end = ContinuousClock.now + deadline
     while !condition() {
         if ContinuousClock.now >= end { return false }

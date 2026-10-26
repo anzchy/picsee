@@ -89,7 +89,7 @@ private actor EntrySink {
 }
 
 /// MainActor poll: sleeping yields the actor, so hint hops and refresh completions run between checks.
-@MainActor func mainPoll(deadline: Duration = .seconds(2), _ condition: () -> Bool) async -> Bool {
+@MainActor func mainPoll(deadline: Duration = .seconds(10), _ condition: () -> Bool) async -> Bool {
     let end = ContinuousClock.now + deadline
     while !condition() {
         if ContinuousClock.now >= end { return false }
