@@ -160,8 +160,21 @@ private func peakGlyphColor(_ pixels: NSBitmapImageRep, x: Range<Int>, y: Range<
                 let pixels = NSBitmapImageRep(cgImage: image)
                 let valueInk = try #require(inkBounds(pixels, x: origin..<contentWidth,
                     y: 0..<image.height, background: background))
+                // Compare the same glyphs at the same trailing-aligned width. Their left
+                // side bearing depends on the runner's font and rasterizer, not the gap.
+                let reference = ImageRenderer(content: Text(verbatim: probe)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(DesignColor.textPrimary.color)
+                    .frame(width: CGFloat(contentWidth - origin), alignment: .trailing)
+                    .background(Color(red: background.redComponent, green: background.greenComponent,
+                                      blue: background.blueComponent))
+                    .environment(\.colorScheme, theme == .dark ? .dark : .light))
+                reference.scale = 1
+                let referenceImage = try #require(reference.cgImage)
+                let referenceInk = try #require(inkBounds(NSBitmapImageRep(cgImage: referenceImage),
+                    x: 0..<referenceImage.width, y: 0..<referenceImage.height, background: background))
                 #expect(image.height == 15)
-                #expect(abs(valueInk.minX - CGFloat(origin)) <= 1,
+                #expect(abs(valueInk.minX - referenceInk.minX - CGFloat(origin)) <= 1,
                         "\(pageName) \(panelWidth) \(label): value column starts beyond 48+7 pt")
             }
         }
