@@ -86,17 +86,19 @@ import PicseeCore
         emptyState.isHidden = true
         emptyState.setAccessibilityIdentifier("grid.search.empty")
         emptyTitle.font = .systemFont(ofSize: 16, weight: .medium)
+        emptyTitle.textColor = DesignColor.textPrimary.nsColor
         emptyIcon.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
         emptyIcon.contentTintColor = .secondaryLabelColor
-        emptyDetail.textColor = .secondaryLabelColor
+        emptyDetail.textColor = DesignColor.textSecondary.nsColor
         emptyDetail.font = .systemFont(ofSize: 13)
+        setEmptyDetailText(emptyDetail.stringValue)
         emptyDetail.lineBreakMode = .byTruncatingMiddle
         emptyTitle.alignment = .center
         emptyDetail.alignment = .center
         clearSearchButton.title = String(localized: "Clear Search")
         clearSearchButton.bezelStyle = .rounded
         clearSearchButton.isBordered = true
-        clearSearchButton.bezelColor = DesignColor.accent.nsColor
+        clearSearchButton.bezelColor = DesignColor.primaryFill.nsColor
         clearSearchButton.target = self
         clearSearchButton.action = #selector(clearFromButton)
         clearSearchButton.setAccessibilityIdentifier("grid.search.clear")
@@ -175,7 +177,7 @@ import PicseeCore
         effectiveAppearance.performAsCurrentDrawingAppearance {
             sidebar.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
             footer.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
-            footerRule.layer?.backgroundColor = NSColor.separatorColor.cgColor
+            footerRule.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
         }
     }
     public func showFolder(_ name: String?) {
@@ -212,11 +214,28 @@ import PicseeCore
         emptyState.frame = mainContent.bounds
         let centerX = emptyState.bounds.midX
         let centerY = emptyState.bounds.midY
-        emptyIcon.frame = NSRect(x: centerX - 16, y: centerY + 44, width: 32, height: 32)
+        // search-empty.html: centered flex column; h2 margin-top 18,
+        // p margin-top 9 and line-height 1.7 × 13, actions margin-top 18.
+        let titleGap: CGFloat = 18
+        let detailGap: CGFloat = 9
+        let actionGap: CGFloat = 18
+        let iconHeight: CGFloat = 32
+        let titleHeight: CGFloat = 25
+        let detailHeight: CGFloat = 22.1
+        let clearHeight: CGFloat = 30
+        let groupHeight = iconHeight + titleGap + titleHeight + detailGap + detailHeight + actionGap + clearHeight
+        let groupTop = centerY + groupHeight / 2
+        emptyIcon.frame = NSRect(x: centerX - 16, y: groupTop - iconHeight, width: 32, height: iconHeight)
         let emptyWidth = min(360, max(0, emptyState.bounds.width - 48))
-        emptyTitle.frame = NSRect(x: centerX - emptyWidth / 2, y: centerY + 1, width: emptyWidth, height: 25)
-        emptyDetail.frame = NSRect(x: centerX - emptyWidth / 2, y: centerY - 28, width: emptyWidth, height: 20)
-        clearSearchButton.frame = NSRect(x: max(0, centerX - 65), y: centerY - 75, width: 130, height: 30)
+        emptyTitle.frame = NSRect(x: centerX - emptyWidth / 2,
+                                  y: emptyIcon.frame.minY - titleGap - titleHeight,
+                                  width: emptyWidth, height: titleHeight)
+        emptyDetail.frame = NSRect(x: centerX - emptyWidth / 2,
+                                   y: emptyTitle.frame.minY - detailGap - detailHeight,
+                                   width: emptyWidth, height: detailHeight)
+        clearSearchButton.frame = NSRect(x: max(0, centerX - 65),
+                                         y: emptyDetail.frame.minY - actionGap - clearHeight,
+                                         width: 130, height: clearHeight)
         folderName.frame = NSRect(x: 14, y: max(0, sidebar.bounds.height - 53),
                                   width: max(0, sidebar.bounds.width - 28), height: 20)
         divider.frame = NSRect(x: max(0, sidebar.bounds.width - 5), y: 0, width: 5,
@@ -310,9 +329,20 @@ import PicseeCore
         searchStatus.isHidden = false
         searchButton.state = term.isEmpty ? .off : .on
     }
+    private func setEmptyDetailText(_ text: String) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.minimumLineHeight = 22.1
+        paragraph.maximumLineHeight = 22.1
+        emptyDetail.attributedStringValue = NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: DesignColor.textSecondary.nsColor,
+            .paragraphStyle: paragraph,
+        ])
+    }
     public func showSearchEmpty(_ visible: Bool, term: String = "") {
         if visible { mainContent.addSubview(emptyState, positioned: .above, relativeTo: nil) }
-        if visible { emptyDetail.stringValue = String(format: String(localized: "No images with “%@” in their filename."), term) }
+        if visible { setEmptyDetailText(String(format: String(localized: "No images with “%@” in their filename."), term)) }
         emptyState.isHidden = !visible
         emptyState.setAccessibilityHidden(!visible || !footerActionsEnabled)
         updateKeyViewLoop()
