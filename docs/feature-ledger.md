@@ -196,7 +196,7 @@
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| INFO-01 | 基础 Inspector | Partial | 单元 | P3-13 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorMetadata.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOInspectorMetadataReader.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Inspector/InspectorPanel.swift`、`App/CanvasWindowController.swift`、`App/UI/WindowInspectorReader.swift` | ⌘I 打开右侧面板：缩略图、文件名、尺寸、类型、日期、大小和“加入个人收藏”；浅深色同一面板（16/34 页）；读不到的值显示“未知” 限制：基础字段与缩略图从授权文件读取；Grid/大图 ⌘I、Tab、Esc、面板与内容分栏、1280/960/700 pt 响应式布局及浅深渲染仅离屏测试；“加入个人收藏”待 P3-14 接入；签名真机与 16/34 页像素对照未验。 |
+| INFO-01 | 基础 Inspector | Partial | 单元 | P3-13 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorMetadata.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOInspectorMetadataReader.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Inspector/InspectorPanel.swift`、`App/CanvasWindowController.swift`、`App/UI/WindowInspectorReader.swift` | ⌘I 打开右侧面板：缩略图、文件名、尺寸、类型、日期、大小和“加入个人收藏”；浅深色同一面板（16/34 页）；读不到的值显示“未知” 限制：基础字段与缩略图从授权文件读取；Grid 集合视图/大图 ⌘I、Tab、Esc、面板与内容分栏、1280/960/700 pt 响应式布局、16/34 页浅深色与中英五行文字/列距仅离屏测试；“加入个人收藏”待 P3-14 接入；签名真机与 16/34 页像素对照未验。 |
 | INFO-02 | 切图后信息不过期 | Partial | 单元 | P3-13 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorMetadata.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Tests/PicseeApplicationTests/InspectorModelTests.swift` | Inspector 开着快速翻图，面板始终只显示当前这张的信息 限制：受控延迟读取和当前项切换仅单元；签名真机快速翻图未验。 |
 | INFO-03 | 拍摄参数、GPS、IPTC | Absent | 无 | P5-01 | — | 打开带 EXIF 的照片，Inspector 显示镜头、光圈、快门、GPS；没有这些数据的图不显示假值 |
 | INFO-04 | Finder 标签 | Absent | 无 | P5-02 | — | 给图片设一个颜色标签，Finder 里看到同样的标签；按标签过滤只剩该标签的图 |

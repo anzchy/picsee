@@ -52,6 +52,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var pendingGridCurrentItemID: ItemID?
     let session: ViewerSession
     private let inspector: InspectorModel
+    private let motionPolicy: MotionPolicy
     private let router = CommandRouter()
     private let accessServices: Task<AccessServices, Error>
     private var navigationTask: Task<Void, Never>?
@@ -61,6 +62,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func toggleGridSidebar() { if gridShellVisible { gridShell.toggleSidebar() } }
     var gridSearchAvailable: Bool { gridShellVisible && !gridView.isHidden }
     private var inspectorHost: NSHostingView<MotionPolicyContent<InspectorPanel>>!
+    private var inspectorOverlayMode = false
     var onOpenRequest: (() -> Void)?
     var menuTracking: () -> Bool = { false }
     var appearanceAdapter: WindowAppearanceAdapter?
@@ -79,6 +81,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         session = ViewerSession(preferencesStore: preferencesStore, imageLoader: ViewerImageLoader(trace: NativeFirstPreviewTrace(), presentation: pipeline as? any ImagePresentationPinning))
         canvas = CanvasInputBridge(frame: .zero, session: session)
         inspector = InspectorModel(reader: WindowInspectorReader(services: accessServices))
+        self.motionPolicy = motionPolicy
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -117,14 +120,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         dragStrip.autoresizingMask = [.width, .minYMargin]
         dragStrip.setAccessibilityIdentifier("chrome.drag-strip")
         content.addSubview(dragStrip)
-        inspectorHost = NSHostingView(rootView: MotionPolicyContent(policy: motionPolicy) { InspectorPanel(model: inspector, session: session, close: { [weak self] in
-            _ = self?.route(.inspector, from: .button)
-        }, restoreCanvasFocus: { [weak self] in
-            guard let self else { return }
-            _ = self.window?.makeFirstResponder(self.gridView.isHidden ? self.canvas : self.gridView.collectionView)
-        }, updateFocus: { [weak self] focus in
-            self?.session.updateFocus(focus)
-        }) })
+        inspectorHost = NSHostingView(rootView: inspectorRootView(overlay: false))
         inspectorHost.frame = InspectorPanelLayout.frame(in: content.bounds, grid: false)
         inspectorHost.autoresizingMask = [.minXMargin, .height]
         inspectorHost.isHidden = true
@@ -531,8 +527,25 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     func toggleInspector() { _ = route(.inspector, from: .button) }
     private func layoutInspector() {
         guard inspectorHost != nil else { return }
+        if let width = window?.contentView?.bounds.width {
+            let overlay = InspectorPanelLayout.overlaysContent(at: width)
+            if overlay != inspectorOverlayMode {
+                inspectorOverlayMode = overlay
+                inspectorHost.rootView = inspectorRootView(overlay: overlay)
+            }
+        }
         presentation.layoutInspector(visible: inspectorVisible && !inspectorHost.isHidden)
         canvas.synchronizeViewport()
+    }
+    private func inspectorRootView(overlay: Bool) -> MotionPolicyContent<InspectorPanel> {
+        MotionPolicyContent(policy: motionPolicy) {
+            InspectorPanel(model: inspector, session: session, topInset: overlay ? 12 : 0,
+                close: { [weak self] in _ = self?.route(.inspector, from: .button) },
+                restoreCanvasFocus: { [weak self] in
+                    guard let self else { return }
+                    _ = self.window?.makeFirstResponder(self.gridView.isHidden ? self.canvas : self.gridView.collectionView)
+                }, updateFocus: { [weak self] focus in self?.session.updateFocus(focus) })
+        }
     }
     private func syncInspector(refresh: Bool = false) {
         guard session.inspectorFocus.isVisible else {

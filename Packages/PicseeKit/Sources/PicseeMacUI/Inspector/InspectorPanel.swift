@@ -12,7 +12,7 @@ public enum InspectorPanelLayout {
     }
     public static func overlaysContent(at windowWidth: CGFloat) -> Bool { windowWidth <= 720 }
     public static func labelWidth(_ label: String) -> CGFloat {
-        max(48, ceil((label as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width))
+        48 // pages 16/34: .inspector dl grid-template-columns: 48px 1fr
     }
     public static func frame(in bounds: NSRect, grid: Bool) -> NSRect {
         let width = min(Self.width(for: bounds.width), bounds.width)
@@ -33,7 +33,7 @@ struct InspectorFieldRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Text(label).foregroundStyle(DesignColor.textSecondary.color)
                 .frame(width: InspectorPanelLayout.labelWidth(label), alignment: .leading)
-                .fixedSize(horizontal: true, vertical: false)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Text(value).font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(DesignColor.textPrimary.color).multilineTextAlignment(.trailing)
@@ -47,22 +47,44 @@ struct InspectorFieldRow: View {
 public struct InspectorPanel: View {
     @Bindable public var model: InspectorModel
     public let session: ViewerSession
+    let translations: [String: String]
+    public let topInset: CGFloat
     public let close: () -> Void
     public let restoreCanvasFocus: () -> Void
     public let updateFocus: (FocusContext) -> Void
 
-    public init(model: InspectorModel, session: ViewerSession, close: @escaping () -> Void,
+    public init(model: InspectorModel, session: ViewerSession, translations: [String: String] = [:],
+                topInset: CGFloat = 0,
+                close: @escaping () -> Void,
                 restoreCanvasFocus: @escaping () -> Void, updateFocus: @escaping (FocusContext) -> Void) {
-        self.model = model; self.session = session; self.close = close
+        self.model = model; self.session = session; self.translations = translations; self.close = close
+        self.topInset = topInset
         self.restoreCanvasFocus = restoreCanvasFocus; self.updateFocus = updateFocus
+    }
+
+    private func localized(_ key: String) -> String {
+        if let translated = translations[key] { return translated }
+        switch key {
+        case "Image Information": return String(localized: "Image Information")
+        case "Dimensions": return String(localized: "Dimensions")
+        case "Type": return String(localized: "Type")
+        case "Created": return String(localized: "Created")
+        case "Modified": return String(localized: "Modified")
+        case "Size": return String(localized: "Size")
+        case "Unknown": return String(localized: "Unknown")
+        case "Loading…": return String(localized: "Loading…")
+        case "No Permission": return String(localized: "No Permission")
+        case "Unreadable": return String(localized: "Unreadable")
+        default: return key
+        }
     }
 
     private var unavailable: String {
         switch model.value {
-        case .loading: String(localized: "Loading…")
-        case .noPermission: String(localized: "No Permission")
-        case .unreadable: String(localized: "Unreadable")
-        case .unknown, .known: String(localized: "Unknown")
+        case .loading: localized("Loading…")
+        case .noPermission: localized("No Permission")
+        case .unreadable: localized("Unreadable")
+        case .unknown, .known: localized("Unknown")
         }
     }
     private func field(_ value: String?) -> String { value ?? unavailable }
@@ -79,7 +101,7 @@ public struct InspectorPanel: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Image Information").font(.system(size: 13, weight: .medium))
+                Text(verbatim: localized("Image Information")).font(.system(size: 13, weight: .medium))
                 Spacer()
                 InspectorCloseControl(focused: session.inspectorFocus.focus == .textInput || session.inspectorFocus.focus == .panel,
                     close: close, updateFocus: updateFocus, restoreCanvasFocus: restoreCanvasFocus)
@@ -105,14 +127,14 @@ public struct InspectorPanel: View {
                 .padding(.top, 14)
                 .accessibilityIdentifier("inspector.item-name")
             VStack(spacing: 13) {
-                row(String(localized: "Dimensions"), field(metadata.flatMap { value in
+                row(localized("Dimensions"), field(metadata.flatMap { value in
                     guard let w = value.pixelWidth, let h = value.pixelHeight else { return nil }
                     return "\(w) × \(h)"
                 }), id: "dimensions")
-                row(String(localized: "Type"), field(metadata?.typeIdentifier.map(Self.typeName)), id: "type")
-                row(String(localized: "Created"), field(metadata?.creationDate?.formatted(date: .numeric, time: .omitted)), id: "created")
-                row(String(localized: "Modified"), field(metadata?.modificationDate?.formatted(date: .numeric, time: .omitted)), id: "modified")
-                row(String(localized: "Size"), field(metadata?.byteSize.map {
+                row(localized("Type"), field(metadata?.typeIdentifier.map(Self.typeName)), id: "type")
+                row(localized("Created"), field(metadata?.creationDate?.formatted(date: .numeric, time: .omitted)), id: "created")
+                row(localized("Modified"), field(metadata?.modificationDate?.formatted(date: .numeric, time: .omitted)), id: "modified")
+                row(localized("Size"), field(metadata?.byteSize.map {
                     ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
                 }), id: "size")
             }
@@ -120,7 +142,7 @@ public struct InspectorPanel: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 17)
-        .padding(.top, 12)
+        .padding(.top, topInset)
         .padding(.bottom, 18)
         .frame(minWidth: 0, idealWidth: 220, maxWidth: .infinity)
         .background(DesignColor.canvasBackground.color)
