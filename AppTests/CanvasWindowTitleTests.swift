@@ -44,7 +44,17 @@ import PicseeMacUI
 }
 
 @MainActor @Test func issue136WindowRoutesInspectorCommandTabAndEscape() throws {
+    let defaultsDomain = Bundle.main.bundleIdentifier ?? "PicseeAppTests"
+    let keyboardMode = UserDefaults.standard.persistentDomain(forName: defaultsDomain)?["AppleKeyboardUIMode"]
+    UserDefaults.standard.set(0, forKey: "AppleKeyboardUIMode")
+    defer {
+        if let keyboardMode { UserDefaults.standard.set(keyboardMode, forKey: "AppleKeyboardUIMode") }
+        else { UserDefaults.standard.removeObject(forKey: "AppleKeyboardUIMode") }
+    }
     _ = NSApplication.shared
+    // design/prototypes/picsee-browser/states/viewer-inspector{,-light}.html:
+    // the same right panel opens with Command-I, accepts Tab even with Keyboard Navigation off,
+    // and returns focus to the canvas with Escape in viewer and Grid.
     let unavailable = Task<AccessServices, Error> { throw CancellationError() }
     let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
         preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: unavailable,
@@ -61,14 +71,32 @@ import PicseeMacUI
             isARepeat: false, keyCode: code))
         window.sendEvent(event)
     }
-    try key(34, "i", modifiers: .command)
-    #expect(controller.inspectorVisible)
-    for _ in 0..<12 where controller.session.inspectorFocus.focus != .panel
-        && controller.session.inspectorFocus.focus != .textInput {
-        try key(48, "\t")
+    func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+    let content = try #require(window.contentView)
+    let canvas = try #require(descendants(content)
+        .first { $0.accessibilityIdentifier() == "viewer.canvas" })
+    #expect(UserDefaults.standard.integer(forKey: "AppleKeyboardUIMode") == 0)
+    for grid in [false, true] {
+        if grid { controller.showGrid() }
+        _ = window.makeFirstResponder(canvas)
+        controller.session.updateFocus(.canvas)
+        try key(34, "i", modifiers: .command)
+        #expect(controller.inspectorVisible)
+        window.contentView?.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        let close = try #require(descendants(content)
+            .compactMap { $0 as? NSButton }.first { $0.accessibilityIdentifier() == "inspector.close" })
+        #expect(close.acceptsFirstResponder) // AppKit override works with Keyboard Navigation off.
+        for _ in 0..<12 where window.firstResponder !== close {
+            try key(48, "\t")
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+        #expect(window.firstResponder === close)
+        #expect(controller.session.inspectorFocus.focus == .panel)
+        try key(53, "\u{1b}")
+        #expect(controller.session.inspectorFocus.focus == .canvas)
+        #expect(controller.inspectorVisible)
+        try key(34, "i", modifiers: .command)
+        #expect(!controller.inspectorVisible)
     }
-    #expect(controller.session.inspectorFocus.focus == .panel || controller.session.inspectorFocus.focus == .textInput)
-    try key(53, "\u{1b}")
-    #expect(controller.session.inspectorFocus.focus == .canvas)
-    #expect(controller.inspectorVisible)
 }

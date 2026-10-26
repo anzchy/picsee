@@ -78,6 +78,7 @@ import PicseeCore
     public func showReadingOverGrid(_ reading: Bool) -> Bool {
         guard reading, isGridVisible else { return false }
         showGrid(reading: true)
+        layoutInspector(visible: false)
         return true
     }
     /// Restores the native grid after a preview with the Session's reconciled selection.

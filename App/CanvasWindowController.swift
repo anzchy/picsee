@@ -120,7 +120,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         inspectorHost = NSHostingView(rootView: MotionPolicyContent(policy: motionPolicy) { InspectorPanel(model: inspector, session: session, close: { [weak self] in
             _ = self?.route(.inspector, from: .button)
         }, restoreCanvasFocus: { [weak self] in
-            self?.window?.makeFirstResponder(self?.canvas)
+            guard let self else { return }
+            _ = self.window?.makeFirstResponder(self.gridView.isHidden ? self.canvas : self.gridView.collectionView)
         }, updateFocus: { [weak self] focus in
             self?.session.updateFocus(focus)
         }) })
@@ -474,6 +475,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         let controls: [NSView] = stateHost.buttons + chromeOverlay.tools
         if let view = window?.firstResponder as? NSView,
            controls.contains(where: { view === $0 || view.isDescendant(of: $0) }) { return .tools }
+        if let view = window?.firstResponder as? NSView,
+           view === gridView || view.isDescendant(of: gridView) { return .canvas }
         if window?.firstResponder is NSTextInputClient { return .textInput }
         return window?.firstResponder === canvas ? .canvas : .panel
     }
@@ -551,7 +554,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     func applyFocus(_ focus: FocusContext) {
         guard focus == .canvas else { return }
-        window?.makeFirstResponder(canvas)
+        _ = window?.makeFirstResponder(gridView.isHidden ? canvas : gridView.collectionView)
     }
     func presentGridItem(_ id: ItemID) {
         guard let entry = gridProjection.entry(for: id), let rootID = gridFolderRoot,
@@ -577,7 +580,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         } else { showGrid() }
         if let window { GridWindowIdentity.showFolder(folder, in: window) }
     }
-    private func showGrid(reading: Bool = false) {
+    func showGrid(reading: Bool = false) {
         presentation.showGrid(reading: reading)
         inspectorHost.isHidden = reading || !inspectorVisible
         layoutInspector()
@@ -687,6 +690,9 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         stateHost.refresh()
     }
     private func consumePanelKey(_ event: NSEvent) -> Bool {
+        if event.keyCode == 34, event.modifierFlags.contains(.command),
+           event.modifierFlags.intersection([.control, .option]).isEmpty,
+           !menuTracking() { return route(.inspector, from: .key) }
         if !gridView.isHidden, focusContext != .textInput,
            event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             if event.keyCode == 49 { return route(.preview, from: .key) }
@@ -697,6 +703,10 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             return route(.escape, from: .key)
         }
         guard !menuTracking(), inspectorVisible else { return false }
+        if !gridView.isHidden, event.keyCode == 48, focusContext == .canvas {
+            session.updateFocus(.panel)
+            return true
+        }
         if event.keyCode == 48 && session.inspectorFocus.focus == .canvas {
             session.tab(reverse: event.modifierFlags.contains(.shift))
             return true

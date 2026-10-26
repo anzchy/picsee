@@ -19,15 +19,34 @@ import PicseeApplication
     #expect(state.frame.width == 740)
     #expect(chrome.frame.width == 740)
     #expect(inspector.frame.minX == canvas.frame.maxX)
+    #expect(canvas.frame.union(inspector.frame) == host.bounds)
     presentation.showGrid(reading: false)
     presentation.layoutInspector(visible: true)
     #expect(shell.frame.width == 740)
     #expect(inspector.frame.minX == shell.frame.maxX)
+    #expect(inspector.frame.minY == host.bounds.minY)
+    #expect(inspector.frame.maxY == host.bounds.maxY)
+    #expect(shell.frame.union(inspector.frame) == host.bounds)
+    #expect(presentation.showReadingOverGrid(true))
+    #expect(inspector.isHidden)
+    #expect(shell.frame.width == host.bounds.width)
+    #expect(shell.frame.maxX == host.bounds.maxX)
+    presentation.showGrid(reading: false)
+    presentation.layoutInspector(visible: true)
+    #expect(shell.frame.union(inspector.frame) == host.bounds)
+    host.frame.size = NSSize(width: 720, height: 520)
+    presentation.layoutInspector(visible: true)
+    #expect(shell.frame.union(inspector.frame) == host.bounds) // live resize
     presentation.layoutInspector(visible: false)
-    #expect(shell.frame.width == 960)
+    #expect(shell.frame.width == 720)
     presentation.showViewer()
     presentation.layoutInspector(visible: false)
-    #expect(canvas.frame.width == 960)
+    #expect(canvas.frame.width == 720)
+    // Pages 16/34: a presentation without a Grid shell still sizes its Reading State to the stage.
+    let bare = GridViewerPresentation(canvas: canvas, chrome: chrome, state: state,
+        grid: grid, inspector: inspector)
+    bare.layoutInspector(visible: true)
+    #expect(state.frame == NSRect(x: 0, y: 0, width: 500, height: 520))
 }
 
 @Test @MainActor func cancelReadingRestoresVisibleViewerForFolderNavigatedImage() {
