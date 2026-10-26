@@ -525,6 +525,9 @@ private struct GridGeometry: Equatable {
         if let current = self.currentItemID { onCurrentChange?(current) }
         window?.makeFirstResponder(collectionView)
     }
+    public func setCurrentItemID(_ id: ItemID?) {
+        currentItemID = id.flatMap { indices[$0] != nil ? $0 : nil } ?? entries.first?.itemID
+    }
     private func moveCurrent(by delta: Int, preservingSelection: Bool) {
         guard !entries.isEmpty else { return }
         let current = currentItemID.flatMap { indices[$0] } ?? 0

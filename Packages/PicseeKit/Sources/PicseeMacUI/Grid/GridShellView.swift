@@ -1,5 +1,6 @@
 import AppKit
 import PicseeApplication
+import PicseeCore
 
 @MainActor private final class GridSidebarToggleButton: NSButton {
     override var acceptsFirstResponder: Bool { !isHiddenOrHasHiddenAncestor && isEnabled }
@@ -33,20 +34,33 @@ import PicseeApplication
 }
 
 /// Page 11/12/24/29 frame shared by the grid and folder-reading state.
-@MainActor public final class GridShellView: NSView {
+@MainActor public final class GridShellView: NSView, NSSearchFieldDelegate {
     public let mainContent = NSView()
     public let sidebar = NSView()
     public let footer = NSView()
     public let toggleButton: NSButton = GridSidebarToggleButton()
+    public let searchField = NSSearchField()
+    public let sortButton: NSButton = GridSidebarToggleButton()
+    public var onSearchChange: ((String) -> Void)?
+    public var onClearSearch: (() -> Void)?
+    public var onSort: ((FolderMenuAction) -> Void)?
+    public var onOpenSortMenu: ((NSButton, NSMenu) -> Void)?
+    public var sortConditions: (() -> FolderViewConditions)?
     public var onMainFrameChange: ((NSRect) -> Void)?
     private let preferencesStore: any DisplayPreferencesStore
     private let divider = GridSidebarDivider()
     private let folderName = NSTextField(labelWithString: "")
     private let footerRule = NSView()
+    private let emptyState = NSView()
+    private let emptyIcon = NSImageView()
+    private let emptyTitle = NSTextField(labelWithString: String(localized: "No matching images"))
+    private let emptyDetail = NSTextField(labelWithString: String(localized: "Try another filename or clear the search."))
+    public let clearSearchButton: NSButton = GridSidebarToggleButton()
     private var lastMainFrame: NSRect?
     private var dragStartWidth: CGFloat?
     private var liveSidebarWidth: CGFloat?
     private weak var focusAnchor: NSView?
+    private var footerActionsEnabled = true
 
     public init(frame: NSRect, preferencesStore: any DisplayPreferencesStore) {
         self.preferencesStore = preferencesStore
@@ -55,7 +69,37 @@ import PicseeApplication
         addSubview(mainContent)
         addSubview(footer)
         footer.addSubview(toggleButton)
+        footer.addSubview(searchField)
+        footer.addSubview(sortButton)
         footer.addSubview(footerRule)
+        mainContent.addSubview(emptyState)
+        emptyState.addSubview(emptyTitle)
+        emptyState.addSubview(emptyIcon)
+        emptyState.addSubview(emptyDetail)
+        emptyState.addSubview(clearSearchButton)
+        emptyState.isHidden = true
+        emptyState.setAccessibilityIdentifier("grid.search.empty")
+        emptyTitle.font = .systemFont(ofSize: 17, weight: .semibold)
+        emptyIcon.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        emptyIcon.contentTintColor = .secondaryLabelColor
+        emptyDetail.textColor = .secondaryLabelColor
+        emptyTitle.alignment = .center
+        emptyDetail.alignment = .center
+        clearSearchButton.title = String(localized: "Clear Search")
+        clearSearchButton.target = self
+        clearSearchButton.action = #selector(clearFromButton)
+        clearSearchButton.setAccessibilityIdentifier("grid.search.clear")
+        searchField.placeholderString = String(localized: "Search current folder")
+        searchField.setAccessibilityLabel(String(localized: "Search current folder"))
+        searchField.setAccessibilityIdentifier("grid.search.field")
+        searchField.delegate = self
+        sortButton.isBordered = false
+        sortButton.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
+        sortButton.target = self
+        sortButton.action = #selector(showSortMenu)
+        sortButton.toolTip = String(localized: "Sort images")
+        sortButton.setAccessibilityLabel(String(localized: "Sort images"))
+        sortButton.setAccessibilityIdentifier("grid.sort.button")
         sidebar.addSubview(folderName)
         sidebar.addSubview(divider)
         sidebar.setAccessibilityIdentifier("grid.sidebar")
@@ -131,6 +175,17 @@ import PicseeApplication
         footer.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 40)
         toggleButton.frame = NSRect(x: 8, y: 4, width: 32, height: 32)
         footerRule.frame = NSRect(x: 0, y: 39, width: bounds.width, height: 1)
+        sortButton.frame = NSRect(x: max(48, footer.bounds.width - 40), y: 4, width: 32, height: 32)
+        let searchWidth = min(190, max(0, sortButton.frame.minX - 56))
+        searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - 8, y: 6,
+                                   width: searchWidth, height: 28)
+        emptyState.frame = mainContent.bounds
+        let centerX = emptyState.bounds.midX
+        let centerY = emptyState.bounds.midY
+        emptyIcon.frame = NSRect(x: centerX - 16, y: centerY + 56, width: 32, height: 32)
+        emptyTitle.frame = NSRect(x: max(0, centerX - 180), y: centerY + 20, width: 360, height: 25)
+        emptyDetail.frame = NSRect(x: max(0, centerX - 180), y: centerY - 12, width: 360, height: 20)
+        clearSearchButton.frame = NSRect(x: max(0, centerX - 65), y: centerY - 56, width: 130, height: 30)
         folderName.frame = NSRect(x: 14, y: max(0, sidebar.bounds.height - 53),
                                   width: max(0, sidebar.bounds.width - 28), height: 20)
         divider.frame = NSRect(x: max(0, sidebar.bounds.width - 5), y: 0, width: 5,
@@ -177,8 +232,66 @@ import PicseeApplication
     private func updateKeyViewLoop() {
         guard let focusAnchor else { return }
         focusAnchor.nextKeyView = toggleButton
-        toggleButton.nextKeyView = preferencesStore.value.gridSidebarVisible ? divider : focusAnchor
-        divider.nextKeyView = focusAnchor
+        let nextAction: NSView = footerActionsEnabled ? searchField : focusAnchor
+        toggleButton.nextKeyView = preferencesStore.value.gridSidebarVisible ? divider : nextAction
+        divider.nextKeyView = nextAction
+        searchField.nextKeyView = sortButton
+        sortButton.nextKeyView = emptyState.isHidden ? focusAnchor : clearSearchButton
+        clearSearchButton.nextKeyView = focusAnchor
+    }
+    public func focusSearch() { window?.makeFirstResponder(searchField) }
+    public func setFooterActionsEnabled(_ enabled: Bool) {
+        footerActionsEnabled = enabled
+        searchField.isEnabled = enabled
+        sortButton.isEnabled = enabled
+        updateKeyViewLoop()
+    }
+    public func setSearchTerm(_ term: String) { searchField.stringValue = term }
+    public func showSearchEmpty(_ visible: Bool, term: String = "") {
+        if visible { mainContent.addSubview(emptyState, positioned: .above, relativeTo: nil) }
+        if visible { emptyDetail.stringValue = String(format: String(localized: "No images with “%@” in their filename."), term) }
+        emptyState.isHidden = !visible
+        updateKeyViewLoop()
+    }
+    public var searchEmptyVisible: Bool { !emptyState.isHidden }
+    public func controlTextDidChange(_ obj: Notification) { onSearchChange?(searchField.stringValue) }
+    public func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        guard control === searchField, selector == #selector(NSResponder.cancelOperation(_:)) else { return false }
+        clearSearch()
+        return true
+    }
+    @objc private func clearFromButton() { clearSearch() }
+    private func clearSearch() {
+        searchField.stringValue = ""
+        onClearSearch?()
+    }
+    @objc private func showSortMenu() {
+        onOpenSortMenu?(sortButton, makeSortMenu())
+    }
+    public func makeSortMenu() -> NSMenu {
+        let menu = NSMenu(title: String(localized: "Sort By"))
+        for key in FolderSortKey.allCases { addSortItem(.sort(key), to: menu) }
+        menu.addItem(.separator())
+        for direction in FolderSortDirection.allCases { addSortItem(.direction(direction), to: menu) }
+        return menu
+    }
+    private func addSortItem(_ action: FolderMenuAction, to menu: NSMenu) {
+        let item = menu.addItem(withTitle: String(localized: String.LocalizationValue(action.titleKey)),
+                                action: #selector(selectSort(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = action
+        item.setAccessibilityIdentifier(action.accessibilityIdentifier)
+        if let conditions = sortConditions?() {
+            switch action {
+            case .sort(let key): item.state = conditions.sort == key ? .on : .off
+            case .direction(let direction): item.state = conditions.direction == direction ? .on : .off
+            default: break
+            }
+        }
+    }
+    @objc private func selectSort(_ item: NSMenuItem) {
+        guard let action = item.representedObject as? FolderMenuAction else { return }
+        onSort?(action)
     }
     private func refreshToggleLabel() {
         let label = String(localized: preferencesStore.value.gridSidebarVisible ? "Hide sidebar" : "Show sidebar")

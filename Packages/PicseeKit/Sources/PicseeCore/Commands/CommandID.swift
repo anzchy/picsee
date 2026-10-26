@@ -19,9 +19,9 @@ public enum CommandID: String, CaseIterable, Sendable {
         }
     }
     public var usesCommand: Bool { [.search, .open, .inspector].contains(self) }
-    public var isImplemented: Bool { [.preview, .enter, .previous, .next, .escape, .fit, .actualPixels, .zoomIn, .zoomOut, .open, .inspector].contains(self) }
+    public var isImplemented: Bool { [.preview, .enter, .previous, .next, .escape, .fit, .actualPixels, .zoomIn, .zoomOut, .search, .open, .inspector].contains(self) }
     public var shortcutHint: String? { isImplemented ? (usesCommand ? "⌘" + defaultKey.uppercased() : defaultKey) : nil }
-    public static var menuCommands: [Self] { allCases.filter(\.isImplemented) }
+    public static var menuCommands: [Self] { allCases.filter { $0.isImplemented && $0 != .search } }
     public static func matching(key: String, command: Bool) -> Self? {
         let normalized = key == "=" ? "+" : (key == "−" ? "-" : key)
         return allCases.first { $0.defaultKey == normalized && $0.usesCommand == command }

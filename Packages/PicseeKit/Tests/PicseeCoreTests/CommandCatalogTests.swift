@@ -8,10 +8,10 @@ import PicseeCore
         (.actualPixels, "1", false), (.zoomIn, "+", false), (.zoomOut, "-", false),
         (.search, "f", true), (.open, "o", true), (.inspector, "i", true)
     ]
-    let implemented: Set<CommandID> = [.preview, .enter, .previous, .next, .escape, .fit, .actualPixels, .zoomIn, .zoomOut, .open, .inspector]
+    let implemented: Set<CommandID> = [.preview, .enter, .previous, .next, .escape, .fit, .actualPixels, .zoomIn, .zoomOut, .search, .open, .inspector]
     #expect(CommandID.allCases.count == 12)
     #expect(Set(CommandID.allCases.map(\.rawValue)).count == 12)
-    #expect(Set(CommandID.menuCommands) == implemented)
+    #expect(Set(CommandID.menuCommands) == implemented.subtracting([.search]))
     for (id, key, modifier) in expected {
         #expect(id.defaultKey == key)
         #expect(id.usesCommand == modifier)
