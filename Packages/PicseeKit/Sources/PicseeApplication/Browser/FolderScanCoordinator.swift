@@ -6,9 +6,11 @@ struct FolderScanRestorePoint {
     let source: FolderSnapshot
     let conditions: FolderViewConditions
     let loopEnabled: Bool
+    let recursiveEnabled: Bool
     let inputURL: URL?
     let currentItemID: ItemID?
     let currentURL: URL?
+    let canPresent: (@MainActor () -> Bool)?
 }
 
 /// One scan owner per window. The scanning task retains its lease until enumeration really exits.
@@ -39,12 +41,13 @@ struct FolderScanRestorePoint {
         projectSource()
     }
     public func setLoopEnabled(_ value: Bool) { loopEnabled = value }
-    @discardableResult public func setRecursiveEnabled(_ value: Bool) -> Task<Void, any Error>? {
+    /// `rereadingFolder` rescans as a folder open (Reading State, first entry on completion) instead of keeping the shown image.
+    @discardableResult public func setRecursiveEnabled(_ value: Bool, rereadingFolder: Bool = false) -> Task<Void, any Error>? {
         guard recursiveEnabled != value else { return nil }
         recursiveEnabled = value
         guard let folder = activeFolder ?? sourceSnapshot.map({ ($0.version.folder, $0.version.rootID) }),
             let canPresent = automaticPresentationAllowed else { return nil }
-        let shown = currentURL
+        let shown = rereadingFolder ? nil : currentURL
         let staysInFlatFolder = shown?.deletingLastPathComponent().standardizedFileURL == folder.url.standardizedFileURL
         let retainedInput = value || staysInFlatFolder ? shown : nil
         if !value && shown != nil && !staysInFlatFolder { excludedPresentationNeedsReconciliation = true }
@@ -73,7 +76,8 @@ struct FolderScanRestorePoint {
     }
     @discardableResult public func retry() -> Task<Void, any Error>? {
         guard failure != nil, let activeFolder, let canPresent = automaticPresentationAllowed else { return nil }
-        return start(folder: activeFolder.url, rootID: activeFolder.rootID, input: inputURL,
+        // The image the user moved to after the failure, not the one the failed scan began with.
+        return start(folder: activeFolder.url, rootID: activeFolder.rootID, input: currentURL ?? inputURL,
             canPresent: canPresent, preserveConditions: true)
     }
     public private(set) var inputURL: URL?
@@ -222,17 +226,21 @@ struct FolderScanRestorePoint {
     var restorePoint: FolderScanRestorePoint? {
         guard let sourceSnapshot, sourceSnapshot.isComplete else { return nil }
         return FolderScanRestorePoint(source: sourceSnapshot, conditions: conditions, loopEnabled: loopEnabled,
-            inputURL: inputURL, currentItemID: currentItemID, currentURL: currentURL)
+            recursiveEnabled: recursiveEnabled, inputURL: inputURL, currentItemID: currentItemID, currentURL: currentURL,
+            canPresent: automaticPresentationAllowed)
     }
     /// Restores without scanning and without an active generation, so a cancelled scan's late events stay ignored.
     func restore(_ point: FolderScanRestorePoint) {
         stop(.cancelled)
         conditions = point.conditions
         loopEnabled = point.loopEnabled
+        recursiveEnabled = point.recursiveEnabled
         inputURL = point.inputURL
         currentItemID = point.currentItemID
         currentURL = point.currentURL
         sourceSnapshot = point.source
+        // A still-current authority keeps the restored source rescannable (an Include Subfolders toggle from the grid).
+        automaticPresentationAllowed = point.canPresent.flatMap { $0() ? $0 : nil }
         snapshot = point.source.applying(point.conditions)
     }
     public func cancel() { end() }

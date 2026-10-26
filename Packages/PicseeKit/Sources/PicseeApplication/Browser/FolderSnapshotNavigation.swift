@@ -82,8 +82,14 @@ extension ViewerSession {
         guard filePreviewSet == nil, previewSet == nil else { return }
         folderScan?.setLoopEnabled(enabled)
     }
-    public func setFolderRecursiveEnabled(_ enabled: Bool) {
-        guard filePreviewSet == nil, previewSet == nil else { return }
-        _ = folderScan?.setRecursiveEnabled(enabled)
+    @discardableResult public func setFolderRecursiveEnabled(_ enabled: Bool) -> Task<Void, any Error>? {
+        guard filePreviewSet == nil, previewSet == nil, let folderScan else { return nil }
+        guard mode == .browsing, folderScan.recursiveEnabled != enabled else { return folderScan.setRecursiveEnabled(enabled) }
+        // From the grid the rescan reads like a folder open, and Cancel Reading returns to this grid (ADR-0010).
+        let recorded = folderEntryRestore == nil
+        beginFolderEntry(shownImage: nil, hasCompleteGrid: folderScan.restorePoint != nil)
+        let task = folderScan.setRecursiveEnabled(enabled, rereadingFolder: true)
+        if task == nil, recorded { folderEntryRestore = nil }
+        return task
     }
 }
