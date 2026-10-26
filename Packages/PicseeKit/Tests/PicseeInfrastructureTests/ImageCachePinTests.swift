@@ -105,8 +105,10 @@ private actor CachePinObserver: ImagePresentationPinning {
         #expect(await cache.pinCount(for: key) == 2)
         #expect(await cache.usage() == ImageCacheUsage(entries: 1, previewBytes: 0, detailBytes: 32, pinnedBytes: 32))
         await cache.insert(cacheImage(c, key: key), for: key)
-        #expect(await cache.finish(late, image: cacheImage(c, key: key))?.image === b)
-        #expect(await cache.image(for: key)?.image === b)
+        // The first pin replaced the unpinned buffer (#139 R1); the late finish still receives the one retained buffer.
+        let retained = reverse ? b : a
+        #expect(await cache.finish(late, image: cacheImage(c, key: key))?.image === retained)
+        #expect(await cache.image(for: key)?.image === retained)
         await cache.pin(key, image: cacheImage(b, key: key))
         #expect(await cache.pinCount(for: key) == 3)
         await cache.pin(key, image: cacheImage(a, key: key))

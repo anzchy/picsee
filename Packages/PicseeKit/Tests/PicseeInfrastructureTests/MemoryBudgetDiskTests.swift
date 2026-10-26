@@ -180,4 +180,27 @@ private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int) async {
         await pipeline.unpin(filler)
         #expect(budget.usage.pinned == 0)
     }
+
+    // R1 3.1 (opus M2): scrolling back to a thumbnail served from disk pins one buffer, not the old evictable one as well.
+    @Test func scrollBackOverTheDiskCacheHoldsOneBufferPerThumbnail() async throws {
+        let rig = try await DiskRig()
+        defer { rig.remove() }
+        let pipeline = ImageIOPipeline(thumbnailCache: ThumbnailDiskCache(directory: rig.cacheDirectory))
+        let budget = try #require(pipeline.cache.budget)
+        let (request, first) = try await rig.load(pipeline, edge: 64, priority: .visible)
+        let key = try #require(request.renderKey)
+        await pipeline.pin(key, image: first)
+        await pipeline.unpin(key)
+        let (again, second) = try await rig.load(pipeline, edge: 64, priority: .visible)
+        try #require(again.renderKey == key)
+        try #require(second.image !== first.image)
+        await pipeline.pin(key, image: second)
+        let bytes = second.image.bytesPerRow * second.image.height
+        #expect(budget.usage.pinned == bytes)
+        #expect(await pipeline.cache.usage().pinnedBytes == bytes)
+        #expect(await pipeline.cache.usage().totalBytes == bytes)
+        #expect(await pipeline.cache.pinCount(for: key) == 1)
+        await pipeline.unpin(key)
+        #expect(budget.usage.pinned == 0)
+    }
 }

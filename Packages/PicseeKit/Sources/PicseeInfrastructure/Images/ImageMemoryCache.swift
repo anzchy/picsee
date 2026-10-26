@@ -30,7 +30,7 @@ struct ImageCacheUsage: Equatable, Sendable {
 public actor ImageMemoryCache {
     private struct Entry {
         let key: RenderKey
-        let image: DecodedImage
+        var image: DecodedImage
         var pins = 0
         var variants: [DecodedImage] = []
         var stale = false
@@ -91,7 +91,9 @@ public actor ImageMemoryCache {
         guard image.itemID == key.itemID, image.revision == key.revision else { return }
         recordRevision(key.revision, for: key.itemID)
         if let index = entries.firstIndex(where: { $0.key == key }) {
-            if entries[index].image.image !== image.image,
+            // An unpinned entry's buffer is held by no presenter: the pinned buffer replaces it rather than doubling it.
+            if entries[index].pins == 0 { entries[index].image = image }
+            else if entries[index].image.image !== image.image,
                !entries[index].variants.contains(where: { $0.image === image.image }) {
                 entries[index].variants.append(image)
             }
