@@ -40,14 +40,14 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     // Part 1: a real write reaches stream A; after A.stop() returns, A sees nothing more, with sentinel B ending the wait.
     let dir = try makeTempDir("fsevents"); defer { try? FileManager.default.removeItem(at: dir) }
     let a = HintRecorder(), b = HintRecorder()
-    let streamA = FSEventSource().start(watching: dir, onHints: a.sink)
+    let streamA = try FSEventSource().start(watching: dir, onHints: a.sink)
     let x = dir.appendingPathComponent("x.png")
     FileManager.default.createFile(atPath: x.path, contents: Data([1]))
     #expect(await mainPoll(deadline: .seconds(10)) { a.changedPaths.contains(canonicalPath(x)) })
     streamA.stop()
     streamA.stop() // idempotent
     let aAtStop = a.count
-    let streamB = FSEventSource().start(watching: dir, onHints: b.sink)
+    let streamB = try FSEventSource().start(watching: dir, onHints: b.sink)
     let y = dir.appendingPathComponent("y.png")
     FileManager.default.createFile(atPath: y.path, contents: Data([1]))
     #expect(await mainPoll(deadline: .seconds(10)) { b.changedPaths.contains(canonicalPath(y)) })
@@ -57,11 +57,11 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     // Part 1b: stop() called from inside the stream's own callback returns (no deadlock) and ends later callbacks.
     let c = HintRecorder(), d = HintRecorder(), holder = StreamHolder()
     let cSink = c.sink
-    holder.set(FSEventSource().start(watching: dir) { hints in cSink(hints); holder.stream?.stop() })
+    holder.set(try FSEventSource().start(watching: dir) { hints in cSink(hints); holder.stream?.stop() })
     let z1 = dir.appendingPathComponent("z1.png")
     FileManager.default.createFile(atPath: z1.path, contents: Data([1]))
     #expect(await mainPoll(deadline: .seconds(10)) { c.count >= 1 })
-    let streamD = FSEventSource().start(watching: dir, onHints: d.sink)
+    let streamD = try FSEventSource().start(watching: dir, onHints: d.sink)
     let z2 = dir.appendingPathComponent("z2.png")
     FileManager.default.createFile(atPath: z2.path, contents: Data([1]))
     #expect(await mainPoll(deadline: .seconds(10)) { d.changedPaths.contains(canonicalPath(z2)) })

@@ -5,7 +5,17 @@ import PicseeCore
 /// FSEvents adapter: file-level events since now, delivered on the stream's own serial queue until `stop()` returns.
 public struct FSEventSource: FolderEventSource {
     public static let latency: Double = 0.05
-    public init() {}
+    typealias Create = @Sendable (FSEventStreamCallback, UnsafeMutablePointer<FSEventStreamContext>, URL) -> FSEventStreamRef?
+    private let create: Create, startStream: @Sendable (FSEventStreamRef) -> Bool
+    public init() { self.init(create: Self.makeStream) }
+    /// Test seams for an OS that cannot create or refuses to start a stream.
+    init(create: @escaping Create = Self.makeStream, start: @escaping @Sendable (FSEventStreamRef) -> Bool = FSEventStreamStart) {
+        self.create = create; startStream = start
+    }
+    private static let makeStream: Create = { callback, context, url in
+        FSEventStreamCreate(nil, callback, context, [url.path] as CFArray, FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+            latency, FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer))
+    }
     static let dropFlags = FSEventStreamEventFlags(kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagUserDropped
         | kFSEventStreamEventFlagKernelDropped | kFSEventStreamEventFlagEventIdsWrapped | kFSEventStreamEventFlagRootChanged)
     static func hint(path: String, flags: FSEventStreamEventFlags) -> FolderChangeHint {
@@ -32,7 +42,7 @@ public struct FSEventSource: FolderEventSource {
         }
     }
 
-    public func start(watching url: URL, onHints: @escaping @Sendable ([FolderChangeHint]) -> Void) -> any FolderEventStream {
+    public func start(watching url: URL, onHints: @escaping @Sendable ([FolderChangeHint]) -> Void) throws -> any FolderEventStream {
         let stream = Stream(onHints)
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(stream).toOpaque(),
             retain: { info in info.map { _ = Unmanaged<Stream>.fromOpaque($0).retain(); return $0 } },
@@ -44,11 +54,15 @@ public struct FSEventSource: FolderEventSource {
             let cPaths = paths.assumingMemoryBound(to: UnsafePointer<CChar>.self)
             stream.onHints((0..<count).map { FSEventSource.hint(path: String(cString: cPaths[$0]), flags: flags[$0]) })
         }
-        // A stream that failed to create is never started; its stop() finds no ref.
-        guard let ref = FSEventStreamCreate(nil, callback, &context, [url.path] as CFArray,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow), Self.latency,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)) else { return stream }
-        stream.queue.sync { stream.ref = ref; FSEventStreamSetDispatchQueue(ref, stream.queue); FSEventStreamStart(ref) }
+        guard let ref = create(callback, &context, url) else { throw FolderWatchError.streamCreateFailed }
+        // A refused stream is invalidated and released at once, so nothing is delivered and its context is freed.
+        let started = stream.queue.sync {
+            FSEventStreamSetDispatchQueue(ref, stream.queue)
+            guard startStream(ref) else { FSEventStreamInvalidate(ref); FSEventStreamRelease(ref); return false }
+            stream.ref = ref; return true
+        }
+        // Invalidation may queue the context release; draining the queue frees the handler before the throw.
+        guard started else { stream.queue.sync {}; throw FolderWatchError.streamStartRefused }
         return stream
     }
 }

@@ -9,7 +9,7 @@ final class FakeFolderEventSource: FolderEventSource, @unchecked Sendable {
     private let lock = NSLock()
     private let scopeCounts: @Sendable () -> [Int]
     private var handlers: [String: [UUID: @Sendable ([FolderChangeHint]) -> Void]] = [:]
-    private var state = (starts: 0, stops: 0, active: 0, maxActive: 0)
+    private var state = (starts: 0, stops: 0, active: 0, maxActive: 0, refusals: 0, refused: 0)
     private var started: [String] = []
     private var atStart: [[Int]] = []
     private var atStop: [[Int]] = []
@@ -18,14 +18,18 @@ final class FakeFolderEventSource: FolderEventSource, @unchecked Sendable {
     var stops: Int { lock.withLock { state.stops } }
     var active: Int { lock.withLock { state.active } }
     var maxActive: Int { lock.withLock { state.maxActive } }
+    /// The next `refusals` starts throw `.streamStartRefused` and count only in `refused`.
+    var refusals: Int { get { lock.withLock { state.refusals } } set { lock.withLock { state.refusals = newValue } } }
+    var refused: Int { lock.withLock { state.refused } }
     var startURLs: [String] { lock.withLock { started } }
     var scopeAtStart: [[Int]] { lock.withLock { atStart } }
     var scopeAtStop: [[Int]] { lock.withLock { atStop } }
 
     private struct Stream: FolderEventStream { let onStop: @Sendable () -> Void; func stop() { onStop() } }
-    func start(watching url: URL, onHints: @escaping @Sendable ([FolderChangeHint]) -> Void) -> any FolderEventStream {
+    func start(watching url: URL, onHints: @escaping @Sendable ([FolderChangeHint]) -> Void) throws -> any FolderEventStream {
         let key = canonicalPath(url), token = UUID(), scope = scopeCounts()
-        lock.withLock {
+        try lock.withLock {
+            if state.refusals > 0 { state.refusals -= 1; state.refused += 1; throw FolderWatchError.streamStartRefused }
             state.starts += 1; state.active += 1; state.maxActive = max(state.maxActive, state.active)
             started.append(key); atStart.append(scope)
             handlers[key, default: [:]][token] = onHints
@@ -76,16 +80,16 @@ final class FakeWatchClock: WatchScheduling, @unchecked Sendable {
     func advance(by delta: Int) { advance(to: nowMilliseconds + delta) }
 }
 
-/// Records each `onChange` with the clock time it arrived at.
+/// Records the clock time of each `onChange`.
 final class ChangeLog: @unchecked Sendable {
     private let lock = NSLock()
-    private var entries: [(at: Int, hints: [FolderChangeHint])] = []
+    private var entries: [Int] = []
     private let clock: any WatchScheduling
     init(clock: any WatchScheduling) { self.clock = clock }
-    var all: [(at: Int, hints: [FolderChangeHint])] { lock.withLock { entries } }
+    var times: [Int] { lock.withLock { entries } }
     var count: Int { lock.withLock { entries.count } }
-    var sink: @Sendable ([FolderChangeHint]) -> Void {
-        { [self] hints in let at = clock.nowMilliseconds; lock.withLock { entries.append((at, hints)) } }
+    var sink: @Sendable () -> Void {
+        { [self] in let at = clock.nowMilliseconds; lock.withLock { entries.append(at) } }
     }
 }
 

@@ -40,25 +40,26 @@ import PicseeCore
         f.clock.advance(to: 1000)
         #expect(recursiveLog.count == (row.recursive ? 1 : 0), "row \(row.name) recursive")
         #expect(flatLog.count == (row.flat ? 1 : 0), "row \(row.name) flat")
-        if row.recursive { #expect(recursiveLog.all.first?.hints == [hint], "row \(row.name) recursive payload") }
-        if row.flat { #expect(flatLog.all.first?.hints == [hint], "row \(row.name) flat payload") }
         await r.cancel(); await s.cancel()
     }
 
-    // A mixed batch delivers only the hints relevant to each subscriber, in arrival order.
+    // A mixed batch with any relevant hint flushes once; a batch of only irrelevant hints flushes nothing.
     let (f, root) = try await WatchFixture.filterRoot()
     defer { f.remove() }
     let flatLog = ChangeLog(clock: f.clock)
     let s = try await f.hub.subscribe(rootID: root, folder: f.url("root/F"), recursive: false, onChange: flatLog.sink)
     let batch: [FolderChangeHint] = [.changed(f.url("root/G/x.png")), .changed(f.url("root/F/x.png")),
         .changed(f.url("root/F/sub/x.png")), .changed(f.url("root/F/sub"))]
-    f.emit(batch, at: 0)
+    f.emit([batch[0], batch[2]], at: 0)
     f.clock.advance(to: 1000)
-    #expect(flatLog.all.map(\.hints) == [[batch[1], batch[3]]])
+    #expect(flatLog.count == 0)
+    f.emit(batch, at: 1000)
+    f.clock.advance(to: 2000)
+    #expect(flatLog.times == [1200])
     await s.cancel()
 }
 
-private func flushTimes(_ log: ChangeLog) -> [Int] { log.all.map(\.at) }
+private func flushTimes(_ log: ChangeLog) -> [Int] { log.times }
 
 @Test func watchHubDebounceFlushesExactlyAtWindowDeadline() async throws {
     func fixture() async throws -> (WatchFixture, AccessRootID, ChangeLog, any FolderWatchSubscription) {
@@ -84,7 +85,6 @@ private func flushTimes(_ log: ChangeLog) -> [Int] { log.all.map(\.at) }
         for (i, hint) in hints.enumerated() { f.emit([hint], at: i * 150) }
         f.clock.advance(to: 6000)
         #expect(flushTimes(log) == [1000, 2050, 3050], "D2")
-        #expect(log.all.map(\.hints) == [Array(hints[0..<7]), Array(hints[7..<14]), Array(hints[14..<20])], "D2 windows")
     }
     // D3: an event after a flush starts a new window.
     do {
@@ -125,7 +125,6 @@ private func flushTimes(_ log: ChangeLog) -> [Int] { log.all.map(\.at) }
         f.emit([second], at: 300)
         f.clock.advance(to: 2000)
         #expect(flushTimes(log) == [200, 500], "D6")
-        #expect(log.all.map(\.hints) == [[first], [second]], "D6 payloads")
     }
     // D7: each subscriber has its own timer.
     do {
@@ -151,24 +150,24 @@ private func flushTimes(_ log: ChangeLog) -> [Int] { log.all.map(\.at) }
             let relevant = Int.random(in: 0..<10, using: &rng) >= 3
             timeline.append((t, .changed(f.url(relevant ? "root/F/e\(i).png" : "root/G/e\(i).png")), relevant))
         }
-        var expected: [(at: Int, hints: [FolderChangeHint])] = []
-        var window: (start: Int, deadline: Int, hints: [FolderChangeHint])?
+        var expected: [Int] = []
+        var window: (start: Int, deadline: Int)?
         for event in timeline {
-            if let open = window, open.deadline <= event.at { expected.append((open.deadline, open.hints)); window = nil }
+            if let open = window, open.deadline <= event.at { expected.append(open.deadline); window = nil }
             guard event.relevant else { continue }
             if let open = window {
-                window = (open.start, min(event.at + 200, open.start + 1000), open.hints + [event.hint])
-            } else { window = (event.at, event.at + 200, [event.hint]) }
+                window = (open.start, min(event.at + 200, open.start + 1000))
+            } else { window = (event.at, event.at + 200) }
         }
-        if let open = window { expected.append((open.deadline, open.hints)) }
+        if let open = window { expected.append(open.deadline) }
 
         for event in timeline { f.emit([event.hint], at: event.at) }
         f.clock.advance(to: t + 2000)
-        let observed = log.all
-        if observed.map(\.at) != expected.map(\.at) || observed.map(\.hints) != expected.map(\.hints) {
-            let mismatch = zip(observed, expected).enumerated().first { $1.0.at != $1.1.at || $1.0.hints != $1.1.hints }?.offset ?? min(observed.count, expected.count)
+        let observed = log.times
+        if observed != expected {
+            let mismatch = zip(observed, expected).enumerated().first { $1.0 != $1.1 }?.offset ?? min(observed.count, expected.count)
             Issue.record("""
-                seed=\(seed) first mismatching window=\(mismatch) observed=\(observed.map(\.at)) expected=\(expected.map(\.at)) \
+                seed=\(seed) first mismatching window=\(mismatch) observed=\(observed) expected=\(expected) \
                 timeline=\(timeline.map { "\($0.at)\($0.relevant ? "" : "~")" })
                 """)
             return
