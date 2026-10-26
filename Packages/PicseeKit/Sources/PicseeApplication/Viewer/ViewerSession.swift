@@ -115,7 +115,8 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         scrollAnchor = nil
         orderedItemIDs = []
     }
-    /// Caller reports authoritative available IDs; filtered-out items alone are not deletions.
+    /// Caller reports the navigable IDs, so deleted and filtered-out items are both absent. While browsing, an absent
+    /// Current Item moves to its nearest survivor, as it does for a deletion.
     public func updateItems(_ items: [ItemID], sourceVersion: PreviewSourceVersion) {
         let old = orderedItemIDs, alive = Set(items), gone = selection.currentItemID
         orderedItemIDs = items
