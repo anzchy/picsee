@@ -34,8 +34,20 @@ struct FolderScanRestorePoint {
     public private(set) var metadataUnknownItemIDs: Set<ItemID> = []
     public private(set) var loopEnabled = false
     public private(set) var recursiveEnabled = false
+    /// A filtered empty projection is final only after enumeration, or while its prior result remains shown during refresh.
     public var hasNoMatches: Bool {
-        sourceSnapshot?.entries.isEmpty == false && snapshot?.entries.isEmpty == true
+        sourceSnapshot?.isComplete == true && (refreshTask == nil || noMatchesPresented)
+            && sourceSnapshot?.entries.isEmpty == false && snapshot?.entries.isEmpty == true
+    }
+    public var isAwaitingFilteredMatch: Bool {
+        guard failure == nil, !isReadingFolder, !hasNoMatches, conditions.selectedExtensions != nil,
+              snapshot?.entries.isEmpty == true,
+              sourceSnapshot?.isComplete == false ||
+                  (refreshTask != nil && sourceSnapshot?.entries.isEmpty == false) else { return false }
+        guard let currentURL else { return true }
+        return conditions.selectedExtensions?.contains {
+            $0.caseInsensitiveCompare(currentURL.pathExtension) == .orderedSame
+        } != true
     }
     public var availableExtensions: [String] {
         Array(Set(sourceSnapshot?.entries.map(\.normalizedExtension) ?? [])).sorted()
@@ -190,6 +202,7 @@ struct FolderScanRestorePoint {
                     host?.folderScanDidComplete(count: fresh.navigationEntries.count)
                 }
                 if fresh.entries == sourceSnapshot?.entries {
+                    projectSource()
                     enqueueMetadata()
                 } else {
                     applyRefresh(fresh)
@@ -240,18 +253,23 @@ struct FolderScanRestorePoint {
         let snapshot = fresh.applying(conditions, metadata: metadata)
         self.snapshot = snapshot
         enqueueMetadata()
-        guard let id = currentItemID else { return }
+        guard let id = currentItemID else { projectSource(); return }
         let target: FolderEntry?
         if let index = snapshot.navigationIndex(for: id) {
             if snapshot.entries.contains(where: {
                 $0.itemID == id && $0.url.standardizedFileURL == currentURL?.standardizedFileURL }) { return }
             target = snapshot.navigationEntries[index]
         } else {
-            guard let previous, let old = previous.firstIndex(where: { $0.itemID == id }) else { return }
-            target = (Array(previous[(old + 1)...]) + previous[..<old].reversed()).lazy
-                .compactMap { snapshot.navigationIndex(for: $0.itemID) }.first.map { snapshot.navigationEntries[$0] }
+            if let previous, let old = previous.firstIndex(where: { $0.itemID == id }) {
+                target = (Array(previous[(old + 1)...]) + previous[..<old].reversed()).lazy
+                    .compactMap { snapshot.navigationIndex(for: $0.itemID) }.first.map { snapshot.navigationEntries[$0] }
+            } else {
+                target = snapshot.navigationEntries.first
+            }
         }
         let allowed = automaticPresentationAllowed?() != false
+        if target != nil { noMatchesPresented = false }
+        if target == nil && hasNoMatches && allowed { presentNoMatchesIfNeeded(); return }
         presentationRevision &+= 1
         currentItemID = target?.itemID; currentURL = target?.url
         guard let target else { inputURL = nil; if allowed { host?.clearFolderImageForNoMatches() }; return }
