@@ -10,13 +10,13 @@ struct PinnedDesign {
     struct Edges: Equatable { let top: Double; let right: Double; let bottom: Double; let left: Double }
     struct Font: Equatable { let size: Double; let weight: Int; let lineHeight: Double? }
     struct Color: Equatable { let red: Double; let green: Double; let blue: Double; let alpha: Double }
-    private struct Rule { let selector: String; let declarations: [String: String]; let min: Double?; let max: Double?; let order: Int }
+    private struct Rule { let selector: String; let declarations: [String: String]; let declarationOrder: [(String, String)]; let min: Double?; let max: Double?; let unsupported: String? }
     private let name: String
     private let rules: [Rule]
     private let appearance: String
 
-    static func page(_ name: String, source: String = #filePath) throws -> Self {
-        let tests = URL(fileURLWithPath: source).deletingLastPathComponent()
+    static func page(_ name: String, source: String? = nil) throws -> Self {
+        let tests = URL(fileURLWithPath: source ?? #filePath).deletingLastPathComponent()
         let root = tests.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
         let directory = root.appendingPathComponent("design/prototypes/picsee-browser/states")
@@ -35,18 +35,18 @@ struct PinnedDesign {
         let styles = matches("(?s)<style\\b[^>]*>(.*?)</style>", in: html).compactMap { $0.first }
         guard !styles.isEmpty else { throw Error("\(entry.file) has no inline CSS") }
         var rules: [Rule] = []
-        for style in styles { parse(style, min: nil, max: nil, into: &rules) }
+        for style in styles { try parse(style, min: nil, max: nil, unsupported: nil, into: &rules) }
         let appearance = html.contains("class=\"theme-dark\"") ? "dark" : "light"
         return Self(name: name, rules: rules, appearance: appearance)
     }
 
     func raw(_ selector: String, _ property: String, viewport: Double) throws -> String {
-        let candidates = rules.filter { rule in
-            rule.selector == selector && (rule.min == nil || viewport >= rule.min!) &&
-                (rule.max == nil || viewport <= rule.max!)
-        }
-        guard let value = candidates.sorted(by: { ($0.selector.count, $0.order) < ($1.selector.count, $1.order) })
-            .last(where: { $0.declarations[property] != nil })?.declarations[property] else {
+        let candidates = try matchingRules(selector, property, viewport: viewport)
+        let themeValue = selector == ":root" && property.hasPrefix("--")
+            ? try matchingRules(appearance == "dark" ? ".theme-dark" : ".theme-light", property, viewport: viewport)
+                .last(where: { $0.declarations[property] != nil })?.declarations[property]
+            : nil
+        guard let value = themeValue ?? candidates.last(where: { $0.declarations[property] != nil })?.declarations[property] else {
             throw Error("\(name) selector '\(selector)' property '\(property)' at \(viewport)pt: no matching declaration")
         }
         return try resolveVars(value, viewport: viewport, context: "\(selector) \(property)", tokenSelector: selector)
@@ -54,6 +54,9 @@ struct PinnedDesign {
 
     func length(_ selector: String, _ property: String, viewport: Double, percentageBase: Double? = nil) throws -> Double {
         let value = try raw(selector, property, viewport: viewport)
+        if property == "line-height", Double(value) != nil {
+            return try lineHeight(selector, viewport: viewport)
+        }
         guard let result = evaluate(value, viewport: viewport, percentageBase: percentageBase) else {
             throw Error("\(name) \(selector) \(property) at \(viewport)pt: expected length, got '\(value)'")
         }
@@ -77,23 +80,37 @@ struct PinnedDesign {
     }
 
     func edges(_ selector: String, _ property: String, viewport: Double) throws -> Edges {
-        let value = try raw(selector, property, viewport: viewport)
-        let parts = Self.splitWhitespace(value)
-        guard (1...4).contains(parts.count) else {
-            throw Error("\(name) \(selector) \(property) at \(viewport)pt: expected 1–4 sides, got '\(value)'")
+        let candidates = try matchingRules(selector, property, viewport: viewport, sideProperties: true)
+        var sides: [String?] = [nil, nil, nil, nil]
+        for rule in candidates {
+            for (key, value) in rule.declarationOrder {
+                if key == property {
+                    let parts = Self.splitWhitespace(value)
+                    guard (1...4).contains(parts.count) else {
+                        throw Error("\(name) \(selector) \(property) at \(viewport)pt: expected 1–4 sides, got '\(value)'")
+                    }
+                    sides = [parts[0], parts.count > 1 ? parts[1] : parts[0],
+                             parts.count > 2 ? parts[2] : parts[0],
+                             parts.count > 3 ? parts[3] : parts.count > 1 ? parts[1] : parts[0]]
+                }
+                for (index, side) in ["top", "right", "bottom", "left"].enumerated()
+                    where key == "\(property)-\(side)" {
+                    sides[index] = value
+                }
+            }
         }
+        guard sides.allSatisfy({ $0 != nil }) else {
+            throw Error("\(name) \(selector) \(property) at \(viewport)pt: no complete side declaration")
+        }
+        let parts = try sides.map { try resolveVars($0!, viewport: viewport, context: "\(selector) \(property)", tokenSelector: selector) }
+        let value = parts.joined(separator: " ")
         let numbers = try parts.map { part -> Double in
             guard let number = evaluate(part, viewport: viewport) else {
                 throw Error("\(name) \(selector) \(property) at \(viewport)pt: unresolved side '\(part)' in '\(value)'")
             }
             return number
         }
-        switch numbers.count {
-        case 1: return Edges(top: numbers[0], right: numbers[0], bottom: numbers[0], left: numbers[0])
-        case 2: return Edges(top: numbers[0], right: numbers[1], bottom: numbers[0], left: numbers[1])
-        case 3: return Edges(top: numbers[0], right: numbers[1], bottom: numbers[2], left: numbers[1])
-        default: return Edges(top: numbers[0], right: numbers[1], bottom: numbers[2], left: numbers[3])
-        }
+        return Edges(top: numbers[0], right: numbers[1], bottom: numbers[2], left: numbers[3])
     }
 
     func font(_ selector: String, viewport: Double) throws -> Font {
@@ -103,13 +120,16 @@ struct PinnedDesign {
             throw Error("\(name) \(selector) font-weight at \(viewport)pt: expected numeric weight, got '\(weightText)'")
         }
         let lineHeight: Double?
-        if let rawLine = try? raw(selector, "line-height", viewport: viewport) {
+        do {
+            let rawLine = try raw(selector, "line-height", viewport: viewport)
             if let points = evaluate(rawLine, viewport: viewport) {
                 lineHeight = rawLine.hasSuffix("px") ? points : points * size
             } else {
                 throw Error("\(name) \(selector) line-height at \(viewport)pt: unresolved '\(rawLine)'")
             }
-        } else { lineHeight = nil }
+        } catch let error as Error where error.description.contains("no matching declaration") {
+            lineHeight = nil
+        }
         return Font(size: size, weight: weight, lineHeight: lineHeight)
     }
 
@@ -168,10 +188,12 @@ struct PinnedDesign {
                 throw Error("\(name) \(context) at \(viewport)pt: unterminated var() in '\(text)'")
             }
             let token = String(result[range.upperBound..<close])
-            let selectors = [tokenSelector, appearance == "dark" ? ".theme-dark" : ".theme-light", ":root"]
+            let selectors = tokenSelector == ":root"
+                ? [appearance == "dark" ? ".theme-dark" : ".theme-light", ":root"]
+                : [tokenSelector, appearance == "dark" ? ".theme-dark" : ".theme-light", ":root"]
             var found: String?
             for selector in selectors {
-                found = try? rawToken(selector, token, viewport: viewport)
+                found = try rawToken(selector, token, viewport: viewport)
                 if found != nil { break }
             }
             guard let found else { throw Error("\(name) \(context) at \(viewport)pt: missing token \(token) in '\(text)'") }
@@ -180,12 +202,29 @@ struct PinnedDesign {
         return result
     }
 
-    private func rawToken(_ selector: String, _ token: String, viewport: Double) throws -> String {
-        guard let rule = rules.last(where: { $0.selector == selector && $0.declarations[token] != nil &&
-            ($0.min == nil || viewport >= $0.min!) && ($0.max == nil || viewport <= $0.max!) }) else {
-            throw Error("missing token \(token)")
+    private func rawToken(_ selector: String, _ token: String, viewport: Double) throws -> String? {
+        try matchingRules(selector, token, viewport: viewport)
+            .last(where: { $0.declarations[token] != nil })?.declarations[token]
+    }
+
+    /// Exact-selector queries fail when a contextual rule could override the same property.
+    /// This reader does not infer the pinned DOM's full selector matching or specificity.
+    private func matchingRules(_ selector: String, _ property: String, viewport: Double,
+                               sideProperties: Bool = false) throws -> [Rule] {
+        let properties = [property] + (sideProperties ? ["top", "right", "bottom", "left"].map { "\(property)-\($0)" } : [])
+        let active = rules.filter { ($0.min == nil || viewport >= $0.min!) && ($0.max == nil || viewport <= $0.max!) }
+        for rule in active where properties.contains(where: { rule.declarations[$0] != nil }) {
+            let contextual = rule.selector != selector && [" ", ">", "+", "~"].contains {
+                rule.selector.hasSuffix($0 + selector)
+            }
+            if let unsupported = rule.unsupported, rule.selector == selector || contextual {
+                throw Error("\(name) selector '\(selector)' property '\(property)' at \(viewport)pt: unsupported \(unsupported)")
+            }
+            if contextual {
+                throw Error("\(name) selector '\(selector)' property '\(property)' at \(viewport)pt: ambiguous contextual rule '\(rule.selector)'")
+            }
         }
-        return rule.declarations[token]!
+        return active.filter { $0.selector == selector && $0.unsupported == nil }
     }
 
     private struct Catalog: Decodable {
@@ -193,7 +232,7 @@ struct PinnedDesign {
         struct Entry: Decodable { let name: String; let file: String; let sha256: String }
     }
 
-    private static func parse(_ css: String, min: Double?, max: Double?, into rules: inout [Rule]) {
+    private static func parse(_ css: String, min: Double?, max: Double?, unsupported: String?, into rules: inout [Rule]) throws {
         let clean = css.replacingOccurrences(of: "(?s)/\\*.*?\\*/", with: "", options: .regularExpression)
         let chars = Array(clean)
         var i = 0
@@ -211,25 +250,30 @@ struct PinnedDesign {
                 if chars[i] == "}" { depth -= 1 }
                 i += 1
             }
-            guard depth == 0 else { break }
+            guard depth == 0 else { throw Error("unbalanced CSS block after '\(header)'") }
             let body = String(chars[bodyStart..<(i - 1)])
             if header.hasPrefix("@media") {
                 let maxWidth = matches("max-width\\s*:\\s*([0-9.]+)px", in: header).first?.first.flatMap(Double.init)
                 let minWidth = matches("min-width\\s*:\\s*([0-9.]+)px", in: header).first?.first.flatMap(Double.init)
-                if maxWidth != nil || minWidth != nil {
-                    parse(body, min: minWidth ?? min, max: maxWidth ?? max, into: &rules)
-                }
+                let widthOnly = header.range(of: "^@media\\s*(\\(\\s*(min|max)-width\\s*:\\s*[0-9.]+px\\s*\\)\\s*(and\\s*)?)+$", options: .regularExpression) != nil
+                try parse(body, min: minWidth ?? min, max: maxWidth ?? max,
+                          unsupported: widthOnly ? unsupported : header, into: &rules)
+            } else if header.hasPrefix("@") && !header.hasPrefix("@keyframes") && !header.hasPrefix("@font-face") {
+                try parse(body, min: min, max: max, unsupported: header, into: &rules)
             } else if !header.hasPrefix("@") {
                 var declarations: [String: String] = [:]
+                var declarationOrder: [(String, String)] = []
                 for declaration in split(body, separator: ";") {
                     guard let colon = declaration.firstIndex(of: ":") else { continue }
                     let key = declaration[..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
                     let value = declaration[declaration.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines)
                     declarations[key] = value
+                    declarationOrder.append((key, value))
                 }
                 for selector in split(header, separator: ",") {
                     rules.append(Rule(selector: selector.trimmingCharacters(in: .whitespacesAndNewlines),
-                                      declarations: declarations, min: min, max: max, order: rules.count))
+                                      declarations: declarations, declarationOrder: declarationOrder, min: min, max: max,
+                                      unsupported: unsupported))
                 }
             }
         }
@@ -281,9 +325,12 @@ struct PinnedDesign {
                   let preferred = evaluate(parts[1], viewport: viewport, percentageBase: percentageBase), let high = evaluate(parts[2], viewport: viewport, percentageBase: percentageBase) else { return nil }
             return Swift.min(Swift.max(preferred, low), high)
         }
-        if value.hasPrefix("min("), value.hasSuffix(")") {
-            let numbers = Self.split(String(value.dropFirst(4).dropLast()), separator: ",").compactMap { evaluate($0, viewport: viewport, percentageBase: percentageBase) }
-            return numbers.count >= 2 ? numbers.min() : nil
+        if (value.hasPrefix("min(") || value.hasPrefix("max(")), value.hasSuffix(")") {
+            let numbers = Self.split(String(value.dropFirst(4).dropLast()), separator: ",").map {
+                evaluate($0, viewport: viewport, percentageBase: percentageBase)
+            }
+            guard numbers.count >= 2, numbers.allSatisfy({ $0 != nil }) else { return nil }
+            return value.hasPrefix("min(") ? numbers.compactMap { $0 }.min() : numbers.compactMap { $0 }.max()
         }
         if value.hasPrefix("calc("), value.hasSuffix(")") {
             let body = String(value.dropFirst(5).dropLast())
@@ -323,22 +370,28 @@ struct PinnedDesign {
             let body = String(value.dropFirst("color-mix(in srgb,".count).dropLast())
             let parts = Self.split(body, separator: ",")
             guard parts.count == 2 else { return nil }
-            func component(_ string: String) -> (Color, Double)? {
+            func component(_ string: String) -> (Color, Double?)? {
                 let bits = Self.splitWhitespace(string.trimmingCharacters(in: .whitespaces))
                 guard bits.count >= 1 else { return nil }
                 let percent = bits.last?.hasSuffix("%") == true ? Double(bits.last!.dropLast()).map { $0 / 100 } : nil
                 let colorString = percent == nil ? string.trimmingCharacters(in: .whitespaces) : bits.dropLast().joined(separator: " ")
                 guard let color = parseColor(colorString) else { return nil }
-                return (color, percent ?? -1)
+                return (color, percent)
             }
             guard let (a, firstWeight) = component(parts[0]), let (b, secondWeight) = component(parts[1]) else { return nil }
-            var wa = firstWeight; var wb = secondWeight
-            if wa < 0 { wa = 1 - wb }; if wb < 0 { wb = 1 - wa }
-            let alpha = a.alpha * wa + b.alpha * wb
+            guard [firstWeight, secondWeight].allSatisfy({ $0 == nil || (0...1).contains($0!) }) else { return nil }
+            var wa = firstWeight ?? (secondWeight == nil ? 0.5 : 1 - secondWeight!)
+            var wb = secondWeight ?? (firstWeight == nil ? 0.5 : 1 - firstWeight!)
+            let total = wa + wb
+            guard total > 0 else { return nil }
+            let alphaMultiplier = Swift.min(total, 1.0)
+            wa /= total; wb /= total
+            let alpha = (a.alpha * wa + b.alpha * wb) * alphaMultiplier
             guard alpha > 0 else { return Color(red: 0, green: 0, blue: 0, alpha: 0) }
-            return Color(red: (a.red * a.alpha * wa + b.red * b.alpha * wb) / alpha,
-                         green: (a.green * a.alpha * wa + b.green * b.alpha * wb) / alpha,
-                         blue: (a.blue * a.alpha * wa + b.blue * b.alpha * wb) / alpha, alpha: alpha)
+            let mixedAlpha = a.alpha * wa + b.alpha * wb
+            return Color(red: (a.red * a.alpha * wa + b.red * b.alpha * wb) / mixedAlpha,
+                         green: (a.green * a.alpha * wa + b.green * b.alpha * wb) / mixedAlpha,
+                         blue: (a.blue * a.alpha * wa + b.blue * b.alpha * wb) / mixedAlpha, alpha: alpha)
         }
         return nil
     }

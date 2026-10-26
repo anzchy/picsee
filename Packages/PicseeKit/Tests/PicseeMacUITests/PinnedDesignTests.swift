@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import CryptoKit
 
 @Test func pinnedDesignGridRulesFollowViewport() throws {
     let page = try PinnedDesign.page("grid-light")
@@ -7,6 +8,80 @@ import Testing
     #expect(try page.edges(".grid-bottom-bar", "padding", viewport: 480).right == 7)
     #expect(try page.length(".grid-toolbar-tools", "gap", viewport: 1280) == 6)
     #expect(try page.length(".grid-toolbar-tools", "gap", viewport: 800) == 2)
+}
+
+@Test func pinnedDesignAppliesLonghandsInCascadeOrder() throws {
+    let grid = try PinnedDesign.page("grid-light")
+    #expect(try grid.edges(".toolbar", "padding", viewport: 700) == .init(top: 0, right: 8, bottom: 0, left: 8))
+    #expect(throws: PinnedDesign.Error.self) { try grid.edges(".sidebar", "padding", viewport: 700) }
+    let inspector = try PinnedDesign.page("viewer-inspector")
+    #expect(throws: PinnedDesign.Error.self) { try inspector.edges(".inspector", "padding", viewport: 700) }
+}
+
+@Test func pinnedDesignAppliesDeclarationsInSameRuleOrder() throws {
+    let page = try fixturePage(".a{padding-left:4px;padding:10px}.b{padding:10px;padding-left:4px}")
+    #expect(try page.edges(".a", "padding", viewport: 800).left == 10)
+    #expect(try page.edges(".b", "padding", viewport: 800).left == 4)
+}
+
+@Test func pinnedDesignRejectsContextualOverride() throws {
+    let page = try PinnedDesign.page("grid-light")
+    #expect(throws: PinnedDesign.Error.self) {
+        try page.color(".titlebar-middle", "color", viewport: 1280)
+    }
+}
+
+@Test func pinnedDesignUsesDarkTokensForDirectQueries() throws {
+    let page = try PinnedDesign.page("grid-dark")
+    #expect(try page.color(":root", "--color-accent", viewport: 1280).red == 96.0 / 255)
+}
+
+@Test func pinnedDesignRejectsUnresolvedMathOperands() throws {
+    let page = try PinnedDesign.page("grid-light")
+    for expression in ["min(10px,unsupported,20px)", "max(10px,unsupported,20px)", "clamp(10px,unsupported,20px)"] {
+        #expect(throws: PinnedDesign.Error.self) { try page.lengthValue(expression, viewport: 800) }
+    }
+}
+
+@Test func pinnedDesignResolvesUnitlessLineHeightAsLength() throws {
+    let page = try PinnedDesign.page("search-empty")
+    #expect(abs(try page.length(".empty-state p", "line-height", viewport: 1280) - 22.1) < 0.0001)
+}
+
+private func fixturePage(_ css: String) throws -> PinnedDesign {
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let states = temporary.appendingPathComponent("design/prototypes/picsee-browser/states")
+    try FileManager.default.createDirectory(at: states, withIntermediateDirectories: true)
+    let html = "<html><style>\(css)</style></html>"
+    let hash = SHA256.hash(data: Data(html.utf8)).map { String(format: "%02x", $0) }.joined()
+    try Data(html.utf8).write(to: states.appendingPathComponent("fixture.html"))
+    let manifest = "{\"states\":[{\"name\":\"fixture\",\"file\":\"fixture.html\",\"sha256\":\"\(hash)\"}]}"
+    try Data(manifest.utf8).write(to: states.appendingPathComponent("manifest.json"))
+    let source = temporary.appendingPathComponent("Packages/PicseeKit/Tests/PicseeMacUITests/Test.swift")
+    return try PinnedDesign.page("fixture", source: source.path)
+}
+
+@Test func pinnedDesignColorMixUsesCSSWeights() throws {
+    let page = try fixturePage(".a{color:color-mix(in srgb, black, white)} .b{color:color-mix(in srgb, black 20%, white 20%)} .c{color:color-mix(in srgb, black 20%, transparent 20%)} .d{color:color-mix(in srgb, black 80%, white 80%)} .e{color:color-mix(in srgb, black 20%, white)}")
+    #expect(try page.color(".a", "color", viewport: 800).red == 0.5)
+    #expect(try page.color(".b", "color", viewport: 800).red == 0.5)
+    #expect(try page.color(".b", "color", viewport: 800).alpha == 0.4)
+    #expect(try page.color(".c", "color", viewport: 800).alpha == 0.2)
+    #expect(try page.color(".d", "color", viewport: 800).red == 0.5)
+    #expect(try page.color(".d", "color", viewport: 800).alpha == 1)
+    #expect(try page.color(".e", "color", viewport: 800).red == 0.8)
+}
+
+@Test func pinnedDesignPropagatesBrokenLineHeightToken() throws {
+    let page = try fixturePage(".a{font-size:12px;font-weight:500;line-height:var(--missing)}")
+    #expect(throws: PinnedDesign.Error.self) { try page.font(".a", viewport: 800) }
+}
+
+@Test func pinnedDesignRejectsUnsupportedAtRules() throws {
+    for conditional in ["@media (prefers-reduced-motion:reduce){.a{gap:9px}}", "@supports (display:grid){.a{gap:9px}}", "@layer example{.a{gap:9px}}"] {
+        let page = try fixturePage(".a{gap:2px}" + conditional)
+        #expect(throws: PinnedDesign.Error.self) { try page.length(".a", "gap", viewport: 800) }
+    }
 }
 
 @Test func pinnedDesignTypographyAndColorsComeFromPages() throws {
