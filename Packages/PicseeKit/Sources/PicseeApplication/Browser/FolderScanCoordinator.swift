@@ -13,8 +13,10 @@ struct FolderScanRestorePoint {
     let currentItemID: ItemID?
     let currentURL: URL?
     let canPresent: (@MainActor () -> Bool)?
+    let folder: URL?
 }
 
+@MainActor private final class RefreshBuffer { var entries: [FolderEntry] = [] }
 /// One scan owner per window. The scanning task retains its lease until enumeration really exits.
 @MainActor @Observable public final class FolderScanCoordinator {
     public private(set) var snapshot: FolderSnapshot?
@@ -22,7 +24,7 @@ struct FolderScanRestorePoint {
     public private(set) var conditions = FolderViewConditions()
     public var isMetadataSortPending: Bool {
         guard sourceSnapshot != nil, conditions.sort == .captureDate || conditions.sort == .pixelDimensions else { return false }
-        return activeGeneration != nil || !pendingMetadataIDs.isEmpty
+        return activeGeneration != nil || refreshTask != nil || !pendingMetadataIDs.isEmpty
     }
     public var metadataSortState: MetadataSortState {
         guard sourceSnapshot != nil, conditions.sort == .captureDate || conditions.sort == .pixelDimensions else { return .idle }
@@ -120,6 +122,7 @@ struct FolderScanRestorePoint {
     private var metadataDrain: Task<Void, Never>?
     private var metadataRevision: UInt64 = 0
     private let trace: (any FolderScanTracing)?
+    private let watcher: (any FolderWatching)?
     private var firstBatchTraced = false
     private var noMatchesPresented = false
     var presentationRevision: UInt64 = 0
@@ -127,16 +130,110 @@ struct FolderScanRestorePoint {
     private var activeGeneration: UInt64?
     private var activeFolder: (url: URL, rootID: AccessRootID)?
     private var excludedPresentationNeedsReconciliation = false
-    public convenience init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)? = nil) {
-        self.init(access: access, scanner: scanner, trace: trace, metadataReader: nil)
+    private var sourceFolder: URL?
+    private var watch: (any FolderWatchSubscription)?
+    private var retiredWatches: [any FolderWatchSubscription] = []
+    private var watchToken: UInt64 = 0
+    private var watchRequested = false
+    private var refreshPending = false
+    private var refreshTask: Task<Void, any Error>?
+    public convenience init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)? = nil,
+        watcher: (any FolderWatching)? = nil) {
+        self.init(access: access, scanner: scanner, trace: trace, metadataReader: nil, watcher: watcher)
     }
     public convenience init(access: any AccessLeasing, scanner: any FolderScanning,
                             metadataReader: any FolderMetadataReading) {
-        self.init(access: access, scanner: scanner, trace: nil, metadataReader: metadataReader)
+        self.init(access: access, scanner: scanner, trace: nil, metadataReader: metadataReader, watcher: nil)
     }
     public init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)?,
-                metadataReader: (any FolderMetadataReading)?) {
-        self.access = access; self.scanner = scanner; self.trace = trace; self.metadataReader = metadataReader
+                metadataReader: (any FolderMetadataReading)?, watcher: (any FolderWatching)? = nil) {
+        self.access = access; self.scanner = scanner; self.trace = trace
+        self.metadataReader = metadataReader; self.watcher = watcher
+    }
+    /// Silent rescan of the complete source: no Reading State and no host start; nil when there is none.
+    @discardableResult public func refresh() -> Task<Void, any Error>? {
+        guard let source = sourceSnapshot, source.isComplete, activeGeneration == nil, failure == nil,
+              let folder = sourceFolder else { return nil }
+        refreshPending = false
+        refreshTask?.cancel()
+        invalidateMetadata()
+        generation &+= 1
+        let token = generation, rootID = source.version.rootID, buffer = RefreshBuffer()
+        let options = FolderScanOptions(recursive: recursiveEnabled)
+        trace?.begin(generation: token, folderURL: folder)
+        let task = Task { [self] in
+            do {
+                try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: nil, options: options,
+                    access: access, scanner: scanner, ready: { _, _ in }, emit: { buffer.entries += $0 })
+                try Task.checkCancellation()
+                guard generation == token else { throw CancellationError() }
+                refreshTask = nil
+                let fresh = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: token),
+                    entries: buffer.entries, isComplete: true)
+                trace?.complete(count: fresh.navigationEntries.count, generation: token)
+                trace?.end(outcome: .complete, generation: token)
+                applyRefresh(fresh)
+            } catch {
+                guard generation == token, !Task.isCancelled, !(error is CancellationError) else {
+                    trace?.end(outcome: .cancelled, generation: token); return
+                }
+                refreshTask = nil
+                trace?.failure(error, generation: token); trace?.end(outcome: .failed, generation: token)
+                enqueueMetadata()
+                if refreshPending { refresh() }
+                throw error
+            }
+            if refreshPending { refresh() }
+        }
+        refreshTask = task
+        return task
+    }
+    /// Keeps the Current Item, else moves to its successor (then predecessor) in the previous navigation order.
+    private func applyRefresh(_ fresh: FolderSnapshot) {
+        let previous = snapshot?.navigationEntries ?? []
+        sourceSnapshot = fresh
+        snapshot = fresh.applying(conditions, metadata: metadata)
+        enqueueMetadata()
+        guard let id = currentItemID, let snapshot else { return }
+        let kept = snapshot.navigationIndex(for: id)
+        if kept != nil, snapshot.entries.contains(where: {
+            $0.itemID == id && $0.url.standardizedFileURL == currentURL?.standardizedFileURL }) { return }
+        let order = kept.map { [snapshot.navigationEntries[$0]] } ?? previous.firstIndex { $0.itemID == id }.map {
+            Array(previous[($0 + 1)...]) + previous[..<$0].reversed() } ?? []
+        let target = order.lazy.compactMap { snapshot.navigationIndex(for: $0.itemID) }.first
+            .map { snapshot.navigationEntries[$0] }
+        let allowed = automaticPresentationAllowed?() != false
+        presentationRevision &+= 1
+        currentItemID = target?.itemID; currentURL = target?.url
+        guard let target else { inputURL = nil; if allowed { host?.clearFolderImageForNoMatches() }; return }
+        if allowed { host?.openFolderImage(target.url, rootID: snapshot.version.rootID) }
+    }
+    /// A replaced subscription is cancelled only once its successor exists, so a shared stream never restarts.
+    private func requestWatch() -> UInt64 { watchToken &+= 1; watchRequested = watcher != nil; return watchToken }
+    private func subscribeWatch(_ folder: URL, rootID: AccessRootID, recursive: Bool, token: UInt64) async {
+        guard let watcher, watchToken == token else { return }
+        let subscription = try? await watcher.subscribe(rootID: rootID, folder: folder,
+            recursive: recursive) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.watchDidChange(token) }
+        }
+        if watchToken == token { watch = subscription; watchRequested = false }
+        else if let subscription { retiredWatches.append(subscription) }
+        releaseRetiredWatches()
+    }
+    private func retireWatch() {
+        guard watcher != nil else { return }
+        if let watch { retiredWatches.append(watch) }
+        watch = nil; watchToken &+= 1; watchRequested = false
+        Task { @MainActor [weak self] in self?.releaseRetiredWatches() }
+    }
+    private func releaseRetiredWatches() {
+        guard !watchRequested, !retiredWatches.isEmpty else { return }
+        let retired = retiredWatches; retiredWatches = []
+        Task { for subscription in retired { await subscription.cancel() } }
+    }
+    private func watchDidChange(_ token: UInt64) {
+        guard token == watchToken else { return }
+        if activeGeneration != nil || refreshTask != nil { refreshPending = true } else { refresh() }
     }
     @discardableResult public func begin(folder: URL, rootID: AccessRootID, input: URL? = nil,
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool = { true }) -> Task<Void, any Error> {
@@ -160,8 +257,11 @@ struct FolderScanRestorePoint {
         automaticPresentationAllowed = canPresent
         isReadingFolder = input == nil
         firstBatchTraced = false
+        sourceFolder = folder
+        let watchToken = requestWatch()
         trace?.begin(generation: token, folderURL: folder)
         let task = Task { [self] in
+            await subscribeWatch(folder, rootID: rootID, recursive: recursiveEnabled, token: watchToken)
             do {
                 try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: input,
                     options: FolderScanOptions(recursive: recursiveEnabled),
@@ -224,6 +324,7 @@ struct FolderScanRestorePoint {
                 trace?.end(outcome: .complete, generation: token)
                 host?.folderScanDidComplete(count: completed.navigationEntries.count)
                 if showEmpty { host?.showEmptyFolder() }
+                if refreshPending { refresh() }
             } catch {
                 guard activeGeneration == token else { return }
                 if !Task.isCancelled, !retainReadingAuthority() { return }
@@ -241,6 +342,7 @@ struct FolderScanRestorePoint {
                 snapshot = sourceSnapshot?.applying(conditions, metadata: metadata)
                 pendingDirection = nil
                 failure = error
+                retireWatch()
                 trace?.failure(error, generation: token)
                 trace?.end(outcome: .failed, generation: token)
                 host?.folderScanDidEnd()
@@ -267,7 +369,7 @@ struct FolderScanRestorePoint {
         guard let sourceSnapshot, sourceSnapshot.isComplete else { return nil }
         return FolderScanRestorePoint(source: sourceSnapshot, conditions: conditions, loopEnabled: loopEnabled,
             recursiveEnabled: recursiveEnabled, inputURL: inputURL, currentItemID: currentItemID, currentURL: currentURL,
-            canPresent: automaticPresentationAllowed)
+            canPresent: automaticPresentationAllowed, folder: sourceFolder)
     }
     /// Restores without scanning and without an active generation, so a cancelled scan's late events stay ignored.
     func restore(_ point: FolderScanRestorePoint) {
@@ -281,8 +383,12 @@ struct FolderScanRestorePoint {
         sourceSnapshot = point.source
         // A still-current authority keeps the restored source rescannable (an Include Subfolders toggle from the grid).
         automaticPresentationAllowed = point.canPresent.flatMap { $0() ? $0 : nil }
-        snapshot = point.source.applying(point.conditions)
+        snapshot = point.source.applying(point.conditions, metadata: metadata)
         enqueueMetadata()
+        sourceFolder = point.folder
+        guard let folder = point.folder else { return }
+        let token = requestWatch(), rootID = point.source.version.rootID, recursive = point.recursiveEnabled
+        Task { await subscribeWatch(folder, rootID: rootID, recursive: recursive, token: token) }
     }
     public func cancel() { end() }
     public func end() { stop(.cancelled) }
@@ -350,6 +456,8 @@ struct FolderScanRestorePoint {
         isReadingFolder = false
         failure = nil
         noMatchesPresented = false
+        refreshTask?.cancel(); refreshTask = nil; refreshPending = false
+        retireWatch()
         if outcome == .cancelled { excludedPresentationNeedsReconciliation = false }
         if let ending { trace?.end(outcome: outcome, generation: ending) }
         host?.folderScanDidEnd()
