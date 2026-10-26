@@ -267,6 +267,10 @@ private struct GridGeometry: Equatable {
     public private(set) var selection = BrowserSelection()
     private var geometry: GridGeometry?
     private let thumbnailScheduler = GridThumbnailScheduler()
+    public var thumbnailPinning: (any ImagePresentationPinning)? {
+        get { thumbnailScheduler.pinning }
+        set { thumbnailScheduler.pinning = newValue }
+    }
     public var thumbnailLoader: (@Sendable (FolderEntry, AccessRootID, ThumbnailCoverage, DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage))? {
         didSet { reconcileThumbnails() }
     }
