@@ -8,6 +8,8 @@ struct AccessServices: Sendable {
     let recent: RecentFolderStore
     let lister = SiblingLister()
     let browser = FolderBrowser()
+    /// One watch per Access Root, shared by every window's folder scan.
+    let watch: WatchHub
     init(buildSHA: String) throws {
         let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                  appropriateFor: nil, create: true).appendingPathComponent("Picsee")
@@ -15,6 +17,7 @@ struct AccessServices: Sendable {
         files = try FileAccess(scope: system, bookmarks: system,
                                store: BookmarkStore(url: support.appendingPathComponent("access-roots.json")), buildSHA: buildSHA)
         recent = RecentFolderStore(url: support.appendingPathComponent("recent-folders.json"))
+        watch = WatchHub(access: files, source: FSEventSource(), scheduler: DispatchWatchScheduler())
     }
     func grant(_ folder: URL) async throws -> AccessRootID {
         let id = try await files.grant(folder: folder)

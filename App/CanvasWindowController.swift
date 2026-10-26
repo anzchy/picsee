@@ -731,7 +731,7 @@ extension CanvasWindowController: FolderScanHost {
     private func folderScanner(_ services: AccessServices) -> FolderScanCoordinator {
         if let scan = session.folderScan { return scan }
         let scan = FolderScanCoordinator(access: services.files, scanner: services.browser,
-            trace: NativeFolderScanTrace(), metadataReader: ImageFolderMetadataReader())
+            trace: NativeFolderScanTrace(), metadataReader: ImageFolderMetadataReader(), watcher: services.watch)
         scan.host = self
         session.folderScan = scan
         observeGridSnapshot(scan)
@@ -746,12 +746,20 @@ extension CanvasWindowController: FolderScanHost {
                snapshot != gridProjection.snapshot, gridProjection.apply(snapshot), snapshot.isComplete {
                 let anchor = gridView.firstVisibleItemID() ?? gridProjection.scrollAnchor
                 gridProjection.setScrollAnchor(anchor)
+                // A watched refresh only reconciles: an open Preview Set shrinks in place and the grid stays as shown.
+                let entering = folderEntryRestore != nil
                 session.updateItems(snapshot.navigationEntries.map(\.itemID),
                     sourceVersion: .init(snapshot.version.generation))
+                let offset = gridView.contentOffset
                 gridView.display(snapshot, selection: session.selection)
-                folderEntryRestore = nil
-                session.completeFolderEntry()
-                showGrid()
+                if entering {
+                    folderEntryRestore = nil
+                    session.completeFolderEntry()
+                    showGrid()
+                } else if !gridView.isHidden {
+                    gridView.restoreContentOffset(offset)
+                    gridView.activate(currentItemID: session.selection.currentItemID)
+                }
             }
         } onChange: { [weak self, weak scan] in
             Task { @MainActor [weak self, weak scan] in
