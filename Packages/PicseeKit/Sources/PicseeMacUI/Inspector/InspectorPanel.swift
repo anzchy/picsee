@@ -5,13 +5,22 @@ import PicseeApplication
 import PicseeCore
 
 public enum InspectorPanelLayout {
+    public static func width(for windowWidth: CGFloat) -> CGFloat {
+        if windowWidth <= 720 { return 220 }
+        if windowWidth <= 1050 { return 195 }
+        return 220
+    }
+    public static func overlaysContent(at windowWidth: CGFloat) -> Bool { windowWidth <= 720 }
     public static func labelWidth(_ label: String) -> CGFloat {
         max(48, ceil((label as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width))
     }
     public static func frame(in bounds: NSRect, grid: Bool) -> NSRect {
-        let width = min(220, bounds.width)
-        return NSRect(x: bounds.maxX - width, y: bounds.minY,
-                      width: width, height: bounds.height)
+        let width = min(Self.width(for: bounds.width), bounds.width)
+        if overlaysContent(at: bounds.width) {
+            return NSRect(x: bounds.maxX - width, y: bounds.minY + 38,
+                          width: width, height: max(0, bounds.height - 125))
+        }
+        return NSRect(x: bounds.maxX - width, y: bounds.minY, width: width, height: bounds.height)
     }
 }
 
@@ -113,7 +122,7 @@ public struct InspectorPanel: View {
         .padding(.horizontal, 17)
         .padding(.top, 12)
         .padding(.bottom, 18)
-        .frame(width: 220)
+        .frame(minWidth: 0, idealWidth: 220, maxWidth: .infinity)
         .background(DesignColor.canvasBackground.color)
         .shadow(color: .black.opacity(0.16), radius: 12, x: 0, y: 8)
         .overlay(alignment: .leading) { Rectangle().fill(DesignColor.divider.color).frame(width: 1) }
