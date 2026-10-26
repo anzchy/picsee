@@ -157,6 +157,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             }
         }
         gridView.thumbnailPinning = pipeline as? any ImagePresentationPinning
+        gridView.thumbnailPrefetchResumption = pipeline as? any PrefetchResuming
         gridView.autoresizingMask = [.width, .height]
         gridView.isHidden = true
         gridView.setAccessibilityHidden(true)

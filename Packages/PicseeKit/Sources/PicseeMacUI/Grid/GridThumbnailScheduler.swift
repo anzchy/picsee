@@ -57,6 +57,11 @@ enum GridThumbnailPixelSizing {
             }
         }
     }
+    /// Says when the pipeline admits prefetch again. While it waits, deferred cells are not asked again (unless they
+    /// become visible) and new margin cells are deferred unasked; when it returns the scheduler reconciles once.
+    var prefetchResumption: (any PrefetchResuming)?
+    private var resumption: Task<Void, Never>?
+    private var lastReconcile: (visible: Set<Int>, columns: Int, coverage: ThumbnailCoverage, loader: Loader)?
     /// Under memory pressure only visible cells are requested and held; prefetch resumes when it ends.
     func setMemoryPressure(_ active: Bool) { underPressure = active }
     private var underPressure = false
@@ -82,6 +87,7 @@ enum GridThumbnailPixelSizing {
             cancelAll(); return
         }
         if currentCoverage != coverage { cancelAll(); currentCoverage = coverage }
+        lastReconcile = (visible, columns, coverage, loader)
         let margin = max(1, columns) * 2
         let lower = max(0, first - margin)
         let upper = min(snapshot.navigationEntries.count - 1, last + margin)
@@ -95,7 +101,7 @@ enum GridThumbnailPixelSizing {
             var keepFailure = false
             if let record = records[index] {
                 let isVisible = visible.contains(index)
-                if record.deferred || isVisible && ((record.priority == .prefetch && record.task != nil)
+                if record.deferred && (resumption == nil || isVisible) || isVisible && ((record.priority == .prefetch && record.task != nil)
                     || (record.failed && record.task == nil && !record.wasVisible)) {
                     keepFailure = record.failed
                     previousFailure = record.failedRevision
@@ -111,6 +117,8 @@ enum GridThumbnailPixelSizing {
             records[index] = Record(token: token, itemID: entry.itemID, task: nil, result: nil,
                 failed: keepFailure, failedRevision: previousFailure,
                 priority: priority, wasVisible: visible.contains(index))
+            // The pipeline still refuses prefetch: the cell waits for the resumption instead of asking now.
+            if priority == .prefetch, resumption != nil { records[index]?.deferred = true; continue }
             records[index]?.task = Task { [weak self] in
                 do {
                     let loaded: (ImageDecodeRequest, DecodedImage)
@@ -162,6 +170,14 @@ enum GridThumbnailPixelSizing {
         records[index]?.task = nil
         records[index]?.deferred = true
         resumeTerminalWaiters(at: index)
+        guard resumption == nil, let prefetchResumption else { return }
+        resumption = Task { [weak self] in
+            await prefetchResumption.prefetchResumes()
+            guard !Task.isCancelled, let self else { return }
+            resumption = nil
+            guard let last = lastReconcile else { return }
+            reconcile(visible: last.visible, columns: last.columns, coverage: last.coverage, loader: last.loader)
+        }
     }
 
     private func fail(index: Int, token: UUID, error: any Error) {
@@ -191,11 +207,14 @@ enum GridThumbnailPixelSizing {
 
     func stop() { cancelAll(); snapshot = nil }
     private func cancelAll() {
+        resumption?.cancel()
+        resumption = nil
         for record in records.values { drop(record) }
         records.removeAll()
         for index in Array(terminalWaiters.keys) { resumeTerminalWaiters(at: index) }
     }
     deinit {
+        resumption?.cancel()
         for record in records.values {
             record.task?.cancel()
             if let key = record.result?.0.renderKey { pinOperations?.yield(.unpin(key)) }

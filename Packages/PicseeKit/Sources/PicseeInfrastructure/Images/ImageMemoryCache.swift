@@ -68,6 +68,7 @@ public actor ImageMemoryCache {
         }
     }
     func permits(_ priority: DecodePriority) -> Bool { pressurePolicy.permits(priority) }
+    func prefetchDelay() -> TimeInterval? { pressurePolicy.prefetchDelay() }
     func image(for key: RenderKey, context: ResourceSnapshotContext? = nil) -> DecodedImage? {
         guard let index = entries.firstIndex(where: { $0.key == key }) else { return nil }
         let entry = entries.remove(at: index)

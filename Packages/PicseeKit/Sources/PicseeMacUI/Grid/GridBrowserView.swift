@@ -271,6 +271,10 @@ private struct GridGeometry: Equatable {
         get { thumbnailScheduler.pinning }
         set { thumbnailScheduler.pinning = newValue }
     }
+    public var thumbnailPrefetchResumption: (any PrefetchResuming)? {
+        get { thumbnailScheduler.prefetchResumption }
+        set { thumbnailScheduler.prefetchResumption = newValue }
+    }
     public var thumbnailLoader: (@Sendable (FolderEntry, AccessRootID, ThumbnailCoverage, DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage))? {
         didSet { reconcileThumbnails() }
     }
