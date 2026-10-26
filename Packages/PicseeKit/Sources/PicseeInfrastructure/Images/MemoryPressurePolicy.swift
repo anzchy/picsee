@@ -3,7 +3,7 @@ import PicseeCore
 
 public enum MemoryPressureLevel: String, Sendable { case normal, warning, critical }
 
-/// State advances only at pressure delivery or a request; recovery needs no timer.
+/// State advances only at pressure delivery or a request; a waiter asks `prefetchDelay()` how long to sleep.
 struct MemoryPressurePolicy: Sendable {
     private(set) var level: MemoryPressureLevel = .normal
     let recoveryDelay: TimeInterval
@@ -25,5 +25,12 @@ struct MemoryPressurePolicy: Sendable {
             suspended = false; self.normalSince = nil
         }
         return priority != .prefetch || !suspended
+    }
+    /// Seconds until prefetch is permitted again, or nil when it is. While pressure lasts its end is unknown,
+    /// so the caller looks again after one recovery delay (at least a second).
+    mutating func prefetchDelay() -> TimeInterval? {
+        guard !permits(.prefetch) else { return nil }
+        guard level == .normal, let normalSince else { return max(recoveryDelay, 1) }
+        return recoveryDelay - (clock() - normalSince)
     }
 }

@@ -243,6 +243,8 @@ final class GatedDecoder: ImageDecoding, @unchecked Sendable {
     window.contentView = grid
     grid.thumbnailPinning = fake
     #expect(grid.thumbnailPinning != nil)
+    grid.thumbnailPrefetchResumption = GatedResumption()
+    #expect(grid.thumbnailPrefetchResumption != nil)
     grid.thumbnailLoader = pinningLoader
     grid.display(snapshot, selectedItemID: nil)
     window.layoutIfNeeded()

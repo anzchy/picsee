@@ -50,7 +50,8 @@ public struct ImageIODecoder: ImageDecoding {
     }
 }
 
-public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePresentationPinning, ThumbnailCacheProviding, Sendable {
+public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePresentationPinning, PrefetchResuming,
+    ThumbnailCacheProviding, Sendable {
     private let configuration: DecodeConfiguration
     private let rootResolvers = RootIdentityResolvers()
     private let identityResolver: any ItemIdentityResolving
@@ -59,12 +60,15 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
     let cache: ImageMemoryCache
     private let cacheTrace: (any ResourceSnapshotTracing)?
     package let thumbnailCache: (any ThumbnailCaching)?
+    private let pressureSleep: @Sendable (TimeInterval) async throws -> Void
     public init(decoder: any ImageDecoding = ImageIODecoder(), configuration: DecodeConfiguration = DecodeConfiguration(),
                 identityResolver: any ItemIdentityResolving = FileItemIdentityResolver(),
                 cache: ImageMemoryCache? = nil, cacheTrace: (any ResourceSnapshotTracing)? = nil,
                 thumbnailCache: (any ThumbnailCaching)? = nil,
-                pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+                pressureClock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+                pressureSleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }) {
         self.configuration = configuration
+        self.pressureSleep = pressureSleep
         let cache = cache ?? ImageMemoryCache(capacity: configuration.cacheCapacity, budget: MemoryBudget(limit: configuration.budget),
             pressureRecoveryDelay: configuration.pressureRecoveryDelay, pressureClock: pressureClock)
         self.cache = cache
@@ -92,6 +96,12 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
     public func memoryPressure(_ level: MemoryPressureLevel) async {
         let context = await snapshotContext()
         await cache.pressure(level, context: context)
+    }
+    /// Sleeps until the cache admits prefetch again; a cancelled caller returns.
+    public func prefetchResumes() async {
+        while !Task.isCancelled, let delay = await cache.prefetchDelay() {
+            try? await pressureSleep(delay)
+        }
     }
     private func header(_ request: ImageDecodeRequest) async throws -> ImageSourceHeader {
         guard request.fileURL.isFileURL, request.maximumPixelSize > 0 else {

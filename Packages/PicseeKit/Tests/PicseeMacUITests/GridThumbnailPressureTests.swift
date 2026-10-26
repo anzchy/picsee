@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 import PicseeCore
+@testable import PicseeInfrastructure
 @testable import PicseeMacUI
 
 /// Counts loader calls per item and priority; each item's outcome is chosen by the test.
@@ -147,4 +148,187 @@ private let pressureTile = ThumbnailCoverage(width: 212, height: 212)
 private actor Refusal {
     private(set) var on = false
     func set(_ value: Bool) { on = value }
+}
+
+/// A pressure clock that moves only when the test advances it; each sleep wakes once the clock reaches its end.
+final class ManualPressureTime: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: TimeInterval = 0
+    private var sleepers: [(id: UUID, until: TimeInterval, continuation: CheckedContinuation<Void, Error>)] = []
+    private var asked: [TimeInterval] = []
+    var now: TimeInterval { lock.withLock { current } }
+    var requested: [TimeInterval] { lock.withLock { asked } }
+    var sleeping: Int { lock.withLock { sleepers.count } }
+    func sleep(_ seconds: TimeInterval) async throws {
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let cancelled = lock.withLock {
+                    asked.append(seconds)
+                    if Task.isCancelled { return true }
+                    sleepers.append((id, current + seconds, continuation))
+                    return false
+                }
+                if cancelled { continuation.resume(throwing: CancellationError()) }
+            }
+        } onCancel: {
+            let sleeper = lock.withLock { () -> CheckedContinuation<Void, Error>? in
+                guard let index = sleepers.firstIndex(where: { $0.id == id }) else { return nil }
+                return sleepers.remove(at: index).continuation
+            }
+            sleeper?.resume(throwing: CancellationError())
+        }
+    }
+    func advance(by seconds: TimeInterval) {
+        let woken = lock.withLock { () -> [CheckedContinuation<Void, Error>] in
+            current += seconds
+            let due = sleepers.filter { $0.until <= current }
+            sleepers.removeAll { $0.until <= current }
+            return due.map(\.continuation)
+        }
+        for sleeper in woken { sleeper.resume() }
+    }
+    /// True once `count` sleeps are pending, within ten seconds.
+    func waitForSleepers(_ count: Int) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while sleeping != count, ContinuousClock.now < deadline { await Task.yield() }
+        return sleeping == count
+    }
+}
+
+/// Counts the scheduler's waits and forwards them to the pipeline.
+private actor CountingResumption: PrefetchResuming {
+    let base: any PrefetchResuming
+    private(set) var calls = 0
+    init(base: any PrefetchResuming) { self.base = base }
+    func prefetchResumes() async { calls += 1; await base.prefetchResumes() }
+}
+
+/// Holds each wait until `release()`; like the pipeline, a cancelled wait returns normally.
+actor GatedResumption: PrefetchResuming {
+    private(set) var calls = 0
+    private(set) var returned = 0
+    private var waiter: CheckedContinuation<Void, Never>?
+    func prefetchResumes() async {
+        calls += 1
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { waiter = $0 }
+        } onCancel: { Task { await self.release() } }
+        returned += 1
+    }
+    func release() { waiter?.resume(); waiter = nil }
+}
+
+@MainActor private func eventually(_ condition: @MainActor () async -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+    while await !condition(), ContinuousClock.now < deadline { await Task.yield() }
+    return await condition()
+}
+
+/// Real pipeline and its pressure clock: the scheduler waits for the pipeline's recovery delay, not for a scroll (#139 R1).
+@Suite(.timeLimit(.minutes(1))) @MainActor struct GridPrefetchResumptionTests {
+    // R1 1.1, 1.2, 1.4b: refused margin cells are asked once, kept through reconciles and scrolls inside the recovery
+    // window (a deferred cell that becomes visible is asked as visible), and requested once more when the delay ends.
+    @Test func deferredPrefetchWaitsForThePipelineAndResumesWithoutAScroll() async throws {
+        let (folder, names) = try GridSharedBudgetTests.folder(copies: 10)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let rootID = AccessRootID(rawValue: UUID()), root = ItemIdentityRoot(id: rootID, url: folder)
+        let snapshot = pinningSnapshot(count: names.count, folder: folder, rootID: rootID, names: names)
+        let ids = snapshot.navigationEntries.map(\.itemID)
+        let time = ManualPressureTime()
+        let pipeline = ImageIOPipeline(pressureClock: { time.now }, pressureSleep: { try await time.sleep($0) })
+        let budget = try #require(pipeline.cache.budget)
+        let resumption = CountingResumption(base: pipeline), log = PressureLoaderLog()
+        let scheduler = GridThumbnailScheduler()
+        scheduler.pinning = pipeline
+        scheduler.prefetchResumption = resumption
+        scheduler.setSnapshot(snapshot)
+        var failures: [Int] = []
+        scheduler.onFailure = { failures.append($0) }
+        let real = GridSharedBudgetTests.loader(pipeline, root: root)
+        let loader: GridThumbnailScheduler.Loader = { entry, rootID, coverage, priority in
+            await log.record(entry.itemID, priority)
+            return try await real(entry, rootID, coverage, priority)
+        }
+        let tile = ThumbnailCoverage(width: 16, height: 12)
+        func reconcile(_ visible: Set<Int>) { scheduler.reconcile(visible: visible, columns: 1, coverage: tile, loader: loader) }
+
+        await pipeline.memoryPressure(.warning)
+        await pipeline.memoryPressure(.normal)
+        reconcile([0])
+        for index in 0...2 { await scheduler.waitForTerminal(at: index) }
+        #expect(scheduler.result(at: 0) != nil)
+        #expect(scheduler.result(at: 1) == nil && scheduler.result(at: 2) == nil)
+        #expect(await time.waitForSleepers(1))
+        for _ in 0..<3 { reconcile([0]) }
+        reconcile([2])
+        await scheduler.waitForTerminal(at: 2)
+        reconcile([3])
+        await scheduler.waitForTerminal(at: 3)
+        let window = await log.calls
+        #expect(window[ids[0]] == [.visible])
+        #expect(window[ids[1]] == [.prefetch])
+        #expect(window[ids[2]] == [.prefetch, .visible])
+        #expect(window[ids[3]] == [.visible])
+        #expect(window[ids[4]] == nil && window[ids[5]] == nil)
+        #expect(failures.isEmpty)
+        #expect(await resumption.calls == 1)
+
+        time.advance(by: 5)
+        #expect(await eventually { (1...5).allSatisfy { scheduler.result(at: $0) != nil } })
+        let resumed = await log.calls
+        #expect(resumed[ids[0]] == [.visible])
+        #expect(resumed[ids[1]] == [.prefetch, .prefetch])
+        #expect(resumed[ids[2]] == [.prefetch, .visible])
+        #expect(resumed[ids[3]] == [.visible])
+        #expect(resumed[ids[4]] == [.prefetch] && resumed[ids[5]] == [.prefetch])
+        #expect(resumed[ids[6]] == nil)
+        #expect(failures.isEmpty)
+        await scheduler.settlePins()
+        let held = (1...5).compactMap { scheduler.result(at: $0)?.1.image }.reduce(0) { $0 + $1.bytesPerRow * $1.height }
+        #expect(budget.usage.pinned == held)
+
+        // A second pressure episode defers the margin again and resumes it the same way.
+        await pipeline.memoryPressure(.warning)
+        scheduler.setMemoryPressure(true)
+        reconcile([3])
+        await pipeline.memoryPressure(.normal)
+        scheduler.setMemoryPressure(false)
+        reconcile([3])
+        for index in 1...5 { await scheduler.waitForTerminal(at: index) }
+        #expect(await time.waitForSleepers(1))
+        #expect(await resumption.calls == 2)
+        #expect(scheduler.result(at: 1) == nil && scheduler.result(at: 5) == nil)
+        time.advance(by: 5)
+        #expect(await eventually { [1, 2, 4, 5].allSatisfy { scheduler.result(at: $0) != nil } })
+        #expect(await log.calls[ids[1]] == [.prefetch, .prefetch, .prefetch, .prefetch])
+        #expect(failures.isEmpty)
+        scheduler.stop()
+        await scheduler.settlePins()
+        #expect(budget.usage.pinned == 0)
+    }
+
+    // R1 1.3: a folder change while waiting cancels the wait; nothing is asked when the wait returns.
+    @Test func folderChangeCancelsThePrefetchWait() async {
+        let log = PressureLoaderLog(), refusing = Refusal(), gate = GatedResumption()
+        let scheduler = GridThumbnailScheduler()
+        scheduler.prefetchResumption = gate
+        scheduler.setSnapshot(pinningSnapshot(count: 5))
+        let loader: GridThumbnailScheduler.Loader = { entry, _, coverage, priority in
+            await log.record(entry.itemID, priority)
+            if priority == .prefetch, await refusing.on { throw ImageLoadError(.cancelled, itemID: entry.itemID) }
+            return pressureDecoded(entry, coverage: coverage)
+        }
+        await refusing.set(true)
+        scheduler.reconcile(visible: [0], columns: 1, coverage: pressureTile, loader: loader)
+        for index in 0...2 { await scheduler.waitForTerminal(at: index) }
+        #expect(await eventually { await gate.calls == 1 })
+        scheduler.setSnapshot(pinningSnapshot(count: 5))
+        #expect(await eventually { await gate.returned == 1 })
+        await refusing.set(false)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(scheduler.token(at: 0) == nil)
+        #expect(await log.calls.values.reduce(0) { $0 + $1.count } == 3)
+        scheduler.stop()
+    }
 }
