@@ -1,4 +1,5 @@
 import Foundation
+import os
 import PicseeCore
 
 /// One event stream and one root lease per AccessRootID while any subscriber of that root is live.
@@ -11,12 +12,14 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
     private let scheduler: any WatchScheduling
     private let lock = NSLock()
     private var roots: [AccessRootID: Root] = [:]
+    /// Paths stay out of the log; root IDs and error kinds are public so a folder that stops updating can be diagnosed.
+    private let log = Logger(subsystem: "io.github.anzchy.picsee", category: "watch")
 
     /// Mutable state below is guarded by the hub's lock.
     private final class Subscriber: @unchecked Sendable {
-        let id = UUID(), folder: URL, path: [String], recursive: Bool, onChange: @Sendable ([FolderChangeHint]) -> Void
-        var pending: [FolderChangeHint] = [], timer: (any WatchCancellable)?, windowStart: Int?, epoch = 0
-        init(folder: URL, recursive: Bool, onChange: @escaping @Sendable ([FolderChangeHint]) -> Void) {
+        let id = UUID(), folder: URL, path: [String], recursive: Bool, onChange: @Sendable () -> Void
+        var pending = false, timer: (any WatchCancellable)?, windowStart: Int?, epoch = 0
+        init(folder: URL, recursive: Bool, onChange: @escaping @Sendable () -> Void) {
             self.folder = folder; path = WatchHub.canonical(folder); self.recursive = recursive; self.onChange = onChange
         }
         /// `path` nil means mustRescan. Ancestors, the folder itself and its (direct, unless recursive) contents are relevant.
@@ -42,7 +45,7 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
     }
 
     public func subscribe(rootID: AccessRootID, folder: URL, recursive: Bool,
-        onChange: @escaping @Sendable ([FolderChangeHint]) -> Void) async throws -> any FolderWatchSubscription {
+        onChange: @escaping @Sendable () -> Void) async throws -> any FolderWatchSubscription {
         let subscriber = Subscriber(folder: folder, recursive: recursive, onChange: onChange)
         let (root, transition) = lock.withLock { () -> (Root, Task<(any Error)?, Never>) in
             let root = roots[rootID] ?? Root()
@@ -59,12 +62,12 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
 
     /// Delivers immediately, outside the lock; a pending debounce window is cancelled and folded into this one delivery.
     public func reconcileAll() {
-        let due = lock.withLock { roots.values.flatMap(\.subscribers.values).map { s -> (Subscriber, [FolderChangeHint]) in
-            s.timer?.cancel(); s.timer = nil; s.windowStart = nil; s.epoch += 1
-            defer { s.pending = [] }
-            return (s, s.pending + [.mustRescan])
+        let due = lock.withLock { roots.values.flatMap(\.subscribers.values).map { s in
+            s.timer?.cancel(); s.timer = nil; s.windowStart = nil; s.epoch += 1; s.pending = false
+            return s
         } }
-        for (subscriber, hints) in due { subscriber.onChange(hints) }
+        log.notice("FolderWatch reconcile subscribers=\(due.count, privacy: .public)")
+        for subscriber in due { subscriber.onChange() }
     }
 
     private func remove(_ id: UUID, from root: Root, _ rootID: AccessRootID) async {
@@ -107,14 +110,24 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
         case .none: return nil
         case .stop(let stream, let lease):
             stream.stop()
+            log.notice("FolderWatch stop root=\(rootID.rawValue.uuidString, privacy: .public)")
             await access.release(lease)
             return nil
         case .start(let folder):
             let lease: AccessLease
-            do { lease = try await access.acquire(.root(rootID, file: folder)) } catch { return error }
+            do { lease = try await access.acquire(.root(rootID, file: folder)) } catch {
+                log.error("FolderWatch lease failed root=\(rootID.rawValue.uuidString, privacy: .public) error=\(String(describing: type(of: error)), privacy: .public)")
+                return error
+            }
             guard lock.withLock({ !root.subscribers.isEmpty }) else { await access.release(lease); return nil }
-            let stream = source.start(watching: lease.url) { [weak self] hints in self?.deliver(hints, to: root) }
+            let stream: any FolderEventStream
+            do { stream = try source.start(watching: lease.url) { [weak self] hints in self?.deliver(hints, to: root) } } catch {
+                log.error("FolderWatch stream failed root=\(rootID.rawValue.uuidString, privacy: .public) error=\(String(describing: error), privacy: .public)")
+                await access.release(lease)
+                return error
+            }
             lock.withLock { root.stream = stream; root.lease = lease }
+            log.notice("FolderWatch start root=\(rootID.rawValue.uuidString, privacy: .public)")
             return nil
         }
     }
@@ -131,12 +144,12 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
 
     private func deliver(_ hints: [FolderChangeHint], to root: Root) {
         let paths = hints.map { hint -> [String]? in if case .changed(let url) = hint { Self.canonical(url) } else { nil } }
+        if paths.contains(where: { $0 == nil }) { log.notice("FolderWatch mustRescan") }
         lock.withLock {
             let now = scheduler.nowMilliseconds
             for subscriber in root.subscribers.values {
-                let relevant = zip(hints, paths).filter { subscriber.isRelevant($1) }.map(\.0)
-                guard !relevant.isEmpty else { continue }
-                subscriber.pending += relevant
+                guard paths.contains(where: subscriber.isRelevant) else { continue }
+                subscriber.pending = true
                 let start = subscriber.windowStart ?? now
                 subscriber.windowStart = start; subscriber.epoch += 1
                 subscriber.timer?.cancel()
@@ -149,12 +162,12 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
     }
 
     private func flush(_ subscriber: Subscriber, of root: Root, epoch: Int) {
-        let hints = lock.withLock { () -> [FolderChangeHint] in
-            guard subscriber.epoch == epoch, root.subscribers[subscriber.id] === subscriber else { return [] }
+        let due = lock.withLock { () -> Bool in
+            guard subscriber.epoch == epoch, root.subscribers[subscriber.id] === subscriber else { return false }
             subscriber.timer = nil; subscriber.windowStart = nil
-            defer { subscriber.pending = [] }
+            defer { subscriber.pending = false }
             return subscriber.pending
         }
-        if !hints.isEmpty { subscriber.onChange(hints) }
+        if due { subscriber.onChange() }
     }
 }

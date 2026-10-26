@@ -217,7 +217,7 @@ struct FolderScanRestorePoint {
     private func subscribeWatch(_ folder: URL, rootID: AccessRootID, recursive: Bool, token: UInt64) async {
         guard let watcher, watchToken == token else { return }
         let subscription = try? await watcher.subscribe(rootID: rootID, folder: folder,
-            recursive: recursive) { [weak self] _ in
+            recursive: recursive) { [weak self] in
             Task { @MainActor [weak self] in self?.watchDidChange(token) }
         }
         if watchToken == token { watch = subscription; watchRequested = false }
