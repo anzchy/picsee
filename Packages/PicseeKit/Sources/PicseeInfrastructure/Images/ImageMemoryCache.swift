@@ -85,7 +85,7 @@ public actor ImageMemoryCache {
     }
     func remove(_ key: RenderKey, context: ResourceSnapshotContext? = nil) {
         guard let index = entries.firstIndex(where: { $0.key == key && $0.pins == 0 }) else { return }
-        entries.remove(at: index); emit(context); account()
+        entries.remove(at: index); emit(context); account(context)
     }
     func pin(_ key: RenderKey, image: DecodedImage, context: ResourceSnapshotContext? = nil) {
         guard image.itemID == key.itemID, image.revision == key.revision else { return }
@@ -111,7 +111,7 @@ public actor ImageMemoryCache {
                 emit(context)
             }
             trim(to: limit, context: context)
-        } else { account() }
+        } else { account(context) }
     }
     /// Frees at least `bytes` of evictable pixels, oldest first, so admission can stage a decode.
     func release(bytes: Int, context: ResourceSnapshotContext? = nil) {
@@ -119,29 +119,30 @@ public actor ImageMemoryCache {
         while usage().unpinnedBytes > target, let index = entries.firstIndex(where: { $0.pins == 0 }) {
             entries.remove(at: index); emit(context)
         }
-        account()
+        account(context)
     }
     func pinCount(for key: RenderKey) -> Int { entries.first(where: { $0.key == key })?.pins ?? 0 }
     func pendingCount() -> Int { pending.count }
     func trim(to limit: Int, context: ResourceSnapshotContext? = nil) {
         precondition(limit >= 0)
         self.limit = min(capacity, limit)
-        while self.limit == 0 || usage().unpinnedBytes > min(self.limit, evictableRoom()) {
+        while self.limit == 0 || usage().unpinnedBytes > self.limit {
             guard let index = entries.firstIndex(where: { $0.pins == 0 }) else { break }
             entries.remove(at: index)
             emit(context)
         }
-        account()
+        account(context)
     }
-    /// Evictable pixels may use only what pins and admitted decodes leave of the shared budget.
-    private func evictableRoom() -> Int {
-        guard let budget else { return .max }
-        return max(0, budget.limit - usage().pinnedBytes - budget.usage.reserved)
-    }
-    private func account() {
+    /// Evictable pixels may use only what pins and admitted decodes leave of the shared budget;
+    /// the ledger decides that room under its lock, and the oldest entries go until they fit.
+    private func account(_ context: ResourceSnapshotContext? = nil) {
         guard let budget else { return }
-        let state = usage()
-        budget.resident(pinned: state.pinnedBytes, evictable: state.unpinnedBytes)
+        var state = usage()
+        while state.unpinnedBytes > budget.resident(pinned: state.pinnedBytes, evictable: state.unpinnedBytes),
+              let index = entries.firstIndex(where: { $0.pins == 0 }) {
+            entries.remove(at: index); emit(context)
+            state = usage()
+        }
     }
     func withObservation<T: Sendable>(itemID: ItemID? = nil,
         _ operation: @Sendable (UUID) async throws -> T) async rethrows -> T {
@@ -203,7 +204,7 @@ public actor ImageMemoryCache {
         while let index = entries.firstIndex(where: { $0.stale && $0.pins == 0 }) {
             entries.remove(at: index); emit(context)
         }
-        account()
+        account(context)
         pending = pending.filter { $0.value.itemID != key.itemID || $0.value.revision == key.revision }
         let request = ImageCacheRequest(key: key, id: UUID(), image: image(for: key, context: context))
         if request.image == nil { pending[request.id] = key }
