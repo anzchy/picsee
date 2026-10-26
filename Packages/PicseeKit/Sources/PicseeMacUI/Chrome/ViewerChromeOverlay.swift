@@ -151,6 +151,8 @@ public final class ViewerChromeOverlay: NSView {
     public private(set) var filename: String?
     public private(set) var position: String?
     private let fileLabel = NSTextField(labelWithString: "")
+    let metadataSortNotice = GridSortNoticeLabel(labelWithString: String(localized: "Sort unfinished"))
+    private var displayedMetadataSortState: MetadataSortState = .idle
     public override func draw(_ dirtyRect: NSRect) {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -187,6 +189,11 @@ public final class ViewerChromeOverlay: NSView {
         fileLabel.lineBreakMode = .byTruncatingMiddle
         fileLabel.font = DesignMetrics.font("uiSmall")
         groups[1].addSubview(fileLabel)
+        metadataSortNotice.isHidden = true
+        metadataSortNotice.font = .systemFont(ofSize: 12, weight: .medium)
+        metadataSortNotice.textColor = .secondaryLabelColor
+        metadataSortNotice.wantsLayer = true
+        addSubview(metadataSortNotice)
         arrangeGroups()
         updateGroupColors()
         refresh()
@@ -199,6 +206,7 @@ public final class ViewerChromeOverlay: NSView {
         needsDisplay = true
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         effectiveAppearance.performAsCurrentDrawingAppearance {
+            metadataSortNotice.layer?.backgroundColor = DesignColor.canvasBackground.nsColor.cgColor
             for group in groups {
                 guard let layer = group.layer else { continue }
                 layer.backgroundColor = DesignColor.popoverBackground.nsColor.cgColor
@@ -232,10 +240,24 @@ public final class ViewerChromeOverlay: NSView {
         groups[1].frame = NSRect(x: centerX, y: singleRow ? 14 : 60, width: width, height: 38)
         tools[3].setFrameOrigin(NSPoint(x: width - 35, y: 5))
         fileLabel.frame = NSRect(x: 37, y: 10, width: max(0, width - 74), height: 18)
+        metadataSortNotice.sizeToFit()
+        metadataSortNotice.frame.origin = NSPoint(x: max(12, bounds.maxX - metadataSortNotice.frame.width - 20), y: 64)
         for group in groups {
             group.layer?.shadowPath = CGPath(roundedRect: group.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
         }
         needsDisplay = true
+    }
+    public func setMetadataSortState(_ state: MetadataSortState) {
+        guard displayedMetadataSortState != state else { return }
+        displayedMetadataSortState = state
+        let visible = state == .pending || state == .incomplete
+        let label = String(localized: state == .incomplete ? "Sort metadata unavailable" : "Sort unfinished")
+        metadataSortNotice.stringValue = label
+        metadataSortNotice.setAccessibilityLabel(label)
+        metadataSortNotice.setAccessibilityIdentifier(state == .incomplete ? "folder.sort.incomplete" : "folder.sort.pending")
+        metadataSortNotice.isHidden = !visible
+        metadataSortNotice.setAccessibilityHidden(!visible)
+        arrangeGroups()
     }
     public static let edgeBandHeight: CGFloat = 32
     public func pointerMoved(_ point: NSPoint) {

@@ -29,8 +29,9 @@ import Testing
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
     defer { try? FileManager.default.removeItem(at: url) }
     try Data("not an image".utf8).write(to: url)
-    let result = try ImageFolderMetadataReader().read(url)
-    #expect(result.captureDate == nil && result.pixelWidth == nil && result.pixelHeight == nil)
+    #expect(throws: FolderMetadataReadError.unreadableHeader) {
+        try ImageFolderMetadataReader().read(url)
+    }
 }
 
 @Test func issue108CaptureDateFallsBackToTIFFHeader() throws {
@@ -70,9 +71,11 @@ import Testing
     #expect(metadata.captureDate == ImageFolderMetadataReader.captureDate("2020:04:04 22:07:08"))
 }
 
-@Test func issue108MalformedCaptureOffsetStaysUnknown() {
-    #expect(ImageFolderMetadataReader.captureDate("2020:04:05 06:07:08", offset: "+99:00") == nil)
-    #expect(ImageFolderMetadataReader.captureDate("2020:04:05 06:07:08", offset: "bad") == nil)
+@Test func issue108MalformedCaptureOffsetFallsBackToUTC() {
+    #expect(ImageFolderMetadataReader.captureDate("2020:04:05 06:07:08", offset: "+99:00")
+        == ImageFolderMetadataReader.captureDate("2020:04:05 06:07:08"))
+    #expect(ImageFolderMetadataReader.captureDate("2020:04:05 06:07:08", offset: "bad")
+        == ImageFolderMetadataReader.captureDate("2020:04:05 06:07:08"))
     #expect(ImageFolderMetadataReader.captureDate("2020:04:05 06:07:08", offset: "-02:00")
         == ImageFolderMetadataReader.captureDate("2020:04:05 08:07:08"))
 }

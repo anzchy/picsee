@@ -739,7 +739,8 @@ extension CanvasWindowController: FolderScanHost {
     }
     private func observeGridSnapshot(_ scan: FolderScanCoordinator) {
         withObservationTracking {
-            gridView.setMetadataSortPending(scan.isMetadataSortPending)
+            gridView.setMetadataSortState(scan.metadataSortState)
+            chromeOverlay.setMetadataSortState(scan.metadataSortState)
             // A restored source equals the projection already shown; repainting it would cover a restored viewer.
             if let snapshot = scan.snapshot, gridFolderRoot == snapshot.version.rootID,
                snapshot != gridProjection.snapshot, gridProjection.apply(snapshot), snapshot.isComplete {
