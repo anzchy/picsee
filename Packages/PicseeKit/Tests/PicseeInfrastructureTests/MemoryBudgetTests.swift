@@ -118,6 +118,57 @@ private struct BudgetRig {
         #expect(rig.budget.peak == limit)
     }
 
+    // R1 4.1 (opus M3): eviction that cannot admit a non-current job evicts nothing; an idle `.current` takes only its shortfall.
+    @Test func budgetDoesNotEvictWhenEvictionCannotAdmit() async throws {
+        let rig = BudgetRig()
+        defer { rig.releaseAll() }
+        try await rig.fill(1...2, pinned: true)
+        try await rig.fill(3...4, pinned: false)
+        let visible = await rig.subscribe(100, cost: 3 * unit, .visible)
+        var starts = rig.decoder.started.makeAsyncIterator()
+        // The current job's own release runs only after any release the visible job started has finished.
+        let current = await rig.subscribe(101, .current)
+        _ = await starts.next()
+        #expect(await rig.cache.image(for: cacheKey(3)) == nil)
+        #expect(await rig.cache.image(for: cacheKey(4)) != nil)
+        #expect(await rig.admission.activity().waiting == 1)
+        rig.decoder.gate.signal()
+        _ = try await current.value()
+        await visible.cancel()
+        await #expect(throws: CancellationError.self) { try await visible.value() }
+        #expect(rig.budget.peak == limit)
+    }
+
+    // R1 4.1c: an idle `.current` whose shortfall exceeds the evictable bytes still evicts them all, then may exceed.
+    @Test func budgetIdleCurrentEvictsEverythingEvenBeyondItsShortfall() async throws {
+        let rig = BudgetRig()
+        defer { rig.releaseAll() }
+        try await rig.fill(1...3, pinned: true)
+        try await rig.fill(4...4, pinned: false)
+        var starts = rig.decoder.started.makeAsyncIterator()
+        let current = await rig.subscribe(100, cost: 2 * unit, .current)
+        _ = await starts.next()
+        #expect(await rig.cache.usage().unpinnedBytes == 0)
+        #expect(rig.budget.usage == MemoryBudget.Usage(pinned: 48, evictable: 0, reserved: 32))
+        rig.decoder.gate.signal()
+        _ = try await current.value()
+    }
+
+    // R1 4.1b: when the shortfall equals the evictable bytes, eviction admits a `.visible` job.
+    @Test func budgetEvictsWhenTheShortfallEqualsEvictable() async throws {
+        let rig = BudgetRig()
+        defer { rig.releaseAll() }
+        try await rig.fill(1...2, pinned: true)
+        try await rig.fill(3...4, pinned: false)
+        var starts = rig.decoder.started.makeAsyncIterator()
+        let visible = await rig.subscribe(100, cost: 2 * unit, .visible)
+        _ = await starts.next()
+        #expect(await rig.cache.usage().unpinnedBytes == 0)
+        rig.decoder.gate.signal()
+        _ = try await visible.value()
+        #expect(rig.budget.peak == limit)
+    }
+
     // 2.5, 2.6, 2.6b: inserts and pins keep pinned + evictable + reserved within the limit, and the peak sees them.
     @Test func budgetInsertsAndPinsTrimEvictableToTheRoomLeft() async throws {
         let rig = BudgetRig()
