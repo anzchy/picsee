@@ -17,6 +17,28 @@ import PicseeCore
         }
     }
     public var isGridVisible: Bool { !grid.isHidden }
+    public func layoutInspector(visible: Bool) {
+        guard let parent = canvas.superview else { return }
+        let bounds = parent.bounds
+        let panelWidth: CGFloat = visible ? min(220, bounds.width) : 0
+        let contentWidth = max(0, bounds.width - panelWidth)
+        let content = NSRect(x: bounds.minX, y: bounds.minY, width: contentWidth, height: bounds.height)
+        canvas.frame = content
+        chrome.frame = content
+        if let shell {
+            shell.frame = NSRect(x: bounds.minX, y: bounds.minY, width: contentWidth,
+                                 height: max(0, bounds.height - 28))
+            shell.layoutSubtreeIfNeeded()
+            if !state.isHidden && !shell.isHidden {
+                state.frame = shell.convert(shell.mainFrame, to: parent)
+            } else if shell.isHidden {
+                state.frame = content
+            }
+        } else {
+            state.frame = content
+        }
+        inspector.frame = InspectorPanelLayout.frame(in: bounds, grid: !grid.isHidden)
+    }
     /// Begins a folder preview from the visible grid's ordered snapshot.
     public func beginPreview(_ session: ViewerSession, snapshot: FolderSnapshot?, scrollAnchor: ItemID?) {
         session.beginBrowsing(items: snapshot?.navigationEntries.map(\.itemID) ?? [],

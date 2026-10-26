@@ -52,6 +52,22 @@ private actor HeldInspectorReader: InspectorMetadataReading {
     #expect(model.value == .unreadable)
 }
 
+@Test @MainActor func issue136InspectorRefreshesSameURLWhenRevisionChanges() async {
+    let reader = HeldInspectorReader(), model = InspectorModel(reader: reader)
+    let url = URL(fileURLWithPath: "/tmp/revised.png")
+    model.select(itemID: nil, url: url, access: .fileGrant(url), revision: "first")
+    await Task.yield()
+    await reader.release("revised.png", result: .success(.init(pixelWidth: 100)))
+    for _ in 0..<20 where model.value == .loading { await Task.yield() }
+    #expect(model.value == .known(.init(pixelWidth: 100)))
+    model.select(itemID: nil, url: url, access: .fileGrant(url), revision: "second")
+    #expect(model.value == .loading)
+    await Task.yield()
+    await reader.release("revised.png", result: .success(.init(pixelWidth: 200)))
+    for _ in 0..<20 where model.value == .loading { await Task.yield() }
+    #expect(model.value == .known(.init(pixelWidth: 200)))
+}
+
 @Test @MainActor func issue136GridCurrentItemCanOpenInspectorAndEscapeRestoresCanvas() {
     let host = FakeSessionHost(), session = ViewerSession(host: host)
     let first = ItemID.rootRelative(rootID: AccessRootID(), relativePath: "one.png")

@@ -520,15 +520,16 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     func requestOpen() { onOpenRequest?() }
     func showInspector(_ visible: Bool) {
-        layoutInspector()
         inspectorHost.isHidden = !visible
+        layoutInspector()
         syncInspector()
     }
     /// Public toggle for the grid footer's later info button.
     func toggleInspector() { _ = route(.inspector, from: .button) }
     private func layoutInspector() {
-        guard inspectorHost != nil, let bounds = window?.contentView?.bounds else { return }
-        inspectorHost.frame = InspectorPanelLayout.frame(in: bounds, grid: !gridView.isHidden)
+        guard inspectorHost != nil else { return }
+        presentation.layoutInspector(visible: inspectorVisible && !inspectorHost.isHidden)
+        canvas.synchronizeViewport()
     }
     private func syncInspector(refresh: Bool = false) {
         guard session.inspectorFocus.isVisible else {
@@ -542,8 +543,10 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             inspector.select(itemID: id, url: entry.url, access: .root(root, file: entry.url), refresh: refresh)
         } else if let fileURL {
             let access = retryIntent?.accessRequest ?? gridFolderRoot.map { AccessRequest.root($0, file: fileURL) } ?? .fileGrant(fileURL)
-            inspector.select(itemID: session.currentItemID ?? session.imageLoader.presented?.key.itemID,
-                url: fileURL, access: access, refresh: refresh)
+            let revision = session.imageLoader.presented?.key.revision
+            let revisionKey = revision.map { "\($0.resourceIdentifier ?? "")|\($0.byteCount)|\($0.modificationDate?.timeIntervalSinceReferenceDate ?? -1)" }
+            inspector.select(itemID: session.currentItemID, url: fileURL, access: access,
+                revision: revisionKey, refresh: refresh)
         } else { inspector.select(itemID: nil, url: nil, access: nil) }
     }
     func applyFocus(_ focus: FocusContext) {
@@ -693,7 +696,12 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             menuTracking: menuTracking(), focus: focusContext, keyCode: event.keyCode) {
             return route(.escape, from: .key)
         }
-        guard !menuTracking(), inspectorVisible, focusContext != .canvas else { return false }
+        guard !menuTracking(), inspectorVisible else { return false }
+        if event.keyCode == 48 && session.inspectorFocus.focus == .canvas {
+            session.tab(reverse: event.modifierFlags.contains(.shift))
+            return true
+        }
+        guard focusContext != .canvas else { return false }
         if event.keyCode == 48 && (focusContext == .tools || event.modifierFlags.contains(.shift)) {
             session.tab(reverse: event.modifierFlags.contains(.shift))
             return true

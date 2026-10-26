@@ -5,6 +5,9 @@ import PicseeApplication
 import PicseeCore
 
 public enum InspectorPanelLayout {
+    public static func labelWidth(_ label: String) -> CGFloat {
+        max(48, ceil((label as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width))
+    }
     public static func frame(in bounds: NSRect, grid: Bool) -> NSRect {
         let footer: CGFloat = grid ? 40 : 0
         let title: CGFloat = grid ? 28 : 0
@@ -20,7 +23,6 @@ public struct InspectorPanel: View {
     public let close: () -> Void
     public let restoreCanvasFocus: () -> Void
     public let updateFocus: (FocusContext) -> Void
-    @FocusState private var closeFocused: Bool
 
     public init(model: InspectorModel, session: ViewerSession, close: @escaping () -> Void,
                 restoreCanvasFocus: @escaping () -> Void, updateFocus: @escaping (FocusContext) -> Void) {
@@ -46,7 +48,9 @@ public struct InspectorPanel: View {
     }
     private func row(_ label: String, _ value: String, id: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
-            Text(label).foregroundStyle(DesignColor.textSecondary.color).frame(width: 48, alignment: .leading)
+            Text(label).foregroundStyle(DesignColor.textSecondary.color)
+                .frame(width: InspectorPanelLayout.labelWidth(label), alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 0)
             Text(value).font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(DesignColor.textPrimary.color).multilineTextAlignment(.trailing)
@@ -59,11 +63,9 @@ public struct InspectorPanel: View {
             HStack {
                 Text("Image Information").font(.system(size: 13, weight: .medium))
                 Spacer()
-                Button(action: close) { Image(systemName: "xmark").font(.system(size: 12)) }
-                    .buttonStyle(.plain).frame(width: 24, height: 24)
-                    .accessibilityLabel(Text("Close Inspector"))
-                    .accessibilityIdentifier("inspector.close")
-                    .focused($closeFocused)
+                InspectorCloseControl(focused: session.inspectorFocus.focus == .textInput || session.inspectorFocus.focus == .panel,
+                    close: close, updateFocus: updateFocus, restoreCanvasFocus: restoreCanvasFocus)
+                    .frame(width: 24, height: 24)
             }
             .frame(height: 36)
             .padding(.bottom, 12)
@@ -100,14 +102,54 @@ public struct InspectorPanel: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 17)
+        .padding(.top, 12)
         .padding(.bottom, 18)
         .frame(width: 220)
         .background(DesignColor.canvasBackground.color)
+        .shadow(color: .black.opacity(0.16), radius: 12, x: 0, y: 8)
         .overlay(alignment: .leading) { Rectangle().fill(DesignColor.divider.color).frame(width: 1) }
-        .onChange(of: session.inspectorFocus.focus) { _, current in closeFocused = current == .textInput || current == .panel }
-        .onChange(of: closeFocused) { _, focused in
-            if focused { updateFocus(.panel) }
-            else if session.inspectorFocus.focus == .canvas { restoreCanvasFocus() }
+    }
+}
+
+private final class InspectorFocusButton: NSButton {
+    var onFocus: (() -> Void)?
+    override var acceptsFirstResponder: Bool { true }
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { onFocus?() }
+        return accepted
+    }
+}
+
+private struct InspectorCloseControl: NSViewRepresentable {
+    let focused: Bool
+    let close: () -> Void
+    let updateFocus: (FocusContext) -> Void
+    let restoreCanvasFocus: () -> Void
+
+    final class Coordinator: NSObject {
+        var close: () -> Void = {}
+        @objc func performClose() { close() }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> InspectorFocusButton {
+        let button = InspectorFocusButton()
+        button.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+        button.isBordered = false
+        button.focusRingType = .exterior
+        button.setAccessibilityLabel(String(localized: "Close Inspector"))
+        button.setAccessibilityIdentifier("inspector.close")
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.performClose)
+        return button
+    }
+    func updateNSView(_ button: InspectorFocusButton, context: Context) {
+        context.coordinator.close = close
+        button.onFocus = { updateFocus(.panel) }
+        if focused, button.window?.firstResponder !== button {
+            button.window?.makeFirstResponder(button)
+        } else if !focused, button.window?.firstResponder === button {
+            restoreCanvasFocus()
         }
     }
 }

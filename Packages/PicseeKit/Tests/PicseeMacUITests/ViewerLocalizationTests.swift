@@ -31,7 +31,7 @@ private let statesLocalizationKeys = [
     "File", "Edit", "View", "Window", "About Picsee", "Hide Picsee", "Hide Others", "Show All",
     "Quit Picsee", "Undo", "Redo", "Cut", "Copy", "Paste", "Select All", "Minimize", "Zoom",
     "Bring All to Front", "Fit", "Actual Pixels", "Zoom In", "Zoom Out", "Open…",
-    "Show Inspector", "Hide Inspector", "Focus Canvas", "Inspector Placeholder", "Focus test (not saved)",
+    "Show Inspector", "Hide Inspector", "Focus Canvas", "Inspector Placeholder",
     "Cancel", "Retry", "Close", "Open Recent", "Always Show Tools", "Zoom mode", "Fit window",
     "Previous Image", "Next Image", "Previous image", "Next image", "Zoom in", "Zoom out",
     "Show image information", "Open folder", "Enter Full Screen", "Exit Full Screen", "Component Preview",
