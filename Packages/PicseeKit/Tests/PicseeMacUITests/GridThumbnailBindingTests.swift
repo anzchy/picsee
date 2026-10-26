@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 import PicseeCore
+import PicseeApplication
 @testable import PicseeMacUI
 
 private func thumbnailPixel(_ value: UInt8) -> CGImage {
@@ -39,6 +40,63 @@ private actor GridThumbnailRequestLog {
         if requested.contains(id) { return }
         await withCheckedContinuation { waiters[id, default: []].append($0) }
     }
+}
+
+private actor GridThumbnailEdgeLog {
+    private var edges: [Int] = []
+    func add(_ edge: Int) { edges.append(edge) }
+    func contains(_ edge: Int) -> Bool { edges.contains(edge) }
+}
+
+@Test @MainActor func gridThumbnailRequestsFollowSidebarMainColumnSize() async throws {
+    _ = NSApplication.shared
+    let store = InMemoryDisplayPreferencesStore()
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 1280, height: 772), preferencesStore: store)
+    let grid = GridBrowserView(frame: NSRect(origin: .zero, size: shell.mainFrame.size))
+    grid.autoresizingMask = [.width, .height]
+    shell.mainContent.addSubview(grid)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
+                          styleMask: [], backing: .buffered, defer: false)
+    window.contentView!.addSubview(shell)
+    let entry = thumbnailFixture("Resize.jpg")
+    let rootID = AccessRootID(rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000118")!)
+    let snapshot = FolderSnapshot(version: .init(rootID: rootID,
+        folder: entry.url.deletingLastPathComponent(), generation: 1), entries: [entry], isComplete: true)
+    let log = GridThumbnailEdgeLog()
+    grid.thumbnailLoader = { entry, _, edge, _ in
+        await log.add(edge)
+        return thumbnailRequest(entry, edge: edge, revision: 1)
+    }
+    shell.layoutSubtreeIfNeeded()
+    grid.display(snapshot, selectedItemID: nil)
+    grid.setThumbnailsActive(true)
+    let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
+    func expectedEdge() -> Int {
+        GridThumbnailPixelSizing.edge(tile: NSSize(width: layout.itemSize.width - 8,
+            height: layout.itemSize.height - 36), backingScale: window.backingScaleFactor)
+    }
+    func awaitRequest(_ edge: Int) async {
+        for _ in 0..<200 {
+            if await log.contains(edge) { break }
+            await Task.yield()
+        }
+        #expect(await log.contains(edge))
+    }
+    let initial = expectedEdge()
+    await awaitRequest(initial)
+    shell.resizeSidebar(to: 320)
+    shell.layoutSubtreeIfNeeded()
+    grid.layoutSubtreeIfNeeded()
+    let resized = expectedEdge()
+    #expect(resized != initial)
+    await awaitRequest(resized)
+    shell.toggleSidebar()
+    shell.layoutSubtreeIfNeeded()
+    grid.layoutSubtreeIfNeeded()
+    let expanded = expectedEdge()
+    #expect(expanded != resized && expanded != initial)
+    await awaitRequest(expanded)
+    grid.stopThumbnails()
 }
 
 private actor HeldGridImagePort {
