@@ -34,9 +34,10 @@ struct InspectorFieldRow: View {
             Text(label).foregroundStyle(DesignColor.textSecondary.color)
                 .frame(width: InspectorPanelLayout.labelWidth(label), alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+            // Pinned pages 16/34: .inspector dl uses 48px 1fr with one 7px column gap.
             Text(value).font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(DesignColor.textPrimary.color).multilineTextAlignment(.trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .accessibilityIdentifier("inspector.\(id)")
         }
         .font(.system(size: 12))
