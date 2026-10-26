@@ -332,6 +332,7 @@ import PicseeCore
     private func setEmptyDetailText(_ text: String) {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
+        paragraph.lineBreakMode = .byTruncatingMiddle
         paragraph.minimumLineHeight = 22.1
         paragraph.maximumLineHeight = 22.1
         emptyDetail.attributedStringValue = NSAttributedString(string: text, attributes: [

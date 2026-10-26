@@ -124,6 +124,12 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
             shell.showSearchEmpty(true, term: String(repeating: "long-name-", count: 40))
             let title = try #require(shell.emptyStateTitle)
             let detail = try #require(shell.emptyStateDetail)
+            let paragraph = detail.attributedStringValue.attribute(.paragraphStyle, at: 0,
+                effectiveRange: nil) as? NSParagraphStyle
+            #expect(paragraph?.lineBreakMode == .byTruncatingMiddle)
+            let closing = String(localized: "No images with “%@” in their filename.")
+                .components(separatedBy: "%@").last ?? ""
+            #expect(detail.attributedStringValue.string.hasSuffix(closing))
             #expect(title.font?.pointSize == 16)
             #expect(detail.font?.pointSize == 13)
             #expect(title.frame.midX == shell.mainContent.bounds.midX)
