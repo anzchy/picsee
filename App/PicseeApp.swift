@@ -48,6 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
+    /// Returning to the foreground reconciles every watched folder (events may have been coalesced or lost).
+    func applicationDidBecomeActive(_ notification: Notification) {
+        let services = accessServices
+        Task { try? await services.value.watch.reconcileAll() }
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         viewer().openInput(urls)
         application.activate(ignoringOtherApps: true)
