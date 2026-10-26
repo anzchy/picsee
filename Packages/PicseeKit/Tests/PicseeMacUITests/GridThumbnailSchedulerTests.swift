@@ -15,14 +15,61 @@ private func gridThumbnailSnapshot(rootID: AccessRootID, count: Int, generation:
 private actor HeldGridThumbnailPort {
     private(set) var started: Set<ItemID> = []
     private(set) var cancelled: Set<ItemID> = []
+    private var startWaiters: [ItemID: [CheckedContinuation<Void, Never>]] = [:]
+    private var cancelWaiters: [ItemID: [CheckedContinuation<Void, Never>]] = [:]
+    func waitStarted(_ id: ItemID) async {
+        if started.contains(id) { return }
+        await withCheckedContinuation { startWaiters[id, default: []].append($0) }
+    }
+    func waitCancelled(_ id: ItemID) async {
+        if cancelled.contains(id) { return }
+        await withCheckedContinuation { cancelWaiters[id, default: []].append($0) }
+    }
     func load(_ entry: FolderEntry) async throws -> (ImageDecodeRequest, DecodedImage) {
         started.insert(entry.itemID)
+        for waiter in startWaiters.removeValue(forKey: entry.itemID) ?? [] { waiter.resume() }
         do { try await Task.sleep(for: .seconds(60)) }
         catch {
             cancelled.insert(entry.itemID)
+            for waiter in cancelWaiters.removeValue(forKey: entry.itemID) ?? [] { waiter.resume() }
             throw error
         }
         throw CancellationError()
+    }
+}
+
+private actor GridAttemptCounter {
+    private(set) var count = 0
+    func next() -> Int { count += 1; return count }
+}
+
+private func gridThumbnailDecoded(_ entry: FolderEntry, edge: Int, revision: Int) -> (ImageDecodeRequest, DecodedImage) {
+    let key = RenderKey(itemID: entry.itemID, revision: FileRevision(byteCount: revision, modificationDate: nil), maximumPixelSize: edge)
+    let request = ImageDecodeRequest(fileURL: entry.url, maximumPixelSize: edge, renderKey: key)
+    let context = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8,
+        bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    let image = DecodedImage(image: context.makeImage()!, sourcePixelSize: CGSize(width: 1, height: 1),
+        revision: key.revision, itemID: entry.itemID)
+    return (request, image)
+}
+
+private actor GridPriorityPort {
+    private var seen: Set<String> = []
+    private var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private func key(_ id: ItemID, _ priority: DecodePriority) -> String { "\(id):\(priority)" }
+    func load(_ id: ItemID, priority: DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage) {
+        let key = key(id, priority)
+        seen.insert(key)
+        for waiter in waiters.removeValue(forKey: key) ?? [] { waiter.resume() }
+        try await Task.sleep(for: .seconds(60))
+        throw CancellationError()
+    }
+    func has(_ id: ItemID, priority: DecodePriority) -> Bool { seen.contains(key(id, priority)) }
+    func waitFor(_ id: ItemID, priority: DecodePriority) async {
+        let key = key(id, priority)
+        if seen.contains(key) { return }
+        await withCheckedContinuation { waiters[key, default: []].append($0) }
     }
 }
 
@@ -62,10 +109,109 @@ private actor HeldGridThumbnailPort {
 }
 
 @Test func gridThumbnailPixelSizingRoundsUpForRetina() {
-    #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 212, height: 148), backingScale: 1) == 212)
-    #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 212, height: 148), backingScale: 2) == 424)
-    #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 211.5, height: 148), backingScale: 2) == 423)
+    #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 212, height: 148), backingScale: 1) >= 318)
+    #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 212, height: 148), backingScale: 2) >= 636)
+    #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 211.5, height: 148), backingScale: 2) >= 635)
+    #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 212, height: 148), backingScale: 2) == 848)
+    let coverEdge = GridThumbnailPixelSizing.edge(tile: NSSize(width: 212, height: 148), backingScale: 2)
+    #expect(Double(coverEdge) * 2 / 3 >= 212 * 2) // 2:3 portrait's short side fills the tile width.
+    #expect(Double(coverEdge) * 2 / 3 >= 148 * 2) // 3:2 landscape's short side fills the tile height.
     #expect(GridThumbnailPixelSizing.edge(tile: NSSize(width: 900, height: 700), backingScale: 2) == 1024)
+}
+
+@Test @MainActor func gridFailedPrefetchReplaysAndRetriesOnlyOnVisibilityTransition() async {
+    let snapshot = gridThumbnailSnapshot(rootID: AccessRootID(rawValue: UUID()), count: 4, generation: 1)
+    let scheduler = GridThumbnailScheduler()
+    scheduler.setSnapshot(snapshot)
+    var failures: [Int] = []
+    scheduler.onFailure = { failures.append($0) }
+    let loader: GridThumbnailScheduler.Loader = { _, _, _, _ in throw ImageLoadError(.cancelled) }
+    scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
+    await scheduler.waitForTerminal(at: 2)
+    #expect(scheduler.hasFailure(at: 2))
+    scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
+    #expect(scheduler.hasFailure(at: 2))
+    scheduler.reconcile(visible: [2], columns: 1, pixelEdge: 424, loader: loader)
+    #expect(!scheduler.hasFailure(at: 2))
+    await scheduler.waitForTerminal(at: 2)
+    #expect(scheduler.hasFailure(at: 2))
+    #expect(failures.contains(2))
+}
+
+@Test @MainActor func gridSourceChangedRetriesOnceWithFreshRequest() async {
+    let snapshot = gridThumbnailSnapshot(rootID: AccessRootID(rawValue: UUID()), count: 1, generation: 1)
+    let scheduler = GridThumbnailScheduler()
+    scheduler.setSnapshot(snapshot)
+    let attempts = GridAttemptCounter()
+    let loader: GridThumbnailScheduler.Loader = { entry, _, edge, _ in
+        let count = await attempts.next()
+        if count == 1 { throw ImageLoadError(.sourceChanged) }
+        return gridThumbnailDecoded(entry, edge: edge, revision: count)
+    }
+    scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
+    await scheduler.waitForTerminal(at: 0)
+    #expect(await attempts.count == 2)
+    #expect(scheduler.result(at: 0)?.0.renderKey?.revision.byteCount == 2)
+}
+
+@Test @MainActor func gridAdmissionRejectionRecoversWhenCapacityFrees() async {
+    let snapshot = gridThumbnailSnapshot(rootID: AccessRootID(rawValue: UUID()), count: 3, generation: 1)
+    let scheduler = GridThumbnailScheduler()
+    scheduler.setSnapshot(snapshot)
+    let rejectedID = snapshot.navigationEntries[2].itemID
+    let loader: GridThumbnailScheduler.Loader = { entry, _, edge, priority in
+        if entry.itemID == rejectedID && priority == .prefetch {
+            throw ImageLoadError(.cancelled)
+        }
+        return gridThumbnailDecoded(entry, edge: edge, revision: 9)
+    }
+    scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
+    await scheduler.waitForTerminal(at: 2)
+    #expect(scheduler.hasFailure(at: 2))
+    scheduler.reconcile(visible: [2], columns: 1, pixelEdge: 424, loader: loader)
+    await scheduler.waitForTerminal(at: 2)
+    #expect(!scheduler.hasFailure(at: 2))
+    #expect(scheduler.result(at: 2)?.0.renderKey?.revision.byteCount == 9)
+}
+
+@Test @MainActor func gridFailedVisibleRequestRetriesAfterNearbyRevisit() async {
+    let snapshot = gridThumbnailSnapshot(rootID: AccessRootID(rawValue: UUID()), count: 3, generation: 1)
+    let scheduler = GridThumbnailScheduler()
+    scheduler.setSnapshot(snapshot)
+    let attempts = GridAttemptCounter()
+    let failedID = snapshot.navigationEntries[0].itemID
+    let loader: GridThumbnailScheduler.Loader = { entry, _, edge, _ in
+        if entry.itemID == failedID {
+            let count = await attempts.next()
+            if count == 1 { throw ImageLoadError(.corruptImage) }
+            return gridThumbnailDecoded(entry, edge: edge, revision: count)
+        }
+        return gridThumbnailDecoded(entry, edge: edge, revision: 1)
+    }
+    scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
+    await scheduler.waitForTerminal(at: 0)
+    #expect(scheduler.hasFailure(at: 0))
+    scheduler.reconcile(visible: [1], columns: 1, pixelEdge: 424, loader: loader)
+    scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
+    await scheduler.waitForTerminal(at: 0)
+    #expect(scheduler.result(at: 0) != nil)
+    #expect(await attempts.count == 2)
+}
+
+@Test @MainActor func gridPendingPrefetchPromotesWhenVisible() async {
+    let snapshot = gridThumbnailSnapshot(rootID: AccessRootID(rawValue: UUID()), count: 3, generation: 1)
+    let scheduler = GridThumbnailScheduler()
+    scheduler.setSnapshot(snapshot)
+    let port = GridPriorityPort()
+    let loader: GridThumbnailScheduler.Loader = { entry, _, _, priority in
+        try await port.load(entry.itemID, priority: priority)
+    }
+    scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 424, loader: loader)
+    await port.waitFor(snapshot.navigationEntries[2].itemID, priority: .prefetch)
+    scheduler.reconcile(visible: [2], columns: 1, pixelEdge: 424, loader: loader)
+    await port.waitFor(snapshot.navigationEntries[2].itemID, priority: .visible)
+    #expect(await port.has(snapshot.navigationEntries[2].itemID, priority: .visible))
+    scheduler.stop()
 }
 
 @Test @MainActor func gridThumbnailScrollAndCloseCancelHeldFilePortWork() async {
@@ -76,27 +222,15 @@ private actor HeldGridThumbnailPort {
     let loader: GridThumbnailScheduler.Loader = { entry, _, _, _ in try await port.load(entry) }
     scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 212, loader: loader)
     let first = snapshot.navigationEntries[0].itemID
-    for _ in 0..<500 {
-        if await port.started.contains(first) { break }
-        await Task.yield()
-    }
+    await port.waitStarted(first)
     #expect(await port.started.contains(first))
     scheduler.reconcile(visible: [20], columns: 1, pixelEdge: 212, loader: loader)
-    for _ in 0..<500 {
-        if await port.cancelled.contains(first) { break }
-        await Task.yield()
-    }
+    await port.waitCancelled(first)
     #expect(await port.cancelled.contains(first))
     let later = snapshot.navigationEntries[20].itemID
-    for _ in 0..<500 {
-        if await port.started.contains(later) { break }
-        await Task.yield()
-    }
+    await port.waitStarted(later)
     scheduler.stop()
-    for _ in 0..<500 {
-        if await port.cancelled.contains(later) { break }
-        await Task.yield()
-    }
+    await port.waitCancelled(later)
     #expect(await port.cancelled.contains(later))
     #expect(scheduler.activeItemIDs.isEmpty)
 }
@@ -119,10 +253,7 @@ private actor HeldGridThumbnailPort {
         return (request, image)
     }
     scheduler.reconcile(visible: [0], columns: 1, pixelEdge: 212, loader: loader)
-    for _ in 0..<100 {
-        if failed { break }
-        await Task.yield()
-    }
+    await scheduler.waitForTerminal(at: 0)
     #expect(failed)
     #expect(scheduler.result(at: 0) == nil)
 }
