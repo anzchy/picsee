@@ -20,7 +20,8 @@ public actor AccessImageSource {
     private init(request: AccessRequest, access: any AccessLeasing, pipeline: any ImagePipeline, display: AccessLease) {
         self.request = request; self.access = access; self.pipeline = pipeline; self.display = display
     }
-    public func image(maximumPixelSize: Int, isPreview: Bool = false) async throws -> (ImageDecodeRequest, DecodedImage) {
+    public func image(maximumPixelSize: Int, isPreview: Bool = false,
+                      priority: DecodePriority = .current) async throws -> (ImageDecodeRequest, DecodedImage) {
         guard !closed else { throw FileAccessError.startFailed }
         pending += 1
         let file: URL
@@ -34,7 +35,8 @@ public actor AccessImageSource {
                 let prepared = try await pipeline.request(for: file, maximumPixelSize: maximumPixelSize, identityRoot: root)
                 try Task.checkCancellation()
                 let request = ImageDecodeRequest(fileURL: file, maximumPixelSize: maximumPixelSize,
-                                                 renderKey: prepared.renderKey, isPreview: isPreview, identityRoot: root)
+                                                 renderKey: prepared.renderKey, priority: priority,
+                                                 isPreview: isPreview, identityRoot: root)
                 var ticket: ThumbnailCacheTicket?
                 if let thumbnailCache {
                     do { ticket = try await thumbnailCache.prepare(request) }

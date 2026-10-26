@@ -2146,6 +2146,20 @@
         }
       }
     },
+    "Thumbnail unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Thumbnail unavailable" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法显示缩略图" } }
+      }
+    },
+    "thumbnail unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "thumbnail unavailable" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法显示缩略图" } }
+      }
+    },
     "thumbnail pending": {
       "extractionState": "manual",
       "localizations": {

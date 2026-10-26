@@ -18,6 +18,9 @@ import PicseeCore
 @MainActor public final class GridPhotoItem: NSCollectionViewItem {
     public private(set) var representedItemID: ItemID?
     public private(set) var filename = ""
+    public private(set) var thumbnailToken = UUID()
+    public private(set) var thumbnailGeneration: UInt64 = 0
+    public private(set) var thumbnailPixelEdge = 0
     private let tile = NSView()
     private let currentRing = CALayer()
     private let selectionOutline = CALayer()
@@ -33,6 +36,8 @@ import PicseeCore
         tile.frame = NSRect(x: 4, y: 32, width: 212, height: 148)
         tile.wantsLayer = true
         tile.layer?.cornerRadius = DesignMetrics.radii["inner"]!
+        tile.layer?.masksToBounds = true
+        tile.layer?.contentsGravity = .resizeAspectFill
         placeholder.frame = tile.frame
         placeholder.alignment = .center
         placeholder.textColor = .secondaryLabelColor
@@ -75,12 +80,50 @@ import PicseeCore
     /// Current Item (where arrows, Space and Enter act); distinct from Selection.
     public var isCurrent = false { didSet { updateSelection() } }
     public func configure(_ entry: FolderEntry) {
+        thumbnailToken = UUID()
+        tile.layer?.contents = nil
+        placeholder.stringValue = String(localized: "Thumbnail pending")
+        placeholder.isHidden = false
+        thumbnailPixelEdge = 0
         representedItemID = entry.itemID
         filename = entry.url.lastPathComponent
         nameLabel.stringValue = filename
         view.setAccessibilityLabel("\(filename), \(String(localized: "thumbnail pending"))")
         view.setAccessibilityIdentifier("grid.cell")
         updateSelection()
+    }
+
+    public func beginThumbnail(generation: UInt64, pixelEdge: Int, token: UUID = UUID()) {
+        thumbnailToken = token
+        thumbnailGeneration = generation
+        thumbnailPixelEdge = pixelEdge
+        tile.layer?.contents = nil
+        placeholder.stringValue = String(localized: "Thumbnail pending")
+        placeholder.isHidden = false
+        view.setAccessibilityLabel("\(filename), \(String(localized: "thumbnail pending"))")
+    }
+
+    @discardableResult public func installThumbnail(_ request: ImageDecodeRequest, image: DecodedImage,
+        token: UUID, generation: UInt64, pixelEdge: Int) -> Bool {
+        guard let key = request.renderKey,
+              token == thumbnailToken, generation == thumbnailGeneration,
+              pixelEdge == thumbnailPixelEdge, request.maximumPixelSize == pixelEdge,
+              key.maximumPixelSize == pixelEdge, key.itemID == representedItemID,
+              image.itemID == key.itemID, image.revision == key.revision,
+              image.image.width > 0, image.image.height > 0,
+              image.image.width <= pixelEdge, image.image.height <= pixelEdge else { return false }
+        tile.layer?.contents = image.image
+        placeholder.isHidden = true
+        view.setAccessibilityLabel(filename)
+        return true
+    }
+
+    public func thumbnailUnavailable(token: UUID) {
+        guard token == thumbnailToken else { return }
+        tile.layer?.contents = nil
+        placeholder.stringValue = String(localized: "Thumbnail unavailable")
+        placeholder.isHidden = false
+        view.setAccessibilityLabel("\(filename), \(String(localized: "thumbnail unavailable"))")
     }
 
     public override var isSelected: Bool { didSet { updateSelection() } }
@@ -166,6 +209,12 @@ private struct GridGeometry: Equatable {
     private var indices: [ItemID: Int] = [:]
     private var updating = false
     private var geometry: GridGeometry?
+    private let thumbnailScheduler = GridThumbnailScheduler()
+    public var thumbnailLoader: (@Sendable (FolderEntry, AccessRootID, Int, DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage))? {
+        didSet { reconcileThumbnails() }
+    }
+    private var thumbnailsActive = false
+    private var thumbnailGeneration: UInt64 = 0
     private static let reuseID = NSUserInterfaceItemIdentifier("grid.photo")
 
     public override init(frame: NSRect) {
@@ -190,13 +239,20 @@ private struct GridGeometry: Equatable {
         scrollView.autoresizingMask = [.width, .height]
         scrollView.hasVerticalScroller = true
         scrollView.contentView.postsFrameChangedNotifications = true
+        scrollView.contentView.postsBoundsChangedNotifications = true
         scrollView.backgroundColor = DesignColor.canvasBackground.nsColor
         scrollView.documentView = collectionView
         addSubview(scrollView)
         NotificationCenter.default.addObserver(self, selector: #selector(clipFrameChanged),
             name: NSView.frameDidChangeNotification, object: scrollView.contentView)
+        NotificationCenter.default.addObserver(self, selector: #selector(clipBoundsChanged),
+            name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         NotificationCenter.default.addObserver(self, selector: #selector(scrollerStyleChanged),
             name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil)
+        thumbnailScheduler.onResult = { [weak self] index, request, image in
+            self?.showThumbnail(at: index, request: request, image: image)
+        }
+        thumbnailScheduler.onFailure = { [weak self] index in self?.showThumbnailFailure(at: index) }
         updateGeometry()
     }
     public required init?(coder: NSCoder) { nil }
@@ -205,7 +261,10 @@ private struct GridGeometry: Equatable {
 
     @objc private func clipFrameChanged() {
         updateGeometry()
+        reconcileThumbnails()
     }
+
+    @objc private func clipBoundsChanged() { reconcileThumbnails() }
 
     @objc private func scrollerStyleChanged() {
         scrollView.tile()
@@ -215,6 +274,72 @@ private struct GridGeometry: Equatable {
     public override func layout() {
         super.layout()
         updateGeometry()
+        reconcileThumbnails()
+    }
+
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        reconcileThumbnails()
+    }
+
+    public func setThumbnailsActive(_ active: Bool) {
+        thumbnailsActive = active
+        if active { reconcileThumbnails() } else { thumbnailScheduler.stop() }
+    }
+
+    public func stopThumbnails() { setThumbnailsActive(false) }
+
+    private var thumbnailPixelEdge: Int {
+        guard let geometry else { return 0 }
+        let scale: CGFloat
+        if let window { scale = window.backingScaleFactor } else { scale = 1 }
+        return GridThumbnailPixelSizing.edge(tile: NSSize(width: geometry.itemSize.width - 8,
+            height: geometry.itemSize.height - 36), backingScale: scale)
+    }
+
+    private func reconcileThumbnails() {
+        guard thumbnailsActive, window != nil, let geometry, thumbnailLoader != nil else {
+            thumbnailScheduler.reconcile(visible: [], columns: 1, pixelEdge: 0, loader: nil)
+            return
+        }
+        collectionView.layoutSubtreeIfNeeded()
+        // The flow layout is installed in init and remains this view's layout.
+        let attributes = collectionView.collectionViewLayout!.layoutAttributesForElements(in: collectionView.visibleRect)
+        var visible: Set<Int> = []
+        for attribute in attributes where attribute.representedElementCategory == .item {
+            if let index = attribute.indexPath?.item { visible.insert(index) }
+        }
+        thumbnailScheduler.reconcile(visible: visible, columns: geometry.columns,
+            pixelEdge: thumbnailPixelEdge, loader: thumbnailLoader)
+        for index in visible { bindThumbnail(at: index) }
+    }
+
+    private func bindThumbnail(at index: Int) {
+        guard entries.indices.contains(index), let token = thumbnailScheduler.token(at: index),
+              let item = collectionView.item(at: IndexPath(item: index, section: 0)) as? GridPhotoItem,
+              item.representedItemID == entries[index].itemID else { return }
+        let edge = thumbnailPixelEdge
+        if item.thumbnailToken != token || item.thumbnailGeneration != thumbnailGeneration || item.thumbnailPixelEdge != edge {
+            item.beginThumbnail(generation: thumbnailGeneration, pixelEdge: edge, token: token)
+        }
+        if let (request, image) = thumbnailScheduler.result(at: index) {
+            _ = item.installThumbnail(request, image: image, token: token,
+                generation: thumbnailGeneration, pixelEdge: edge)
+        }
+    }
+
+    private func showThumbnail(at index: Int, request: ImageDecodeRequest, image: DecodedImage) {
+        guard entries.indices.contains(index), let token = thumbnailScheduler.token(at: index),
+              let item = collectionView.item(at: IndexPath(item: index, section: 0)) as? GridPhotoItem,
+              item.representedItemID == entries[index].itemID else { return }
+        _ = item.installThumbnail(request, image: image, token: token,
+            generation: thumbnailGeneration, pixelEdge: thumbnailPixelEdge)
+    }
+
+    private func showThumbnailFailure(at index: Int) {
+        guard let token = thumbnailScheduler.token(at: index),
+              let item = collectionView.item(at: IndexPath(item: index, section: 0)) as? GridPhotoItem else { return }
+        item.thumbnailUnavailable(token: token)
     }
 
     private func updateGeometry() {
@@ -231,12 +356,15 @@ private struct GridGeometry: Equatable {
     }
 
     public func display(_ snapshot: FolderSnapshot, selectedItemID: ItemID?) {
+        thumbnailScheduler.setSnapshot(snapshot)
+        thumbnailGeneration = snapshot.version.generation
         if !snapshot.isComplete {
             entries = []; indices = [:]; currentItemID = nil
             updating = true
             collectionView.reloadData()
             collectionView.deselectAll(nil)
             updating = false
+            reconcileThumbnails()
             return
         }
         entries = snapshot.navigationEntries
@@ -254,6 +382,7 @@ private struct GridGeometry: Equatable {
             collectionView.deselectAll(nil)
         }
         updating = false
+        reconcileThumbnails()
     }
     /// A requested Current Item that is filtered out or gone falls back to the first item in sort order.
     public func activate(currentItemID: ItemID? = nil) {
@@ -302,6 +431,14 @@ private struct GridGeometry: Equatable {
         if let photo = item as? GridPhotoItem {
             photo.configure(entries[indexPath.item])
             photo.isCurrent = entries[indexPath.item].itemID == currentItemID
+            if let token = thumbnailScheduler.token(at: indexPath.item) {
+                let edge = thumbnailPixelEdge
+                photo.beginThumbnail(generation: thumbnailGeneration, pixelEdge: edge, token: token)
+                if let (request, image) = thumbnailScheduler.result(at: indexPath.item) {
+                    _ = photo.installThumbnail(request, image: image, token: token,
+                        generation: thumbnailGeneration, pixelEdge: edge)
+                }
+            }
         }
         return item
     }

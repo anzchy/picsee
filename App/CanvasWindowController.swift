@@ -121,6 +121,20 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridShell.isHidden = true
         content.addSubview(gridShell)
         gridView = GridBrowserView(frame: NSRect(origin: .zero, size: gridShell.mainFrame.size))
+        gridView.thumbnailLoader = { [accessServices, pipeline] entry, rootID, pixelEdge, priority in
+            let services = try await accessServices.value
+            let source = try await AccessImageSource.open(.root(rootID, file: entry.url),
+                access: services.files, pipeline: pipeline)
+            do {
+                let result = try await source.image(maximumPixelSize: pixelEdge, priority: priority)
+                await source.close()
+                try Task.checkCancellation()
+                return result
+            } catch {
+                await source.close()
+                throw error
+            }
+        }
         gridView.autoresizingMask = [.width, .height]
         gridView.isHidden = true
         gridView.setAccessibilityHidden(true)
@@ -220,6 +234,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        gridView.stopThumbnails()
         gridFolderRoot = nil
         gridFolderURL = nil
         endInput()
