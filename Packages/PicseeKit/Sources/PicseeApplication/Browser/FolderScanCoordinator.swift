@@ -190,18 +190,22 @@ struct FolderScanRestorePoint {
     }
     /// Keeps the Current Item, else moves to its successor (then predecessor) in the previous navigation order.
     private func applyRefresh(_ fresh: FolderSnapshot) {
-        let previous = snapshot?.navigationEntries ?? []
+        let previous = snapshot?.navigationEntries
         sourceSnapshot = fresh
-        snapshot = fresh.applying(conditions, metadata: metadata)
+        let snapshot = fresh.applying(conditions, metadata: metadata)
+        self.snapshot = snapshot
         enqueueMetadata()
-        guard let id = currentItemID, let snapshot else { return }
-        let kept = snapshot.navigationIndex(for: id)
-        if kept != nil, snapshot.entries.contains(where: {
-            $0.itemID == id && $0.url.standardizedFileURL == currentURL?.standardizedFileURL }) { return }
-        let order = kept.map { [snapshot.navigationEntries[$0]] } ?? previous.firstIndex { $0.itemID == id }.map {
-            Array(previous[($0 + 1)...]) + previous[..<$0].reversed() } ?? []
-        let target = order.lazy.compactMap { snapshot.navigationIndex(for: $0.itemID) }.first
-            .map { snapshot.navigationEntries[$0] }
+        guard let id = currentItemID else { return }
+        let target: FolderEntry?
+        if let index = snapshot.navigationIndex(for: id) {
+            if snapshot.entries.contains(where: {
+                $0.itemID == id && $0.url.standardizedFileURL == currentURL?.standardizedFileURL }) { return }
+            target = snapshot.navigationEntries[index]
+        } else {
+            guard let previous, let old = previous.firstIndex(where: { $0.itemID == id }) else { return }
+            target = (Array(previous[(old + 1)...]) + previous[..<old].reversed()).lazy
+                .compactMap { snapshot.navigationIndex(for: $0.itemID) }.first.map { snapshot.navigationEntries[$0] }
+        }
         let allowed = automaticPresentationAllowed?() != false
         presentationRevision &+= 1
         currentItemID = target?.itemID; currentURL = target?.url
