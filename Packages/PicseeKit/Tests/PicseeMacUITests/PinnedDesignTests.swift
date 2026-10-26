@@ -84,6 +84,71 @@ private func fixturePage(_ css: String) throws -> PinnedDesign {
     }
 }
 
+@Test func issue168RejectsCommaSeparatedMediaLists() throws {
+    let page = try fixturePage(".a{gap:2px}@media (min-width:1000px), (max-width:400px){.a{gap:9px}}")
+    for viewport in [300.0, 1200.0] {
+        do {
+            _ = try page.length(".a", "gap", viewport: viewport)
+            Issue.record("Expected unsupported media list at \(viewport)pt")
+        } catch let error as PinnedDesign.Error {
+            for part in ["fixture", "selector '.a'", "property 'gap'", "at \(viewport)pt", "unsupported @media"] {
+                #expect(error.description.contains(part), "Missing \(part): \(error)")
+            }
+        }
+    }
+}
+
+@Test func issue168RejectsSameElementQualifiers() throws {
+    for qualified in [".x.state", ".x[attr]", ".x:not(.hidden)", ".x:last-child", ".parent .x:not(.hidden)"] {
+        let page = try fixturePage(".x{gap:2px}\(qualified){gap:9px}")
+        do {
+            _ = try page.length(".x", "gap", viewport: 800)
+            Issue.record("Expected ambiguity from \(qualified)")
+        } catch let error as PinnedDesign.Error {
+            for part in ["fixture", "selector '.x'", "property 'gap'", "at 800.0pt", "ambiguous", qualified] {
+                #expect(error.description.contains(part), "Missing \(part): \(error)")
+            }
+        }
+    }
+}
+
+@Test func issue168RejectsPinnedWorkspaceQualifiedRule() throws {
+    let page = try PinnedDesign.page("grid-light")
+    do {
+        _ = try page.raw(".workspace", "grid-template-columns", viewport: 1280)
+        Issue.record("Expected qualified workspace rule to be ambiguous")
+    } catch let error as PinnedDesign.Error {
+        for part in ["grid-light", "selector '.workspace'", "property 'grid-template-columns'", "at 1280.0pt", "ambiguous", ".workspace:not(.sidebar-hidden)"] {
+            #expect(error.description.contains(part), "Missing \(part): \(error)")
+        }
+    }
+}
+
+@Test func issue168AllowsTransientStateQualifiers() throws {
+    for qualified in [":hover", ":focus", ":focus-visible", ":focus-within", ":active", ":disabled"] {
+        let page = try fixturePage(".x{gap:2px}.x\(qualified){gap:9px}")
+        #expect(try page.length(".x", "gap", viewport: 800) == 2)
+    }
+}
+
+@Test func issue168RejectsMalformedCSSTailsOnLoad() throws {
+    let cases = [
+        (".a{gap:2px}}", "stray closing brace"),
+        (".a{gap:2px} trailing text", "trailing CSS text"),
+        ("@import url(other.css); .a{gap:2px}", "blockless at-statement"),
+        ("@charset \"utf-8\"; .a{gap:2px}", "blockless at-statement")
+    ]
+    for (css, reason) in cases {
+        do {
+            _ = try fixturePage(css)
+            Issue.record("Expected CSS load failure: \(css)")
+        } catch let error as PinnedDesign.Error {
+            #expect(error.description.contains("fixture"), "Missing page: \(error)")
+            #expect(error.description.contains(reason), "Missing \(reason): \(error)")
+        }
+    }
+}
+
 @Test func pinnedDesignTypographyAndColorsComeFromPages() throws {
     let empty = try PinnedDesign.page("search-empty")
     let heading = try empty.font(".empty-state h2", viewport: 1280)
