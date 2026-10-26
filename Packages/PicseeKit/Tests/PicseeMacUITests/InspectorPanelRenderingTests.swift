@@ -15,7 +15,7 @@ private struct FilledInspectorReader: InspectorMetadataReading {
 
 @Test func issue136InspectorFrameLeavesGridTitleAndFooterVisible() {
     let bounds = NSRect(x: 0, y: 0, width: 960, height: 640)
-    #expect(InspectorPanelLayout.frame(in: bounds, grid: true) == NSRect(x: 740, y: 40, width: 220, height: 572))
+    #expect(InspectorPanelLayout.frame(in: bounds, grid: true) == NSRect(x: 740, y: 0, width: 220, height: 640))
     #expect(InspectorPanelLayout.frame(in: bounds, grid: false) == NSRect(x: 740, y: 0, width: 220, height: 640))
 }
 
@@ -35,9 +35,45 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     }
 }
 
+// design/prototypes/picsee-browser/states/viewer-inspector.html and viewer-inspector-light.html:
+// .inspector dl uses a 7 px column gap and 12 px type; the label and value must remain distinct.
+@Test @MainActor func issue136Pages16And34DrawEnglishAndChineseRowsWithoutOverlap() throws {
+    _ = NSApplication.shared
+    for theme in DesignTheme.allCases {
+        for (label, range) in [("Dimensions", 45...90), ("尺寸", 10...55)] {
+            let background = theme == .dark ? Color(red: 15/255, green: 17/255, blue: 21/255) : Color.white
+            let renderer = ImageRenderer(content: InspectorFieldRow(label: label, value: "6000 × 4000", id: "dimensions")
+                .frame(width: 186, height: 24).background(background)
+                .environment(\.colorScheme, theme == .dark ? .dark : .light))
+            renderer.scale = 1
+            let image = try #require(renderer.cgImage)
+            let pixels = NSBitmapImageRep(cgImage: image)
+            let base = theme == .dark ? 15.0/255 : 1.0
+            let ink = (0..<24).flatMap { y in (0..<186).compactMap { x -> Int? in
+                guard let color = pixels.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                      abs(color.redComponent - base) > 0.12 else { return nil }
+                return x
+            } }
+            let labelInk = ink.filter { $0 < 95 }, valueInk = ink.filter { $0 >= 95 }
+            #expect((labelInk.max() ?? 0) >= range.lowerBound)
+            #expect((labelInk.max() ?? 999) <= range.upperBound)
+            #expect((valueInk.min() ?? 0) >= 100)
+            #expect((valueInk.max() ?? 0) >= 175)
+        }
+    }
+}
+
 @Test @MainActor func issue136InspectorPanelUsesPage16And34GeometryAndSurfaceColors() throws {
     _ = NSApplication.shared
     let session = ViewerSession(), model = InspectorModel(reader: EmptyInspectorReader())
+    func renderedCSS(_ rgb: [Double]) throws -> [CGFloat] {
+        let swatch = ImageRenderer(content: Color(red: rgb[0]/255, green: rgb[1]/255, blue: rgb[2]/255)
+            .frame(width: 1, height: 1))
+        swatch.scale = 1
+        let image = try #require(swatch.cgImage)
+        let color = try #require(NSBitmapImageRep(cgImage: image).colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB))
+        return [color.redComponent, color.greenComponent, color.blueComponent]
+    }
     for theme in DesignTheme.allCases {
         let renderer = ImageRenderer(content: InspectorPanel(model: model, session: session,
             close: {}, restoreCanvasFocus: {}, updateFocus: { _ in })
@@ -48,8 +84,8 @@ private struct FilledInspectorReader: InspectorMetadataReading {
         #expect(image.width == 220 && image.height == 500)
         let pixels = NSBitmapImageRep(cgImage: image)
         // Pinned pages 16/34: --color-bg and --color-surface, independent of DesignColor.
-        let base: [Double] = theme == .dark ? [15, 17, 21] : [255, 255, 255]
-        let preview: [Double] = theme == .dark ? [22, 26, 34] : [246, 247, 251]
+        let base = try renderedCSS(theme == .dark ? [15, 17, 21] : [255, 255, 255])
+        let preview = try renderedCSS(theme == .dark ? [22, 26, 34] : [246, 247, 251])
         for (point, expected) in [(NSPoint(x: 205, y: 400), base),
                                   (NSPoint(x: 205, y: 460), base),
                                   (NSPoint(x: 100, y: 275), base),
@@ -58,8 +94,26 @@ private struct FilledInspectorReader: InspectorMetadataReading {
             let color = try #require(pixels.colorAt(x: Int(point.x), y: Int(point.y))).usingColorSpace(.deviceRGB)!
             for i in 0..<3 {
                 let actual = [color.redComponent, color.greenComponent, color.blueComponent][i]
-                #expect(abs(actual - expected[i] / 255) < 0.06)
+                #expect(abs(actual - expected[i]) < 0.012)
             }
+        }
+        // Pages 16/34: header 36 pt, 12 pt gap, preview 120 pt, name 14 pt after preview,
+        // and five 12 pt metadata rows separated by 13 pt. Assert ink on the drawn panel.
+        func inkCount(x: Range<Int>, y: Range<Int>) -> Int {
+            y.reduce(0) { count, row in
+                count + x.reduce(0) { n, column in
+                    guard let color = pixels.colorAt(x: column, y: row)?.usingColorSpace(.deviceRGB) else { return n }
+                    return n + (abs(color.redComponent - base[0]) > 0.14 ? 1 : 0)
+                }
+            }
+        }
+        #expect(inkCount(x: 17..<170, y: 12..<48) > 20) // header
+        #expect(inkCount(x: 17..<195, y: 194..<228) > 20) // file name or Unknown
+        #expect(inkCount(x: 17..<95, y: 235..<395) > 40) // row labels
+        #expect(inkCount(x: 110..<203, y: 235..<395) > 40) // row values
+        for y in [52, 185] {
+            let color = try #require(pixels.colorAt(x: 100, y: y)?.usingColorSpace(.deviceRGB))
+            #expect(abs(color.redComponent - base[0]) < 0.10) // gap can include the preview shadow
         }
     }
 }
@@ -98,9 +152,9 @@ private struct FilledInspectorReader: InspectorMetadataReading {
 @Test @MainActor func issue136InspectorPanelFocusEntersAndEscRestoresCanvas() {
     _ = NSApplication.shared
     let session = ViewerSession(), model = InspectorModel(reader: EmptyInspectorReader())
-    var updates: [FocusContext] = [], restored = 0
+    var updates: [FocusContext] = [], restored = 0, closed = 0
     let host = NSHostingView(rootView: InspectorPanel(model: model, session: session,
-        close: {}, restoreCanvasFocus: { restored += 1 }, updateFocus: { updates.append($0) }))
+        close: { closed += 1 }, restoreCanvasFocus: { restored += 1 }, updateFocus: { updates.append($0) }))
     let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 220, height: 500),
         styleMask: .borderless, backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false; window.contentView = host
@@ -111,6 +165,8 @@ private struct FilledInspectorReader: InspectorMetadataReading {
         .first { $0.accessibilityIdentifier() == "inspector.close" }
     #expect(closeButton?.acceptsFirstResponder == true)
     #expect(closeButton?.focusRingType == .exterior)
+    closeButton?.performClick(nil)
+    #expect(closed == 1)
     session.setInspectorVisible(true)
     session.tab(reverse: false)
     host.layoutSubtreeIfNeeded()

@@ -9,10 +9,28 @@ public enum InspectorPanelLayout {
         max(48, ceil((label as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width))
     }
     public static func frame(in bounds: NSRect, grid: Bool) -> NSRect {
-        let footer: CGFloat = grid ? 40 : 0
-        let title: CGFloat = grid ? 28 : 0
-        return NSRect(x: bounds.maxX - 220, y: bounds.minY + footer,
-                      width: 220, height: max(0, bounds.height - footer - title))
+        let width = min(220, bounds.width)
+        return NSRect(x: bounds.maxX - width, y: bounds.minY,
+                      width: width, height: bounds.height)
+    }
+}
+
+/// A single Inspector metadata row shared by the English and Chinese panels.
+struct InspectorFieldRow: View {
+    let label: String
+    let value: String
+    let id: String
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Text(label).foregroundStyle(DesignColor.textSecondary.color)
+                .frame(width: InspectorPanelLayout.labelWidth(label), alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: 0)
+            Text(value).font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(DesignColor.textPrimary.color).multilineTextAlignment(.trailing)
+                .accessibilityIdentifier("inspector.\(id)")
+        }
+        .font(.system(size: 12))
     }
 }
 
@@ -47,16 +65,7 @@ public struct InspectorPanel: View {
         return identifier
     }
     private func row(_ label: String, _ value: String, id: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 7) {
-            Text(label).foregroundStyle(DesignColor.textSecondary.color)
-                .frame(width: InspectorPanelLayout.labelWidth(label), alignment: .leading)
-                .fixedSize(horizontal: true, vertical: false)
-            Spacer(minLength: 0)
-            Text(value).font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(DesignColor.textPrimary.color).multilineTextAlignment(.trailing)
-                .accessibilityIdentifier("inspector.\(id)")
-        }
-        .font(.system(size: 12))
+        InspectorFieldRow(label: label, value: value, id: id)
     }
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {

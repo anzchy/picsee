@@ -21,6 +21,21 @@ private actor BrokenInspectorLease: AccessLeasing {
     func release(_ lease: AccessLease) {}
 }
 
+@Test func issue136CancellationReachesImageIOWorker() async throws {
+    let (events, continuation) = AsyncStream<Void>.makeStream()
+    let reader = ImageIOInspectorMetadataReader(access: InspectorLease(), workerStarted: {
+        continuation.yield(())
+    })
+    let url = fixture("landscape-3x2.png")
+    let task = Task { try await reader.read(url, access: .fileGrant(url)) }
+    var iterator = events.makeAsyncIterator()
+    _ = await iterator.next()
+    task.cancel()
+    _ = try? await task.value
+    continuation.finish()
+    #expect(task.isCancelled)
+}
+
 @Test func issue136InspectorReadsRealImageHeaderAndAttributes() async throws {
     let url = fixture("landscape-3x2.png")
     let reader = ImageIOInspectorMetadataReader(access: InspectorLease())

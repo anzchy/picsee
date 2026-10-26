@@ -7,7 +7,11 @@ import UniformTypeIdentifiers
 /// Header and file attributes are read under the same security scope used for image decoding.
 public struct ImageIOInspectorMetadataReader: InspectorMetadataReading {
     private let access: any AccessLeasing
-    public init(access: any AccessLeasing) { self.access = access }
+    private let workerStarted: (@Sendable () -> Void)?
+    public init(access: any AccessLeasing) { self.access = access; self.workerStarted = nil }
+    init(access: any AccessLeasing, workerStarted: @escaping @Sendable () -> Void) {
+        self.access = access; self.workerStarted = workerStarted
+    }
     public func read(_ url: URL, access request: AccessRequest) async throws -> InspectorMetadata {
         do {
             return try await access.withLease(request) { _ in
@@ -48,6 +52,7 @@ public struct ImageIOInspectorMetadataReader: InspectorMetadataReading {
                         typeIdentifier: CGImageSourceGetType(source) as String?, creationDate: attributes.creationDate,
                         modificationDate: attributes.contentModificationDate, byteSize: size, thumbnailData: thumbnail)
                 }
+                workerStarted?()
                 return try await withTaskCancellationHandler {
                     try await worker.value
                 } onCancel: {
