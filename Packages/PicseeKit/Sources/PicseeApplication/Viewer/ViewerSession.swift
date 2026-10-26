@@ -230,7 +230,7 @@ public enum ViewerMode: Sendable { case browsing, viewing }
         case .fit, .actualPixels, .zoomIn, .zoomOut: imageCommandsAvailable
         case .escape: inspectorFocus.focus != .canvas || (filePreviewSet == nil && previewSet != nil) || canReturnSingleImage
         case .open: true
-        case .inspector: inspectorFocus.isVisible || imageCommandsAvailable
+        case .inspector: inspectorFocus.isVisible || imageCommandsAvailable || (mode == .browsing && currentItemID != nil)
         case .preview, .enter: mode == .browsing && !orderedItemIDs.isEmpty
         case .previous, .next:
             if let filePreviewSet { filePreviewSet.canMove(forward: command == .next) }
