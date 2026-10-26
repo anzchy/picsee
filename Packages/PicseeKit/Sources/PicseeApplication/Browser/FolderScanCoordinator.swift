@@ -100,9 +100,11 @@ struct FolderScanRestorePoint {
         return "Folder scan failed"
     }
     @discardableResult public func retry() -> Task<Void, any Error>? {
-        guard failure != nil, let activeFolder, let canPresent = automaticPresentationAllowed else { return nil }
+        // A failed refresh has no active folder; it rescans the complete source's folder.
+        guard failure != nil, let folder = activeFolder ?? sourceSnapshot.map({ ($0.version.folder, $0.version.rootID) }),
+              let canPresent = automaticPresentationAllowed else { return nil }
         // The image the user moved to after the failure, not the one the failed scan began with.
-        return start(folder: activeFolder.url, rootID: activeFolder.rootID, input: currentURL ?? inputURL,
+        return start(folder: folder.url, rootID: folder.rootID, input: currentURL ?? inputURL,
             canPresent: canPresent, preserveConditions: true)
     }
     public private(set) var inputURL: URL?
@@ -138,6 +140,7 @@ struct FolderScanRestorePoint {
     private var watchToken: UInt64 = 0
     private var watchRequested = false
     private var refreshPending = false
+    private var refreshFailed = false
     private var refreshTask: Task<Void, any Error>?
     public convenience init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)? = nil,
         watcher: (any FolderWatching)? = nil) {
@@ -158,8 +161,10 @@ struct FolderScanRestorePoint {
         if !held.isEmpty { Task { for subscription in held { await subscription.cancel() } } }
     }
     /// Silent rescan of the complete source: no Reading State and no host start; nil when there is none.
+    /// A failure shows the folder scan failure and keeps the snapshot and the watch; a Current Item whose file is
+    /// gone is cleared rather than kept on screen. The next successful refresh clears the failure.
     @discardableResult public func refresh() -> Task<Void, any Error>? {
-        guard let source = sourceSnapshot, source.isComplete, activeGeneration == nil, failure == nil,
+        guard let source = sourceSnapshot, source.isComplete, activeGeneration == nil, failure == nil || refreshFailed,
               let folder = sourceFolder else { return nil }
         refreshPending = false
         refreshTask?.cancel()
@@ -179,13 +184,31 @@ struct FolderScanRestorePoint {
                     entries: buffer.entries, isComplete: true)
                 trace?.complete(count: fresh.navigationEntries.count, generation: token)
                 trace?.end(outcome: .complete, generation: token)
-                applyRefresh(fresh)
+                if refreshFailed {
+                    failure = nil; refreshFailed = false
+                    host?.folderScanDidComplete(count: fresh.navigationEntries.count)
+                }
+                if fresh.entries == sourceSnapshot?.entries {
+                    enqueueMetadata()
+                } else {
+                    applyRefresh(fresh)
+                }
             } catch {
+                let shown = currentURL
+                var gone = false
+                if let shown { gone = await Self.isGone(shown, rootID: rootID, access: access) }
                 guard generation == token, !Task.isCancelled, !(error is CancellationError) else {
                     trace?.end(outcome: .cancelled, generation: token); return
                 }
                 refreshTask = nil
                 trace?.failure(error, generation: token); trace?.end(outcome: .failed, generation: token)
+                failure = error; refreshFailed = true
+                if gone, currentURL == shown {
+                    currentItemID = nil; currentURL = nil; inputURL = nil
+                    presentationRevision &+= 1
+                    if automaticPresentationAllowed?() != false { host?.clearFolderImageForNoMatches() }
+                }
+                host?.folderScanDidEnd()
                 enqueueMetadata()
                 if refreshPending { refresh() }
                 throw error
@@ -479,7 +502,7 @@ struct FolderScanRestorePoint {
         isReadingFolder = false
         failure = nil
         noMatchesPresented = false
-        refreshTask?.cancel(); refreshTask = nil; refreshPending = false
+        refreshTask?.cancel(); refreshTask = nil; refreshPending = false; refreshFailed = false
         retireWatch(successor: successor)
         if outcome == .cancelled { excludedPresentationNeedsReconciliation = false }
         if let ending { trace?.end(outcome: outcome, generation: ending) }
@@ -562,6 +585,11 @@ struct FolderScanRestorePoint {
                 metadataTask = nil
             }
         }
+    }
+    /// Judged under a root lease; a lease that cannot be taken counts as gone, since the file cannot be shown either.
+    private nonisolated static func isGone(_ url: URL, rootID: AccessRootID, access: any AccessLeasing) async -> Bool {
+        let exists = try? await access.withLease(.root(rootID, file: url)) { _ in FileManager.default.fileExists(atPath: url.path) }
+        return exists != true
     }
     /// Explicitly nonisolated: path canonicalization and scanning begin only inside the acquired lease.
     private nonisolated static func scanLeased(folder: URL, rootID: AccessRootID, generation: UInt64, input: URL?,
