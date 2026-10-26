@@ -32,13 +32,9 @@ private struct FilledInspectorReader: InspectorMetadataReading {
 }
 
 @Test func issue136EnglishAndChineseLabelsFitTheirColumn() {
-    let font = NSFont.systemFont(ofSize: 12)
     for label in ["Dimensions", "Modified", "Created", "Type", "Size",
                   "尺寸", "修改日期", "创建日期", "类型", "大小"] {
-        let measured = (label as NSString).size(withAttributes: [.font: font]).width
-        #expect(InspectorPanelLayout.labelWidth(label) >= measured)
-        #expect(InspectorPanelLayout.labelWidth(label) >= 48)
-        #expect(InspectorPanelLayout.labelWidth(label) < 110)
+        #expect(InspectorPanelLayout.labelWidth(label) == 48)
     }
 }
 
@@ -47,7 +43,7 @@ private struct FilledInspectorReader: InspectorMetadataReading {
 @Test @MainActor func issue136Pages16And34DrawEnglishAndChineseRowsWithoutOverlap() throws {
     _ = NSApplication.shared
     for theme in DesignTheme.allCases {
-        for (label, range) in [("Dimensions", 45...90), ("尺寸", 10...55)] {
+        for (label, heightRange) in [("Dimensions", 20...30), ("尺寸", 8...15)] {
             let background = theme == .dark ? Color(red: 15/255, green: 17/255, blue: 21/255) : Color.white
             let renderer = ImageRenderer(content: InspectorFieldRow(label: label, value: "6000 × 4000", id: "dimensions")
                 .frame(width: 186, height: 24).background(background)
@@ -62,13 +58,13 @@ private struct FilledInspectorReader: InspectorMetadataReading {
                 return (x, y)
             } }
             let labelInk = ink.filter { $0.0 < 95 }, valueInk = ink.filter { $0.0 >= 95 }
-            #expect((labelInk.map(\.0).max() ?? 0) >= range.lowerBound)
-            #expect((labelInk.map(\.0).max() ?? 999) <= range.upperBound)
+            #expect((labelInk.map(\.0).max() ?? 0) >= 10)
+            #expect((labelInk.map(\.0).max() ?? 999) < 48)
             #expect((valueInk.map(\.0).min() ?? 0) >= 100)
             #expect((valueInk.map(\.0).max() ?? 0) >= 175)
             let labelHeight = (labelInk.map(\.1).max() ?? 0) - (labelInk.map(\.1).min() ?? 0) + 1
             let valueHeight = (valueInk.map(\.1).max() ?? 0) - (valueInk.map(\.1).min() ?? 0) + 1
-            #expect((8...15).contains(labelHeight)) // drawn 12 pt label, pages 16/34
+            #expect(heightRange.contains(labelHeight)) // English wraps in the 48 pt CSS column
             #expect((8...15).contains(valueHeight)) // drawn 12 pt monospaced value
         }
     }

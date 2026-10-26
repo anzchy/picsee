@@ -78,7 +78,11 @@ import PicseeMacUI
     #expect(UserDefaults.standard.integer(forKey: "AppleKeyboardUIMode") == 0)
     for grid in [false, true] {
         if grid { controller.showGrid() }
-        _ = window.makeFirstResponder(canvas)
+        let entry: NSView = if grid {
+            try #require(descendants(content).compactMap { $0 as? NSCollectionView }.first)
+        } else { canvas }
+        #expect(window.makeFirstResponder(entry))
+        #expect(window.firstResponder === entry)
         controller.session.updateFocus(.canvas)
         try key(34, "i", modifiers: .command)
         #expect(controller.inspectorVisible)
@@ -95,6 +99,7 @@ import PicseeMacUI
         #expect(controller.session.inspectorFocus.focus == .panel)
         try key(53, "\u{1b}")
         #expect(controller.session.inspectorFocus.focus == .canvas)
+        #expect(window.firstResponder === entry)
         #expect(controller.inspectorVisible)
         try key(34, "i", modifiers: .command)
         #expect(!controller.inspectorVisible)
