@@ -117,9 +117,16 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     }
     /// Caller reports authoritative available IDs; filtered-out items alone are not deletions.
     public func updateItems(_ items: [ItemID], sourceVersion: PreviewSourceVersion) {
+        let old = orderedItemIDs, alive = Set(items), gone = selection.currentItemID
         orderedItemIDs = items
         self.sourceVersion = sourceVersion
         selection.reconcile(with: items)
+        // Browsing: a removed Current Item moves to the nearest survivor in the old order, successor first.
+        if mode == .browsing, previewSet == nil, selection.currentItemID == nil,
+           let gone, let index = old.firstIndex(of: gone),
+           let next = old[(index + 1)...].first(where: alive.contains) ?? old[..<index].last(where: alive.contains) {
+            selection.focus(next, in: items)
+        }
         let previous = previewSet?.currentItemID
         previewSet?.reconcile(availableItemIDs: items)
         if previous != previewSet?.currentItemID, previous != nil {
