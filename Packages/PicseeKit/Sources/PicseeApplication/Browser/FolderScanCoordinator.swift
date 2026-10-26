@@ -18,6 +18,11 @@ struct FolderScanRestorePoint {
     public private(set) var snapshot: FolderSnapshot?
     public private(set) var sourceSnapshot: FolderSnapshot?
     public private(set) var conditions = FolderViewConditions()
+    public var isMetadataSortPending: Bool {
+        guard sourceSnapshot != nil, conditions.sort == .captureDate || conditions.sort == .pixelDimensions else { return false }
+        return activeGeneration != nil || !pendingMetadataIDs.isEmpty
+    }
+    public private(set) var metadataUnknownItemIDs: Set<ItemID> = []
     public private(set) var loopEnabled = false
     public private(set) var recursiveEnabled = false
     public var hasNoMatches: Bool {
@@ -37,8 +42,10 @@ struct FolderScanRestorePoint {
         return true
     }
     public func setConditions(_ value: FolderViewConditions) {
+        if conditions.sort != value.sort { invalidateMetadata() }
         conditions = value
         projectSource()
+        enqueueMetadata()
     }
     public func setLoopEnabled(_ value: Bool) { loopEnabled = value }
     /// `rereadingFolder` rescans as a folder open (Reading State, first entry on completion) instead of keeping the shown image.
@@ -88,6 +95,13 @@ struct FolderScanRestorePoint {
     var automaticPresentationAllowed: (@MainActor () -> Bool)?
     private let access: any AccessLeasing
     private let scanner: any FolderScanning
+    private let metadataReader: (any FolderMetadataReading)?
+    private var metadata: [ItemID: FolderImageMetadata] = [:]
+    private var metadataQueue: [FolderEntry] = []
+    private var pendingMetadataIDs: Set<ItemID> = []
+    private var metadataTask: Task<Void, Never>?
+    private var metadataDrain: Task<Void, Never>?
+    private var metadataRevision: UInt64 = 0
     private let trace: (any FolderScanTracing)?
     private var firstBatchTraced = false
     private var noMatchesPresented = false
@@ -96,8 +110,16 @@ struct FolderScanRestorePoint {
     private var activeGeneration: UInt64?
     private var activeFolder: (url: URL, rootID: AccessRootID)?
     private var excludedPresentationNeedsReconciliation = false
-    public init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)? = nil) {
-        self.access = access; self.scanner = scanner; self.trace = trace
+    public convenience init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)? = nil) {
+        self.init(access: access, scanner: scanner, trace: trace, metadataReader: nil)
+    }
+    public convenience init(access: any AccessLeasing, scanner: any FolderScanning,
+                            metadataReader: any FolderMetadataReading) {
+        self.init(access: access, scanner: scanner, trace: nil, metadataReader: metadataReader)
+    }
+    public init(access: any AccessLeasing, scanner: any FolderScanning, trace: (any FolderScanTracing)?,
+                metadataReader: (any FolderMetadataReading)?) {
+        self.access = access; self.scanner = scanner; self.trace = trace; self.metadataReader = metadataReader
     }
     @discardableResult public func begin(folder: URL, rootID: AccessRootID, input: URL? = nil,
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool = { true }) -> Task<Void, any Error> {
@@ -135,6 +157,7 @@ struct FolderScanRestorePoint {
                         guard activeGeneration == token, !Task.isCancelled, retainReadingAuthority(), let sourceSnapshot else { return }
                         self.sourceSnapshot = sourceSnapshot.appending(batch, isComplete: false)
                         projectSource()
+                        enqueueMetadata()
                         if !batch.isEmpty, !firstBatchTraced {
                             firstBatchTraced = true
                             trace?.firstBatch(count: batch.count, generation: token)
@@ -242,12 +265,13 @@ struct FolderScanRestorePoint {
         // A still-current authority keeps the restored source rescannable (an Include Subfolders toggle from the grid).
         automaticPresentationAllowed = point.canPresent.flatMap { $0() ? $0 : nil }
         snapshot = point.source.applying(point.conditions)
+        enqueueMetadata()
     }
     public func cancel() { end() }
     public func end() { stop(.cancelled) }
     private func projectSource() {
         guard let sourceSnapshot else { return }
-        snapshot = sourceSnapshot.applying(conditions)
+        snapshot = sourceSnapshot.applying(conditions, metadata: metadata)
         guard let snapshot, !isReadingFolder, automaticPresentationAllowed?() != false else { return }
         if snapshot.entries.isEmpty {
             presentNoMatchesIfNeeded()
@@ -293,6 +317,7 @@ struct FolderScanRestorePoint {
         return false
     }
     private func stop(_ outcome: FolderScanOutcome) {
+        invalidateMetadata()
         let ending = activeGeneration
         activeGeneration = nil
         activeFolder = nil
@@ -311,6 +336,52 @@ struct FolderScanRestorePoint {
         if outcome == .cancelled { excludedPresentationNeedsReconciliation = false }
         if let ending { trace?.end(outcome: outcome, generation: ending) }
         host?.folderScanDidEnd()
+    }
+    private func invalidateMetadata() {
+        metadataRevision &+= 1
+        if metadataTask != nil { metadataDrain = metadataTask }
+        metadataTask?.cancel(); metadataTask = nil
+        metadataQueue.removeAll(); pendingMetadataIDs.removeAll()
+        metadata.removeAll(); metadataUnknownItemIDs.removeAll()
+    }
+    private func enqueueMetadata() {
+        guard metadataReader != nil,
+              conditions.sort == .captureDate || conditions.sort == .pixelDimensions,
+              let sourceSnapshot else { return }
+        for entry in sourceSnapshot.navigationEntries where metadata[entry.itemID] == nil && !pendingMetadataIDs.contains(entry.itemID) {
+            pendingMetadataIDs.insert(entry.itemID)
+            metadataQueue.append(entry)
+        }
+        guard metadataTask == nil, !metadataQueue.isEmpty else { return }
+        let token = metadataRevision, version = sourceSnapshot.version
+        let predecessor = metadataDrain
+        metadataTask = Task { [weak self] in
+            guard let self else { return }
+            await predecessor?.value
+            while !Task.isCancelled, token == metadataRevision, !metadataQueue.isEmpty {
+                let entry = metadataQueue.removeFirst()
+                guard let reader = metadataReader else { break }
+                let access = access
+                let read = Task.detached {
+                    try await access.withLease(.root(version.rootID, file: entry.url)) { lease in
+                        guard AccessBoundary.contains(entry.url, in: lease.url) else { throw FileAccessError.outsideRoot }
+                        try Task.checkCancellation()
+                        return try reader.read(entry.url)
+                    }
+                }
+                let result = await withTaskCancellationHandler {
+                    try? await read.value
+                } onCancel: { read.cancel() }
+                guard !Task.isCancelled, token == metadataRevision,
+                      self.sourceSnapshot?.version == version,
+                      self.sourceSnapshot?.navigationIndex(for: entry.itemID) != nil else { break }
+                metadata[entry.itemID] = result ?? .init()
+                if result == nil { metadataUnknownItemIDs.insert(entry.itemID) }
+                pendingMetadataIDs.remove(entry.itemID)
+                if pendingMetadataIDs.isEmpty || metadata.count.isMultiple(of: 64) { projectSource() }
+            }
+            if token == metadataRevision { metadataTask = nil }
+        }
     }
     /// Explicitly nonisolated: path canonicalization and scanning begin only inside the acquired lease.
     private nonisolated static func scanLeased(folder: URL, rootID: AccessRootID, generation: UInt64, input: URL?,

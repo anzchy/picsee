@@ -25,6 +25,8 @@ public enum FolderMenuAction: Equatable, Sendable {
         case .sort(.modificationDate): "Modification Date"
         case .sort(.type): "Type"
         case .sort(.size): "Size"
+        case .sort(.captureDate): "Capture Date"
+        case .sort(.pixelDimensions): "Pixel Area (Width × Height)"
         case .direction(.ascending): "Ascending"
         case .direction(.descending): "Descending"
         case .extensionType(let value): value.isEmpty ? "No Extension" : value.uppercased()
@@ -32,6 +34,12 @@ public enum FolderMenuAction: Equatable, Sendable {
         case .loop: "Loop Through Folder"
         case .recursive: "Include Subfolders"
         }
+    }
+    public var helpKey: String? {
+        if case .sort(.pixelDimensions) = self {
+            return "Sort by pixel area; equal areas use width, height, then natural name. Unknown last."
+        }
+        return nil
     }
 }
 

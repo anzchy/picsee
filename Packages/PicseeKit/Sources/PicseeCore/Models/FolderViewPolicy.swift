@@ -1,7 +1,16 @@
 import Foundation
 
 public enum FolderSortKey: String, CaseIterable, Sendable {
-    case name, modificationDate, type, size
+    case name, modificationDate, type, size, captureDate, pixelDimensions
+}
+
+public struct FolderImageMetadata: Equatable, Sendable {
+    public let captureDate: Date?
+    public let pixelWidth: Int?
+    public let pixelHeight: Int?
+    public init(captureDate: Date? = nil, pixelWidth: Int? = nil, pixelHeight: Int? = nil) {
+        self.captureDate = captureDate; self.pixelWidth = pixelWidth; self.pixelHeight = pixelHeight
+    }
 }
 
 public enum FolderSortDirection: String, CaseIterable, Sendable {
@@ -22,16 +31,16 @@ public struct FolderViewConditions: Equatable, Sendable {
 }
 
 extension FolderSnapshot {
-    public func applying(_ conditions: FolderViewConditions) -> Self {
+    public func applying(_ conditions: FolderViewConditions, metadata: [ItemID: FolderImageMetadata] = [:]) -> Self {
         let selected = conditions.selectedExtensions.map { Set($0.map { $0.lowercased() }) }
         let projected = entries.filter { selected?.contains($0.normalizedExtension) != false }
-            .sorted { folderEntryBefore($0, $1, conditions: conditions) }
+            .sorted { folderEntryBefore($0, $1, conditions: conditions, metadata: metadata) }
         return Self(version: version, orderedEntries: projected, isComplete: isComplete)
     }
 }
 
 private func folderEntryBefore(_ lhs: FolderEntry, _ rhs: FolderEntry,
-                               conditions: FolderViewConditions) -> Bool {
+                               conditions: FolderViewConditions, metadata: [ItemID: FolderImageMetadata]) -> Bool {
     let comparison: ComparisonResult
     switch conditions.sort {
     case .name:
@@ -53,12 +62,42 @@ private func folderEntryBefore(_ lhs: FolderEntry, _ rhs: FolderEntry,
         case let (left?, right?):
             comparison = left < right ? .orderedAscending : left > right ? .orderedDescending : .orderedSame
         }
+    case .captureDate:
+        switch (metadata[lhs.itemID]?.captureDate, metadata[rhs.itemID]?.captureDate) {
+        case (nil, nil): comparison = .orderedSame
+        case (nil, _?): return false
+        case (_?, nil): return true
+        case let (left?, right?): comparison = left.compare(right)
+        }
+    case .pixelDimensions:
+        func dimensions(_ entry: FolderEntry) -> (Int, Int)? {
+            guard let value = metadata[entry.itemID], let width = value.pixelWidth,
+                  let height = value.pixelHeight, width > 0, height > 0 else { return nil }
+            return (width, height)
+        }
+        switch (dimensions(lhs), dimensions(rhs)) {
+        case (nil, nil): comparison = .orderedSame
+        case (nil, _?): return false
+        case (_?, nil): return true
+        case let ((leftWidth, leftHeight)?, (rightWidth, rightHeight)?):
+            let leftArea = UInt(leftWidth).multipliedFullWidth(by: UInt(leftHeight))
+            let rightArea = UInt(rightWidth).multipliedFullWidth(by: UInt(rightHeight))
+            if leftArea.high != rightArea.high {
+                comparison = leftArea.high < rightArea.high ? .orderedAscending : .orderedDescending
+            } else if leftArea.low != rightArea.low {
+                comparison = leftArea.low < rightArea.low ? .orderedAscending : .orderedDescending
+            } else if leftWidth != rightWidth || leftHeight != rightHeight {
+                return [leftWidth, leftHeight].lexicographicallyPrecedes([rightWidth, rightHeight])
+            } else { comparison = .orderedSame }
+        }
     }
     guard comparison == .orderedSame else {
         return conditions.direction == .ascending ? comparison == .orderedAscending : comparison == .orderedDescending
     }
     let names = folderNaturalNameCompare(lhs, rhs)
-    return names == .orderedSame ? lhs.relativePath < rhs.relativePath : names == .orderedAscending
+    if names != .orderedSame { return names == .orderedAscending }
+    if lhs.itemID != rhs.itemID { return lhs.itemID.stableEncoding < rhs.itemID.stableEncoding }
+    return lhs.relativePath < rhs.relativePath
 }
 
 func folderNaturalNameCompare(_ lhs: FolderEntry, _ rhs: FolderEntry) -> ComparisonResult {

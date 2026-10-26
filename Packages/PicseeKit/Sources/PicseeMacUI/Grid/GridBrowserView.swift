@@ -15,6 +15,10 @@ import PicseeApplication
     }
 }
 
+@MainActor final class GridSortNoticeLabel: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 /// A reused grid item contains only display data supplied by an authorized snapshot.
 @MainActor public final class GridPhotoItem: NSCollectionViewItem {
     public private(set) var representedItemID: ItemID?
@@ -255,6 +259,7 @@ private struct GridGeometry: Equatable {
     /// The grid's Current Item changed without a selection (entry, Esc return, removal fallback).
     public var onCurrentChange: ((ItemID) -> Void)?
     private let scrollView = NSScrollView()
+    let metadataSortNotice = GridSortNoticeLabel(labelWithString: String(localized: "Sort unfinished"))
     private var entries: [FolderEntry] = []
     private var indices: [ItemID: Int] = [:]
     private var updating = false
@@ -301,6 +306,14 @@ private struct GridGeometry: Equatable {
         scrollView.backgroundColor = DesignColor.canvasBackground.nsColor
         scrollView.documentView = collectionView
         addSubview(scrollView)
+        metadataSortNotice.isHidden = true
+        metadataSortNotice.font = .systemFont(ofSize: 12, weight: .medium)
+        metadataSortNotice.textColor = .secondaryLabelColor
+        metadataSortNotice.wantsLayer = true
+        refreshMetadataNoticeAppearance()
+        metadataSortNotice.setAccessibilityIdentifier("folder.sort.pending")
+        metadataSortNotice.setAccessibilityLabel(String(localized: "Sort unfinished"))
+        addSubview(metadataSortNotice)
         NotificationCenter.default.addObserver(self, selector: #selector(clipFrameChanged),
             name: NSView.frameDidChangeNotification, object: scrollView.contentView)
         NotificationCenter.default.addObserver(self, selector: #selector(clipBoundsChanged),
@@ -331,8 +344,23 @@ private struct GridGeometry: Equatable {
 
     public override func layout() {
         super.layout()
+        metadataSortNotice.sizeToFit()
+        metadataSortNotice.frame.origin = NSPoint(x: max(12, bounds.maxX - metadataSortNotice.frame.width - 20), y: 12)
         updateGeometry()
         reconcileThumbnails()
+    }
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshMetadataNoticeAppearance()
+    }
+    private func refreshMetadataNoticeAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            metadataSortNotice.layer?.backgroundColor = DesignColor.canvasBackground.nsColor.cgColor
+        }
+    }
+    public func setMetadataSortPending(_ pending: Bool) {
+        metadataSortNotice.isHidden = !pending
+        metadataSortNotice.setAccessibilityHidden(!pending)
     }
 
     public override func viewDidChangeBackingProperties() {

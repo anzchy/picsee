@@ -3,6 +3,18 @@ import Testing
 import PicseeCore
 @testable import PicseeApplication
 
+@Test func issue108MetadataSortMenuStatesAndAreaSemantics() {
+    let initial = FolderMenuSelection(conditions: .init(), loopEnabled: false)
+    let capture = FolderMenuPolicy.applying(.sort(.captureDate), to: initial)
+    #expect(FolderMenuPolicy.state(for: .sort(.captureDate), selection: capture,
+        hasFolderSource: true, previewActive: false).checked)
+    #expect(FolderMenuAction.sort(.captureDate).accessibilityIdentifier == "folder.sort.captureDate.menu")
+    #expect(FolderMenuAction.sort(.pixelDimensions).titleKey == "Pixel Area (Width × Height)")
+    #expect(FolderMenuAction.sort(.pixelDimensions).helpKey?.contains("equal areas use width, height") == true)
+    #expect(FolderMenuAction.sort(.name).helpKey == nil)
+    #expect(FolderSortKey.allCases.contains(.captureDate) && FolderSortKey.allCases.contains(.pixelDimensions))
+}
+
 @Test func folderMenuPolicyUsesActiveWindowConditionsAndClearableNoMatches() {
     let initial = FolderMenuSelection(conditions: .init(), loopEnabled: false)
     let actions: [FolderMenuAction] = [.sort(.name), .sort(.modificationDate), .sort(.type), .sort(.size),
