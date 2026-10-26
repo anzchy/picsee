@@ -48,8 +48,15 @@ ANSI_PATTERN = re.compile(r"\x1b\[([0-?]*)([ -/]*)([@-~])|\x1b\][^\x07\x1b]*(?:\
 # hidden, strike, their resets, and the basic/bright colours with their defaults.
 NEUTRAL_SGR = frozenset([1, 3, 4, 5, 7, 8, 9, 23, 24, 25, 27, 28, 29, 39, 49, 59,
                          *range(30, 38), *range(40, 48), *range(90, 98), *range(100, 108)])
+# The last line Claude Code draws under an open selection dialog (AskUserQuestion, folder trust),
+# seen on 2.1.310: "Enter to select · ↑/↓ to navigate · Esc to cancel" or "Enter to confirm · Esc to cancel".
+DIALOG_FOOTER_PATTERN = re.compile(r"^Enter to (?:select|confirm) · (?:[^\n]* · )?Esc to cancel$")
 TYPING_GIVE_UP_SECONDS = 14400
 TYPING_SLOW_RETRY_SECONDS = 60
+ATTENTION_AFTER_SECONDS = 600
+# One saved unreadable read per event: the tail of the raw ANSI text and of its plain lines.
+SNAPSHOT_CHARS = 65536
+SNAPSHOT_LINES = 200
 ATTENTION_STATES = ("deferred-user-typing", "delivery-uncertain", "delivery-failed", "launch-failed")
 REPORT_SPEC = importlib.util.spec_from_file_location(
     "picsee_poll_report", Path(__file__).with_name("poll-report.py")
@@ -157,6 +164,10 @@ def _validate_config(config):
         raise ValueError("typing_give_up_seconds must be between 0 and 86400")
     if give_up < hold:
         raise ValueError("typing_give_up_seconds must be at least typing_defer_seconds")
+    alert = config.get("attention_after_seconds", ATTENTION_AFTER_SECONDS)
+    if (not isinstance(alert, (int, float)) or isinstance(alert, bool) or not math.isfinite(alert)
+            or alert <= 0 or alert > 86400):
+        raise ValueError("attention_after_seconds must be above 0 and at most 86400")
     deadline = config.get("poll_deadline_seconds")
     if deadline is not None and (
         not isinstance(deadline, (int, float)) or not math.isfinite(deadline) or deadline <= 0
@@ -455,14 +466,8 @@ def _sgr_dim(params, dim):
     return dim
 
 
-def _claude_input_state(screen):
-    """Classify the Claude Code input box in an ANSI pane snapshot: empty, typing or unknown.
-
-    The box is the text between the last two rule lines, and its first line must start
-    with the prompt glyph. Dim (SGR 2) text is Claude's grey prompt suggestion, not input;
-    an SGR encoding it does not fully recognise ends dim text (see `_sgr_dim`). Anything
-    else, including a missing box or another prompt glyph, is unknown.
-    """
+def _parse_screen(screen):
+    """Split an ANSI pane snapshot into plain lines, undimmed lines and rule line indexes."""
     plain, visible = [], []
     dim = False
     for line in screen.replace("\r", "").split("\n"):
@@ -480,6 +485,22 @@ def _claude_input_state(screen):
         plain.append("".join(text).rstrip())
         visible.append("".join(undimmed))
     rules = [index for index, line in enumerate(plain) if RULE_PATTERN.fullmatch(line)]
+    return plain, visible, rules
+
+
+def _claude_input_state(screen):
+    """Classify the Claude Code input box in an ANSI pane snapshot: empty, typing, dialog or unknown.
+
+    A last drawn line that is a selection-dialog footer is a dialog. Otherwise the box is the
+    text between the last two rule lines, and its first line must start with the prompt glyph.
+    Dim (SGR 2) text is Claude's grey prompt suggestion, not input; an SGR encoding it does not
+    fully recognise ends dim text (see `_sgr_dim`). Anything else, including a missing box or
+    another prompt glyph, is unknown. Only empty lets a send through.
+    """
+    plain, visible, rules = _parse_screen(screen)
+    drawn = [line.strip() for line in plain if line.strip()]
+    if drawn and DIALOG_FOOTER_PATTERN.fullmatch(drawn[-1]):
+        return "dialog"
     if len(rules) < 2 or rules[-1] - rules[-2] < 2 or not plain[rules[-2] + 1].startswith("❯"):
         return "unknown"
     box = visible[rules[-2] + 1:rules[-1]]
@@ -487,12 +508,39 @@ def _claude_input_state(screen):
     return "typing" if any(line.strip() for line in box) else "empty"
 
 
-def _claude_input(destination, run):
+def _claude_read(destination, run):
     argv = ["herdr", "pane", "read", destination["pane"], "--source", "visible", "--format", "ansi"]
     completed = run(argv, capture_output=True, text=True, timeout=30)
     if completed.returncode != 0:
         raise ValueError("herdr pane read failed: " + (completed.stderr.strip() or completed.stdout.strip()))
-    return _claude_input_state(completed.stdout)
+    return completed.stdout
+
+
+def _utc_now():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _save_input_snapshot(event_dir, destination, screen, input_state):
+    """Keep the read that classified as unknown, so the screen can be reproduced offline."""
+    plain, _, rules = _parse_screen(screen)
+    box = plain[rules[-2] + 1:rules[-1]] if len(rules) >= 2 else []
+    first_line = max(0, len(plain) - SNAPSHOT_LINES)
+    _atomic_text(event_dir / "input-snapshot.ansi", screen[-SNAPSHOT_CHARS:])
+    _atomic_json(event_dir / "input-snapshot.json", {
+        "input": input_state, "pane": destination["pane"], "captured_at": _utc_now(),
+        "truncated": len(screen) > SNAPSHOT_CHARS or first_line > 0,
+        "lines": plain[first_line:], "rules": [index - first_line for index in rules if index >= first_line],
+        "box": box,
+    })
+
+
+def _log_attention(event_dir, config, destination, input_state, held):
+    # The listeners directory sits in the delegator's state directory; the log sits beside it.
+    line = ("{} listener {} input={} held {}s; nothing sent; pane {}; event {}; "
+            "run listen-notify.py status\n").format(
+        _utc_now(), config["event"], input_state, _seconds(held), destination["pane"], event_dir)
+    with (event_dir.parent.parent / "attention.log").open("a") as log:
+        log.write(line)
 
 
 def _accepted_claude_run(completed):
@@ -518,7 +566,9 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep, clock):
     typing_retry = config.get("typing_retry_seconds", 5)
     typing_hold = config.get("typing_defer_seconds", 900)
     give_up = _typing_give_up_seconds(config)
+    alert_after = config.get("attention_after_seconds", ATTENTION_AFTER_SECONDS)
     hold_start = None
+    snapshot_saved = alerted = False
     errors = []
     attempt = 1
     while attempt <= attempts:
@@ -527,7 +577,8 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep, clock):
         })
         try:
             _checked_claude_pane(destination, run)
-            input_state = _claude_input(destination, run)
+            screen = _claude_read(destination, run)
+            input_state = _claude_input_state(screen)
             if input_state == "empty":
                 if hold_start is not None:
                     _atomic_text(event_dir / "notification.txt", message + "\nSend held {}s while the Claude "
@@ -539,7 +590,8 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep, clock):
                     "state": "delivery-uncertain", "event": config["event"],
                     "attempt": attempt, "reason": "gate read entered; pane run follows only if the box is empty",
                 })
-                input_state = _claude_input(destination, run)
+                screen = _claude_read(destination, run)
+                input_state = _claude_input_state(screen)
         except Exception as error:
             errors.append(type(error).__name__ + ": " + str(error))
             # Nothing was sent: a failed list or read never reaches the transport.
@@ -558,10 +610,18 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep, clock):
             now = clock()
             hold_start = now if hold_start is None else hold_start
             held = round(now - hold_start, 1)
+            if input_state == "unknown" and not snapshot_saved:
+                _save_input_snapshot(event_dir, destination, screen, input_state)
+                snapshot_saved = True
+            # A dialog or unreadable screen is nobody typing: say so early, once per run.
+            if input_state in ("dialog", "unknown") and not alerted and held >= alert_after:
+                _log_attention(event_dir, config, destination, input_state, held)
+                alerted = True
+            flag = {"attention": True} if alerted else {}
             if held >= give_up:
                 _atomic_json(event_dir / "status.json", {
                     "state": "deferred-user-typing", "event": config["event"],
-                    "input": input_state, "deferred_seconds": held, "retrying": False,
+                    "input": input_state, "deferred_seconds": held, "retrying": False, **flag,
                 })
                 raise DeliveryDeferred(
                     "Claude input box not empty ({}) for {}s; nothing sent, event kept for a later run".format(
@@ -575,7 +635,7 @@ def _deliver_claude(event_dir, config, destination, message, run, sleep, clock):
             wait = min(wait, give_up - held)
             _atomic_json(event_dir / "status.json", {
                 "state": state, "event": config["event"], "input": input_state,
-                "deferred_seconds": held, "retry_in_seconds": wait, "retrying": True,
+                "deferred_seconds": held, "retry_in_seconds": wait, "retrying": True, **flag,
             })
             sleep(wait)
             continue
@@ -757,7 +817,8 @@ def listener_status(state_root):
         if not isinstance(status, dict):
             status = {}
         worker = _worker_state(event_dir / "pid")
-        flag = "attention" if state in ATTENTION_STATES + ("invalid",) or worker != "running" else "active"
+        flag = ("attention" if state in ATTENTION_STATES + ("invalid",) or worker != "running"
+                or status.get("attention") is True else "active")
         attention = attention or flag == "attention"
         line = "{} {} state={} worker={}".format(flag, event_dir.name, state, worker)
         for field in ("input", "deferred_seconds", "retrying", "reason", "last_error"):
@@ -807,6 +868,8 @@ def _build_parser():
                        help="claude-pane: hold time before recording deferred-user-typing")
     start.add_argument("--typing-give-up-seconds", type=float,
                        help="claude-pane: stop re-checking a deferred send (default max(14400, defer))")
+    start.add_argument("--attention-after-seconds", type=float, default=ATTENTION_AFTER_SECONDS,
+                       help="claude-pane: log a dialog or unreadable box held this long to attention.log")
     default_root = Path.home() / ".picsee" / "herdr" / "delegator" / "listeners"
     start.add_argument("--state-root", type=Path, default=default_root)
     status = subparsers.add_parser("status", help="list undelivered events; exit 3 if any needs attention")
@@ -872,6 +935,7 @@ def _config_from_args(args):
         "typing_defer_seconds": args.typing_defer_seconds,
         "typing_give_up_seconds": (args.typing_give_up_seconds if args.typing_give_up_seconds is not None
                                    else max(TYPING_GIVE_UP_SECONDS, args.typing_defer_seconds)),
+        "attention_after_seconds": args.attention_after_seconds,
     }
 
 

@@ -1,0 +1,3 @@
+# herdr pane reads kept byte for byte (CRLF line ends and trailing spaces are part of the capture),
+# except that user, host, uid, session and project names are replaced by placeholders.
+*.ansi -text -whitespace
