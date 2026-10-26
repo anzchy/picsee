@@ -17,17 +17,23 @@ struct UntestedNativeResourceSnapshotTrace: ResourceSnapshotTracing {
     }
 }
 
-/// Untested OS input adapter. One consumer forwards observed levels in source-delivery order.
+/// Untested OS input adapter. One consumer forwards observed levels in source-delivery order,
+/// first to the shared pipeline, then to the windows (whose grids stop prefetch while it lasts).
 final class UntestedNativeMemoryPressureForwarder {
     private let source: any DispatchSourceMemoryPressure
     private let levels: AsyncStream<MemoryPressureLevel>.Continuation
     private let consumer: Task<Void, Never>
-    init(pipeline: ImageIOPipeline) {
+    init(pipeline: ImageIOPipeline, windows: @escaping @MainActor (MemoryPressureLevel) -> Void) {
         let (events, levels) = AsyncStream<MemoryPressureLevel>.makeStream()
         let source = DispatchSource.makeMemoryPressureSource(eventMask: [.normal, .warning, .critical],
             queue: DispatchQueue(label: "io.github.anzchy.picsee.memory-pressure"))
         self.source = source; self.levels = levels
-        consumer = Task { for await level in events { await pipeline.memoryPressure(level) } }
+        consumer = Task {
+            for await level in events {
+                await pipeline.memoryPressure(level)
+                await windows(level)
+            }
+        }
         source.setEventHandler { [weak source] in
             guard let flags = source?.data else { return }
             if flags.contains(.critical) { levels.yield(.critical) }

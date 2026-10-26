@@ -26,12 +26,14 @@ enum GridThumbnailPixelSizing {
         var failedRevision: FileRevision?
         var priority: DecodePriority
         var wasVisible: Bool
+        /// The pipeline refused this prefetch under memory pressure; the next reconcile asks again.
+        var deferred = false
     }
     private var snapshot: FolderSnapshot?
     private var records: [Int: Record] = [:]
     private var currentCoverage: ThumbnailCoverage?
     private var terminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
-    var activeItemIDs: Set<ItemID> { Set(records.values.map(\.itemID)) }
+    var activeItemIDs: Set<ItemID> { Set(records.values.filter { !$0.deferred }.map(\.itemID)) }
     private enum PinOperation: Sendable {
         case pin(RenderKey, DecodedImage), unpin(RenderKey), settle(CheckedContinuation<Void, Never>)
     }
@@ -55,6 +57,9 @@ enum GridThumbnailPixelSizing {
             }
         }
     }
+    /// Under memory pressure only visible cells are requested and held; prefetch resumes when it ends.
+    func setMemoryPressure(_ active: Bool) { underPressure = active }
+    private var underPressure = false
     /// Returns once every pin and unpin sent so far has reached `pinning`.
     func settlePins() async {
         guard let pinOperations else { return }
@@ -80,7 +85,7 @@ enum GridThumbnailPixelSizing {
         let margin = max(1, columns) * 2
         let lower = max(0, first - margin)
         let upper = min(snapshot.navigationEntries.count - 1, last + margin)
-        let desired = Set(lower...upper)
+        let desired = underPressure ? visible.filter { (lower...upper).contains($0) } : Set(lower...upper)
         for index in Array(records.keys) where !desired.contains(index) {
             drop(records.removeValue(forKey: index))
         }
@@ -90,7 +95,7 @@ enum GridThumbnailPixelSizing {
             var keepFailure = false
             if let record = records[index] {
                 let isVisible = visible.contains(index)
-                if isVisible && ((record.priority == .prefetch && record.task != nil)
+                if record.deferred || isVisible && ((record.priority == .prefetch && record.task != nil)
                     || (record.failed && record.task == nil && !record.wasVisible)) {
                     keepFailure = record.failed
                     previousFailure = record.failedRevision
@@ -117,6 +122,10 @@ enum GridThumbnailPixelSizing {
                     }
                     guard !Task.isCancelled else { return }
                     self?.finish(index: index, token: token, request: loaded.0, image: loaded.1)
+                } catch let error as ImageLoadError where error.kind == .cancelled && priority == .prefetch {
+                    // The pipeline refused prefetch under memory pressure: not a failure; the next reconcile asks again.
+                    guard !Task.isCancelled else { return }
+                    self?.deferPrefetch(index: index, token: token)
                 } catch {
                     guard !Task.isCancelled else { return }
                     self?.fail(index: index, token: token, error: error)
@@ -148,6 +157,13 @@ enum GridThumbnailPixelSizing {
         onResult?(index, request, image)
     }
 
+    private func deferPrefetch(index: Int, token: UUID) {
+        guard records[index]?.token == token else { return }
+        records[index]?.task = nil
+        records[index]?.deferred = true
+        resumeTerminalWaiters(at: index)
+    }
+
     private func fail(index: Int, token: UUID, error: any Error) {
         guard records[index]?.token == token else { return }
         records[index]?.task = nil
@@ -166,7 +182,7 @@ enum GridThumbnailPixelSizing {
     func shouldDisplayFailure(at index: Int) -> Bool { records[index]?.failed == true }
     func waitForTerminal(at index: Int) async {
         if let record = records[index], record.task == nil,
-           (record.result != nil || record.failed) { return }
+           (record.result != nil || record.failed || record.deferred) { return }
         await withCheckedContinuation { terminalWaiters[index, default: []].append($0) }
     }
     private func resumeTerminalWaiters(at index: Int) {
