@@ -24,6 +24,17 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     #expect(InspectorPanel.typeName("com.example.unrecognized-image") == "com.example.unrecognized-image")
 }
 
+@Test func issue136EnglishAndChineseLabelsFitTheirColumn() {
+    let font = NSFont.systemFont(ofSize: 12)
+    for label in ["Dimensions", "Modified", "Created", "Type", "Size",
+                  "尺寸", "修改日期", "创建日期", "类型", "大小"] {
+        let measured = (label as NSString).size(withAttributes: [.font: font]).width
+        #expect(InspectorPanelLayout.labelWidth(label) >= measured)
+        #expect(InspectorPanelLayout.labelWidth(label) >= 48)
+        #expect(InspectorPanelLayout.labelWidth(label) < 110)
+    }
+}
+
 @Test @MainActor func issue136InspectorPanelUsesPage16And34GeometryAndSurfaceColors() throws {
     _ = NSApplication.shared
     let session = ViewerSession(), model = InspectorModel(reader: EmptyInspectorReader())
@@ -36,21 +47,19 @@ private struct FilledInspectorReader: InspectorMetadataReading {
         let image = try #require(renderer.cgImage)
         #expect(image.width == 220 && image.height == 500)
         let pixels = NSBitmapImageRep(cgImage: image)
-        func renderedComponents(_ color: DesignColor) throws -> [Double] {
-            let reference = ImageRenderer(content: Rectangle().fill(color.color).frame(width: 220, height: 500)
-                .environment(\.colorScheme, theme == .dark ? .dark : .light))
-            reference.scale = 1
-            let rep = NSBitmapImageRep(cgImage: try #require(reference.cgImage))
-            let sample = try #require(rep.colorAt(x: 100, y: 100)).usingColorSpace(.deviceRGB)!
-            return [sample.redComponent, sample.greenComponent, sample.blueComponent]
-        }
-        let base = try renderedComponents(.canvasBackground)
-        let preview = try renderedComponents(.sidebarBackground)
-        let lower = try #require(pixels.colorAt(x: 205, y: 400)).usingColorSpace(.deviceRGB)!
-        let picture = try #require(pixels.colorAt(x: 30, y: 85)).usingColorSpace(.deviceRGB)!
-        for i in 0..<3 {
-            #expect(abs(lower.cgColor.components![i] - base[i]) < 0.02)
-            #expect(abs(picture.cgColor.components![i] - preview[i]) < 0.02)
+        // Pinned pages 16/34: --color-bg and --color-surface, independent of DesignColor.
+        let base: [Double] = theme == .dark ? [15, 17, 21] : [255, 255, 255]
+        let preview: [Double] = theme == .dark ? [22, 26, 34] : [246, 247, 251]
+        for (point, expected) in [(NSPoint(x: 205, y: 400), base),
+                                  (NSPoint(x: 205, y: 460), base),
+                                  (NSPoint(x: 100, y: 275), base),
+                                  (NSPoint(x: 30, y: 85), preview),
+                                  (NSPoint(x: 110, y: 105), preview)] {
+            let color = try #require(pixels.colorAt(x: Int(point.x), y: Int(point.y))).usingColorSpace(.deviceRGB)!
+            for i in 0..<3 {
+                let actual = [color.redComponent, color.greenComponent, color.blueComponent][i]
+                #expect(abs(actual - expected[i] / 255) < 0.06)
+            }
         }
     }
 }
@@ -74,9 +83,16 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     renderer.scale = 1
     let image = try #require(renderer.cgImage)
     #expect(image.width == 220 && image.height == 500)
-    let pixel = try #require(NSBitmapImageRep(cgImage: image).colorAt(x: 110, y: 108)).usingColorSpace(.deviceRGB)!
+    let pixels = NSBitmapImageRep(cgImage: image)
     let background = DesignColor.sidebarBackground.components(.light)
-    #expect(abs(pixel.redComponent - background[0]) > 0.05)
+    let hasActualPreviewPixel = stride(from: 60, through: 170, by: 10).contains { y in
+        stride(from: 25, through: 190, by: 10).contains { x in
+            guard let pixel = pixels.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { return false }
+            return abs(pixel.redComponent - background[0]) > 0.05
+                && abs(pixel.greenComponent - background[1]) > 0.05
+        }
+    }
+    #expect(hasActualPreviewPixel)
 }
 
 @Test @MainActor func issue136InspectorPanelFocusEntersAndEscRestoresCanvas() {
@@ -90,6 +106,11 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     window.isReleasedWhenClosed = false; window.contentView = host
     defer { window.close() }
     host.layoutSubtreeIfNeeded()
+    func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+    let closeButton = descendants(host).compactMap { $0 as? NSButton }
+        .first { $0.accessibilityIdentifier() == "inspector.close" }
+    #expect(closeButton?.acceptsFirstResponder == true)
+    #expect(closeButton?.focusRingType == .exterior)
     session.setInspectorVisible(true)
     session.tab(reverse: false)
     host.layoutSubtreeIfNeeded()

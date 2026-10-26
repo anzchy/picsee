@@ -3,6 +3,33 @@ import Testing
 import PicseeApplication
 @testable import PicseeMacUI
 
+@Test @MainActor func issue136InspectorSharesWindowWithViewerAndGrid() {
+    _ = NSApplication.shared
+    let host = NSView(frame: NSRect(x: 0, y: 0, width: 960, height: 640))
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 960, height: 612),
+                             preferencesStore: InMemoryDisplayPreferencesStore())
+    let canvas = NSView(frame: host.bounds), chrome = NSView(frame: host.bounds)
+    let state = NSView(frame: host.bounds), grid = NSView(), inspector = NSView()
+    for view in [canvas, shell, state, chrome, inspector] { host.addSubview(view) }
+    let presentation = GridViewerPresentation(canvas: canvas, chrome: chrome, state: state,
+        grid: grid, inspector: inspector, shell: shell)
+    presentation.showViewer()
+    presentation.layoutInspector(visible: true)
+    #expect(canvas.frame.width == 740)
+    #expect(state.frame.width == 740)
+    #expect(chrome.frame.width == 740)
+    #expect(inspector.frame.minX == canvas.frame.maxX)
+    presentation.showGrid(reading: false)
+    presentation.layoutInspector(visible: true)
+    #expect(shell.frame.width == 740)
+    #expect(inspector.frame.minX == shell.frame.maxX)
+    presentation.layoutInspector(visible: false)
+    #expect(shell.frame.width == 960)
+    presentation.showViewer()
+    presentation.layoutInspector(visible: false)
+    #expect(canvas.frame.width == 960)
+}
+
 @Test @MainActor func cancelReadingRestoresVisibleViewerForFolderNavigatedImage() {
     _ = NSApplication.shared
     let canvas = NSView(), chrome = NSView(), state = NSView(), grid = NSView(), inspector = NSView()

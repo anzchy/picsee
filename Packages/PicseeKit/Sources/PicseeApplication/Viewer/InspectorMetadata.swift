@@ -39,14 +39,15 @@ public enum InspectorValue: Equatable, Sendable {
         let id: ItemID?
         let url: URL
         let access: AccessRequest
+        let revision: String?
     }
     public init(reader: any InspectorMetadataReading) { self.reader = reader }
-    public func select(itemID: ItemID?, url: URL?, access: AccessRequest?, refresh: Bool = false) {
+    public func select(itemID: ItemID?, url: URL?, access: AccessRequest?, revision: String? = nil, refresh: Bool = false) {
         guard let url, let access else {
             key = nil; generation = UUID(); task?.cancel(); task = nil; name = nil; value = .unknown
             return
         }
-        let next = Key(id: itemID, url: url, access: access)
+        let next = Key(id: itemID, url: url, access: access, revision: revision)
         guard refresh || key != next else { return }
         key = next; generation = UUID(); task?.cancel()
         name = url.lastPathComponent; value = .loading

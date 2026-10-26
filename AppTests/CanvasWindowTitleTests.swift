@@ -42,3 +42,33 @@ import PicseeMacUI
     #expect(window.title == "Picsee")
     #expect(window.representedURL == nil)
 }
+
+@MainActor @Test func issue136WindowRoutesInspectorCommandTabAndEscape() throws {
+    _ = NSApplication.shared
+    let unavailable = Task<AccessServices, Error> { throw CancellationError() }
+    let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
+        preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: unavailable,
+        motionPolicy: MotionPolicy(source: StaticMotionSource()))
+    let window = try #require(controller.window)
+    defer { window.close() }
+    let item = ItemID.rootRelative(rootID: AccessRootID(), relativePath: "current.png")
+    controller.session.beginBrowsing(items: [item], sourceVersion: .init(1), scrollAnchor: item)
+    controller.session.focus(item)
+    func key(_ code: UInt16, _ characters: String, modifiers: NSEvent.ModifierFlags = []) throws {
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: modifiers, timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: characters, charactersIgnoringModifiers: characters,
+            isARepeat: false, keyCode: code))
+        window.sendEvent(event)
+    }
+    try key(34, "i", modifiers: .command)
+    #expect(controller.inspectorVisible)
+    for _ in 0..<12 where controller.session.inspectorFocus.focus != .panel
+        && controller.session.inspectorFocus.focus != .textInput {
+        try key(48, "\t")
+    }
+    #expect(controller.session.inspectorFocus.focus == .panel || controller.session.inspectorFocus.focus == .textInput)
+    try key(53, "\u{1b}")
+    #expect(controller.session.inspectorFocus.focus == .canvas)
+    #expect(controller.inspectorVisible)
+}

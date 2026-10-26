@@ -11,7 +11,7 @@ public struct ImageIOInspectorMetadataReader: InspectorMetadataReading {
     public func read(_ url: URL, access request: AccessRequest) async throws -> InspectorMetadata {
         do {
             return try await access.withLease(request) { _ in
-                try await Task.detached(priority: .utility) {
+                let worker = Task.detached(priority: .utility) {
                     try Task.checkCancellation()
                     let attributes: URLResourceValues
                     do { attributes = try url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey, .fileSizeKey]) }
@@ -29,7 +29,10 @@ public struct ImageIOInspectorMetadataReader: InspectorMetadataReading {
                     let height = properties[kCGImagePropertyPixelHeight] as? Int
                     let size = attributes.fileSize.map(Int64.init)
                     let thumbnail: Data?
-                    if let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                    try Task.checkCancellation()
+                    if let width, let height, width > 0, height > 0,
+                       Int64(width) <= 40_000_000 / Int64(height),
+                       let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                         kCGImageSourceCreateThumbnailFromImageAlways: true,
                         kCGImageSourceCreateThumbnailWithTransform: true,
                         kCGImageSourceThumbnailMaxPixelSize: 240
@@ -40,10 +43,16 @@ public struct ImageIOInspectorMetadataReader: InspectorMetadataReading {
                             thumbnail = CGImageDestinationFinalize(destination) ? data as Data : nil
                         } else { thumbnail = nil }
                     } else { thumbnail = nil }
+                    try Task.checkCancellation()
                     return InspectorMetadata(pixelWidth: width, pixelHeight: height,
                         typeIdentifier: CGImageSourceGetType(source) as String?, creationDate: attributes.creationDate,
                         modificationDate: attributes.contentModificationDate, byteSize: size, thumbnailData: thumbnail)
-                }.value
+                }
+                return try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: {
+                    worker.cancel()
+                }
             }
         } catch FileAccessError.needsReconnection, FileAccessError.outsideRoot, FileAccessError.startFailed {
             throw InspectorReadError.noPermission
