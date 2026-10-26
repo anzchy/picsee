@@ -20,6 +20,7 @@ import PicseeApplication
         shell?.isHidden = true
         state.autoresizingMask = [.width, .height]
         if let parent = state.superview { state.frame = parent.bounds }
+        (grid as? GridBrowserView)?.setThumbnailsActive(false)
         grid.isHidden = true
         grid.setAccessibilityHidden(true)
         canvas.isHidden = false
@@ -39,6 +40,7 @@ import PicseeApplication
         chrome.isHidden = true
         inspector.isHidden = true
         grid.isHidden = reading
+        (grid as? GridBrowserView)?.setThumbnailsActive(!reading)
         grid.setAccessibilityHidden(reading)
         state.isHidden = !reading
         state.setAccessibilityHidden(!reading)
