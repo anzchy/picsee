@@ -233,3 +233,27 @@ final class GatedDecoder: ImageDecoding, @unchecked Sendable {
         return try ImageIODecoder().decode(request)
     }
 }
+
+// The view hands its pinning to its scheduler: loaded cells are pinned, stopping releases them.
+@Test(.timeLimit(.minutes(1))) @MainActor func gridViewPinsLoadedThumbnailsUntilStopped() async throws {
+    _ = NSApplication.shared
+    let snapshot = pinningSnapshot(count: 3), fake = RecordingPinning()
+    let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 700, height: 550))
+    let window = NSWindow(contentRect: grid.bounds, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = grid
+    grid.thumbnailPinning = fake
+    #expect(grid.thumbnailPinning != nil)
+    grid.thumbnailLoader = pinningLoader
+    grid.display(snapshot, selectedItemID: nil)
+    window.layoutIfNeeded()
+    grid.layoutSubtreeIfNeeded()
+    grid.setThumbnailsActive(true)
+    for index in 0..<3 { await grid.waitForThumbnail(at: index) }
+    let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+    while await fake.held < 3, ContinuousClock.now < deadline { await Task.yield() }
+    #expect(await fake.held == 3)
+    grid.stopThumbnails()
+    while await fake.held > 0, ContinuousClock.now < deadline { await Task.yield() }
+    #expect(await fake.held == 0)
+    #expect(await !fake.wentNegative)
+}
