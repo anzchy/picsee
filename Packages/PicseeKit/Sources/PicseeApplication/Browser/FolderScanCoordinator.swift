@@ -80,6 +80,8 @@ struct FolderScanRestorePoint {
     public private(set) var generation: UInt64 = 0
     public var isScanning: Bool { activeGeneration != nil }
     public private(set) var isReadingFolder = false
+    /// The folder is shown but not watched: the watch subscription failed (lease or stream).
+    public private(set) var isWatchUnavailable = false
     public private(set) var failure: (any Error)?
     public var completedImageCount: Int? {
         guard failure == nil, sourceSnapshot?.isComplete == true else { return nil }
@@ -131,8 +133,8 @@ struct FolderScanRestorePoint {
     private var activeFolder: (url: URL, rootID: AccessRootID)?
     private var excludedPresentationNeedsReconciliation = false
     private var sourceFolder: URL?
-    private var watch: (any FolderWatchSubscription)?
-    private var retiredWatches: [any FolderWatchSubscription] = []
+    @ObservationIgnored private var watch: (any FolderWatchSubscription)?
+    @ObservationIgnored private var retiredWatches: [any FolderWatchSubscription] = []
     private var watchToken: UInt64 = 0
     private var watchRequested = false
     private var refreshPending = false
@@ -149,6 +151,11 @@ struct FolderScanRestorePoint {
                 metadataReader: (any FolderMetadataReading)?, watcher: (any FolderWatching)? = nil) {
         self.access = access; self.scanner = scanner; self.trace = trace
         self.metadataReader = metadataReader; self.watcher = watcher
+    }
+    /// A coordinator released without end() still cancels the watch it holds.
+    deinit {
+        let held = retiredWatches + (watch.map { [$0] } ?? [])
+        if !held.isEmpty { Task { for subscription in held { await subscription.cancel() } } }
     }
     /// Silent rescan of the complete source: no Reading State and no host start; nil when there is none.
     @discardableResult public func refresh() -> Task<Void, any Error>? {
@@ -188,6 +195,17 @@ struct FolderScanRestorePoint {
         refreshTask = task
         return task
     }
+    /// Foreground fallback for a failed watch: subscribes again, then rescans silently; a live watch is the hub's to reconcile.
+    @discardableResult public func reconcileUnwatched() -> Task<Void, any Error>? {
+        guard isWatchUnavailable, !watchRequested, activeGeneration == nil, let folder = sourceFolder,
+              let source = sourceSnapshot, source.isComplete else { return nil }
+        let token = requestWatch(), rootID = source.version.rootID, recursive = recursiveEnabled
+        return Task { [self] in
+            await subscribeWatch(folder, rootID: rootID, recursive: recursive, token: token)
+            guard watchToken == token else { return }
+            try await refresh()?.value
+        }
+    }
     /// Keeps the Current Item, else moves to its successor (then predecessor) in the previous navigation order.
     private func applyRefresh(_ fresh: FolderSnapshot) {
         let previous = snapshot?.navigationEntries
@@ -220,15 +238,16 @@ struct FolderScanRestorePoint {
             recursive: recursive) { [weak self] in
             Task { @MainActor [weak self] in self?.watchDidChange(token) }
         }
-        if watchToken == token { watch = subscription; watchRequested = false }
+        if watchToken == token { watch = subscription; watchRequested = false; isWatchUnavailable = subscription == nil }
         else if let subscription { retiredWatches.append(subscription) }
         releaseRetiredWatches()
     }
-    private func retireWatch() {
+    /// Cancels at once, unless a `successor` subscription is about to be requested (it releases the old one).
+    private func retireWatch(successor: Bool) {
         guard watcher != nil else { return }
         if let watch { retiredWatches.append(watch) }
-        watch = nil; watchToken &+= 1; watchRequested = false
-        Task { @MainActor [weak self] in self?.releaseRetiredWatches() }
+        watch = nil; watchToken &+= 1; watchRequested = successor; isWatchUnavailable = false
+        releaseRetiredWatches()
     }
     private func releaseRetiredWatches() {
         guard !watchRequested, !retiredWatches.isEmpty else { return }
@@ -248,7 +267,7 @@ struct FolderScanRestorePoint {
         pending: NavigationDirection? = nil, canPresent: @escaping @MainActor () -> Bool,
         preserveConditions: Bool) -> Task<Void, any Error> {
         let previousConditions = conditions
-        stop(.replaced)
+        stop(.replaced, successor: true)
         if !preserveConditions { excludedPresentationNeedsReconciliation = false }
         conditions = preserveConditions ? previousConditions : FolderViewConditions()
         generation &+= 1
@@ -346,7 +365,7 @@ struct FolderScanRestorePoint {
                 snapshot = sourceSnapshot?.applying(conditions, metadata: metadata)
                 pendingDirection = nil
                 failure = error
-                retireWatch()
+                retireWatch(successor: false)
                 trace?.failure(error, generation: token)
                 trace?.end(outcome: .failed, generation: token)
                 host?.folderScanDidEnd()
@@ -377,7 +396,7 @@ struct FolderScanRestorePoint {
     }
     /// Restores without scanning and without an active generation, so a cancelled scan's late events stay ignored.
     func restore(_ point: FolderScanRestorePoint) {
-        stop(.cancelled)
+        stop(.cancelled, successor: point.folder != nil)
         conditions = point.conditions
         loopEnabled = point.loopEnabled
         recursiveEnabled = point.recursiveEnabled
@@ -443,7 +462,7 @@ struct FolderScanRestorePoint {
         stop(.replaced)
         return false
     }
-    private func stop(_ outcome: FolderScanOutcome) {
+    private func stop(_ outcome: FolderScanOutcome, successor: Bool = false) {
         invalidateMetadata()
         let ending = activeGeneration
         activeGeneration = nil
@@ -461,7 +480,7 @@ struct FolderScanRestorePoint {
         failure = nil
         noMatchesPresented = false
         refreshTask?.cancel(); refreshTask = nil; refreshPending = false
-        retireWatch()
+        retireWatch(successor: successor)
         if outcome == .cancelled { excludedPresentationNeedsReconciliation = false }
         if let ending { trace?.end(outcome: outcome, generation: ending) }
         host?.folderScanDidEnd()

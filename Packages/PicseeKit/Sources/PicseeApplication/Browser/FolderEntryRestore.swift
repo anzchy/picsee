@@ -26,8 +26,8 @@ extension ViewerSession {
     public func cancelFolderEntry() -> FolderEntryRestoreTarget? {
         guard let point = folderEntryRestore else { return nil }
         folderEntryRestore = nil
-        cancelFolderReading()
-        if let scan = point.scan { folderScan?.restore(scan) }
+        // restore() stops the reading scan itself and keeps the restored folder's watch on the same stream.
+        if let scan = point.scan, let folderScan { folderScan.restore(scan) } else { cancelFolderReading() }
         restoreBrowsingState(point.browsing)
         return point.target
     }
