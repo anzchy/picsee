@@ -22,7 +22,7 @@ python3 -m http.server 4313 --bind 127.0.0.1 --directory design/prototypes/picse
 
 | 路径 | 作用 | 是否提交 |
 | --- | --- | --- |
-| `manifest.json` | 唯一页面目录：名称、文件、视口、来源类别 | 是 |
+| `manifest.json` | 唯一页面目录：名称、文件、视口、来源类别及每页 HTML 的 SHA256 | 是 |
 | `index.html` | 从manifest加载的浏览索引，不另维护一份页面列表 | 是 |
 | 20个同名HTML | 正式静态状态；不声明按钮行为已实现 | 是 |
 | `assets/images/`、`assets/manifest.json` | 13个按内容哈希命名的共享图片，替代95处重复base64 | 是 |
@@ -34,6 +34,8 @@ python3 -m http.server 4313 --bind 127.0.0.1 --directory design/prototypes/picse
 图片来源及摄影师链接见 [ASSETS.md](../ASSETS.md)。状态稿使用既有示例图及其缩略版；提取时保持原始图片字节，未改变构图。原型文件名、日期等演示信息不代表真实EXIF。
 
 ## 维护
+
+每页的 `sha256` 固定当前 HTML 的原始字节。修改正式状态稿后，先确认设计变更，再对该 HTML 运行 `shasum -a 256 <文件>`，将结果写入 `manifest.json` 对应条目；不要为绕过测试而重新固定哈希。
 
 以 [主设计规范](../../../DESIGN.md)、[组件与原生映射](../../../picsee-ui-system/native/README.md) 和 [实施计划](../../../../docs/PICSEE_DEVELOPMENT_PLAN.md) 为依据。浏览器交互仍在 [viewer-v2.html](../viewer-v2.html)，完整状态稿不等于原生实现。
 
