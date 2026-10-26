@@ -93,6 +93,8 @@ import PicseeCore
         searchField.setAccessibilityLabel(String(localized: "Search current folder"))
         searchField.setAccessibilityIdentifier("grid.search.field")
         searchField.delegate = self
+        searchField.target = self
+        searchField.action = #selector(searchFieldAction)
         sortButton.isBordered = false
         sortButton.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
         sortButton.target = self
@@ -244,6 +246,8 @@ import PicseeCore
         footerActionsEnabled = enabled
         searchField.isEnabled = enabled
         sortButton.isEnabled = enabled
+        emptyState.setAccessibilityHidden(!enabled || emptyState.isHidden)
+        if !enabled { emptyState.isHidden = true }
         updateKeyViewLoop()
     }
     public func setSearchTerm(_ term: String) { searchField.stringValue = term }
@@ -251,10 +255,18 @@ import PicseeCore
         if visible { mainContent.addSubview(emptyState, positioned: .above, relativeTo: nil) }
         if visible { emptyDetail.stringValue = String(format: String(localized: "No images with “%@” in their filename."), term) }
         emptyState.isHidden = !visible
+        emptyState.setAccessibilityHidden(!visible || !footerActionsEnabled)
         updateKeyViewLoop()
     }
     public var searchEmptyVisible: Bool { !emptyState.isHidden }
     public func controlTextDidChange(_ obj: Notification) { onSearchChange?(searchField.stringValue) }
+    public func searchFieldDidEndSearching(_ sender: NSSearchField) {
+        if sender.stringValue.isEmpty { clearSearch() }
+    }
+    @objc private func searchFieldAction() {
+        if searchField.stringValue.isEmpty { clearSearch() }
+        else { onSearchChange?(searchField.stringValue) }
+    }
     public func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         guard control === searchField, selector == #selector(NSResponder.cancelOperation(_:)) else { return false }
         clearSearch()
@@ -263,6 +275,7 @@ import PicseeCore
     @objc private func clearFromButton() { clearSearch() }
     private func clearSearch() {
         searchField.stringValue = ""
+        onSearchChange?("")
         onClearSearch?()
     }
     @objc private func showSortMenu() {

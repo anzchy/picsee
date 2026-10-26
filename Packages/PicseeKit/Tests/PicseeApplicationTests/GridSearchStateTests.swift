@@ -32,3 +32,26 @@ import PicseeCore
     #expect(search.term.isEmpty)
     #expect(search.preferredCurrentItemID == nil)
 }
+
+@Test @MainActor func clearingSearchKeepsUserChosenMatchThenFallsBackWhenRemoved() {
+    let folder = URL(fileURLWithPath: "/tmp/picsee-grid-search-chosen")
+    let rootID = AccessRootID(rawValue: UUID())
+    let root = ItemIdentityRoot(id: rootID, url: folder)
+    let before = FolderEntry(url: folder.appendingPathComponent("before.jpg"), root: root)
+    let first = FolderEntry(url: folder.appendingPathComponent("match-1.jpg"), root: root)
+    let chosen = FolderEntry(url: folder.appendingPathComponent("match-2.jpg"), root: root)
+    let source = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: 1),
+        entries: [before, first, chosen], isComplete: true)
+    let search = GridSearchState()
+    search.setTerm("match", currentItemID: before.itemID)
+    search.userChoseCurrentItem(chosen.itemID)
+    search.clear()
+    #expect(search.currentItemID(in: source, currentItemID: chosen.itemID) == chosen.itemID)
+
+    search.setTerm("match", currentItemID: before.itemID)
+    search.userChoseCurrentItem(chosen.itemID)
+    search.clear()
+    let removed = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: 2),
+        entries: [before, first], isComplete: true)
+    #expect(search.currentItemID(in: removed, currentItemID: chosen.itemID) == before.itemID)
+}

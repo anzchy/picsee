@@ -57,6 +57,22 @@ import PicseeInfrastructure
     #expect(shell.searchField.isEnabled)
 }
 
+@Test @MainActor func nativeSearchClearAndReadingStateKeepFieldAndResultsInStep() {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    var changes: [String] = []
+    shell.onSearchChange = { changes.append($0) }
+    shell.setSearchTerm("missing")
+    shell.showSearchEmpty(true, term: "missing")
+    shell.searchField.stringValue = "" // NSSearchField's built-in clear button has emptied the cell.
+    shell.searchFieldDidEndSearching(shell.searchField)
+    #expect(changes == [""])
+    shell.setFooterActionsEnabled(false)
+    #expect(shell.searchEmptyVisible == false)
+    #expect(shell.searchField.isEnabled == false)
+}
+
 @Test @MainActor func footerSortActionsUseFolderMenuActionsAndReflectCurrentConditions() throws {
     _ = NSApplication.shared
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),

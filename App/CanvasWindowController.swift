@@ -28,6 +28,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var chromeHasImage = false
     private var gridProjection = FolderGridProjection()
     private let gridSearch = GridSearchState()
+    private let searchProjection = GridSearchProjectionScheduler()
     private var gridView: GridBrowserView!
     private var gridShell: GridShellView!
     private var presentation: GridViewerPresentation!
@@ -118,7 +119,6 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridShell.autoresizingMask = [.width, .height]
         gridShell.isHidden = true
         gridShell.onSearchChange = { [weak self] term in self?.updateGridSearch(term) }
-        gridShell.onClearSearch = { [weak self] in self?.updateGridSearch("") }
         gridShell.onSort = { [weak self] action in self?.applyGridSort(action) }
         gridShell.onOpenSortMenu = { button, menu in
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
@@ -144,6 +144,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridView.isHidden = true
         gridView.setAccessibilityHidden(true)
         gridView.onSelect = { [weak self] id in
+            self?.gridSearch.userChoseCurrentItem(id)
             self?.session.select(id)
         }
         gridView.onSelectionGesture = { [weak self] id, modifier in
@@ -215,6 +216,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func open(_ url: URL, accessRequest: AccessRequest? = nil, fromFolderScan: Bool = false) {
         if !fromFolderScan {
+            searchProjection.cancel()
             session.leaveBrowsing()
             session.completeFolderEntry()
             folderEntryRestore = nil
@@ -309,6 +311,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private func openFolder(_ folder: URL, rootID: AccessRootID, currentItemID: ItemID? = nil) {
         if folderEntryRestore == nil { folderEntryRestore = makeFolderEntryRestore() }
+        searchProjection.cancel()
         gridSearch.reset()
         gridShell.setSearchTerm("")
         gridShell.showSearchEmpty(false)
@@ -497,6 +500,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     func presentGridItem(_ id: ItemID) {
         guard let entry = gridProjection.entry(for: id), let rootID = gridFolderRoot,
               gridProjection.snapshot?.version.rootID == rootID else { return }
+        searchProjection.cancel()
         presentation.showViewer()
         open(entry.url, accessRequest: .root(rootID, file: entry.url), fromFolderScan: true)
     }
@@ -525,12 +529,20 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func updateGridSearch(_ term: String) {
-        guard gridSearchAvailable, let snapshot = gridProjection.snapshot, snapshot.isComplete else { return }
+        guard gridSearchAvailable else { gridShell.setSearchTerm(gridSearch.term); return }
         gridSearch.setTerm(term, currentItemID: gridView.currentItemID)
+        guard let snapshot = gridProjection.snapshot, snapshot.isComplete else { return }
         displaySearchedGrid(snapshot)
     }
     private func displaySearchedGrid(_ source: FolderSnapshot) {
-        let filtered = gridSearch.project(source)
+        let term = gridSearch.term
+        searchProjection.schedule(source, term: term) { [weak self] filtered in
+            guard let self, self.gridProjection.snapshot == source,
+                  self.gridSearch.term == term else { return }
+            self.presentSearchedGrid(filtered, source: source)
+        }
+    }
+    private func presentSearchedGrid(_ filtered: FolderSnapshot, source: FolderSnapshot) {
         let current = gridSearch.currentItemID(in: filtered, currentItemID: gridView.currentItemID)
         session.updateItems(filtered.navigationEntries.map(\.itemID),
             sourceVersion: .init(source.version.generation))
@@ -594,6 +606,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func restoreEmptyFolderEntry() {
+        searchProjection.cancel()
         gridFolderRoot = nil
         gridFolderURL = nil
         gridProjection = FolderGridProjection()
@@ -606,13 +619,16 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         stateHost.refresh()
     }
     private func consumePanelKey(_ event: NSEvent) -> Bool {
-        if focusContext == .textInput { return false }
-        if !gridView.isHidden, event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+        if !gridView.isHidden, focusContext != .textInput,
+           event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             if event.keyCode == 49 { return route(.preview, from: .key) }
             if event.keyCode == 36 || event.keyCode == 76 { return route(.enter, from: .key) }
         }
+        if InspectorEscapePolicy.handlesEscape(inspectorVisible: inspectorVisible,
+            menuTracking: menuTracking(), focus: focusContext, keyCode: event.keyCode) {
+            return route(.escape, from: .key)
+        }
         guard !menuTracking(), inspectorVisible, focusContext != .canvas else { return false }
-        if event.keyCode == 53 { return route(.escape, from: .key) }
         if event.keyCode == 48 && (focusContext == .tools || event.modifierFlags.contains(.shift)) {
             session.tab(reverse: event.modifierFlags.contains(.shift))
             return true
