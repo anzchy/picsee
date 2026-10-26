@@ -529,6 +529,7 @@ private struct GridGeometry: Equatable {
         let item = collectionView.makeItem(withIdentifier: Self.reuseID, for: indexPath)
         if let photo = item as? GridPhotoItem {
             photo.configure(entries[indexPath.item])
+            photo.isSelected = selection.selectedItemIDs.contains(entries[indexPath.item].itemID)
             photo.isCurrent = entries[indexPath.item].itemID == currentItemID
             if let token = thumbnailScheduler.token(at: indexPath.item) {
                 let edge = thumbnailPixelEdge
