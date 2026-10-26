@@ -54,6 +54,18 @@ private func gridThumbnailDecoded(_ entry: FolderEntry, edge: Int, revision: Int
     return (request, image)
 }
 
+/// Pre-#161 call sites name only the edge; a square tile of half that edge has it as its fallback edge.
+extension GridThumbnailScheduler {
+    fileprivate func reconcile(visible: Set<Int>, columns: Int, pixelEdge: Int, loader: Loader?) {
+        reconcile(visible: visible, columns: columns,
+                  coverage: ThumbnailCoverage(width: Double(pixelEdge) / 2, height: Double(pixelEdge) / 2), loader: loader)
+    }
+}
+
+private func gridThumbnailDecoded(_ entry: FolderEntry, edge coverage: ThumbnailCoverage, revision: Int) -> (ImageDecodeRequest, DecodedImage) {
+    gridThumbnailDecoded(entry, edge: coverage.fallbackEdge, revision: revision)
+}
+
 private actor GridPriorityPort {
     private var seen: Set<String> = []
     private var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
@@ -267,7 +279,8 @@ private actor GridPriorityPort {
     scheduler.setSnapshot(snapshot)
     var failed = false
     scheduler.onFailure = { _ in failed = true }
-    let loader: GridThumbnailScheduler.Loader = { entry, _, edge, _ in
+    let loader: GridThumbnailScheduler.Loader = { entry, _, coverage, _ in
+        let edge = coverage.fallbackEdge
         let key = RenderKey(itemID: entry.itemID,
             revision: FileRevision(byteCount: 1, modificationDate: nil), maximumPixelSize: edge)
         let request = ImageDecodeRequest(fileURL: entry.url, maximumPixelSize: edge, renderKey: key)

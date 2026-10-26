@@ -129,11 +129,11 @@ import PicseeApplication
         token: UUID, generation: UInt64, pixelEdge: Int) -> Bool {
         guard let key = request.renderKey,
               token == thumbnailToken, generation == thumbnailGeneration,
-              pixelEdge == thumbnailPixelEdge, request.maximumPixelSize == pixelEdge,
-              key.maximumPixelSize == pixelEdge, key.itemID == representedItemID,
+              pixelEdge == thumbnailPixelEdge, request.maximumPixelSize <= GridThumbnailPixelSizing.ceiling,
+              key.maximumPixelSize == request.maximumPixelSize, key.itemID == representedItemID,
               image.itemID == key.itemID, image.revision == key.revision,
               image.image.width > 0, image.image.height > 0,
-              image.image.width <= pixelEdge, image.image.height <= pixelEdge else { return false }
+              image.image.width <= request.maximumPixelSize, image.image.height <= request.maximumPixelSize else { return false }
         tile.layer?.contents = image.image
         thumbnailFailed = false
         thumbnailInstallCount += 1
@@ -267,7 +267,7 @@ private struct GridGeometry: Equatable {
     public private(set) var selection = BrowserSelection()
     private var geometry: GridGeometry?
     private let thumbnailScheduler = GridThumbnailScheduler()
-    public var thumbnailLoader: (@Sendable (FolderEntry, AccessRootID, Int, DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage))? {
+    public var thumbnailLoader: (@Sendable (FolderEntry, AccessRootID, ThumbnailCoverage, DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage))? {
         didSet { reconcileThumbnails() }
     }
     private var thumbnailsActive = false
@@ -388,17 +388,18 @@ private struct GridGeometry: Equatable {
     public func stopThumbnails() { setThumbnailsActive(false) }
     func waitForThumbnail(at index: Int) async { await thumbnailScheduler.waitForTerminal(at: index) }
 
-    private var thumbnailPixelEdge: Int {
-        guard let geometry else { return 0 }
+    private var thumbnailCoverage: ThumbnailCoverage {
+        guard let geometry else { return ThumbnailCoverage(width: 0, height: 0) }
         let scale: CGFloat
         if let window { scale = window.backingScaleFactor } else { scale = 1 }
-        return GridThumbnailPixelSizing.edge(tile: NSSize(width: geometry.itemSize.width - 8,
+        return GridThumbnailPixelSizing.coverage(tile: NSSize(width: geometry.itemSize.width - 8,
             height: geometry.itemSize.height - 36), backingScale: scale)
     }
+    private var thumbnailPixelEdge: Int { thumbnailCoverage.fallbackEdge }
 
     private func reconcileThumbnails() {
         guard thumbnailsActive, window != nil, let geometry, thumbnailLoader != nil else {
-            thumbnailScheduler.reconcile(visible: [], columns: 1, pixelEdge: 0, loader: nil)
+            thumbnailScheduler.reconcile(visible: [], columns: 1, coverage: ThumbnailCoverage(width: 0, height: 0), loader: nil)
             return
         }
         // The flow layout is installed in init and remains this view's layout.
@@ -408,7 +409,7 @@ private struct GridGeometry: Equatable {
             if let index = attribute.indexPath?.item { visible.insert(index) }
         }
         thumbnailScheduler.reconcile(visible: visible, columns: geometry.columns,
-            pixelEdge: thumbnailPixelEdge, loader: thumbnailLoader)
+            coverage: thumbnailCoverage, loader: thumbnailLoader)
         for index in visible { bindThumbnail(at: index) }
     }
 

@@ -8,6 +8,8 @@ struct ImageSourceHeader: Sendable {
     let width: Int
     let height: Int
     let revision: FileRevision
+    /// EXIF orientations 5…8 rotate the stored pixels a quarter turn.
+    var rotated = false
     // ImageIO can return partial pixels for incomplete PNGs. Check chunk boundaries without reading payloads.
     private static func requireCompletePNG(_ url: URL) throws {
         let file = try FileHandle(forReadingFrom: url)
@@ -54,6 +56,7 @@ struct ImageSourceHeader: Sendable {
         _ = try DecodeBudget.outputCost(width: width, height: height, maximumPixelSize: request.maximumPixelSize, bytesPerPixel: bytesPerPixel, budget: budget)
         guard CGImageSourceGetStatus(source) == .statusComplete else { throw ImageDecodeError.unreadableImage }
         return ImageSourceHeader(bytesPerPixel: bytesPerPixel, itemID: itemID, width: width, height: height,
-                                 revision: try FileRevisionReader.read(request.fileURL))
+                                 revision: try FileRevisionReader.read(request.fileURL),
+                                 rotated: (5...8).contains(properties[kCGImagePropertyOrientation] as? Int ?? 1))
     }
 }

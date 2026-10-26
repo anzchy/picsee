@@ -139,12 +139,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridShell.sortConditions = { [weak self] in self?.session.folderConditions ?? .init() }
         content.addSubview(gridShell)
         gridView = GridBrowserView(frame: NSRect(origin: .zero, size: gridShell.mainFrame.size))
-        gridView.thumbnailLoader = { [accessServices, pipeline] entry, rootID, pixelEdge, priority in
+        gridView.thumbnailLoader = { [accessServices, pipeline] entry, rootID, coverage, priority in
             let services = try await accessServices.value
             let source = try await AccessImageSource.open(.root(rootID, file: entry.url),
                 access: services.files, pipeline: pipeline)
             do {
-                let result = try await source.image(maximumPixelSize: pixelEdge, priority: priority)
+                let result = try await source.image(covering: coverage, priority: priority)
                 await source.close()
                 try Task.checkCancellation()
                 return result

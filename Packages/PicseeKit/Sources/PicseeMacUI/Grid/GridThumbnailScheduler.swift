@@ -2,18 +2,19 @@ import AppKit
 import PicseeCore
 
 enum GridThumbnailPixelSizing {
+    static let ceiling = 1024
+    static func coverage(tile: NSSize, backingScale: CGFloat) -> ThumbnailCoverage {
+        ThumbnailCoverage(width: tile.width * backingScale, height: tile.height * backingScale, ceiling: ceiling)
+    }
+    /// The edge used when the source ratio is unknown; it also identifies the cell's size tier.
     static func edge(tile: NSSize, backingScale: CGFloat) -> Int {
-        let longest = max(tile.width, tile.height)
-        guard longest.isFinite, backingScale.isFinite, longest > 0, backingScale > 0 else { return 0 }
-        // ImageIO bounds the long side. Reserve enough pixels for aspect-fill's short side
-        // for common portrait and landscape ratios (up to 2:1), within the cache tier cap.
-        return min(1024, max(1, Int(ceil(min(longest * backingScale * 2, 1024)))))
+        coverage(tile: tile, backingScale: backingScale).fallbackEdge
     }
 }
 
 /// One window's cancellable thumbnail requests. The source is supplied by the App's lease-bound adapter.
 @MainActor final class GridThumbnailScheduler {
-    typealias Loader = @Sendable (FolderEntry, AccessRootID, Int, DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage)
+    typealias Loader = @Sendable (FolderEntry, AccessRootID, ThumbnailCoverage, DecodePriority) async throws -> (ImageDecodeRequest, DecodedImage)
     var onResult: ((Int, ImageDecodeRequest, DecodedImage) -> Void)?
     var onFailure: ((Int) -> Void)?
     private struct Record {
@@ -28,7 +29,7 @@ enum GridThumbnailPixelSizing {
     }
     private var snapshot: FolderSnapshot?
     private var records: [Int: Record] = [:]
-    private var currentPixelEdge = 0
+    private var currentCoverage: ThumbnailCoverage?
     private var terminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
     var activeItemIDs: Set<ItemID> { Set(records.values.map(\.itemID)) }
 
@@ -37,12 +38,12 @@ enum GridThumbnailPixelSizing {
         self.snapshot = snapshot?.isComplete == true ? snapshot : nil
     }
 
-    func reconcile(visible: Set<Int>, columns: Int, pixelEdge: Int, loader: Loader?) {
-        guard let snapshot, let loader, pixelEdge > 0, let first = visible.min(),
+    func reconcile(visible: Set<Int>, columns: Int, coverage: ThumbnailCoverage, loader: Loader?) {
+        guard let snapshot, let loader, coverage.fallbackEdge > 0, let first = visible.min(),
               let last = visible.max(), !snapshot.navigationEntries.isEmpty else {
             cancelAll(); return
         }
-        if currentPixelEdge != pixelEdge { cancelAll(); currentPixelEdge = pixelEdge }
+        if currentCoverage != coverage { cancelAll(); currentCoverage = coverage }
         let margin = max(1, columns) * 2
         let lower = max(0, first - margin)
         let upper = min(snapshot.navigationEntries.count - 1, last + margin)
@@ -76,11 +77,11 @@ enum GridThumbnailPixelSizing {
             records[index]?.task = Task { [weak self] in
                 do {
                     let loaded: (ImageDecodeRequest, DecodedImage)
-                    do { loaded = try await loader(entry, snapshot.version.rootID, pixelEdge, priority) }
+                    do { loaded = try await loader(entry, snapshot.version.rootID, coverage, priority) }
                     catch let error as ImageLoadError where error.kind == .sourceChanged {
                         // A new header obtains the new revision. Retry once per live request.
                         try Task.checkCancellation()
-                        loaded = try await loader(entry, snapshot.version.rootID, pixelEdge, priority)
+                        loaded = try await loader(entry, snapshot.version.rootID, coverage, priority)
                     }
                     guard !Task.isCancelled else { return }
                     self?.finish(index: index, token: token, request: loaded.0, image: loaded.1)
@@ -96,7 +97,9 @@ enum GridThumbnailPixelSizing {
         guard let record = records[index], record.token == token, let snapshot,
               snapshot.navigationEntries.indices.contains(index),
               snapshot.navigationEntries[index].itemID == record.itemID else { return }
-        guard request.maximumPixelSize == currentPixelEdge,
+        // The source-ratio edge (#161), or the fallback when the loader could not read the ratio first.
+        guard let coverage = currentCoverage, request.maximumPixelSize == coverage.fallbackEdge || request.maximumPixelSize
+                == coverage.edge(sourceWidth: image.sourcePixelSize.width, sourceHeight: image.sourcePixelSize.height),
               request.renderKey?.itemID == record.itemID,
               request.renderKey?.revision == image.revision,
               image.itemID == record.itemID else {

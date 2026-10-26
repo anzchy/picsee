@@ -111,3 +111,13 @@ actor AccessPipelineProbe: ImagePipeline {
     #expect(await pipeline.requests == before)
     #expect(await access.count() == 0)
 }
+
+@Test func accessImageSourceCoverageFallsBackWhenPipelineCannotReadHeaderFirst() async throws {
+    let access = AccessProbe(); let pipeline = AccessPipelineProbe(access: access)
+    let source = try await AccessImageSource.open(.fileGrant(URL(fileURLWithPath: "/tmp/a.jpg")), access: access, pipeline: pipeline)
+    let (request, _) = try await source.image(covering: ThumbnailCoverage(width: 424, height: 296), priority: .prefetch)
+    await source.close()
+    #expect(request.maximumPixelSize == 848)
+    #expect(request.priority == .prefetch)
+    #expect(await access.count() == 0)
+}
