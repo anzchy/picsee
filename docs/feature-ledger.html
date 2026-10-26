@@ -57,7 +57,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <tr><td>能力</td><td>用户能感知到的一件事，一行一件</td></tr>
 <tr><td>计划</td><td>开发计划的工作包 ID，可多个，用 <code>、</code> 分隔。它说明这条需求从哪来；没有工作包的能力先补进计划再进账簿</td></tr>
 <tr><td>在哪</td><td>路径从仓库根写起，放在反引号里，如 <code>Sources/PicseeViewer/ViewerSession.swift</code>。不写行号、不写计数、不写构建产物（<code>.build/</code>、<code>DerivedData/</code>）。<code>Absent</code> 写 <code>—</code></td></tr>
-<tr><td>怎么确认</td><td>一个在 App 里能做的操作和应看到的结果，不是“看代码”。列出几个入口，就是几个都要验（见「验证」）。<strong>不超过三句、约 150 字</strong>；过程、截图、日志与历史写进 <code>docs/validation/</code>，这里只放链接</td></tr>
+<tr><td>怎么确认</td><td>一个在 App 里能做的操作和应看到的结果，不是“看代码”。列出几个入口，就是几个都要验（见「验证」）。<strong>验收部分（「限制：」之前）不超过三句、约 150 字</strong>；「限制：」之后的文字不计入这个长度，但每一句都要是事实（未验的入口、仅单元的范围、待哪个工作包）。过程、截图、日志与历史写进 <code>docs/validation/</code>，这里只放链接</td></tr>
 </tbody></table></div>
 <p>最后一条是从 mdpro 吸取的教训：mdpro 账簿的单元格逐渐长成上千字的修复史，没人能对着 App 一行行走下去。</p>
 <h2 id="防止验收被悄悄放宽">防止验收被悄悄放宽</h2>
@@ -318,7 +318,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>107 项能力</span><span>·</span><span>Shipped 0 · Partial 41 · Stub 0 · Absent 66 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 d184a6b854fe · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 6974f0da481a · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>

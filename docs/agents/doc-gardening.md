@@ -103,7 +103,9 @@ A wrong downgrade costs one re-check. A wrong upgrade is the false claim the led
      - a `Partial` row carries `限制：`;
      - an `Absent` row has `—` in 在哪;
      - no path has a line number, a count or a build output;
-     - 怎么确认 is no longer than three sentences or about 150 characters.
+     - the acceptance part of 怎么确认 (the text before 「限制：」) is no longer than three sentences or about 150 characters.
+       The 「限制：」 text does not count toward this length (user, 2026-10-26: 「放宽规则」); do not propose compressing it,
+       but do flag a 限制 clause that is not a fact (process, history or a log belongs in `docs/validation/`).
    - **Stale HTML.** Run `node scripts/ledger/build.mjs --check` at `<head>`. If it fails, the verdict is
      NEEDS-OWNER: run `npm run ledger:build` and commit the HTML with the ledger change.
 7. **Apply** the edits you are allowed to make in `docs/feature-ledger.md`, then run `npm run ledger:build`
