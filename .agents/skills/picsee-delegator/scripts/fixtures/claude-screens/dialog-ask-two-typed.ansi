@@ -1,0 +1,49 @@
+  ├────────┼────────┤
+  │     54 │   2916 │
+  ├────────┼────────┤
+  │     55 │   3025 │
+  ├────────┼────────┤
+  │     56 │   3136 │
+  ├────────┼────────┤
+  │     57 │   3249 │
+  ├────────┼────────┤
+  │     58 │   3364 │
+  ├────────┼────────┤
+  │     59 │   3481 │
+  ├────────┼────────┤
+  │     60 │   3600 │
+  └────────┴────────┘
+  
+  Rivers are among the oldest and most important features of the natural world, shaping landscapes, sustaining ecosystems, and
+  supporting human civilization for thousands of years. Born from rainfall, snowmelt, or springs high in mountains and highlands,
+  they gather water into streams and tributaries that gradually merge into larger channels as they descend toward the sea. Along
+  the way, flowing water carves valleys, transports vast quantities of sediment, and deposits rich soils on floodplains and
+  deltas, which is why so many of the world's earliest agricultural societies arose along the banks of rivers such as the Nile,
+  the Tigris and Euphrates, the Yangtze, and the Ganges. Rivers also serve as natural highways, enabling trade, migration, and
+  communication long before roads and railways existed. Their waters provide drinking water, irrigation, and power for mills and,
+  later, hydroelectric dams, while their wetlands and riparian forests host fish, birds, amphibians, and countless invertebrates.
+  At the same time, rivers are dynamic and sometimes dangerous: they meander, shift course, flood their surroundings, and reshape
+  the land in response to seasonal rains and long-term climate patterns. Human activity has altered many of them through dams,
+  levees, pollution, and water extraction, which has raised concerns about habitat loss, declining fish populations, and the 
+  health of communities that depend on them. Today, protecting rivers means balancing economic needs with ecological health, and
+  it requires cooperation across borders, since many of the world's great rivers flow through several countries before reaching
+  the ocean.
+
+[0m[38;2;153;153;153m✻ Worked for 8s · done 10:02 AM[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mCall AskUserQuestion once with two questions: (1) header "Colour", question "Which colour?", options Red, Blue; (2) header [0m[48;2;55;55;55m     [0m
+[0m[48;2;55;55;55m  [0m[38;2;255;255;255m[48;2;55;55;55m"Size", question "Which size?", options Small, Large. Nothing else.[0m[48;2;55;55;55m                                                             [0m
+[0m[38;2;153;153;153m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;153;153;153m← [0m[38;2;0;0;0m[48;2;177;185;249m ☐ Colour  [0m☐ Size  ✔ Submit  →
+
+[0m[1m[38;2;255;255;255mWhich colour?[0m
+
+  [0m[38;2;153;153;153m1.[0m Red
+     [0m[38;2;153;153;153mChoose red[0m
+  [0m[38;2;153;153;153m2.[0m Blue                                                                               
+     [0m[38;2;153;153;153mChoose blue[0m
+[0m[38;2;177;185;249m❯[0m [0m[38;2;153;153;153m3. [0mmy own answer
+[0m[38;2;153;153;153m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  4. Chat about this
+
+[0m[38;2;153;153;153mEnter to select · Tab/Arrow keys to navigate · ctrl+g to edit in Vim · Esc to cancel[0m

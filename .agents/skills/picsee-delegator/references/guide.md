@@ -133,13 +133,29 @@ does not restore the paused `gpt-auditor`.
   `[Pasted text …]` placeholder, is **typing**. Dim counts only for SGR encodings the parser recognises in full
   (`;` parameters, 38/48/58 colours in `;` or ITU `:` form, 0/00/22 resets, the neutral attribute and colour
   codes); any other SGR (unknown code, unpaired colour, other colon sub-parameters, private marker,
-  intermediate byte) ends dim, so the text after it is **typing**, never empty. No box, a different prompt
-  glyph (`!` shell mode, a menu), or a scrolled-up viewport is **unknown** and is held like typing.
+  intermediate byte) ends dim, so the text after it is **typing**, never empty. When the last line drawn is a
+  selection-dialog footer (`Enter to select · … · Esc to cancel` or `Enter to confirm · Esc to cancel`: an
+  AskUserQuestion or folder-trust dialog, Claude Code 2.1.310), the input is **dialog**, held like typing. No box, a
+  different prompt glyph (`!` shell mode), a pane too short to show the box, or a scrolled-up viewport is
+  **unknown** and is held like typing.
+
+  **Unreadable and dialog screens (#157).** The overnight `unknown` of 2026-10-25 was the delegator sitting in an
+  AskUserQuestion dialog (opened 16:44Z, answered the next morning), which is now read as `dialog`. Idle screens
+  captured on 2026-10-26 (fresh session, long last reply, after a dismissed dialog, the delegator with a grey
+  suggestion) all read `empty`; they are the offline fixtures in `scripts/fixtures/claude-screens/`. The first
+  `unknown` read of each run is saved to `<event>/input-snapshot.ansi` (the last 64 KiB of the raw ANSI read) and
+  `<event>/input-snapshot.json` (input, pane, UTC time, the last 200 plain lines, rule indexes, the box lines),
+  overwritten by the next run. They hold only what the pane showed, which may include conversation text and paths;
+  typed text and dialogs are not saved. After `--attention-after-seconds` (default 600) of `dialog` or `unknown`,
+  the worker appends one line to `attention.log` beside the listeners directory
+  (`~/.picsee/herdr/delegator/attention.log`: UTC time, event, input, held time, pane, event directory), once per
+  run, and from then on writes `attention: true` into `status.json`. Read the new lines of that log at each turn;
+  answering the dialog lets the held send go through. Typing gets no line: a person is at the box.
 
   When that read is empty, the listener writes `delivery-uncertain`, reads the box once more (the **gate read**)
   and runs `herdr pane run` straight after it only if the gate read is also empty; otherwise it returns to the
   hold, nothing sent. A failed list or read is a preflight failure (bounded attempts). While held, `status.json`
-  is `waiting-user-typing` with `input` (`typing`/`unknown`) and `deferred_seconds`, the real elapsed time on a
+  is `waiting-user-typing` with `input` (`typing`/`dialog`/`unknown`) and `deferred_seconds`, the real elapsed time on a
   monotonic clock since the box was first seen non-empty, including herdr call time; the listener re-checks
   identity and the box every `--typing-retry-seconds` (default 5, the last sleep capped to the deadline)
   without using a delivery attempt and never sends keys, clears or edits the user's text. After
@@ -151,7 +167,8 @@ does not restore the paused `gpt-auditor`.
 
   Run `listen-notify.py status` (same `--state-root`) at each loop and before ending a turn: it prints one line
   per undelivered event and exits 3 when any line is `attention` (`deferred-user-typing`, `delivery-uncertain`,
-  `delivery-failed`, `launch-failed`, a `status.json` that is not a JSON object (`state=invalid`), or a worker
+  `delivery-failed`, `launch-failed`, a `status.json` with `attention: true` or that is not a JSON object
+  (`state=invalid`), or a worker
   that is stopped or `foreign` — a stale pid now owned by another user's process). For a deferral, check the
   box, then resume with the identical `start` command (or `listen-notify.py run --event-dir <dir>`); a still-running worker answers
   `already-running` and sends on its next check. Resuming keeps the event's registered `--typing-*` values;
