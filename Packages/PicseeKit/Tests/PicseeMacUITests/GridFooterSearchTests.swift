@@ -5,6 +5,79 @@ import PicseeApplication
 import PicseeInfrastructure
 @testable import PicseeMacUI
 
+private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Color) throws {
+    let color = try #require(actual?.usingColorSpace(.sRGB))
+    #expect(abs(Double(color.redComponent) - expected.red) < 0.01)
+    #expect(abs(Double(color.greenComponent) - expected.green) < 0.01)
+    #expect(abs(Double(color.blueComponent) - expected.blue) < 0.01)
+    #expect(abs(Double(color.alphaComponent) - expected.alpha) < 0.01)
+}
+
+/// search-empty.html `.empty-state`, `h2`, `p`, `.mock-actions`, `.mock-primary`;
+/// `.grid-bottom-bar` and `.grid-file-status`. grid-dark.html supplies dark tokens.
+@Test @MainActor func page23GeometryTypographyAndResolvedColorsFollowPinnedCSS() throws {
+    _ = NSApplication.shared
+    let light = try PinnedDesign.page("search-empty")
+    let dark = try PinnedDesign.page("grid-dark")
+    for (appearanceName, darkMode) in [(NSAppearance.Name.aqua, false), (.darkAqua, true)] {
+        for size in [NSSize(width: 1280, height: 800), NSSize(width: 800, height: 680)] {
+            let design = darkMode ? dark : light
+            let appearance = try #require(NSAppearance(named: appearanceName))
+            let shell = GridShellView(frame: NSRect(origin: .zero, size: size),
+                preferencesStore: InMemoryDisplayPreferencesStore())
+            shell.appearance = appearance
+            shell.layoutSubtreeIfNeeded()
+            shell.showSearchEmpty(true, term: "missing")
+            let title = try #require(shell.emptyStateTitle)
+            let detail = try #require(shell.emptyStateDetail)
+            let state = try #require(shell.mainContent.subviews.first { $0.accessibilityIdentifier() == "grid.search.empty" })
+            let icon = try #require(state.subviews.compactMap { $0 as? NSImageView }.first)
+            let clear = shell.clearSearchButton
+            let width = Double(size.width)
+            let titleGap = try light.length(".empty-state h2", "margin-top", viewport: width)
+            let detailGap = try light.length(".empty-state p", "margin-top", viewport: width)
+            let actionGap = try light.length(".mock-actions", "margin-top", viewport: width)
+            let detailLineHeight = try light.lineHeight(".empty-state p", viewport: width)
+            let detailFontSize = try light.length(".empty-state p", "font-size", viewport: width)
+            let titleFont = try light.font(".empty-state h2", viewport: width)
+            #expect(title.font == NSFont.systemFont(ofSize: titleFont.size, weight: .medium))
+            #expect(titleFont.weight == 500)
+            #expect(detail.font?.pointSize == CGFloat(detailFontSize))
+            #expect(abs(Double(detail.frame.height) - detailLineHeight) < 0.01)
+            let paragraph = detail.attributedStringValue.attribute(.paragraphStyle, at: 0,
+                effectiveRange: nil) as? NSParagraphStyle
+            #expect(abs(Double(paragraph?.minimumLineHeight ?? 0) - detailLineHeight) < 0.01)
+            #expect(abs(Double(icon.frame.minY - title.frame.maxY) - titleGap) < 0.01)
+            #expect(abs(Double(title.frame.minY - detail.frame.maxY) - detailGap) < 0.01)
+            #expect(abs(Double(detail.frame.minY - clear.frame.maxY) - actionGap) < 0.01)
+            let groupHeight = Double(icon.frame.height + title.frame.height + detail.frame.height + clear.frame.height)
+                + titleGap + detailGap + actionGap
+            let center = Double(shell.mainContent.bounds.midY)
+            #expect(abs(Double(title.frame.maxY) - (center + groupHeight / 2 - Double(icon.frame.height) - titleGap)) < 0.01)
+            #expect(abs(Double(detail.frame.maxY) - (center + groupHeight / 2 - Double(icon.frame.height + title.frame.height) - titleGap - detailGap)) < 0.01)
+            #expect(abs(Double(clear.frame.minY) - (center - groupHeight / 2)) < 0.01)
+            var resolved: [NSColor?] = []
+            appearance.performAsCurrentDrawingAppearance {
+                resolved = [title.textColor, detail.textColor, clear.bezelColor,
+                    shell.searchStatus.textColor,
+                    shell.footer.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))]
+                    .map { $0?.usingColorSpace(.sRGB) }
+            }
+            try expectPinnedColor(resolved[0], darkMode
+                ? dark.color(":root", "--color-text", viewport: width)
+                : light.color(".empty-state h2", "color", viewport: width))
+            try expectPinnedColor(resolved[1], darkMode
+                ? dark.color(":root", "--color-muted", viewport: width)
+                : light.color(".empty-state", "color", viewport: width))
+            try expectPinnedColor(resolved[2], darkMode
+                ? dark.color(":root", "--color-accent-fill", viewport: width)
+                : light.color(".mock-primary", "background", viewport: width))
+            try expectPinnedColor(resolved[3], design.color(".grid-file-status", "color", viewport: width))
+            try expectPinnedColor(resolved[4], design.color(".grid-bottom-bar", "background", viewport: width))
+        }
+    }
+}
+
 /// grid-light.html / grid-dark.html `.grid-bottom-bar` (40px, 12px inset;
 /// 7px only at max-width:480px), `.grid-toolbar-tools` (6px gap;
 /// 2px at max-width:800px), and primitives.css `.ds-icon-button` (30x28).
