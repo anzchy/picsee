@@ -105,7 +105,7 @@ $macos-device-test 读 ~/.picsee/device-briefs/brief-2026-11-05-VIEW-02-03.md，
 Claude Code 使用同一份 brief，调用 `/macos-device-test`。
 
 会话会按技能顺序做：选机器 → 检查没有别的 Picsee 在跑 → 用锁定的 Xcode 构建并检查签名团队 →
-`open -n` 启动并记录 PID → doctor 自检（每一行都要通过）→ 若工具要求授权，仅申请 brief 需要的 App →
+`open -n -W` 启动（`-W` 让脚本及时发现 App 退出），按 bundle 内可执行路径及晚于启动时间的出生时间识别唯一新 PID 并记录 → doctor 自检（每一行都要通过）→ 若工具要求授权，仅申请 brief 需要的 App →
 按运行步骤操作 → 存日志和截图 → 按 PID 清理、释放 GUI 锁并确认证据还在。
 
 若 brief 含 @2x，mini 上的会话改用 `ssh macbook` 把命令送进 MacBook 桌面启动的 tmux 会话；不能在普通

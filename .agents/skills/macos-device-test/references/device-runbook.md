@@ -117,10 +117,10 @@ scripts/device/launch.sh "$RUN_DIR"
 # Records bundle.path, picsee.pid, process.json (PID/path/birth), start.txt, ready.json and app.log.
 ```
 
-The helper checks isolation, calls `open -n` with the absolute bundle path, finds the new PID by its exact
-executable path, and records its executable path and process start time (`ps -o lstart=`) in `process.json` before checking
+The helper calls `open -n -W` with the absolute bundle path (`-W` lets it notice an immediate App exit), finds exactly one new PID by its exact
+executable path and a birth time after launch began, then records the PID, executable path and process start time (`ps -o lstart=`) in `process.json` before checking
 readiness. Old, missing, ambiguous or retired ownership records are refused; use a fresh run directory. It never picks a PID by owner name or newest
-name match. The P0 skeleton run opens no fixture; it has one empty window.
+name match. A pre-existing Picsee blocks launch and is never recorded or stopped; cleanup signals only the recorded PID while its birth identity still matches. The P0 skeleton run opens no fixture; it has one empty window.
 
 For a future file-opening recipe, pass the scratch fixture through the app's normal open entry point.
 Opening a file this way is a **File Grant**: the sandboxed app can read that file without a dialog. A folder

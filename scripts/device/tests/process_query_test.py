@@ -69,30 +69,26 @@ class ProcessQueryTests(unittest.TestCase):
                 checked.assert_not_called()
             self.assertFalse((run / 'start.txt').exists())
 
-    def test_launch_reaps_only_its_spawned_process_when_followup_query_fails(self):
+    def test_launch_does_not_signal_unrecorded_process_when_followup_query_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             run = Path(directory)
             (run / 'bundle.path').write_text(str(run / 'Picsee.app') + '\n')
             (run / 'build.json').write_text('{"sha":"abcdefg"}\n')
-            class Child:
-                pid = 4242
-                stopped = False
-                def poll(self): return None
-                def terminate(self): self.stopped = True
-                def wait(self, timeout=None): return 0
-            child = Child()
             responses = [[], RuntimeError('pgrep process query failed')]
             def fake_running():
                 result = responses.pop(0)
                 if isinstance(result, Exception): raise result
                 return result
+            class OpenHelper:
+                def poll(self): return None
             with patch.object(d, 'running', side_effect=fake_running), \
                     patch.object(d, 'checked', return_value=''), \
-                    patch.object(d.subprocess, 'Popen', return_value=child) as spawned:
+                    patch.object(d.os, 'kill') as kill, \
+                    patch.object(d.subprocess, 'Popen', return_value=OpenHelper()) as spawned:
                 with self.assertRaisesRegex(RuntimeError, 'pgrep'):
                     d.launch(run)
-            spawned.assert_called_once()
-            self.assertTrue(child.stopped)
+            self.assertEqual(spawned.call_args.args[0][:3], ['/usr/bin/open', '-n', '-W'])
+            kill.assert_not_called()
             self.assertFalse((run / 'process.json').exists())
 
     def test_doctor_fails_single_instance_on_query_error(self):
