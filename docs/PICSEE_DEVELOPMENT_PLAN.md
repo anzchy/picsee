@@ -212,7 +212,7 @@ P0 技术验证、设计映射与命令底座
 - [ ] `P2-08` 22/26页：当前文件被外部删除/重命名/替换、目录被移动、卷卸载、空文件夹与授权不足场景。本阶段响应外部变化，不提供主动删除功能。P2-08a（#140，外部变化）已合入。22/26 页形态已由用户选定（用户 2026-10-28：「22 选 B+D，26 选 B+C」；原型 `states/prototype-states-22-26.html`（分支 `prototype/states-22-26`），`?page=22&variant=22-BD`、`?page=26&variant=26-BC&cause=grant|volume|moved`）：
   - `P2-08b`（#137，FOLDER-08）22-BD：空文件夹不再弹 NSAlert「此文件夹没有图片」，侧栏与底部工具保留。有子文件夹时显示子文件夹卡片、「包含子文件夹浏览」（P2-04 开关）与「选择其他文件夹…」；没有时显示最近文件夹（按打开时间）与「选择其他文件夹…」；内容区都可拖入另一个文件夹。
   - `P2-08c`（#141，ACCESS-04、FOLDER-09）26-BC：失效文件夹在侧栏置灰加 ⚠、子文件夹折叠，收藏与最近查看仍可用；内容区按原因区分：授权失效 →「重新选择文件夹…」（回到原位置），卷未连接 → 无需操作、挂载后自动恢复，移动或改名 →「在新位置选择…」。替换已验证流程中的 NSAlert（ReconnectPrompt，ACCESS-03），须重做真机记录。实现前先确认三种原因能否可靠区分（卷挂载状态、书签解析）。
-  - 选定形态都要进入 `states/journeys.html`（用户 2026-10-27：「选中后都要进入 User journeys.html」）。
+  - 选定形态都要进入 `states/journeys.html`（用户 2026-10-27：「选中后都要进入 User journeys.html」）。决定记录：[ADR-014](adr/0014-recoverable-folder-states-in-window.md)。
 - [ ] `P2-09` 首批/扫描中/完成/取消状态和最近打开的授权入口；真实计数、未知总数和stale bookmark重连，不保存图片副本。
 
 验收：以图片打开时，5000 项本地目录能边扫描边翻图；打开文件夹按 ADR-0010 显示读取状态，扫描完成后进入网格；快速切换目录后旧扫描不回流；重命名保留当前对象或给出可解释的恢复；原路径替换触发修订失效；新增/删除最终与真实目录一致；空目录、单项目录、递归循环链接均可恢复。
@@ -497,6 +497,8 @@ P0-01～P0-09、P1-01～P1-10、P2-01（#77）、P2-02（#78、#82）、P2-03（
 粗估不重新给数：§1.2 的区间尚未用本项目实际速度校准。
 
 ### 14.7 沿用户旅程的开发顺序（2026-10-28）
+
+决定记录：[ADR-013](adr/0013-build-by-user-journey-slices.md)。
 
 用户 2026-10-28 先问：「在 macOS App 开发的过程中，是把各个页面先实现出来再添加细节功能，还是说每个页面的功能做出来再去开发其他页面？也就是 User journey 中最佳的开发顺序是什么样的？」随后要求「let codex weigh in on your suggestions」「also search for google and Meta, frontend design/ app design best practices」，并决定：「把这个顺序写进计划，通知 delegator」。顺序由 opus-auditor 提出，经 Codex 对 main 只读复核后修正。旅程图见 `states/journeys.html`（分支 `prototype/states-22-26`）。
 
