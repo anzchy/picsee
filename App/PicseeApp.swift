@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var motionPolicy = MotionPolicy(source: UntestedNativeReduceMotionSource())
     private var commandMenu: CommandMenu?
     private var cacheSettingsWindow: CacheSettingsWindow?
+    private var diagnosticsWindow: DiagnosticsWindow?
     private var windowController: CanvasWindowController?
     #if DEBUG && PICSEE_UI_TEST_FIXTURE
     private var uiTestFixtureRoot: URL?
@@ -121,6 +122,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cacheSettingsWindow = CacheSettingsWindow(cache: thumbnailCache, appearanceAdapter: appearanceAdapter)
         }
         cacheSettingsWindow?.show()
+    }
+
+    private func showDiagnostics() {
+        if diagnosticsWindow == nil {
+            diagnosticsWindow = DiagnosticsWindow(source: imagePipeline, appearanceAdapter: appearanceAdapter)
+        }
+        diagnosticsWindow?.show()
     }
 }
 
