@@ -48,12 +48,14 @@
     {
       "name": "app-red",
       "description": "Compiled PicseeAppTests through installed NSApp main menu and real NSEvent key equivalent. Build-for-testing before RED record.",
+      "setupCommand": "scripts/heavy-lock.sh xcodebuild build-for-testing -scheme Picsee -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -derivedDataPath .build/dd-ci -only-testing:PicseeAppTests",
       "command": "node scripts/tdd/app-lane.mjs",
       "gateOn": [
         "manual"
       ],
       "coverage": "none",
-      "timeoutMs": 600000
+      "probeCommand": "scripts/heavy-lock.sh xcodebuild -list -project Picsee.xcodeproj",
+      "timeoutMs": 2400000
     }
   ],
   "coverageThresholds": {
