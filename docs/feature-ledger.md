@@ -197,7 +197,7 @@
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
 | INFO-01 | 基础 Inspector | Partial | 单元 | P3-13 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorMetadata.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Images/ImageIOInspectorMetadataReader.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Inspector/InspectorPanel.swift`、`App/CanvasWindowController.swift`、`App/UI/WindowInspectorReader.swift` | ⌘I 打开右侧面板：缩略图、文件名、尺寸、类型、日期、大小和“加入个人收藏”；浅深色同一面板（16/34 页）；读不到的值显示“未知” 限制：基础字段与缩略图从授权文件读取；Grid 集合视图/大图 ⌘I、Tab、Esc、面板与内容分栏、1280/960/700 pt 响应式布局、16/34 页浅深色与中英五行文字/列距仅离屏测试；面板尚无加入个人收藏按钮，待 P3-14；标签列按当前语言最宽标签定宽，最小 48 pt（16/34 页为固定 48 pt，原生例外），仅离屏测试；Inspector 缩略图（240 px）不经共用内存上限（#194）；16/34 页像素对照未验；网格搜索与 Inspector 焦点/ Esc 组合仅 App 单元。 |
-| INFO-02 | 切图后信息不过期 | Partial | 单元 | P3-13 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorMetadata.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Tests/PicseeApplicationTests/InspectorModelTests.swift` | Inspector 开着快速翻图，面板始终只显示当前这张的信息 限制：受控延迟读取和当前项切换仅单元；签名真机快速翻图未验；监听刷新与直接输入搜索后的 Inspector 当前项和空结果同步仅 App 与包内单元。 |
+| INFO-02 | 切图后信息不过期 | Partial | 单元 | P3-13 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorMetadata.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Tests/PicseeApplicationTests/InspectorModelTests.swift` | Inspector 开着快速翻图，面板始终只显示当前这张的信息 限制：受控延迟读取和当前项切换仅单元；签名真机快速翻图未验；监听刷新与直接输入搜索后的 Inspector 当前项和空结果同步仅 App 与包内单元；外部重命名、同路径替换及删除后的新名称、新元数据、后继或空态同步仅 App 接线测试覆盖，签名真机未验。 |
 | INFO-03 | 拍摄参数、GPS、IPTC | Absent | 无 | P5-01 | — | 打开带 EXIF 的照片，Inspector 显示镜头、光圈、快门、GPS；没有这些数据的图不显示假值 |
 | INFO-04 | Finder 标签 | Absent | 无 | P5-02 | — | 给图片设一个颜色标签，Finder 里看到同样的标签；按标签过滤只剩该标签的图 |
 
