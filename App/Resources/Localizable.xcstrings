@@ -3162,6 +3162,23 @@
           }
         }
       }
+    },
+    "Hits and misses count memory lookups: viewer images and thumbnails the disk cache can’t hold. Grid thumbnails the disk cache holds skip this lookup and count under Thumbnail Disk Cache; their pinned pixels still show in Entries and Size.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hits and misses count memory lookups: viewer images and thumbnails the disk cache can’t hold. Grid thumbnails the disk cache holds skip this lookup and count under Thumbnail Disk Cache; their pinned pixels still show in Entries and Size."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命中与未命中只统计内存查找：查看器图片，以及磁盘缓存无法保存的缩略图。磁盘缓存可保存的网格缩略图不经过这次查找，计入“磁盘缩略图缓存”；它们钉住的像素仍计入条目和大小。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
