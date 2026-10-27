@@ -1,21 +1,19 @@
+import AppKit
 import XCTest
 
 final class PicseeFixtureGridUITests: XCTestCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        guard NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.anzchy.picsee").isEmpty else {
+            throw XCTSkip("another Picsee is running; refusing to launch over it")
+        }
+    }
+
     @MainActor
     func testContainerFixtureOpensThreeImageGrid() throws {
         // The UI target's TEST_TARGET_NAME binds this to the product built for this test run.
         let app = XCUIApplication()
         let fixtureName = UUID().uuidString
-        addTeardownBlock {
-            app.terminate()
-            // Fallback if App termination did not run its test-only cleanup hook.
-            let runFolder = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Containers/io.github.anzchy.picsee/Data/Library/Application Support/Picsee/UITestFixtures", isDirectory: true)
-                .appendingPathComponent(fixtureName, isDirectory: true)
-            if FileManager.default.fileExists(atPath: runFolder.path) {
-                try? FileManager.default.removeItem(at: runFolder)
-            }
-        }
         let names = ["landscape-3x2.png", "portrait-2x3.png", "orientation-1.tiff"]
         for (index, name) in names.enumerated() {
             let resource = name as NSString
@@ -26,6 +24,16 @@ final class PicseeFixtureGridUITests: XCTestCase {
         }
         app.launchArguments += ["-PicseeUITestFixture", fixtureName]
         app.launch()
+        addTeardownBlock {
+            app.terminate()
+            // Fallback if App termination did not run its test-only cleanup hook.
+            let runFolder = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Containers/io.github.anzchy.picsee/Data/Library/Application Support/Picsee/UITestFixtures", isDirectory: true)
+                .appendingPathComponent(fixtureName, isDirectory: true)
+            if FileManager.default.fileExists(atPath: runFolder.path) {
+                try? FileManager.default.removeItem(at: runFolder)
+            }
+        }
 
         let folderMarker = app.descendants(matching: .any).matching(identifier: "grid.sidebar.folder").firstMatch
         let fixtureMarker = XCTNSPredicateExpectation(
