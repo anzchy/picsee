@@ -393,3 +393,50 @@ private func setPermissions(_ url: URL, _ mode: Int) throws {
     #expect(recents.last == PersonalImageVisit(ref: personalRef("v10.jpg"), viewedAt: at(1)))
     #expect(recents.contains { $0.ref == personalRef("v0.jpg") })
 }
+
+@Test func personalImageStoreRecoveryRemovalSurvivesRepair() async throws {
+    let fm = FileManager.default
+    let (a, b) = (personalRef("a.jpg"), personalRef("b.jpg"))
+    // The last of n toggles made during recovery decides: odd adds A back, even leaves it removed.
+    for toggles in 1...4 {
+        let base = personalStoreDirectory()
+        defer { try? fm.removeItem(at: base) }
+        let path = base.appendingPathComponent("personal-images.json")
+        let recovery = path.appendingPathExtension("recovered")
+        try await personalStoreFile(path, favorites: [b, a])
+        let healthy = try Data(contentsOf: path)
+        try Data("{nope".utf8).write(to: path)
+        let store = PersonalImageStore(url: path)
+        for step in 1...toggles { #expect(try await store.toggleFavorite(a) == (step % 2 == 1), "toggles \(toggles)") }
+        try healthy.write(to: path)
+        let expected = toggles % 2 == 1 ? [a, b] : [b]
+        let repaired = PersonalImageStore(url: path)
+        #expect(try await repaired.favorites() == expected, "toggles \(toggles)")
+        #expect(try await repaired.isFavorite(a.itemID) == (toggles % 2 == 1), "toggles \(toggles)")
+        try await repaired.recordVisit(b, at: at(1))
+        #expect(!fm.fileExists(atPath: recovery.path), "toggles \(toggles)")
+        #expect(try await PersonalImageStore(url: path).favorites() == expected, "toggles \(toggles)")
+        let text = try String(contentsOf: path, encoding: .utf8)
+        #expect(!text.contains("removed"), "markers stay out of the primary")
+    }
+}
+
+@Test func personalImageStoreRecoveryVisitSurvivesRepairOnce() async throws {
+    let fm = FileManager.default
+    let base = personalStoreDirectory()
+    defer { try? fm.removeItem(at: base) }
+    let path = base.appendingPathComponent("personal-images.json")
+    let (x, y) = (personalRef("x.jpg"), personalRef("y.jpg"))
+    try await personalStoreFile(path, visits: [(x, 1), (y, 2)])
+    let healthy = try Data(contentsOf: path)
+    try Data("{nope".utf8).write(to: path)
+    let store = PersonalImageStore(url: path)
+    try await store.recordVisit(x, at: at(5))
+    _ = try await store.toggleFavorite(x); _ = try await store.toggleFavorite(x)
+    try healthy.write(to: path)
+    let repaired = PersonalImageStore(url: path)
+    #expect(try await repaired.recents() == [PersonalImageVisit(ref: x, viewedAt: at(5)), PersonalImageVisit(ref: y, viewedAt: at(2))])
+    _ = try await repaired.toggleFavorite(y)
+    #expect(try await PersonalImageStore(url: path).recents().map(\.ref) == [x, y])
+    #expect(try await PersonalImageStore(url: path).favorites() == [y])
+}
