@@ -4,7 +4,7 @@
   bundled Unsplash sample photos, across appearance, drag-over, window size and accessibility settings?"
   One design (B4, final per user 2026-10-27), five switches on the floating bar, all mirrored in the URL:
     ?appearance=light|dark &drag=idle|over &size=960x640|800x600|1280x800|1440x900
-    &motion=full|reduce &transparency=full|reduce   (optional &guides=1 draws the size-rule guides)
+    &motion=full|reduce &transparency=full|reduce &lang=zh|en   (optional &guides=1 draws the size-rule guides)
   Run: npm run preview:states → http://127.0.0.1:4313/prototype-first-launch-b4-final.html
   Not the native app; nothing is persisted. Photos: assets/b4-samples/ (see its README.md).
 -->
@@ -112,7 +112,7 @@
 </head>
 <body>
 <div class="proto-head">
-  <div class="rule"><b>B4 散落相纸 · 定稿效果</b>（原型，可丢弃；12 张相纸用打包候选样图 <code>assets/b4-samples/</code>）<br>
+  <div class="rule"><b>B4 散落相纸 · 定稿效果</b>（原型，可丢弃；6 张相纸用打包候选样图 <code>assets/b4-samples/</code>）<br>
     <span id="rule-text"></span></div>
   <div class="readout" id="readout" aria-live="polite"></div>
 </div>
@@ -125,13 +125,13 @@
         <div class="drop" id="drop">
           <div class="centre" id="centre">
             <div class="stack" id="stack" aria-hidden="true">
-              <div class="f" style="background-image:url(assets/b4-samples/temple.jpg)"></div>
-              <div class="f" style="background-image:url(assets/b4-samples/coast.jpg)"></div>
               <div class="f" style="background-image:url(assets/b4-samples/lakehouse.jpg)"></div>
+              <div class="f" style="background-image:url(assets/b4-samples/gate.jpg)"></div>
+              <div class="f" style="background-image:url(assets/b4-samples/alley.jpg)"></div>
             </div>
             <h1 id="drop-h">把照片文件夹拖到这里</h1>
-            <div class="sub"><button class="btn" id="open">选择文件夹…</button><span>或按 <kbd>⌘O</kbd></span></div>
-            <div class="chips"><span>文件夹</span><span>单张或多张图片</span><span>常见图片格式</span></div>
+            <div class="sub"><button class="btn" id="open" data-t="btn"></button><span><span data-t="or"></span> <kbd>⌘O</kbd></span></div>
+            <div class="chips"><span data-t="c1"></span><span data-t="c2"></span><span data-t="c3"></span></div>
           </div>
         </div>
         <div class="toast" id="toast"></div>
@@ -150,12 +150,17 @@
   <span class="sep"></span>
   <div class="grp" data-k="transparency"><span>降低透明度</span><button data-v="full">关</button><button data-v="reduce">开</button></div>
   <span class="sep"></span>
+  <div class="grp" data-k="lang"><span>语言</span><button data-v="zh">中文</button><button data-v="en">English</button></div>
+  <span class="sep"></span>
   <div class="grp" data-k="guides"><button data-v="1" title="显示尺寸规则辅助线">辅助线</button></div>
 </div>
 <script>
 // ---- state (mirrored in the URL) ----
 const OPTS = { appearance: ['light', 'dark'], drag: ['idle', 'over'], size: ['960x640', '800x600', '1280x800', '1440x900'],
-               motion: ['full', 'reduce'], transparency: ['full', 'reduce'], guides: ['0', '1'] };
+               motion: ['full', 'reduce'], transparency: ['full', 'reduce'], lang: ['zh', 'en'], guides: ['0', '1'] };
+// draft English strings (round 2); the language is independent of appearance
+const STR = { zh: { idle: '把照片文件夹拖到这里', over: '松开即可打开', btn: '选择文件夹…', or: '或按', c1: '文件夹', c2: '单张或多张图片', c3: '常见图片格式' },
+              en: { idle: 'Drop a photo folder here', over: 'Release to open', btn: 'Choose Folder…', or: 'or press', c1: 'Folder', c2: 'One or more images', c3: 'Common image formats' } };
 const qs = new URLSearchParams(location.search);
 const S = {};
 for (const k in OPTS) S[k] = OPTS[k].includes(qs.get(k)) ? qs.get(k) : OPTS[k][0];
@@ -170,22 +175,17 @@ const DIM = 0.4;                                    // drag-over: prints fall to
 // when less than 75% of it is inside the window, or when it covers the traffic lights.
 // Below 720×480 all prints are hidden (minimum size; not reachable with the sizes on the bar).
 const REF = { w: 960, h: 640, pw: 150, ph: 110 };
-const RULE = '尺寸规则：每张相纸锚定到某个角或某条边的中点；尺寸、到锚点的距离、沿边偏移都按 s = clamp(min(W/960, H/640), 0.8, 1.25) 缩放；中央内容不缩放。相纸旋转后的外框（含 6 pt 白边）压到中央留白区（中央内容外扩 16 pt，宽至少 420 pt 以容纳扇开）时，先朝窗口边缘外推（每次 2 pt，最多 60 pt，且至少 75% 留在窗口内）；仍压到就隐藏。窗口内可见面积不足 75% 或盖住红绿灯，也隐藏。窗口小于 720×480 时全部隐藏。';
+const RULE = '尺寸规则：每张相纸锚定到某个角或某条边的中点；尺寸、到锚点的距离、沿边偏移都按 s = clamp(min(W/960, H/640), 0.8, 1.25) 缩放；中央内容不缩放。相纸旋转后的外框（含 6 pt 白边）压到中央留白区（中央内容外扩 16 pt，宽至少 420 pt 以容纳扇开）时，先朝窗口边缘外推，取横向或纵向中较短的一种（左右边只横推，上下边只纵推；每次 2 pt，最多 60 pt，至少 75% 留在窗口内且不盖红绿灯）；仍压到就隐藏。窗口内可见面积不足 75% 或盖住红绿灯，也隐藏。窗口小于 720×480 时全部隐藏。';
 // anchor, a, b, rotation. TL/TR/BL/BR: a = gap to the left/right edge, b = gap to the top/bottom edge.
 // L/R: a = gap to that edge, b = print-centre offset from the window's vertical middle. T/B: a = centre offset from horizontal middle, b = gap.
+// round 2 (user 2026-10-27 「bundle fewer photos」): 6 photos, at most two torii (lakeside, gate), pale ones dropped
 const PRINTS = [
-  ['TL',  30,   78, -8, 'alley'],
-  ['TL', 190,   22,  5, 'island'],
-  ['TR',  90,   58, -5, 'hillside'],
-  ['R',   10,  -77,  9, 'lakeside'],
-  ['L',   20,   13,  7, 'mountain'],
-  ['R',   20,  103, -7, 'morning'],
-  ['BL',  60,   52, -4, 'shore'],
-  ['BL', 230,   10,  6, 'blue'],
-  ['BR', 210,   10, -6, 'gate'],
-  ['BR',  30,   22,  5, 'temple'],
-  ['B',   -5,    4,  3, 'coast'],
-  ['T',   15,   18, -3, 'lakehouse'],
+  ['TL',  70,   60, -7, 'alley'],
+  ['T',  196,   26,  4, 'lakeside'],
+  ['R',   30,   26,  8, 'hillside'],
+  ['BR', 176,   14, -5, 'gate'],
+  ['BL',  52,   30,  6, 'temple'],
+  ['L',   26,  -34, -4, 'lakehouse'],
 ];
 const bg = document.getElementById('bg'), win = document.getElementById('win'), frame = document.getElementById('frame');
 const els = PRINTS.map(([, , , , n]) => { const p = document.createElement('div'); p.className = 'print';
@@ -217,22 +217,30 @@ function layout(W, H) {
   PRINTS.forEach(([a, A, B, rot, name], i) => {
     // place at the anchor; if the print enters the keep-out, push it outward (away from the centre) in 2 pt steps
     // while at least 75% of it stays inside the window; only then hide it
-    const place = (k) => {
-      const g = (v) => Math.max(v * s - k, -1e9);
+    const place = (k, ax) => {          // k = push in pt; ax = 'x' or 'y' (corners can go either way; edges only outward)
+      const gx = (v) => v * s - (ax === 'x' ? k : 0), gy = (v) => v * s - (ax === 'y' ? k : 0);
       let x, y;
-      if (a === 'TL') { x = g(A); y = g(B); }
-      if (a === 'TR') { x = W - g(A) - pw; y = g(B); }
-      if (a === 'BL') { x = g(A); y = H - g(B) - ph; }
-      if (a === 'BR') { x = W - g(A) - pw; y = H - g(B) - ph; }
-      if (a === 'L')  { x = g(A); y = H / 2 + B * s - ph / 2; }
-      if (a === 'R')  { x = W - g(A) - pw; y = H / 2 + B * s - ph / 2; }
-      if (a === 'T')  { x = W / 2 + A * s - pw / 2; y = g(B); }
-      if (a === 'B')  { x = W / 2 + A * s - pw / 2; y = H - g(B) - ph; }
+      if (a === 'TL') { x = gx(A); y = gy(B); }
+      if (a === 'TR') { x = W - gx(A) - pw; y = gy(B); }
+      if (a === 'BL') { x = gx(A); y = H - gy(B) - ph; }
+      if (a === 'BR') { x = W - gx(A) - pw; y = H - gy(B) - ph; }
+      if (a === 'L')  { x = gx(A); y = H / 2 + B * s - ph / 2; }
+      if (a === 'R')  { x = W - gx(A) - pw; y = H / 2 + B * s - ph / 2; }
+      if (a === 'T')  { x = W / 2 + A * s - pw / 2; y = gy(B); }
+      if (a === 'B')  { x = W / 2 + A * s - pw / 2; y = H - gy(B) - ph; }
       const bx = rotBox(x, y, pw, ph, rot);
       return { x, y, bx, inside: inter(bx, { l: 0, t: 0, r: W, b: H }) / ((bx.r - bx.l) * (bx.b - bx.t)) };
     };
-    let P = place(0), push = 0;
-    while (inter(P.bx, K) > 0 && push < 60) { const n = place(push + 2); if (n.inside < 0.75) break; push += 2; P = n; }
+    // overlap with the keep-out: push outward along the shorter way (2 pt steps, max 60 pt), keeping ≥75% inside
+    // the window and off the traffic lights; if no push clears it, the print is hidden
+    const axes = a === 'L' || a === 'R' ? ['x'] : a === 'T' || a === 'B' ? ['y'] : ['x', 'y'];
+    let P = place(0, 'x'), push = 0, dir = '';
+    if (inter(P.bx, K) > 0) {
+      search: for (let k = 2; k <= 60; k += 2) for (const d of axes) {
+        const n = place(k, d);
+        if (n.inside >= 0.75 && inter(n.bx, traffic) === 0 && inter(n.bx, K) === 0) { P = n; push = k; dir = d; break search; }
+      }
+    }
     const { x, y, bx, inside } = P;
     const ax = { TL: 0, BL: 0, L: 0, TR: W, BR: W, R: W, T: W / 2, B: W / 2 }[a];
     const ay = { TL: 0, TR: 0, T: 0, BL: H, BR: H, B: H, L: H / 2, R: H / 2 }[a];
@@ -246,7 +254,7 @@ function layout(W, H) {
     p.classList.toggle('hidden', !!why);
     p.title = `#${i + 1} ${name} · ${a}` + (why ? ` · 隐藏：${why}` : '');
     if (why) out.push(`#${i + 1} ${name}（${a}）${why}`);
-    else if (push) out.push(`#${i + 1} ${name}（${a}）外推 ${push} pt`);
+    else if (push) out.push(`#${i + 1} ${name}（${a}）外推 ${push} pt（${dir === 'x' ? '横向' : '纵向'}）`);
   });
   return { s, notes: out, hiddenCount: els.filter(e => e.classList.contains('hidden')).length };
 }
@@ -265,7 +273,9 @@ function render() {
   root.className = [`theme-${S.appearance}`, S.drag === 'over' ? 'over' : '', S.motion === 'reduce' ? 'rm' : '',
                     S.transparency === 'reduce' ? 'rt' : '', S.guides === '1' ? 'guides' : ''].filter(Boolean).join(' ');
   root.style.setProperty('--print-opacity', OPACITY[S.appearance] / 100);
-  h1.textContent = S.drag === 'over' ? '松开即可打开' : '把照片文件夹拖到这里';
+  const T = STR[S.lang]; root.lang = S.lang === 'en' ? 'en' : 'zh-CN';
+  h1.textContent = S.drag === 'over' ? T.over : T.idle;
+  document.querySelectorAll('[data-t]').forEach(e => { e.textContent = T[e.dataset.t]; });
   win.style.width = W + 'px'; win.style.height = H + 'px';   // size first: the keep-out is measured from the laid-out centre
   const L = layout(W, H);
   document.querySelectorAll('.proto-bar .grp').forEach(g => g.querySelectorAll('button').forEach(b =>
@@ -276,7 +286,8 @@ function render() {
     `appearance   <em>${S.appearance}</em>   print opacity <em>${eff}%</em>${S.drag === 'over' ? (S.transparency === 'reduce' ? ' (covered by opaque drop fill)' : ` (= ${op}% × 0.4)`) : ''}`,
     `drag         <em>${S.drag}</em>   ${S.drag === 'over' ? (S.motion === 'reduce' ? 'dim instant, no fan-out' : 'dim over 0.45 s, stack fans') : ''}`,
     `size         <em>${S.size}</em>   s = <em>${L.s.toFixed(2)}</em>   print <em>${Math.round(150 * L.s)}×${Math.round(110 * L.s)}</em>`,
-    `prints shown <em>${shown}/12</em>   page zoom <span id="zoom"></span>`,
+    `prints shown <em>${shown}/${PRINTS.length}</em>   page zoom <span id="zoom"></span>`,
+    `lang         <em>${S.lang}</em>   (draft English)`,
     `motion       <em>${S.motion}</em>   transparency <em>${S.transparency}</em>${S.transparency === 'reduce' ? ' (opaque chips/drop)' : ''}`,
     ...(L.notes.length ? L.notes.map(t => `<span class="hid">${t.includes('外推') ? 'pushed ' : 'hidden '} ${t}</span>`) : ['<span>hidden       none</span>']),
   ].join('\n');
@@ -284,7 +295,7 @@ function render() {
   const z = fit(W, H);          // measure the stage after the readout has its final height
   document.getElementById('zoom').textContent = Math.round(z * 100) + '%';
   const p = new URLSearchParams();
-  for (const k of ['appearance', 'drag', 'size', 'motion', 'transparency']) p.set(k, S[k]);
+  for (const k of ['appearance', 'drag', 'size', 'motion', 'transparency', 'lang']) p.set(k, S[k]);
   if (S.guides === '1') p.set('guides', '1');
   history.replaceState(null, '', '?' + p);
 }
