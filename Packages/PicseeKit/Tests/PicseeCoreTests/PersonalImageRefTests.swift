@@ -55,7 +55,7 @@ private func personalGeneratedPath(_ rng: inout PersonalSplitMix) -> String {
         #expect(ref.rootID == root.id)
         #expect(!ref.relativePath.hasPrefix("/") && !ref.relativePath.split(separator: "/").contains(".."))
     }
-    let alias = try #require(PersonalImageRef(fileURL: files[21], root: root, fileNumber: nil))
+    let alias = try #require(PersonalImageRef(fileURL: files[21], root: root, fileNumber: 2))
     #expect(alias.relativePath == "sub/x.jpg")
 }
 
@@ -82,10 +82,10 @@ private func personalGeneratedPath(_ rng: inout PersonalSplitMix) -> String {
     let (base, root) = try personalTempRoot()
     defer { try? fm.removeItem(at: base) }
     let file = root.url.appendingPathComponent("a.jpg"), other = root.url.appendingPathComponent("b.jpg")
-    let refs = try [7, 8, nil].map { try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: $0)) }
+    let refs = try [7, 8, 9].map { try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: $0)) }
     #expect(refs[0] == refs[1] && refs[1] == refs[2])
     #expect(Set(refs).count == 1)
-    #expect(refs.map(\.fileNumber) == [7, 8, nil])
+    #expect(refs.map(\.fileNumber) == [7, 8, 9])
     #expect(PersonalImageRef(fileURL: other, root: root, fileNumber: 7) != refs[0])
     let otherRoot = ItemIdentityRoot(id: AccessRootID(), url: root.url)
     let samePathOtherRoot = try #require(PersonalImageRef(fileURL: file, root: otherRoot, fileNumber: 7))
@@ -95,7 +95,7 @@ private func personalGeneratedPath(_ rng: inout PersonalSplitMix) -> String {
 
 @Test func personalImageRefCodableRoundTrip() throws {
     let root = ItemIdentityRoot(id: AccessRootID(), url: URL(fileURLWithPath: "/pictures"))
-    let numbers: [UInt64?] = [0, UInt64.max, nil]
+    let numbers: [UInt64] = [0, UInt64.max, 1]
     for seed in UInt64(1)...20 {
         var rng = PersonalSplitMix(state: seed)
         let path = personalGeneratedPath(&rng)
@@ -130,4 +130,25 @@ private func personalGeneratedPath(_ rng: inout PersonalSplitMix) -> String {
     #expect(decoded == visit)
     #expect(decoded.viewedAt.timeIntervalSince1970 == 1_700_000_000.25 && decoded.ref.fileNumber == 4)
     #expect(PersonalImageAvailability.present(root.url) != .missing && PersonalImageAvailability.missing != .revoked)
+}
+
+@Test func personalImageRefEqualityUsesPathBytes() throws {
+    let root = ItemIdentityRoot(id: AccessRootID(), url: URL(fileURLWithPath: "/pictures-compat"))
+    let compatibility = try #require(PersonalImageRef(fileURL: root.url.appendingPathComponent("\u{F900}.jpg"), root: root, fileNumber: 1))
+    let unified = try #require(PersonalImageRef(fileURL: root.url.appendingPathComponent("\u{8C48}.jpg"), root: root, fileNumber: 1))
+    try #require(compatibility.relativePath == unified.relativePath, "canonically equivalent names")
+    try #require(Array(compatibility.relativePath.utf8) != Array(unified.relativePath.utf8), "two spellings on disk")
+    #expect(compatibility.itemID != unified.itemID)
+    #expect(compatibility != unified, "equality follows the item identity, not Unicode equivalence")
+    #expect(Set([compatibility, unified]).count == 2)
+    #expect(compatibility == PersonalImageRef(fileURL: root.url.appendingPathComponent("\u{F900}.jpg"), root: root, fileNumber: 5))
+}
+
+@Test func personalImageRefRequiresFileNumber() throws {
+    let root = AccessRootID().rawValue.uuidString
+    #expect(throws: DecodingError.self) {
+        try JSONDecoder().decode(PersonalImageRef.self, from: Data(#"{"rootID":"\#(root)","relativePath":"a.jpg"}"#.utf8))
+    }
+    let ref = try JSONDecoder().decode(PersonalImageRef.self, from: Data(#"{"rootID":"\#(root)","relativePath":"a.jpg","fileNumber":0}"#.utf8))
+    #expect(ref.fileNumber == 0)
 }

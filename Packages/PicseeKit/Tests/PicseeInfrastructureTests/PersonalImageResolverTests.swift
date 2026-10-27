@@ -46,7 +46,8 @@ private struct PersonalResolverFixture {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try bytes.write(to: file)
         let number = try await access.withLease(.root(rootID, file: file)) { _ in PersonalImageResolver.fingerprint(of: file) }
-        return try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: try #require(number)))
+        let recorded = try #require(number)
+        return try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: recorded))
     }
 }
 
@@ -97,9 +98,6 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     try fm.createSymbolicLink(at: folder.appendingPathComponent("linked.jpg"), withDestinationURL: outside.appendingPathComponent("linked.jpg"))
     #expect(try await resolver.resolve(linked) == .missing, "now a link to the same file outside the root")
 
-    _ = try await fixture.remember("unknown.jpg")
-    let unknown = try #require(PersonalImageRef(fileURL: folder.appendingPathComponent("unknown.jpg"), root: fixture.root, fileNumber: nil))
-    #expect(try await resolver.resolve(unknown) == .missing, "no recorded file number")
     #expect(fixture.scope.counts[0] == fixture.scope.counts[1])
 }
 
@@ -142,8 +140,9 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     let number = try await first.access.withLease(.root(secondID, file: secondFolder)) { _ in
         PersonalImageResolver.fingerprint(of: secondFolder.appendingPathComponent("a.jpg"))
     }
+    let secondNumber = try #require(number)
     let two = try #require(PersonalImageRef(fileURL: secondFolder.appendingPathComponent("a.jpg"),
-        root: ItemIdentityRoot(id: secondID, url: secondFolder), fileNumber: number))
+        root: ItemIdentityRoot(id: secondID, url: secondFolder), fileNumber: secondNumber))
     guard case .present(let urlOne) = try await first.resolver.resolve(one),
           case .present(let urlTwo) = try await first.resolver.resolve(two) else { Issue.record("expected both present"); return }
     #expect(try Data(contentsOf: urlOne) == Data("one".utf8))
@@ -164,8 +163,9 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     let scope = CountingScope(), codec = FakeBookmarks()
     let access = try FileAccess(scope: scope, bookmarks: codec, store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "personal")
     let id = try await access.grant(folder: folder)
+    let number = try #require(PersonalImageResolver.fingerprint(of: file))
     let ref = try #require(PersonalImageRef(fileURL: file, root: ItemIdentityRoot(id: id, url: folder),
-        fileNumber: PersonalImageResolver.fingerprint(of: file)))
+        fileNumber: number))
     let resolver = PersonalImageResolver(access: access)
     guard case .present = try await resolver.resolve(ref) else { Issue.record("expected present"); return }
     codec.fails = true
@@ -190,7 +190,8 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     func ref(_ name: String) throws -> PersonalImageRef {
         let file = folder.appendingPathComponent(name)
         try Data([7]).write(to: file)
-        return try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: PersonalImageResolver.fingerprint(of: file)))
+        let number = try #require(PersonalImageResolver.fingerprint(of: file))
+        return try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: number))
     }
     let present = try ref("present.jpg"), deleted = try ref("deleted.jpg")
     try fm.removeItem(at: folder.appendingPathComponent("deleted.jpg"))
@@ -225,7 +226,8 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     func ref(_ name: String) throws -> PersonalImageRef {
         let file = folder.appendingPathComponent(name)
         try Data([5]).write(to: file)
-        return try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: PersonalImageResolver.fingerprint(of: file)))
+        let number = try #require(PersonalImageResolver.fingerprint(of: file))
+        return try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: number))
     }
     let top = try ref("a.jpg"), nested = try ref("sub/b.jpg")
     let resolver = PersonalImageResolver(access: access)
@@ -272,8 +274,9 @@ private final class CancellingScope: SecurityScope, @unchecked Sendable {
     let scope = CancellingScope()
     let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "personal")
     let id = try await access.grant(folder: folder)
+    let number = try #require(PersonalImageResolver.fingerprint(of: file))
     let ref = try #require(PersonalImageRef(fileURL: file, root: ItemIdentityRoot(id: id, url: folder),
-        fileNumber: PersonalImageResolver.fingerprint(of: file)))
+        fileNumber: number))
     let resolver = PersonalImageResolver(access: access)
     let early = Task {
         withUnsafeCurrentTask { $0?.cancel() }
@@ -300,7 +303,8 @@ private final class CancellingScope: SecurityScope, @unchecked Sendable {
     try Data("new".utf8).write(to: file, options: .atomic)
     #expect(try await fixture.resolver.resolve(try #require(try await store.favorites().first)) == .missing)
     let number = try await fixture.access.withLease(.root(fixture.rootID, file: file)) { _ in PersonalImageResolver.fingerprint(of: file) }
-    let seen = try #require(PersonalImageRef(fileURL: file, root: fixture.root, fileNumber: try #require(number)))
+    let renumbered = try #require(number)
+    let seen = try #require(PersonalImageRef(fileURL: file, root: fixture.root, fileNumber: renumbered))
     try #require(seen.fileNumber != ref.fileNumber, "the atomic save made a new file")
     try await store.recordVisit(seen, at: Date())
     guard case .present(let url) = try await fixture.resolver.resolve(try #require(try await store.favorites().first)) else {
