@@ -190,3 +190,29 @@ private struct ComboInspectorReader: InspectorMetadataReading {
     #expect(scene.grid.displayedItemIDs.isEmpty)
     #expect(!router.route(.preview, from: .key, to: scene.session))
 }
+
+@Test @MainActor func issue140WatchedFilenameSearchRenameThenDeleteKeepsFocusAndMatch() {
+    let scene = SearchedRefreshScene()
+    let a = scene.entry("match-a.jpg"), b = scene.entry("match-b.jpg")
+    let c = scene.entry("match-c.jpg"), hidden = scene.entry("other.jpg")
+    scene.begin(scene.snapshot([a, b, c, hidden], 1), term: "match", current: b.itemID)
+    let responder = scene.window.firstResponder
+    let renamed = FolderEntry(url: scene.folder.appendingPathComponent("match-d.jpg"),
+        root: scene.root, itemID: b.itemID)
+    GridWatchedSearchRefresh.apply(scene.snapshot([a, c, renamed, hidden], 2),
+        session: scene.session, search: scene.search, scheduler: scene.scheduler,
+        grid: scene.grid, shell: scene.shell, gridVisible: true)
+    #expect(scene.grid.currentItemID == b.itemID)
+    #expect(scene.grid.displayedItemIDs == [a, c, renamed].map(\.itemID))
+    #expect(!scene.shell.searchEmptyVisible && scene.window.firstResponder === responder)
+
+    GridWatchedSearchRefresh.apply(scene.snapshot([a, c, hidden], 3),
+        session: scene.session, search: scene.search, scheduler: scene.scheduler,
+        grid: scene.grid, shell: scene.shell, gridVisible: true)
+    #expect(scene.grid.currentItemID == c.itemID)
+    #expect(scene.grid.displayedItemIDs == [a, c].map(\.itemID))
+    #expect(scene.session.selection.currentItemID == c.itemID)
+    #expect(scene.search.term == "match")
+    #expect(!scene.shell.searchEmptyVisible && scene.shell.searchStatus.stringValue.contains("2"))
+    #expect(scene.window.firstResponder === responder)
+}
