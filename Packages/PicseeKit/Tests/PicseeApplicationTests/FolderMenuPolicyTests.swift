@@ -61,6 +61,17 @@ import PicseeCore
     #expect(selected.conditions.selectedExtensions == nil)
 }
 
+@Test func issue127JpegHasOneMenuChoiceAndOneCheckmark() {
+    let choices = FolderMenuPolicy.extensionChoices(available: ["JPG", "JPEG", "jPeG", "png"])
+    #expect(choices.filter { $0 == "jpg" || $0 == "jpeg" } == ["jpg"])
+    let initial = FolderMenuSelection(conditions: .init(), loopEnabled: false)
+    let selected = FolderMenuPolicy.applying(.extensionType("JPEG"), to: initial)
+    #expect(selected.conditions.selectedExtensions == ["jpg"])
+    #expect(FolderMenuPolicy.state(for: .extensionType("jpg"), selection: selected,
+        hasFolderSource: true, previewActive: false).checked)
+    #expect(FolderMenuPolicy.applying(.extensionType("jpg"), to: selected).conditions.selectedExtensions == nil)
+}
+
 @Test func folderMenuPolicyIdentifiersAndLabelsCoverEveryAction() {
     let actions: [FolderMenuAction] = FolderSortKey.allCases.map { .sort($0) }
         + FolderSortDirection.allCases.map { .direction($0) }

@@ -18,6 +18,10 @@ public enum FolderSortDirection: String, CaseIterable, Codable, Sendable {
 }
 
 public struct FolderViewConditions: Equatable, Sendable {
+    public static func canonicalExtension(_ value: String) -> String {
+        let lower = value.lowercased()
+        return lower == "jpeg" ? "jpg" : lower
+    }
     public var sort: FolderSortKey
     public var direction: FolderSortDirection
     public var selectedExtensions: Set<String>?
@@ -26,14 +30,14 @@ public struct FolderViewConditions: Equatable, Sendable {
                 selectedExtensions: Set<String>? = nil) {
         self.sort = sort
         self.direction = direction
-        self.selectedExtensions = selectedExtensions.map { Set($0.map { $0.lowercased() }) }
+        self.selectedExtensions = selectedExtensions.map { Set($0.map(Self.canonicalExtension)) }
     }
 }
 
 extension FolderSnapshot {
     public func applying(_ conditions: FolderViewConditions, metadata: [ItemID: FolderImageMetadata] = [:]) -> Self {
-        let selected = conditions.selectedExtensions.map { Set($0.map { $0.lowercased() }) }
-        let projected = entries.filter { selected?.contains($0.normalizedExtension) != false }
+        let selected = conditions.selectedExtensions.map { Set($0.map(FolderViewConditions.canonicalExtension)) }
+        let projected = entries.filter { selected?.contains(FolderViewConditions.canonicalExtension($0.normalizedExtension)) != false }
             .sorted { folderEntryBefore($0, $1, conditions: conditions, metadata: metadata) }
         return Self(version: version, orderedEntries: projected, isComplete: isComplete)
     }
