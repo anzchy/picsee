@@ -57,6 +57,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     private var trackingMenus: Set<ObjectIdentifier> = []
     private let openWithoutWindow: () -> Void
     private let openSettings: () -> Void
+    private let openDiagnostics: () -> Void
     private let windowController: () -> CanvasWindowController?
     var activeWindowController: CanvasWindowController? { windowController() }
     private(set) var isTracking = false
@@ -65,13 +66,14 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     private let extensionMenu = NSMenu(title: String(localized: "Extensions"))
 
     init(preferencesStore: any DisplayPreferencesStore, openWithoutWindow: @escaping () -> Void,
-         openSettings: @escaping () -> Void,
+         openSettings: @escaping () -> Void, openDiagnostics: @escaping () -> Void,
          windowController: @escaping () -> CanvasWindowController? = {
              NSApp.keyWindow?.windowController as? CanvasWindowController
          }) {
         self.preferencesStore = preferencesStore
         self.openWithoutWindow = openWithoutWindow
         self.openSettings = openSettings
+        self.openDiagnostics = openDiagnostics
         self.windowController = windowController
         super.init()
         let main = CommandMainMenu(title: "Picsee")
@@ -181,6 +183,11 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         windows.addItem(withTitle: String(localized: "Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windows.addItem(withTitle: String(localized: "Zoom"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         windows.addItem(withTitle: String(localized: "Bring All to Front"), action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
+        windows.addItem(.separator())
+        let diagnostics = windows.addItem(withTitle: String(localized: "Diagnostics"), action: #selector(showDiagnostics(_:)), keyEquivalent: "")
+        diagnostics.target = self
+        diagnostics.identifier = NSUserInterfaceItemIdentifier("diagnostics.menu")
+        diagnostics.setAccessibilityIdentifier("diagnostics.menu")
         #if DEBUG
         let preview = windows.addItem(withTitle: String(localized: "Component Preview"), action: #selector(DesignPreviewLauncher.openPreview(_:)), keyEquivalent: "")
         preview.target = DesignPreviewLauncher.shared
@@ -213,6 +220,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
 
     @objc private func showSettings(_ item: NSMenuItem) { openSettings() }
+    @objc private func showDiagnostics(_ item: NSMenuItem) { openDiagnostics() }
 
     @objc private func toggleAlwaysShowTools(_ item: NSMenuItem) {
         var value = preferencesStore.value
@@ -251,7 +259,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         session.setFolderRecursiveEnabled(changed.recursiveEnabled)
     }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        if item.action == #selector(showSettings(_:)) { return true }
+        if item.action == #selector(showSettings(_:)) || item.action == #selector(showDiagnostics(_:)) { return true }
         if let action = item.representedObject as? FolderMenuAction {
             let session = (NSApp.keyWindow?.windowController as? CanvasWindowController)?.session
             let selection = FolderMenuSelection(conditions: session?.folderConditions ?? .init(),

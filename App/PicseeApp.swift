@@ -64,7 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         commandMenu = CommandMenu(preferencesStore: displayPreferences,
                                   openWithoutWindow: { [weak self] in self?.viewer().route(.open, from: .menu) },
-                                  openSettings: { [weak self] in self?.showSettings() })
+                                  openSettings: { [weak self] in self?.showSettings() },
+                                  openDiagnostics: { [weak self] in self?.showDiagnostics() })
         viewer().showWindow(nil)
         viewer().refreshRecents()
         #if DEBUG && PICSEE_UI_TEST_FIXTURE
