@@ -1173,10 +1173,12 @@ extension CanvasWindowController: FolderScanHost {
     }
     func openFolderImage(_ url: URL, rootID: AccessRootID) {
         if gridFolderRoot == rootID && session.mode == .browsing { return }
+        if !session.allowsFolderScanPresentation { return }
         // A scan-owned move must not revoke the authority that admits its later batches.
         open(url, accessRequest: .root(rootID, file: url), fromFolderScan: true)
     }
     func clearFolderImageForNoMatches() {
+        if session.folderScan != nil && !session.allowsFolderScanPresentation { return }
         retryIntent = nil
         retryFromFolderScan = false
         fileURL = nil

@@ -30,6 +30,8 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public private(set) var previewSet: PreviewSet? {
         didSet { if oldValue != nil && previewSet == nil { applyPreferredFolderSort() } }
     }
+    /// While a viewed set is open, its reconciler owns deletion successors.
+    public var allowsFolderScanPresentation: Bool { previewSet == nil && filePreviewSet == nil }
     public internal(set) var filePreviewSet: FilePreviewSet? {
         didSet { if oldValue != nil && filePreviewSet == nil { applyPreferredFolderSort() } }
     }

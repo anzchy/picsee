@@ -63,3 +63,21 @@ import PicseeApplication
     #expect(router.route(.escape, from: .key, to: session))
     #expect(router.route(.enter, from: .key, to: session))
 }
+
+@Test @MainActor func issue140FolderScanCannotPresentOutsideSearchedOrFrozenPreviewSet() {
+    let a = ItemID.ephemeral(UUID()), b = ItemID.ephemeral(UUID()), c = ItemID.ephemeral(UUID())
+    // Search projection and frozen Preview Set both pass only their viewed IDs to the session.
+    for viewed in [[a, c]] {
+        let host = GridRouteHost(), session = ViewerSession(host: host)
+        session.beginBrowsing(items: viewed, sourceVersion: .init(1), scrollAnchor: a)
+        session.select(a)
+        #expect(CommandRouter().route(.preview, from: .key, to: session))
+        #expect(!session.allowsFolderScanPresentation)
+        session.updateItems([c], sourceVersion: .init(2))
+        #expect(host.opened == [a, c])
+        #expect(!host.opened.contains(b))
+        session.updateItems([], sourceVersion: .init(3))
+        #expect(host.returned == 1)
+        #expect(session.allowsFolderScanPresentation)
+    }
+}
