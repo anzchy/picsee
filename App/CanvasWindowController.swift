@@ -59,6 +59,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var navigationTask: Task<Void, Never>?
     private var standaloneGrantURL: URL?
     private var standaloneWatch: (any DispatchSourceFileSystemObject)?
+    private var standaloneWatchTask: Task<Void, Never>?
+    private let standaloneWatchFallback = FileGrantWatchFallback()
     private var standaloneReconcileTask: Task<Void, Never>?
     private var standaloneReconcilePending = false
     private var standaloneRecheckAfterOpen = false
@@ -247,7 +249,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         if !fromFolderScan {
             searchProjection.cancel()
             standaloneWatch?.cancel(); standaloneWatch = nil
-            standaloneReconcileTask?.cancel(); standaloneGrantURL = url
+            standaloneWatchTask?.cancel(); standaloneWatchTask = nil
+            standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
             standaloneReconcilePending = false
             standaloneRecheckAfterOpen = false
             session.endFolderScan()
@@ -307,14 +310,40 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private func watchStandaloneFile(at url: URL) {
         standaloneWatch?.cancel(); standaloneWatch = nil
-        let descriptor = Darwin.open(url.path, O_EVTONLY)
-        guard descriptor >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor,
-            eventMask: [.write, .rename, .delete, .revoke], queue: .main)
-        source.setEventHandler { [weak self] in self?.reconcileStandaloneImage() }
-        source.setCancelHandler { _ = Darwin.close(descriptor) }
-        standaloneWatch = source
-        source.resume()
+        standaloneWatchTask?.cancel()
+        guard let grant = standaloneGrantURL else { return }
+        let operation = accessIntent.current
+        standaloneWatchTask = Task { [weak self, accessServices] in
+            guard let self, let services = try? await accessServices.value else { return }
+            let descriptor: Int32
+            do {
+                descriptor = try await FileGrantWatchDescriptor.open(grant: grant, access: services.files) {
+                    Darwin.open($0.path, O_EVTONLY)
+                }
+            } catch {
+                self.reportStandaloneWatchFailure(grant)
+                return
+            }
+            guard descriptor >= 0 else {
+                self.reportStandaloneWatchFailure(grant)
+                return
+            }
+            guard !Task.isCancelled, operation.isCurrent, self.standaloneGrantURL == grant else {
+                _ = Darwin.close(descriptor)
+                return
+            }
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor,
+                eventMask: [.write, .rename, .delete, .revoke], queue: .main)
+            source.setEventHandler { [weak self] in self?.reconcileStandaloneImage() }
+            source.setCancelHandler { _ = Darwin.close(descriptor) }
+            self.standaloneWatch = source
+            source.resume()
+        }
+    }
+
+    private func reportStandaloneWatchFailure(_ grant: URL) {
+        guard standaloneWatchFallback.recordFailure(grant) else { return }
+        filesystemLogger.warning("File grant vnode watch unavailable; foreground reconciliation remains active file=\(grant.lastPathComponent, privacy: .private)")
     }
 
     func reconcileStandaloneImage() {
@@ -387,6 +416,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         standaloneWatch?.cancel(); standaloneWatch = nil
+        standaloneWatchTask?.cancel(); standaloneWatchTask = nil
         standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
         standaloneReconcilePending = false
         standaloneRecheckAfterOpen = false
@@ -451,6 +481,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private func openFolder(_ folder: URL, rootID: AccessRootID, currentItemID: ItemID? = nil) {
         standaloneWatch?.cancel(); standaloneWatch = nil
+        standaloneWatchTask?.cancel(); standaloneWatchTask = nil
         standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
         standaloneReconcilePending = false
         standaloneRecheckAfterOpen = false
@@ -1168,6 +1199,7 @@ extension CanvasWindowController: FolderScanHost {
     func folderScanDidComplete(count: Int) { chromeOverlay.refresh(session: session) }
     func folderScanDidStart() {
         standaloneWatch?.cancel(); standaloneWatch = nil
+        standaloneWatchTask?.cancel(); standaloneWatchTask = nil
         standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
         standaloneReconcilePending = false
         standaloneRecheckAfterOpen = false
