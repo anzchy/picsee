@@ -1,6 +1,8 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
+import SwiftUI
 import Testing
 import UniformTypeIdentifiers
 import PicseeCore
@@ -320,4 +322,44 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         #expect(value(model, "disk.entries") == "1")
         #expect(await disk.indexScans == 1)
     }
+}
+
+/// The accessibility trait set a view carries, read from its value dump (SwiftUI builds no
+/// accessibility tree for an offscreen hosting view in a test).
+private func traitSets(_ view: some View) -> [String] {
+    var text = ""
+    dump(view, to: &text)
+    let lines = text.components(separatedBy: "\n")
+    return lines.indices.compactMap { index in
+        guard lines[index].contains("traits: Optional") else { return nil }
+        return lines[index...].first { $0.contains("rawValue:") }?.trimmingCharacters(in: .whitespaces)
+    }
+}
+
+@Test @MainActor func diagnosticsPanelSectionTitlesAreHeadings() {
+    let heading = traitSets(Text("x").accessibilityAddTraits(.isHeader))
+    #expect(heading.count == 1)
+    #expect(traitSets(Text("x")).isEmpty)
+    for title in DiagnosticsPanelModel(source: ScriptedDiagnostics([fullSnapshot])).sections.map(\.title) {
+        #expect(traitSets(DiagnosticsPanelView.sectionTitle(title)) == heading, "\(title)")
+    }
+}
+
+@Test @MainActor func diagnosticsPanelViewLaysOutUnknownAndMeasuredRows() async throws {
+    _ = NSApplication.shared
+    let sleeper = ManualSleeper()
+    let model = DiagnosticsPanelModel(source: ScriptedDiagnostics([fullSnapshot]), sleep: { try await sleeper.sleep($0) })
+    let host = NSHostingView(rootView: DiagnosticsPanelView(model: model))
+    let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 340, height: 520),
+                          styleMask: .borderless, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = host
+    defer { window.close() }
+    host.layoutSubtreeIfNeeded()
+    let unknownSize = host.fittingSize
+    #expect(unknownSize.width >= 300 && unknownSize.height >= 360)
+    model.setVisible(true)
+    try #require(await until { sleeper.pendingCount == 1 })
+    model.setVisible(false)
+    host.layoutSubtreeIfNeeded()
+    #expect(host.fittingSize.width >= 300 && value(model, "memory.hits") == "7")
 }

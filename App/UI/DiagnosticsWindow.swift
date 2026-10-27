@@ -22,7 +22,7 @@ final class DiagnosticsWindow: NSObject {
         panel.identifier = NSUserInterfaceItemIdentifier("diagnostics.window")
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
-        panel.contentView = NSHostingView(rootView: DiagnosticsPane(model: model))
+        panel.contentView = NSHostingView(rootView: DiagnosticsPanelView(model: model))
         panel.center()
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(visibilityChanged(_:)),
@@ -42,43 +42,4 @@ final class DiagnosticsWindow: NSObject {
     }
 
     @objc private func willClose(_ notification: Notification) { model.setVisible(false) }
-}
-
-private struct DiagnosticsPane: View {
-    let model: DiagnosticsPanelModel
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DesignMetrics.spacing[4]) {
-                ForEach(model.sections) { section in
-                    VStack(alignment: .leading, spacing: DesignMetrics.spacing[1]) {
-                        Text(LocalizedStringKey(section.title))
-                            .font(Font(DesignMetrics.font("uiLarge")).weight(.semibold))
-                            .foregroundStyle(DesignColor.textPrimary.color)
-                        ForEach(section.rows) { row in
-                            HStack(spacing: DesignMetrics.spacing[2]) {
-                                Text(LocalizedStringKey(row.title))
-                                    .foregroundStyle(DesignColor.textSecondary.color)
-                                Spacer(minLength: DesignMetrics.spacing[2])
-                                value(row.value)
-                                    .monospacedDigit()
-                                    .foregroundStyle(DesignColor.textPrimary.color)
-                            }
-                            .font(Font(DesignMetrics.font("ui")))
-                            .accessibilityElement(children: .combine)
-                            .accessibilityIdentifier("diagnostics.\(row.id)")
-                        }
-                    }
-                }
-            }
-            .padding(DesignMetrics.spacing[3])
-        }
-        .frame(minWidth: 300, minHeight: 360)
-        .background(DesignColor.popoverBackground.color)
-    }
-
-    /// Only the Unknown marker is a localization key; counts and sizes are already formatted.
-    private func value(_ text: String) -> Text {
-        text == DiagnosticsPanelModel.unknown ? Text(LocalizedStringKey(text)) : Text(verbatim: text)
-    }
 }
