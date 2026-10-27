@@ -191,6 +191,7 @@ public final class ViewerStateHost: NSView {
         image.setAccessibilityIdentifier("state.icon")
         image.setAccessibilityRole(.image)
         image.setAccessibilityLabel(iconLabel)
+        if !failure { image.setAccessibilityElement(false) }
         addSubview(image); stateIcon = image
         for (index, line) in textLines.enumerated() {
             let field = NSTextField(labelWithString: line)
@@ -220,7 +221,7 @@ public final class ViewerStateHost: NSView {
         if failure {
             setAccessibilityChildren([image] + stateLabels + buttons)
         } else {
-            setAccessibilityChildren([image, stateLabels[0], stateLabels[1], buttons[0], stateLabels[2]])
+            setAccessibilityChildren([stateLabels[0], stateLabels[1], buttons[0], stateLabels[2]])
         }
         needsLayout = true
         layoutSubtreeIfNeeded()
