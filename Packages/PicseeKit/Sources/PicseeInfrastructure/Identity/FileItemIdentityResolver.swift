@@ -33,6 +33,8 @@ public actor FileItemIdentityResolver: ItemIdentityResolving {
         let resource: FileResourceIdentity?
     }
     private var entries: [URL: Entry] = [:]
+    private var pathsByResource: [FileResourceIdentity: Set<URL>] = [:]
+    private var pathsByItem: [ItemID: Set<URL>] = [:]
     public init(root: ItemIdentityRoot? = nil, reader: any FileIdentityResourceReading = URLIdentityResourceReader()) {
         self.root = root; self.reader = reader
     }
@@ -52,7 +54,41 @@ public actor FileItemIdentityResolver: ItemIdentityResolving {
             relocated[destination.standardizedFileURL] = entry
         }
         entries = relocated
+        rebuildIndexes()
         self.root = movedRoot
+    }
+    /// A completed scan can retire names that no longer exist without treating a
+    /// partial or cancelled scan as evidence of deletion.
+    func pruneMissing(in folder: URL, recursive: Bool) {
+        let boundary = folder.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        for path in Array(entries.keys) {
+            guard path.pathComponents.starts(with: boundary.pathComponents) else { continue }
+            if !recursive && path.deletingLastPathComponent() != boundary { continue }
+            if !FileManager.default.fileExists(atPath: path.path) { removeEntry(at: path) }
+        }
+    }
+    private func removeEntry(at path: URL) {
+        guard let old = entries.removeValue(forKey: path) else { return }
+        if let resource = old.resource {
+            pathsByResource[resource]?.remove(path)
+            if pathsByResource[resource]?.isEmpty == true { pathsByResource.removeValue(forKey: resource) }
+        }
+        pathsByItem[old.item]?.remove(path)
+        if pathsByItem[old.item]?.isEmpty == true { pathsByItem.removeValue(forKey: old.item) }
+    }
+    private func putEntry(_ entry: Entry, at path: URL) {
+        removeEntry(at: path)
+        entries[path] = entry
+        if let resource = entry.resource { pathsByResource[resource, default: []].insert(path) }
+        pathsByItem[entry.item, default: []].insert(path)
+    }
+    private func rebuildIndexes() {
+        pathsByResource.removeAll(keepingCapacity: true)
+        pathsByItem.removeAll(keepingCapacity: true)
+        for (path, entry) in entries {
+            if let resource = entry.resource { pathsByResource[resource, default: []].insert(path) }
+            pathsByItem[entry.item, default: []].insert(path)
+        }
     }
     public func identity(for fileURL: URL) throws -> ItemID {
         guard fileURL.isFileURL else { throw FileAccessError.outsideRoot }
@@ -62,16 +98,16 @@ public actor FileItemIdentityResolver: ItemIdentityResolving {
         let item: ItemID
         if let existing = entries[path] {
             item = existing.item // Includes replace-at-path, even when resource bytes changed.
-        } else if let resource, let renamed = entries.first(where: {
-            $0.value.resource == resource && !FileManager.default.fileExists(atPath: $0.key.path)
-        }) {
-            item = renamed.value.item
-            entries.removeValue(forKey: renamed.key)
+        } else if let resource, let oldPath = pathsByResource[resource]?.first(where: {
+            !FileManager.default.fileExists(atPath: $0.path)
+        }), let renamed = entries[oldPath] {
+            item = renamed.item
+            removeEntry(at: oldPath)
         } else if let root {
             let boundary = root.url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
             let relative = path.pathComponents.dropFirst(boundary.pathComponents.count).joined(separator: "/")
             let candidate = ItemID.rootRelative(rootID: root.id, relativePath: relative)
-            if entries.values.contains(where: { $0.item == candidate }) {
+            if pathsByItem[candidate] != nil {
                 // A renamed live item still owns this token. Reusing its vacated name creates another item.
                 item = resource.map { .resource(volumeUUID: $0.volumeUUID, fileIdentifier: $0.fileIdentifier) }
                     ?? .ephemeral(UUID())
@@ -83,7 +119,7 @@ public actor FileItemIdentityResolver: ItemIdentityResolving {
             // No file resource identity: one ephemeral token per canonical File Grant path, for this session only.
             item = .ephemeral(UUID())
         }
-        entries[path] = Entry(item: item, resource: resource)
+        putEntry(Entry(item: item, resource: resource), at: path)
         return item
     }
 }

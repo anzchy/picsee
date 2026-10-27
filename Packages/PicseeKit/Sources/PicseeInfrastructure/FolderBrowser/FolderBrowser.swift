@@ -20,6 +20,7 @@ public actor FolderBrowser: FolderScanning {
         try Task.checkCancellation()
         let canonicalFolder = folder.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
         guard AccessBoundary.contains(canonicalFolder, in: root.url) else { throw FileAccessError.outsideRoot }
+        let resolver = await rootResolvers.resolver(for: root)
         var batch: [FolderEntry] = []
         var limit = Self.firstBatchSize
         var admittedImages = 0
@@ -63,7 +64,6 @@ public actor FolderBrowser: FolderScanning {
                     continue
                 }
                 guard values.isRegularFile == true, values.contentType?.conforms(to: .image) == true else { continue }
-                let resolver = await rootResolvers.resolver(for: root)
                 // A file can disappear between metadata admission and identity lookup.
                 guard let identity = try? await resolver.identity(for: target) else { continue }
                 let resource = try? URLIdentityResourceReader().identity(for: target)
@@ -89,6 +89,8 @@ public actor FolderBrowser: FolderScanning {
             let pending = batch; batch.removeAll(keepingCapacity: true)
             try await emit(pending); try Task.checkCancellation()
         }
+        try Task.checkCancellation()
+        await resolver.pruneMissing(in: canonicalFolder, recursive: options.recursive)
         } catch {
             if !(error is CancellationError), !Task.isCancelled, !batch.isEmpty {
                 let pending = batch; batch.removeAll(keepingCapacity: true)
