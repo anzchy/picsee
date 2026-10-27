@@ -3044,19 +3044,19 @@
         }
       }
     },
-    "Stored Size": {
+    "Indexed Size": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stored Size"
+            "value": "Indexed Size"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已存大小"
+            "value": "索引大小"
           }
         }
       }
@@ -3142,6 +3142,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "诊断"
+          }
+        }
+      }
+    },
+    "Indexed Entries": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indexed Entries"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "索引条目"
           }
         }
       }

@@ -208,3 +208,22 @@ private struct FailingEdgeDecoder: ImageDecoding {
     _ = try await load.value
     #expect(await admission.diagnostics() == .init(running: 0, waiting: 0, finished: 0))
 }
+
+@Test func diagnosticsCountsAResolvedLookupEvenIfTheCallerDropsIt() async throws {
+    let cache = ImageMemoryCache(capacity: 1 << 20)
+    // The pipeline abandons a resolved lookup this way when its caller is cancelled after the lookup returned.
+    let request = await cache.lookup(decodeKey(1))
+    #expect(await cache.finish(request, image: nil) == nil)
+    #expect(await cache.diagnostics().misses == 1)
+
+    let rig = try CounterRig()
+    defer { rig.remove() }
+    let pipeline = ImageIOPipeline()
+    let disk = ThumbnailDiskCache(directory: rig.cacheDirectory)
+    let source = try await pipeline.request(for: rig.file, maximumPixelSize: 64, identityRoot: rig.root)
+    let ticket = try #require(try await disk.prepare(source))
+    try await disk.store(try await pipeline.image(for: source), for: ticket)
+    // A hit stays counted whatever the caller then does with the image.
+    _ = try await disk.load(ticket)
+    #expect(await disk.diagnostics().hits == 1)
+}

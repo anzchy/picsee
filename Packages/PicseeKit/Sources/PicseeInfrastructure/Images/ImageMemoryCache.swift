@@ -45,7 +45,8 @@ public actor ImageMemoryCache {
     private var observations: [UUID: (epoch: Int, itemID: ItemID?)] = [:]
     // Two distinct revision events suffice to detect a conflict with any still-live observation.
     private var recent: [ItemID: [(epoch: Int, revision: FileRevision)]] = [:]
-    // Resolved lookups since launch, counted where the tracer reports them.
+    // Lookups resolved to a hit or a miss since launch, counted where the tracer reports them: per resolved
+    // attempt, so a caller that cancels or rejects the result afterwards leaves the count.
     private var hits = 0
     private var misses = 0
     /// Shared with this cache's pipeline admission; nil keeps the cache bounded by its capacity alone.
