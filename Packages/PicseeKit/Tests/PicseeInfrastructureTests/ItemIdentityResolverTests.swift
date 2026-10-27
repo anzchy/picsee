@@ -23,6 +23,25 @@ private struct MissingIdentityReader: FileIdentityResourceReading {
     }
 }
 
+private struct NilGrantResourceReader: FileIdentityResourceReading {
+    func identity(for fileURL: URL) throws -> FileResourceIdentity? { nil }
+}
+
+@Test func itemResolverFileGrantWithoutResourceKeepsOneEphemeralTokenPerCanonicalPath() async throws {
+    let tree = try IdentityTree(); defer { tree.remove() }
+    let grant = FileItemIdentityResolver(reader: NilGrantResourceReader())
+    let first = try await grant.identity(for: tree.file)
+    let alias = tree.root.appendingPathComponent("a/../b.png")
+    let same = try await grant.identity(for: alias)
+    let second = try await grant.identity(for: tree.root.appendingPathComponent("other.png"))
+
+    #expect(first.stableEncoding.hasPrefix("id1:ephemeral:"))
+    #expect(UUID(uuidString: String(first.stableEncoding.dropFirst("id1:ephemeral:".count))) != nil)
+    #expect(same == first)
+    #expect(second.stableEncoding.hasPrefix("id1:ephemeral:"))
+    #expect(second != first)
+}
+
 @Test func itemResolverCanonicalAliasesRenameAndHardLinks() async throws {
     let tree = try IdentityTree(); defer { tree.remove() }
     let resolver = FileItemIdentityResolver(root: tree.scope)
