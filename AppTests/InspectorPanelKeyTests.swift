@@ -17,7 +17,7 @@ import PicseeCore
     let unavailable = Task<AccessServices, Error> { throw CancellationError() }
     let controller = CanvasWindowController(pipeline: ImageIOPipeline(), preferencesStore: preferences,
         accessServices: unavailable, motionPolicy: MotionPolicy(source: KeyTestMotionSource()))
-    let menu = CommandMenu(preferencesStore: preferences, openWithoutWindow: {}, openSettings: {},
+    let menu = CommandMenu(preferencesStore: preferences, openWithoutWindow: {}, openSettings: {}, openDiagnostics: {},
         windowController: { controller })
     let window = try #require(controller.window as? CommandWindow)
     defer { window.close(); NSApp.mainMenu = previousMenu; withExtendedLifetime(menu) {} }
