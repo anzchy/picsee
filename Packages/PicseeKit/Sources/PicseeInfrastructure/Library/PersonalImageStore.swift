@@ -17,31 +17,41 @@ public actor PersonalImageStore {
         var favorites: [PersonalImageRef] = []
         var recents: [PersonalImageVisit] = []
     }
-    public init(url: URL) { self.url = url }
+    private let fileLock: NSLock
+    public init(url: URL) {
+        self.url = url
+        fileLock = FileLocks.shared.lock(for: url)
+    }
 
     /// Newest first.
-    public func favorites() throws -> [PersonalImageRef] { try load().favorites }
+    public func favorites() throws -> [PersonalImageRef] { try fileLock.withLock { try load().favorites } }
     /// Newest visit first; equal times keep the later visit first.
-    public func recents() throws -> [PersonalImageVisit] { try load().recents }
-    public func isFavorite(_ item: ItemID) throws -> Bool { try load().favorites.contains { $0.itemID == item } }
+    public func recents() throws -> [PersonalImageVisit] { try fileLock.withLock { try load().recents } }
+    public func isFavorite(_ item: ItemID) throws -> Bool {
+        try fileLock.withLock { try load().favorites.contains { $0.itemID == item } }
+    }
 
     /// Returns whether the item is a favorite afterwards.
     public func toggleFavorite(_ ref: PersonalImageRef) throws -> Bool {
-        var contents = try load()
-        let removed = contents.favorites.contains(ref)
-        contents.favorites.removeAll { $0 == ref }
-        if !removed { contents.favorites.insert(ref, at: 0) }
-        try save(contents)
-        return !removed
+        try fileLock.withLock {
+            var contents = try load()
+            let removed = contents.favorites.contains(ref)
+            contents.favorites.removeAll { $0 == ref }
+            if !removed { contents.favorites.insert(ref, at: 0) }
+            try save(contents)
+            return !removed
+        }
     }
     /// A visit older than every kept one falls outside the bound and is not kept.
     public func recordVisit(_ ref: PersonalImageRef, at date: Date) throws {
-        var contents = try load()
-        contents.recents.removeAll { $0.ref == ref }
-        let index = contents.recents.firstIndex { $0.viewedAt <= date } ?? contents.recents.endIndex
-        contents.recents.insert(PersonalImageVisit(ref: ref, viewedAt: date), at: index)
-        contents.recents = Array(contents.recents.prefix(Self.recentLimit))
-        try save(contents)
+        try fileLock.withLock {
+            var contents = try load()
+            contents.recents.removeAll { $0.ref == ref }
+            let index = contents.recents.firstIndex { $0.viewedAt <= date } ?? contents.recents.endIndex
+            contents.recents.insert(PersonalImageVisit(ref: ref, viewedAt: date), at: index)
+            contents.recents = Array(contents.recents.prefix(Self.recentLimit))
+            try save(contents)
+        }
     }
 
     /// A read error other than damage (permissions, I/O) is thrown and nothing is written.
@@ -91,5 +101,23 @@ public actor PersonalImageStore {
         try JSONEncoder().encode(contents).write(to: destination, options: .atomic)
         // The primary now holds the merged recovery writes.
         if !storeCorrupt, fm.fileExists(atPath: recovery.path) { try fm.removeItem(at: recovery) }
+    }
+}
+
+/// One lock per store file in this process: two stores on one file (through any link to it) never
+/// interleave one store's read and write with the other's. Each call holds it without suspending.
+private final class FileLocks: @unchecked Sendable {
+    static let shared = FileLocks()
+    private let guardLock = NSLock()
+    private var locks: [String: NSLock] = [:]
+    func lock(for url: URL) -> NSLock {
+        let folder = url.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath()
+        let key = folder.appendingPathComponent(url.lastPathComponent).path
+        return guardLock.withLock {
+            if let lock = locks[key] { return lock }
+            let lock = NSLock()
+            locks[key] = lock
+            return lock
+        }
     }
 }
