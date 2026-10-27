@@ -136,3 +136,28 @@ private func issue140PNG(red: UInt8) throws -> Data {
     #expect(await mainPoll { second.snapshot?.version.folder.lastPathComponent == "moved" })
     first.end(); second.end()
 }
+
+@Test @MainActor func issue140WatchedRenameKeepsCurrentUnderActiveExtensionFilter() async throws {
+    let f = try WatchFixture(folders: ["root"]); defer { f.remove() }
+    let root = f.url("root"), old = f.url("root/a.png"), renamed = f.url("root/z.png")
+    try Data().write(to: old)
+    try Data().write(to: f.url("root/b.jpg"))
+    let rootID = try await f.access.grant(folder: root)
+    let coordinator = FolderScanCoordinator(access: f.access, scanner: FolderBrowser(), watcher: f.hub)
+    try await coordinator.begin(folder: root, rootID: rootID, input: old).value
+    coordinator.setConditions(.init(selectedExtensions: ["png"]))
+    let current = try #require(coordinator.currentItemID)
+    try FileManager.default.moveItem(at: old, to: renamed)
+    f.source.emit([.changed(old), .changed(renamed)], on: root)
+    f.clock.advance(by: 200)
+    #expect(await mainPoll {
+        coordinator.currentURL?.lastPathComponent == "z.png" &&
+            coordinator.snapshot?.entries.map(\.url.lastPathComponent) == ["z.png"]
+    })
+    #expect(coordinator.currentItemID == current)
+    #expect(coordinator.conditions.selectedExtensions == ["png"])
+    #expect(coordinator.sourceSnapshot?.entries.count == 2)
+    #expect(coordinator.snapshot?.isComplete == true)
+    #expect(!coordinator.hasNoMatches)
+    coordinator.end()
+}
