@@ -32,6 +32,7 @@ private struct ScopeSession {
 public actor FileAccess: AccessLeasing {
     private let scope: any SecurityScope
     private let bookmarks: any BookmarkCoding
+    private let resourceReader: any FileIdentityResourceReading
     private let store: BookmarkStore
     private let boundary: @Sendable (URL, URL) -> Bool
     private let buildSHA: String
@@ -49,9 +50,11 @@ public actor FileAccess: AccessLeasing {
     private var fileBookmarks: [URL: FileGrantBookmark] = [:]
 
     public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String,
+                resourceReader: any FileIdentityResourceReading = URLIdentityResourceReader(),
                 boundary: @escaping @Sendable (URL, URL) -> Bool = { AccessBoundary.contains($0, in: $1) }) throws {
         self.boundary = boundary
         self.scope = scope; self.bookmarks = bookmarks; self.buildSHA = buildSHA
+        self.resourceReader = resourceReader
         do {
             saved = try store.load()
             self.store = store; storeCorrupt = false
@@ -101,15 +104,20 @@ public actor FileAccess: AccessLeasing {
         guard let bookmark = fileBookmarks[key] else { return file }
         // A new inode at the old name could be a replacement or reuse after rename.
         if FileManager.default.fileExists(atPath: file.path) {
-            let current = try? URLIdentityResourceReader().identity(for: file)
+            let current = try? resourceReader.identity(for: file)
             if bookmark.resource == nil || current == bookmark.resource { return file }
             do {
                 let moved = try resolveFileBookmark(bookmark, original: file)
                 if moved != file, FileManager.default.fileExists(atPath: moved.path) { return moved }
-            } catch FileAccessError.fileDeleted(let deleted) { throw FileAccessError.fileDeleted(deleted) }
+            } catch FileAccessError.fileDeleted(_) {
+                // A trashed former inode yields to a live replacement at the granted path.
+            }
             catch { /* Bookmark failure permits the replacement at the original path. */ }
             let session = try ScopeSession(scope: scope, url: file, rootID: nil)
             defer { session.stop() }
+            guard FileManager.default.isReadableFile(atPath: file.path) else {
+                throw FileAccessError.needsFileReconnection(file)
+            }
             if let data = try? bookmarks.create(for: file) {
                 fileBookmarks[key] = FileGrantBookmark(data: data, resource: current)
             }
@@ -329,7 +337,7 @@ public actor FileAccess: AccessLeasing {
                fileBookmarks[file.standardizedFileURL] == nil {
                 if let data = try? bookmarks.create(for: url) {
                     fileBookmarks[file.standardizedFileURL] = FileGrantBookmark(data: data,
-                        resource: try? URLIdentityResourceReader().identity(for: url))
+                        resource: try? resourceReader.identity(for: url))
                 }
             }
         }
