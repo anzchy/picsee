@@ -81,6 +81,28 @@ herdr agent get <name>                        # JSON incl. agent_status
 
 Queueing a follow-up while a Codex agent works: `send-text`, then `send-keys Tab` twice.
 
+### 3.1 Keep the delegator's context small
+
+Measured from the session logs on 2026-10-27 (echo-sleuth recall over this project):
+
+| Delegator session | API turns | Input tokens incl. cache reads | Context per turn, median / p90 |
+|---|---|---|---|
+| 10-25 to 10-27 | 1,553 | about 649M | 393k / 740k |
+| 10-22 to 10-25 | 1,786 | about 744M | 396k / 741k |
+
+That is about 85% of all Claude tokens in the project; every opus-auditor and opus-imple-1 session together came to
+about 245M (summed estimate). In the 10-25 to 10-27 session alone, status reads drove much of it: 131 listener events,
+726 `herdr` calls, 562 `tail` and 407 `cat` calls. Across both sessions, 81 tool results over 30k characters (mostly
+base64 screenshots of 230–630k characters each) stayed in context after they were read.
+
+| Instead of | Do |
+|---|---|
+| Driving a device run and reading screenshots yourself | Brief a fresh subagent (not a fork, which inherits your whole context): run ID, build SHA, recipe, GUI-lock and cleanup rules, verdict format. It returns the verdict table and evidence paths under `~/.picsee/device-runs/`. Open a PNG only to settle a disputed finding. |
+| `cat` of a report, handoff or log | `grep -n 'VERDICT\|COUNT\|^  [CHML][0-9]'` for reports, the result line for logs; read the full file only for a finding you act on |
+| Polling panes or `gh pr checks` in your turn | listener events; `gh pr checks --watch` and `scripts/owner-gates.sh` in the background with a summary file |
+| Re-reading the same brief or handoff after each event | note the facts you need in the handoff log once; read the diff of a file, not the file |
+| Carrying a finished item's detail forward | at each item boundary (merge, pause, user decision) update the handoff log, then tell the user if it is a good moment for `/compact` |
+
 ### Status is unreliable for Codex
 
 herdr's `agent_status` can be stale for Codex. For a Codex task with a unique report, use the report-aware
@@ -428,6 +450,8 @@ Every request carries:
   isolation);
 - inputs: brief, amendments, handoff ("a claim to test"), evidence dir, receipts command;
 - "Judge specifically", 5–10 bullets on the risky points;
+- for UI work, "check each design-derived assertion row in the brief against the pinned CSS, on both sides of every
+  breakpoint; a missing or constant-only row for a user-visible state is at least Medium";
 - for a new implementer, ask the auditor for an "Implementer assessment" paragraph.
 
 Round-one requests are blind: neither auditor sees the other's report or earlier conclusions. For a C/H confirm,

@@ -54,7 +54,9 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
 1. **Issue** — `gh issue create … --label ready-for-agent`; quote any user decision.
 2. **Brief** — copy [templates/brief-template.md](references/templates/brief-template.md) to
    `~/.picsee/herdr/<impl>/<item>-brief.md`. For UI work, fill the per-state design and evidence fields in
-   [the C design parity contract](../../../docs/agents/ui-parity-contract.md) before dispatch. Read the code before
+   [the C design parity contract](../../../docs/agents/ui-parity-contract.md) before dispatch, including the
+   **design-derived assertion rows** (selector · property · media range · viewports, from the pinned CSS) that the
+   implementer must turn into the first RED. Late assertions drove P3-01, P3-10 and #136 past the round cap. Read the code before
    writing fences. Codex uses `$tdd-guardian-workflow`;
    Kimi needs the hand-written test-first steps. Dispatch: `herdr agent prompt <impl> 'New task: … Read and follow <brief>…'`.
 3. **Watch** — mandatory after every dispatch and rearm for every fix/audit round: attach
@@ -115,6 +117,19 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    Record in `docs/validation/P<n>.md` with `Validated-by: picsee-delegator run=<id>`;
    garden; PR. Defect found → issue + FAIL limit + fix brief + re-validate.
 10. **Log** — update `~/.picsee/timeline.json` and append the handoff log; record user decisions verbatim.
+
+## Keep your own context small (guide §3.1)
+
+Measured 2026-10-27: about 85% of all Claude tokens went to delegator turns re-reading 400–850k tokens of context
+(1,553 turns, about 649M input in one session). Every extra round on any item is multiplied by that. So:
+
+- **Device runs and screenshots go to a fresh subagent** with a brief (run ID, SHA, recipe, GUI-lock rule, verdict
+  format). You read its verdict table and evidence paths, never the PNGs.
+- **Read summaries, not dumps.** Reports: the VERDICT/COUNT lines first, the full file only for a finding you act on.
+  Logs: `grep` the result line. Panes: `herdr pane read <p> | tail -30` only when an event or a stall calls for it;
+  never poll panes in a loop. Long-running gates and CI run in the background and write a summary file.
+- **Keep the handoff log current at every item boundary** (merge, pause, decision), so a compaction loses nothing.
+  When the context is large at such a boundary, tell the user it is a good moment for `/compact`.
 
 ## Never (guide §8)
 
