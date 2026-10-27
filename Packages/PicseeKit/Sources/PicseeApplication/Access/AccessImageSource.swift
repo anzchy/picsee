@@ -41,13 +41,16 @@ public actor AccessImageSource {
         async throws -> (ImageDecodeRequest, DecodedImage) {
         guard !closed else { throw FileAccessError.startFailed }
         pending += 1
-        let file: URL
-        switch request { case .fileGrant(let url), .root(_, let url): file = url }
         let pipeline = pipeline
         let cacheProvider = pipeline as? any ThumbnailCacheProviding
         let thumbnailCache = cacheProvider?.thumbnailCache
         do {
             let result = try await access.withLease(request) { lease in
+                let file: URL
+                switch request {
+                case .fileGrant(let original): file = lease.resolvedFileURL ?? original
+                case .root(_, let url): file = url
+                }
                 let root = lease.rootID.map { ItemIdentityRoot(id: $0, url: lease.url) }
                 let prepared = try await prepare(pipeline, file, root)
                 let maximumPixelSize = prepared.maximumPixelSize

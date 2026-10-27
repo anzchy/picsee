@@ -6,6 +6,7 @@ import PicseeMacUI
 import PicseeInfrastructure
 import SwiftUI
 import Observation
+import Darwin
 
 /// Window intent is isolated; decode admission and buffers are shared by the pipeline.
 @MainActor
@@ -56,6 +57,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let router = CommandRouter()
     private let accessServices: Task<AccessServices, Error>
     private var navigationTask: Task<Void, Never>?
+    private var standaloneGrantURL: URL?
+    private var standaloneWatch: (any DispatchSourceFileSystemObject)?
+    private var standaloneReconcileTask: Task<Void, Never>?
+    private var standaloneReconcilePending = false
+    private var standaloneRecheckAfterOpen = false
     var onRecentsChanged: (([RecentFolder]) -> Void)?
     var canNavigate: Bool { fileURL != nil && window?.attachedSheet == nil }
     var gridShellVisible: Bool { gridShell != nil && !gridShell.isHidden }
@@ -240,6 +246,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func open(_ url: URL, accessRequest: AccessRequest? = nil, fromFolderScan: Bool = false) {
         if !fromFolderScan {
             searchProjection.cancel()
+            standaloneWatch?.cancel(); standaloneWatch = nil
+            standaloneReconcileTask?.cancel(); standaloneGrantURL = url
+            standaloneReconcilePending = false
+            standaloneRecheckAfterOpen = false
+            session.endFolderScan()
             session.leaveBrowsing()
             session.completeFolderEntry()
             folderEntryRestore = nil
@@ -274,9 +285,109 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(canvas)
+        if !fromFolderScan {
+            let operation = accessIntent.current
+            Task { [weak self, accessServices] in
+                guard let self, let services = try? await accessServices.value else { return }
+                let root = await services.files.rootCovering(url)
+                guard operation.isCurrent, self.fileURL == url else { return }
+                if let root {
+                    self.standaloneGrantURL = nil
+                    let scan = self.folderScanner(services)
+                    try? await scan.begin(folder: url.deletingLastPathComponent(), rootID: root,
+                                          input: url, canPresent: { operation.isCurrent }).value
+                } else {
+                    self.standaloneGrantURL = url
+                    self.watchStandaloneFile(at: url)
+                    self.reconcileStandaloneImage()
+                }
+            }
+        }
+    }
+
+    private func watchStandaloneFile(at url: URL) {
+        standaloneWatch?.cancel(); standaloneWatch = nil
+        let descriptor = Darwin.open(url.path, O_EVTONLY)
+        guard descriptor >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor,
+            eventMask: [.write, .rename, .delete, .revoke], queue: .main)
+        source.setEventHandler { [weak self] in self?.reconcileStandaloneImage() }
+        source.setCancelHandler { _ = Darwin.close(descriptor) }
+        standaloneWatch = source
+        source.resume()
+    }
+
+    func reconcileStandaloneImage() {
+        guard let grant = standaloneGrantURL else { return }
+        if standaloneReconcileTask != nil { standaloneReconcilePending = true; return }
+        let operation = accessIntent.current
+        standaloneReconcileTask = Task { [weak self, accessServices, pipeline] in
+            defer {
+                self?.standaloneReconcileTask = nil
+                if self?.standaloneReconcilePending == true {
+                    self?.standaloneReconcilePending = false
+                    self?.reconcileStandaloneImage()
+                }
+            }
+            guard let self, let services = try? await accessServices.value, operation.isCurrent else { return }
+            var checkedURL = grant
+            do {
+                let resolved = try await services.files.resolveFileGrant(grant)
+                checkedURL = resolved
+                let scale = self.window?.backingScaleFactor ?? 1
+                let maximum = max(1, Int(ceil(max(self.canvas.bounds.width, self.canvas.bounds.height) * scale)))
+                let prepared = try await services.files.withLease(.fileGrant(grant)) { lease in
+                    try await pipeline.request(for: lease.url, maximumPixelSize: maximum)
+                }
+                guard operation.isCurrent else { return }
+                let opening = switch self.session.imageLoader.phase {
+                case .opening, .refining: true
+                default: false
+                }
+                if resolved == self.fileURL, self.session.imageLoader.presented == nil, opening {
+                    self.standaloneRecheckAfterOpen = true
+                    return
+                }
+                if resolved != self.fileURL || prepared.renderKey?.revision != self.session.imageLoader.presented?.key.revision {
+                    self.open(resolved, accessRequest: .fileGrant(grant), fromFolderScan: true)
+                    self.watchStandaloneFile(at: resolved)
+                }
+            } catch {
+                guard operation.isCurrent else { return }
+                if error is FileAccessError || !FileManager.default.fileExists(atPath: checkedURL.path) {
+                    self.clearFolderImageForNoMatches()
+                    self.requestFileReconnection(grant)
+                } else {
+                    self.open(checkedURL, accessRequest: .fileGrant(grant), fromFolderScan: true)
+                }
+            }
+        }
+    }
+
+    private func requestFileReconnection(_ original: URL) {
+        guard let window, window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "This File Can’t Be Opened")
+        alert.informativeText = String(localized: "Choose this image again to reconnect access.")
+        alert.addButton(withTitle: String(localized: "Choose File Again…"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.directoryURL = original.deletingLastPathComponent()
+            panel.beginSheetModal(for: window) { result in
+                if result == .OK, let url = panel.url { self?.openInput([url]) }
+            }
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
+        standaloneWatch?.cancel(); standaloneWatch = nil
+        standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
+        standaloneReconcilePending = false
+        standaloneRecheckAfterOpen = false
         gridView.stopThumbnails()
         inspector.select(itemID: nil, url: nil, access: nil)
         gridFolderRoot = nil
@@ -337,6 +448,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func openFolder(_ folder: URL, rootID: AccessRootID, currentItemID: ItemID? = nil) {
+        standaloneWatch?.cancel(); standaloneWatch = nil
+        standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
+        standaloneReconcilePending = false
+        standaloneRecheckAfterOpen = false
         if folderEntryRestore == nil { folderEntryRestore = makeFolderEntryRestore() }
         searchProjection.cancel()
         gridSearch.reset()
@@ -845,13 +960,31 @@ extension CanvasWindowController: ViewerImageHost {
         canvas.install(image)
         WindowImageTitle.apply(to: window, imageURL: fileURL)
         stateHost.refresh()
+        if standaloneRecheckAfterOpen {
+            standaloneRecheckAfterOpen = false
+            reconcileStandaloneImage()
+        }
     }
     func imageLoadFailed(_ error: any Error) {
         canvas.showFailure()
         WindowImageTitle.apply(to: window, imageURL: nil)
         let cancelled = session.dismissCancelledImageFailure(error)
         stateHost.refresh()
+        if standaloneRecheckAfterOpen {
+            standaloneRecheckAfterOpen = false
+            reconcileStandaloneImage()
+        }
         if cancelled { return }
+        if let accessError = error as? FileAccessError,
+           case .needsFileReconnection(let original) = accessError {
+            requestFileReconnection(original)
+            return
+        }
+        if let original = standaloneGrantURL, let fileURL,
+           !FileManager.default.fileExists(atPath: fileURL.path) {
+            requestFileReconnection(original)
+            return
+        }
         if error is FileAccessError { showAccessError(error) }
     }
 }
@@ -964,9 +1097,25 @@ extension CanvasWindowController: FolderScanHost {
         }
     }
     func applyObservedGridSnapshot(_ snapshot: FolderSnapshot) {
+        let previous = gridProjection.snapshot
+        let movedFolder = previous?.version.rootID == snapshot.version.rootID &&
+            previous?.version.folder != snapshot.version.folder
+        let previousSelection = gridProjection.selectedItemID
+        let previousAnchor = gridProjection.scrollAnchor
         // A restored source equals the projection already shown; repainting it would cover a restored viewer.
         if gridFolderRoot == snapshot.version.rootID,
            snapshot != gridProjection.snapshot, gridProjection.apply(snapshot), snapshot.isComplete {
+            if movedFolder {
+                if let previousSelection { gridProjection.select(previousSelection) }
+                gridProjection.setScrollAnchor(previousAnchor)
+            }
+            if gridFolderURL != snapshot.version.folder {
+                gridFolderURL = snapshot.version.folder
+                gridShell.showFolder(snapshot.version.folder.lastPathComponent)
+                if session.mode == .browsing, let window {
+                    GridWindowIdentity.showFolder(snapshot.version.folder, in: window)
+                }
+            }
             let anchor = gridView.firstVisibleItemID() ?? gridProjection.scrollAnchor
             gridProjection.setScrollAnchor(anchor)
             // A watched refresh only reconciles: an open Preview Set shrinks in place and the grid stays as shown.
@@ -990,7 +1139,7 @@ extension CanvasWindowController: FolderScanHost {
         }
     }
     func openFolderImage(_ url: URL, rootID: AccessRootID) {
-        if gridFolderRoot == rootID { return }
+        if gridFolderRoot == rootID && session.mode == .browsing { return }
         // A scan-owned move must not revoke the authority that admits its later batches.
         open(url, accessRequest: .root(rootID, file: url), fromFolderScan: true)
     }
@@ -1016,13 +1165,25 @@ extension CanvasWindowController: FolderScanHost {
     func showEmptyFolder() { showAccessMessage(String(localized: "No Images in This Folder")) }
     func folderScanDidComplete(count: Int) { chromeOverlay.refresh(session: session) }
     func folderScanDidStart() {
+        standaloneWatch?.cancel(); standaloneWatch = nil
+        standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
+        standaloneReconcilePending = false
+        standaloneRecheckAfterOpen = false
         chromeOverlay.refresh(session: session)
         // An Include Subfolders rescan from the grid; the Session already recorded what Cancel Reading returns to.
         guard presentation.showReadingOverGrid(session.folderScan?.isReadingFolder == true) else { return }
         if folderEntryRestore == nil { folderEntryRestore = makeFolderEntryRestore() }
         showReadingState()
     }
-    func folderScanDidEnd() { chromeOverlay.refresh(session: session) }
+    func folderScanDidEnd() {
+        chromeOverlay.refresh(session: session)
+        guard let scan = session.folderScan, scan.failure != nil, scan.sourceSnapshot?.isComplete == true,
+              let source = scan.sourceSnapshot else { return }
+        let folder = gridFolderURL ?? source.version.folder
+        guard !FileManager.default.fileExists(atPath: folder.path) else { return }
+        requestFolderReconnection(rootID: source.version.rootID, lastKnownFolder: folder,
+                                  displayName: folder.lastPathComponent)
+    }
 
     /// Untested native os adapter; structured lifecycle is covered at the Application trace port.
     @MainActor private final class NativeFolderScanTrace: FolderScanTracing {

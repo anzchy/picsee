@@ -9,6 +9,8 @@ P0-04（#8，ACCESS-02）沿用 [ADR-006](0006-sandbox-from-p0-direct-distributi
 
 app-scope bookmark 由本应用重启后恢复用户授予的范围。File Grant 只覆盖单个文件，绝不写 bookmark；Recent Item 只是引用，不授予访问。授权不创建 Library Folder。
 
+2026-10-26 修订：上述 File Grant “绝不写 bookmark”仅适用于持久化存储；#140 按用户新决定在会话内存中暂存单文件 security-scoped bookmark 以跟随外部重命名，绝不枚举父目录或写入 Access Root 存储。见 [ADR-0011](0011-session-file-grant-bookmark-recovery.md)。
+
 ## Considered Options
 
 - Full Disk Access：扩大访问范围且依赖系统设置，拒绝。

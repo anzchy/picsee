@@ -42,6 +42,22 @@ import PicseeInfrastructure
     #expect(throws: (any Error).self) { try adapter.resolve(Data("broken".utf8)) }
 }
 
+@Test func issue140SystemFileBookmarkFollowsSameVolumeRename() throws {
+    let fm = FileManager.default
+    let folder = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: folder) }
+    let original = folder.appendingPathComponent("old.png")
+    let renamed = folder.appendingPathComponent("new.png")
+    try Data([1, 2, 3]).write(to: original)
+    let adapter = SystemSecurityScope()
+    let bookmark = try adapter.create(for: original)
+    try fm.moveItem(at: original, to: renamed)
+    let result = try adapter.resolve(bookmark)
+    #expect(result.url.resolvingSymlinksInPath().path == renamed.resolvingSymlinksInPath().path)
+    #expect(try Data(contentsOf: result.url) == Data([1, 2, 3]))
+}
+
 @Test func issue73SystemScopeReadabilityReflectsRealFiles() async throws {
     let tree = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)

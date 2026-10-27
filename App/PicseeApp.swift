@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let services = accessServices
         Task { try? await services.value.watch.reconcileAll() }
         windowController?.session.folderScan?.reconcileUnwatched()
+        windowController?.reconcileStandaloneImage()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

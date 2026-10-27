@@ -1,6 +1,8 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Choose File Again…": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Choose File Again…"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "重新选择文件…"}}}},
+    "Choose this image again to reconnect access.": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Choose this image again to reconnect access."}},"zh-Hans": {"stringUnit": {"state": "translated","value": "请重新选择这张图片以恢复访问。"}}}},
     "No matching images": {
       "extractionState": "manual",
       "localizations": {
