@@ -234,52 +234,58 @@ def build(run):
 def launch(run):
     if (run / 'process.json').exists() or (run / 'retired').exists():
         raise RuntimeError('run already has an ownership record; use a new run directory')
-    if running():
+    before = set(running())
+    if before:
         raise RuntimeError('another Picsee is running; ask its owner to quit it')
     app = Path((run / 'bundle.path').read_text().strip()).resolve()
     sha = json.loads((run / 'build.json').read_text())['sha']
-    (run / 'start.txt').write_text(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    # Spawn the bundle executable directly so this run owns a process handle even
-    # when the follow-up pgrep query fails before an identity record can be saved.
-    child = subprocess.Popen([str(app / 'Contents/MacOS/Picsee')],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             start_new_session=True)
+    launch_time = time.time()
+    (run / 'start.txt').write_text(datetime.datetime.fromtimestamp(launch_time).strftime('%Y-%m-%d %H:%M:%S'))
+    # -W keeps the LaunchServices helper alive until the new app exits, so an
+    # exit before our first PID sample is observable without launching the
+    # bundle executable directly.
+    opener = subprocess.Popen(['/usr/bin/open', '-n', '-W', str(app)], text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              env={**os.environ, 'LC_ALL': 'C'})
     deadline = time.monotonic() + 30
     missing = 'process'
-    try:
-        while time.monotonic() < deadline:
-            candidates = [p for p in running() if executable(p) == app / 'Contents/MacOS/Picsee']
-            if candidates == [child.pid]:
-                pid = child.pid
-                if not (run / 'process.json').exists():
-                    record = process_snapshot(pid)
-                    if record is None:
-                        raise RuntimeError('process disappeared before birth identity was recorded')
-                    if record['pid'] != child.pid or not inside(Path(record['executable']), app):
-                        raise RuntimeError('spawned process identity differs from the bundle')
-                    (run / 'picsee.pid').write_text(str(pid) + '\n')
-                    save(run, 'process.json', record)
-                identity(run)
-                ws = windows(pid)  # Authorization failures stop immediately; never dismiss prompts.
-                visible = checked(['/usr/bin/osascript', '-l', 'JavaScript', HERE / 'winid.js', str(pid)])
-                log = logs(run, pid)
-                if len(ws) == 1 and ws[0]['title'] == 'Picsee' and visible and f'Picsee launch git={sha}' in log:
-                    save(run, 'ready.json', ws)
-                    print(f'PASS ready pid={pid} title=Picsee git={sha}')
-                    return
-                missing = 'visible Picsee window or public launch SHA log'
-            time.sleep(0.5)
-        raise RuntimeError('ready timeout after 30 s: missing ' + missing)
-    finally:
-        if not ((run / 'process.json').exists() and (run / 'picsee.pid').exists()):
-            if child.poll() is None:
-                child.terminate()
-                try:
-                    child.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    child.kill()
-                    child.wait(timeout=5)
-            (run / 'picsee.pid').unlink(missing_ok=True)
+    while time.monotonic() < deadline:
+        if opener.poll() is not None:
+            _, diagnostic = opener.communicate()
+            raise RuntimeError('LaunchServices app exited before readiness'
+                               + (': ' + diagnostic.strip() if diagnostic.strip() else ''))
+        candidates = [p for p in running() if p not in before and executable(p) == app / 'Contents/MacOS/Picsee']
+        if len(candidates) > 1:
+            raise RuntimeError('more than one new matching Picsee process; no PID recorded')
+        if not candidates and (run / 'process.json').exists():
+            raise RuntimeError('launched process exited after identity was recorded')
+        if candidates:
+            pid = candidates[0]
+            if not (run / 'process.json').exists():
+                record = process_snapshot(pid)
+                if record is None:
+                    raise RuntimeError('launched process disappeared before birth identity was recorded')
+                birth = datetime.datetime.strptime(record['birth'], '%a %b %d %H:%M:%S %Y').timestamp()
+                # ps lstart has second precision. Accept the launch second, while the
+                # pre-open PID snapshot excludes processes already present.
+                if (record['pid'] != pid or not inside(Path(record['executable']), app)
+                        or birth < int(launch_time)):
+                    raise RuntimeError('new process identity or birth differs from this launch')
+                (run / 'picsee.pid').write_text(str(pid) + '\n')
+                save(run, 'process.json', record)
+            elif pid != json.loads((run / 'process.json').read_text())['pid']:
+                raise RuntimeError('launched process identity changed')
+            identity(run)
+            ws = windows(pid)  # Authorization failures stop immediately; never dismiss prompts.
+            visible = checked(['/usr/bin/osascript', '-l', 'JavaScript', HERE / 'winid.js', str(pid)])
+            log = logs(run, pid)
+            if len(ws) == 1 and ws[0]['title'] == 'Picsee' and visible and f'Picsee launch git={sha}' in log:
+                save(run, 'ready.json', ws)
+                print(f'PASS ready pid={pid} title=Picsee git={sha}')
+                return
+            missing = 'visible Picsee window or public launch SHA log'
+        time.sleep(0.5)
+    raise RuntimeError('ready timeout after 30 s: missing ' + missing)
 
 def sandbox_enabled(output):
     # codesign :- requests XML explicitly; do not parse the default human-readable dump.
