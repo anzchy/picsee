@@ -55,3 +55,84 @@ private func issue140PNG(red: UInt8) throws -> Data {
     bitmap.setColor(NSColor(srgbRed: CGFloat(red) / 255, green: 0, blue: 0, alpha: 1), atX: 0, y: 0)
     return try #require(bitmap.representation(using: .png, properties: [:]))
 }
+
+@Test @MainActor func issue140MovedRootFollowsBookmarkAndDeletedCurrentChoosesNeighbor() async throws {
+    let f = try WatchFixture(folders: ["root"]); defer { f.remove() }
+    let root = f.url("root"), moved = f.url("moved")
+    for name in ["a.png", "b.png", "c.png"] {
+        try Data(repeating: 1, count: 3).write(to: root.appendingPathComponent(name))
+    }
+    let rootID = try await f.access.grant(folder: root)
+    let coordinator = FolderScanCoordinator(access: f.access, scanner: FolderBrowser(), watcher: f.hub)
+    try await coordinator.begin(folder: root, rootID: rootID, input: root.appendingPathComponent("b.png")).value
+    let current = try #require(coordinator.currentItemID)
+    try FileManager.default.moveItem(at: root, to: moved)
+    f.bookmarks.relocated = moved
+    try await #require(coordinator.refresh()).value
+    #expect(coordinator.currentItemID == current)
+    #expect(coordinator.currentURL?.lastPathComponent == "b.png")
+    #expect(coordinator.snapshot?.version.folder.lastPathComponent == "moved")
+    try FileManager.default.removeItem(at: moved.appendingPathComponent("b.png"))
+    try await #require(coordinator.refresh()).value
+    #expect(coordinator.currentURL?.lastPathComponent == "c.png")
+    try FileManager.default.removeItem(at: moved.appendingPathComponent("c.png"))
+    try await #require(coordinator.refresh()).value
+    #expect(coordinator.currentURL?.lastPathComponent == "a.png")
+    try FileManager.default.removeItem(at: moved.appendingPathComponent("a.png"))
+    try await #require(coordinator.refresh()).value
+    #expect(coordinator.currentItemID == nil)
+    #expect(coordinator.snapshot?.entries.isEmpty == true)
+    coordinator.end()
+}
+
+@Test @MainActor func issue140MovedRootRebasesSharedWatch() async throws {
+    let f = try WatchFixture(folders: ["root"]); defer { f.remove() }
+    let root = f.url("root"), moved = f.url("moved")
+    try Data().write(to: root.appendingPathComponent("a.png"))
+    let id = try await f.access.grant(folder: root)
+    let coordinator = FolderScanCoordinator(access: f.access, scanner: FolderBrowser(), watcher: f.hub)
+    try await coordinator.begin(folder: root, rootID: id).value
+    try FileManager.default.moveItem(at: root, to: moved)
+    f.bookmarks.relocated = moved
+    try await #require(coordinator.refresh()).value
+    #expect(f.source.startURLs.last == canonicalPath(moved))
+    let added = moved.appendingPathComponent("b.png")
+    try Data().write(to: added)
+    f.source.emit([.mustRescan], on: moved)
+    f.clock.advance(by: 200)
+    #expect(await mainPoll {
+        coordinator.snapshot?.entries.contains(where: { canonicalPath($0.url) == canonicalPath(added) }) == true
+    })
+    coordinator.end()
+}
+
+@Test @MainActor func issue140MovedRootRebasesNestedFolderWithoutEnumeratingParent() async throws {
+    let f = try WatchFixture(folders: ["root/sub"]); defer { f.remove() }
+    let root = f.url("root"), moved = f.url("moved")
+    try Data().write(to: root.appendingPathComponent("sub/a.png"))
+    let id = try await f.access.grant(folder: root)
+    let coordinator = FolderScanCoordinator(access: f.access, scanner: FolderBrowser(), watcher: f.hub)
+    try await coordinator.begin(folder: root.appendingPathComponent("sub"), rootID: id).value
+    try FileManager.default.moveItem(at: root, to: moved)
+    f.bookmarks.relocated = moved
+    try await #require(coordinator.refresh()).value
+    #expect(coordinator.snapshot?.version.folder.lastPathComponent == "sub")
+    #expect(coordinator.snapshot?.version.folder.deletingLastPathComponent().lastPathComponent == "moved")
+    coordinator.end()
+}
+
+@Test @MainActor func issue140MovedRootReconcilesOtherWindowOnSharedWatch() async throws {
+    let f = try WatchFixture(folders: ["root"]); defer { f.remove() }
+    let root = f.url("root"), moved = f.url("moved")
+    try Data().write(to: root.appendingPathComponent("a.png"))
+    let id = try await f.access.grant(folder: root)
+    let first = FolderScanCoordinator(access: f.access, scanner: FolderBrowser(), watcher: f.hub)
+    let second = FolderScanCoordinator(access: f.access, scanner: FolderBrowser(), watcher: f.hub)
+    try await first.begin(folder: root, rootID: id).value
+    try await second.begin(folder: root, rootID: id).value
+    try FileManager.default.moveItem(at: root, to: moved)
+    f.bookmarks.relocated = moved
+    try await #require(first.refresh()).value
+    #expect(await mainPoll { second.snapshot?.version.folder.lastPathComponent == "moved" })
+    first.end(); second.end()
+}

@@ -188,13 +188,29 @@ struct FolderScanRestorePoint {
         trace?.begin(generation: token, folderURL: folder)
         let task = Task { [self] in
             do {
-                try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: nil, options: options,
-                    access: access, scanner: scanner, ready: { _, _ in }, emit: { buffer.entries += $0 })
+                var scannedFolder = folder
+                do {
+                    try await Self.scanLeased(folder: folder, rootID: rootID, generation: token, input: nil, options: options,
+                        access: access, scanner: scanner, ready: { _, _ in }, emit: { buffer.entries += $0 })
+                } catch {
+                    guard let relocated = try? await access.relocatedFolder(folder, rootID: rootID),
+                          relocated.standardizedFileURL != folder.standardizedFileURL else { throw error }
+                    buffer.entries.removeAll()
+                    scannedFolder = relocated
+                    try await Self.scanLeased(folder: relocated, rootID: rootID, generation: token, input: nil, options: options,
+                        access: access, scanner: scanner, ready: { _, _ in }, emit: { buffer.entries += $0 })
+                }
                 try Task.checkCancellation()
                 guard generation == token else { throw CancellationError() }
                 refreshTask = nil
-                let fresh = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: token),
+                let fresh = FolderSnapshot(version: .init(rootID: rootID, folder: scannedFolder, generation: token),
                     entries: buffer.entries, isComplete: true)
+                if scannedFolder != folder {
+                    sourceFolder = scannedFolder
+                    retireWatch(successor: true)
+                    let watchToken = requestWatch()
+                    await subscribeWatch(scannedFolder, rootID: rootID, recursive: recursiveEnabled, token: watchToken)
+                }
                 trace?.complete(count: fresh.navigationEntries.count, generation: token)
                 trace?.end(outcome: .complete, generation: token)
                 if refreshFailed {
