@@ -65,6 +65,7 @@ import PicseeCore
     private var liveSidebarWidth: CGFloat?
     private weak var focusAnchor: NSView?
     private var footerActionsEnabled = true
+    private var preserveRestoredSearchEditor = false
 
     public init(frame: NSRect, preferencesStore: any DisplayPreferencesStore) {
         self.preferencesStore = preferencesStore
@@ -316,6 +317,10 @@ import PicseeCore
         updateKeyViewLoop()
         window?.makeFirstResponder(searchField)
     }
+    public func preserveRestoredSearchEditorThroughMenuDispatch() {
+        preserveRestoredSearchEditor = true
+        DispatchQueue.main.async { [weak self] in self?.preserveRestoredSearchEditor = false }
+    }
     @objc private func openSearchFromButton() { focusSearch() }
     private func collapseSearch() {
         searchField.isHidden = true
@@ -325,7 +330,16 @@ import PicseeCore
         layoutSubtreeIfNeeded()
         updateKeyViewLoop()
     }
-    public func controlTextDidEndEditing(_ obj: Notification) { collapseSearch() }
+    public func controlTextDidEndEditing(_ obj: Notification) {
+        // A menu key equivalent can restore this editor before AppKit delivers its old end-editing callback.
+        if preserveRestoredSearchEditor,
+           window?.firstResponder === searchField || window?.firstResponder === searchField.currentEditor() {
+            preserveRestoredSearchEditor = false
+            return
+        }
+        preserveRestoredSearchEditor = false
+        collapseSearch()
+    }
     public func setFooterActionsEnabled(_ enabled: Bool) {
         footerActionsEnabled = enabled
         searchField.isEnabled = enabled
