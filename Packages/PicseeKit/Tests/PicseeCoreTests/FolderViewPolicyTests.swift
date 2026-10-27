@@ -54,6 +54,12 @@ private func viewPolicyNames(_ entries: [FolderEntry], conditions: FolderViewCon
     #expect(source.applying(directlyMutated).entries.map(\.relativePath) == ["img1.JpG"])
 }
 
+@Test func issue127JpegChoiceIncludesBothFilenameExtensions() {
+    let entries = [viewPolicyEntry("a.JPG"), viewPolicyEntry("b.JpEg"), viewPolicyEntry("c.png")]
+    #expect(viewPolicyNames(entries, conditions: .init(selectedExtensions: ["jpg"])) == ["a.JPG", "b.JpEg"])
+    #expect(viewPolicyNames(entries, conditions: .init(selectedExtensions: ["JPEG"])) == ["a.JPG", "b.JpEg"])
+}
+
 @Test func folderViewPolicyMissingMetadataTiesUseNaturalNameThenPath() {
     let entries = [viewPolicyEntry("z/img2.png"), viewPolicyEntry("img10.png"), viewPolicyEntry("a/img2.png")]
     for key in [FolderSortKey.modificationDate, .size] {

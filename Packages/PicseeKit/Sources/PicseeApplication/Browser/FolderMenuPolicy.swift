@@ -64,9 +64,9 @@ public struct FolderMenuItemState: Equatable, Sendable {
 }
 
 public enum FolderMenuPolicy {
-    public static let commonExtensions = ["png", "jpg", "jpeg", "heic", "gif", "webp", "tiff", "bmp"]
+    public static let commonExtensions = ["png", "jpg", "heic", "gif", "webp", "tiff", "bmp"]
     public static func extensionChoices(available: [String]) -> [String] {
-        let extra = Set(available.map { $0.lowercased() }).subtracting(commonExtensions).sorted()
+        let extra = Set(available.map(FolderViewConditions.canonicalExtension)).subtracting(commonExtensions).sorted()
         return commonExtensions + extra
     }
     public static func state(for action: FolderMenuAction, selection: FolderMenuSelection,
@@ -77,7 +77,7 @@ public enum FolderMenuPolicy {
         case .sort(let key): checked = selection.conditions.sort == key
         case .direction(let direction): checked = selection.conditions.direction == direction
         case .extensionType(let value):
-            checked = selection.conditions.selectedExtensions?.contains(where: { $0.lowercased() == value.lowercased() }) == true
+            checked = selection.conditions.selectedExtensions?.contains(where: { FolderViewConditions.canonicalExtension($0) == FolderViewConditions.canonicalExtension(value) }) == true
         case .clearFilter: checked = selection.conditions.selectedExtensions == nil
         case .loop: checked = selection.loopEnabled
         case .recursive: checked = selection.recursiveEnabled
@@ -90,8 +90,8 @@ public enum FolderMenuPolicy {
         case .sort(let key): result.conditions.sort = key
         case .direction(let direction): result.conditions.direction = direction
         case .extensionType(let value):
-            let normalized = value.lowercased()
-            if var selected = result.conditions.selectedExtensions.map({ Set($0.map { $0.lowercased() }) }) {
+            let normalized = FolderViewConditions.canonicalExtension(value)
+            if var selected = result.conditions.selectedExtensions.map({ Set($0.map(FolderViewConditions.canonicalExtension)) }) {
                 if selected.contains(normalized) { selected.remove(normalized) }
                 else { selected.insert(normalized) }
                 result.conditions.selectedExtensions = selected.isEmpty ? nil : selected
