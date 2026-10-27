@@ -53,7 +53,7 @@ public struct ImageIODecoder: ImageDecoding {
 public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePresentationPinning, PrefetchResuming,
     ThumbnailCacheProviding, Sendable {
     private let configuration: DecodeConfiguration
-    private let rootResolvers = RootIdentityResolvers()
+    private let rootResolvers = RootIdentityResolvers.shared
     private let identityResolver: any ItemIdentityResolving
     private let executor: OperationDecodeExecutor
     let admission: DecodeAdmission

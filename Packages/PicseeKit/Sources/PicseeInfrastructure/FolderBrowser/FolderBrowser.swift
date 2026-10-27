@@ -3,6 +3,7 @@ import PicseeCore
 import UniformTypeIdentifiers
 
 public actor FolderBrowser: FolderScanning {
+    private let rootResolvers = RootIdentityResolvers.shared
     // Provisional after WI-0's first-64 probe; later P2 device validation calibrates these.
     public static let firstBatchSize = 64
     public static let batchSize = 256
@@ -62,8 +63,15 @@ public actor FolderBrowser: FolderScanning {
                     continue
                 }
                 guard values.isRegularFile == true, values.contentType?.conforms(to: .image) == true else { continue }
+                let resolver = await rootResolvers.resolver(for: root)
+                // A file can disappear between metadata admission and identity lookup.
+                guard let identity = try? await resolver.identity(for: target) else { continue }
+                let resource = try? URLIdentityResourceReader().identity(for: target)
+                let token = resource.map {
+                    ItemID.resource(volumeUUID: $0.volumeUUID, fileIdentifier: $0.fileIdentifier).stableEncoding
+                }
                 let entry = FolderEntry(url: file, root: root, modificationDate: values.contentModificationDate,
-                    fileSize: values.fileSize.map(Int64.init))
+                    fileSize: values.fileSize.map(Int64.init), itemID: identity, resourceIdentifier: token)
                 // Keep alias URLs through filtering; FolderSnapshot chooses one navigable URL per identity.
                 batch.append(entry)
                 admittedImages += 1

@@ -246,6 +246,9 @@ struct FolderScanRestorePoint {
     /// Keeps the Current Item, else moves to its successor (then predecessor) in the previous navigation order.
     private func applyRefresh(_ fresh: FolderSnapshot) {
         let previous = snapshot?.navigationEntries
+        let previousCurrent = sourceSnapshot?.entries.first(where: {
+            $0.itemID == currentItemID && $0.url.standardizedFileURL == currentURL?.standardizedFileURL
+        })
         // Conditions may have started reads against the old source while the refresh was scanning.
         if sourceSnapshot?.version != fresh.version { cancelMetadataWork() }
         retainMetadata(matching: fresh)
@@ -256,8 +259,9 @@ struct FolderScanRestorePoint {
         guard let id = currentItemID else { projectSource(); return }
         let target: FolderEntry?
         if let index = snapshot.navigationIndex(for: id) {
-            if snapshot.entries.contains(where: {
-                $0.itemID == id && $0.url.standardizedFileURL == currentURL?.standardizedFileURL }) { return }
+            if let previousCurrent, snapshot.entries.contains(where: {
+                $0 == previousCurrent && $0.itemID == id && $0.url.standardizedFileURL == currentURL?.standardizedFileURL
+            }) { return }
             target = snapshot.navigationEntries[index]
         } else {
             if let previous, let old = previous.firstIndex(where: { $0.itemID == id }) {

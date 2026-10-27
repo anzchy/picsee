@@ -21,17 +21,21 @@ public struct FolderEntry: Equatable, Sendable {
     public let relativePath: String
     public let modificationDate: Date?
     public let fileSize: Int64?
+    /// Session-only file resource token; distinguishes same-path atomic replacement.
+    public let resourceIdentifier: String?
     public var normalizedExtension: String { url.pathExtension.lowercased() }
-    public init(url: URL, root: ItemIdentityRoot, modificationDate: Date? = nil, fileSize: Int64? = nil) {
+    public init(url: URL, root: ItemIdentityRoot, modificationDate: Date? = nil, fileSize: Int64? = nil,
+                itemID: ItemID? = nil, resourceIdentifier: String? = nil) {
         self.url = url
         self.modificationDate = modificationDate
         self.fileSize = fileSize
+        self.resourceIdentifier = resourceIdentifier
         let boundary = root.url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
         let target = url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
         let displayPath = url.standardizedFileURL.deletingLastPathComponent().resolvingSymlinksInPath()
             .appendingPathComponent(url.lastPathComponent).standardizedFileURL
         relativePath = displayPath.pathComponents.dropFirst(boundary.pathComponents.count).joined(separator: "/")
-        itemID = .rootRelative(rootID: root.id,
+        self.itemID = itemID ?? .rootRelative(rootID: root.id,
             relativePath: target.pathComponents.dropFirst(boundary.pathComponents.count).joined(separator: "/"))
     }
 }
