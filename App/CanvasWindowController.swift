@@ -29,6 +29,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var chromeGeneration: UUID?
     private var chromeHasImage = false
     private var gridProjection = FolderGridProjection()
+    private var viewedRefreshVersion: SnapshotVersion?
     private let gridSearch = GridSearchState()
     private let searchProjection = GridSearchProjectionScheduler()
     private var gridView: GridBrowserView!
@@ -1118,6 +1119,26 @@ extension CanvasWindowController: FolderScanHost {
             gridView.setMetadataSortState(scan.metadataSortState)
             chromeOverlay.setMetadataSortState(scan.metadataSortState)
             if let snapshot = scan.snapshot { applyObservedGridSnapshot(snapshot) }
+            if let source = scan.sourceSnapshot, source.isComplete,
+               viewedRefreshVersion != source.version {
+                viewedRefreshVersion = source.version
+                chromeOverlay.refresh(session: session)
+                if session.mode == .viewing, session.filePreviewSet == nil,
+                   let current = session.previewSet?.currentItemID ?? scan.currentItemID,
+                   let entry = source.navigationEntries.first(where: { $0.itemID == current }) {
+                    let revision = session.imageLoader.presented?.key.revision ?? session.imageLoader.preparedKey?.revision
+                    let changed = revision.map { currentRevision in
+                        entry.resourceIdentifier.map { $0 != currentRevision.resourceIdentifier } == true ||
+                        entry.fileSize.map { Int($0) != currentRevision.byteCount } == true ||
+                        entry.modificationDate.map { $0 != currentRevision.modificationDate } == true
+                    } ?? (session.imageLoader.phase == .failed)
+                    if session.imageLoader.fileURL?.standardizedFileURL != entry.url.standardizedFileURL ||
+                       changed {
+                        open(entry.url, accessRequest: .root(source.version.rootID, file: entry.url), fromFolderScan: true)
+                        chromeOverlay.refresh(session: session)
+                    }
+                }
+            }
         } onChange: { [weak self, weak scan] in
             Task { @MainActor [weak self, weak scan] in
                 guard let self, let scan, self.session.folderScan === scan else { return }
