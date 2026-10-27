@@ -102,8 +102,11 @@ public actor FileAccess: AccessLeasing {
         if FileManager.default.fileExists(atPath: file.path) {
             let current = try? URLIdentityResourceReader().identity(for: file)
             if bookmark.resource == nil || current == bookmark.resource { return file }
-            if let moved = try? resolveFileBookmark(bookmark, original: file), moved != file,
-               FileManager.default.fileExists(atPath: moved.path) { return moved }
+            do {
+                let moved = try resolveFileBookmark(bookmark, original: file)
+                if moved != file, FileManager.default.fileExists(atPath: moved.path) { return moved }
+            } catch FileAccessError.fileDeleted(let deleted) { throw FileAccessError.fileDeleted(deleted) }
+            catch { /* Bookmark failure permits the replacement at the original path. */ }
             let session = try ScopeSession(scope: scope, url: file, rootID: nil)
             defer { session.stop() }
             if let data = try? bookmarks.create(for: file) {
@@ -116,13 +119,23 @@ public actor FileAccess: AccessLeasing {
     private func resolveFileBookmark(_ bookmark: FileGrantBookmark, original: URL) throws -> URL {
         do {
             let resolved = try bookmarks.resolve(bookmark.data)
+            if Self.isTrashed(resolved.url) { throw FileAccessError.fileDeleted(original) }
             if resolved.stale {
                 let session = try ScopeSession(scope: scope, url: resolved.url, rootID: nil)
                 defer { session.stop() }
                 fileBookmarks[original.standardizedFileURL]?.data = try bookmarks.create(for: resolved.url)
             }
             return resolved.url
-        } catch { throw FileAccessError.needsFileReconnection(original) }
+        } catch FileAccessError.fileDeleted(let file) { throw FileAccessError.fileDeleted(file) }
+        catch { throw FileAccessError.needsFileReconnection(original) }
+    }
+    static func isTrashed(_ url: URL) -> Bool {
+        let normalized = url.standardizedFileURL
+        let components = normalized.pathComponents
+        if components.contains(".Trash") || components.contains(".Trashes") { return true }
+        guard let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+            appropriateFor: normalized, create: false) else { return false }
+        return components.starts(with: trash.standardizedFileURL.pathComponents)
     }
     /// A point-in-time access check for Recent, balanced before any UI decision.
     public func probeRootURL(_ id: AccessRootID) throws -> URL {

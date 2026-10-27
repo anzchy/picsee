@@ -90,6 +90,32 @@ private actor NoRelocationLease: AccessLeasing {
     func release(_ lease: AccessLease) async {}
 }
 
+@Test func issue140RealFileGrantTrashIsDeletion() async throws {
+    let fm = FileManager.default
+    let directory = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: directory) }
+    let original = directory.appendingPathComponent("trashed.png")
+    try Data([1, 2, 3]).write(to: original)
+    let scope = SystemSecurityScope()
+    let access = try FileAccess(scope: scope, bookmarks: scope,
+        store: BookmarkStore(url: directory.appendingPathComponent("roots.json")), buildSHA: "issue140-trash")
+    let lease = try await access.acquire(.fileGrant(original))
+    await access.release(lease)
+    var trashed: NSURL?
+    try fm.trashItem(at: original, resultingItemURL: &trashed)
+    defer { if let trashed { try? fm.removeItem(at: trashed as URL) } }
+    await #expect(throws: FileAccessError.fileDeleted(original)) {
+        _ = try await access.resolveFileGrant(original)
+    }
+}
+
+@Test func issue140TrashClassifierRecognizesBothVolumeLayoutsWithoutNearPrefix() {
+    #expect(FileAccess.isTrashed(URL(fileURLWithPath: "/Volumes/other/.Trashes/501/image.png")))
+    #expect(FileAccess.isTrashed(URL(fileURLWithPath: "/Users/someone/.Trash/image.png")))
+    #expect(!FileAccess.isTrashed(URL(fileURLWithPath: "/Volumes/other/.Trashes-near/image.png")))
+}
+
 @Test func issue140OtherAccessLeasesHaveNoImplicitFolderRelocation() async throws {
     #expect(try await NoRelocationLease().relocatedFolder(URL(fileURLWithPath: "/tmp"),
         rootID: AccessRootID()) == nil)
