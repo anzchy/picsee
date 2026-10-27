@@ -110,9 +110,19 @@ private actor NoRelocationLease: AccessLeasing {
     }
 }
 
-@Test func issue140TrashClassifierRecognizesBothVolumeLayoutsWithoutNearPrefix() {
-    #expect(FileAccess.isTrashed(URL(fileURLWithPath: "/Volumes/other/.Trashes/501/image.png")))
-    #expect(FileAccess.isTrashed(URL(fileURLWithPath: "/Users/someone/.Trash/image.png")))
+@Test func issue140TrashClassifierUsesActualVolumeLocationWithoutNearPrefix() throws {
+    let trash = try FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+        appropriateFor: FileManager.default.temporaryDirectory, create: false)
+    #expect(FileAccess.isTrashed(trash))
+    let volume = URL(fileURLWithPath: "/Volumes/fixture")
+    #expect(FileAccess.isInPerUserVolumeTrash(
+        URL(fileURLWithPath: "/Volumes/fixture/.Trashes/501/image.png"), volume: volume, uid: 501))
+    #expect(!FileAccess.isInPerUserVolumeTrash(
+        URL(fileURLWithPath: "/Volumes/fixture/ordinary/.Trashes/501/image.png"), volume: volume, uid: 501))
+    #expect(!FileAccess.isInPerUserVolumeTrash(
+        URL(fileURLWithPath: "/Volumes/fixture/.Trashes/502/image.png"), volume: volume, uid: 501))
+    #expect(!FileAccess.isTrashed(URL(fileURLWithPath: "/Users/someone/.Trash/image.png")))
+    #expect(!FileAccess.isTrashed(URL(fileURLWithPath: "/tmp/ordinary/.Trashes/501/image.png")))
     #expect(!FileAccess.isTrashed(URL(fileURLWithPath: "/Volumes/other/.Trashes-near/image.png")))
 }
 

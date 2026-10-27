@@ -1,6 +1,7 @@
 import Foundation
 import PicseeCore
 import os
+import Darwin
 
 /// One lease lifetime; only a successfully started security scope requires a stop.
 private struct ScopeSession {
@@ -132,10 +133,16 @@ public actor FileAccess: AccessLeasing {
     static func isTrashed(_ url: URL) -> Bool {
         let normalized = url.standardizedFileURL
         let components = normalized.pathComponents
-        if components.contains(".Trash") || components.contains(".Trashes") { return true }
-        guard let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
-            appropriateFor: normalized, create: false) else { return false }
-        return components.starts(with: trash.standardizedFileURL.pathComponents)
+        if let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+            appropriateFor: normalized, create: false),
+           components.starts(with: trash.standardizedFileURL.pathComponents) { return true }
+        guard let volume = try? normalized.resourceValues(forKeys: [.volumeURLKey]).volume else { return false }
+        return isInPerUserVolumeTrash(normalized, volume: volume)
+    }
+    static func isInPerUserVolumeTrash(_ url: URL, volume: URL, uid: uid_t = getuid()) -> Bool {
+        let perUserTrash = volume.appendingPathComponent(".Trashes", isDirectory: true)
+            .appendingPathComponent(String(uid), isDirectory: true)
+        return url.standardizedFileURL.pathComponents.starts(with: perUserTrash.standardizedFileURL.pathComponents)
     }
     /// A point-in-time access check for Recent, balanced before any UI decision.
     public func probeRootURL(_ id: AccessRootID) throws -> URL {
