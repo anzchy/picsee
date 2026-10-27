@@ -49,6 +49,7 @@ and continue"; "if <bad outcome>, stop and report — that is High">
 
 ## Ownership
 **You own, and may edit:** <files / exact hunks>. **Not yours:** <files>. Shared with <other implementer>: <split>.
+(Delegator: list real paths here; `overlap-check.py claim` reads them before dispatch.)
 If a needed change crosses a fence: stop, propose the minimal hunk, ask in your final reply.
 
 ## Test-first
