@@ -45,6 +45,9 @@ public actor ImageMemoryCache {
     private var observations: [UUID: (epoch: Int, itemID: ItemID?)] = [:]
     // Two distinct revision events suffice to detect a conflict with any still-live observation.
     private var recent: [ItemID: [(epoch: Int, revision: FileRevision)]] = [:]
+    // Resolved lookups since launch, counted where the tracer reports them.
+    private var hits = 0
+    private var misses = 0
     /// Shared with this cache's pipeline admission; nil keeps the cache bounded by its capacity alone.
     nonisolated let budget: MemoryBudget?
     public init(capacity: Int, pressureRecoveryDelay: TimeInterval = 5,
@@ -210,7 +213,7 @@ public actor ImageMemoryCache {
         account(context)
         pending = pending.filter { $0.value.itemID != key.itemID || $0.value.revision == key.revision }
         let request = ImageCacheRequest(key: key, id: UUID(), image: image(for: key, context: context))
-        if request.image == nil { pending[request.id] = key }
+        if request.image == nil { pending[request.id] = key; misses += 1 } else { hits += 1 }
         context?.tracer.lookup(isPreview: key.isPreview, hit: request.image != nil)
         return request
     }
@@ -229,6 +232,10 @@ public actor ImageMemoryCache {
         context.tracer.snapshot(ResourceSnapshot(entries: state.entries, previewBytes: state.previewBytes,
             detailBytes: state.detailBytes, pinnedBytes: state.pinnedBytes, reservedBytes: activity.reservedBytes,
             running: activity.running, waiting: activity.waiting, pressure: pressurePolicy.level))
+    }
+    /// Entries and resident bytes now, with the lookup outcomes counted since launch.
+    func diagnostics() -> DiagnosticsSnapshot.MemoryCache {
+        DiagnosticsSnapshot.MemoryCache(entries: entries.count, bytes: usage().totalBytes, hits: hits, misses: misses)
     }
     func usage() -> ImageCacheUsage {
         var seen: Set<ObjectIdentifier> = [], pinned: Set<ObjectIdentifier> = []

@@ -127,6 +127,8 @@ public actor DecodeAdmission {
     private var jobs: [UUID: Job] = [:]
     private var pending: [UUID] = []
     private var keyed: [RenderKey: UUID] = [:]
+    /// Source decodes whose decoder returned, once per job however many callers shared it.
+    private var finishedDecodes = 0
 
     public func subscribe(_ request: ImageDecodeRequest, key: RenderKey, cost: Int, heavy: Bool,
                           priority: DecodePriority, reuseExisting: Bool = true) -> DecodeSubscription {
@@ -152,6 +154,10 @@ public actor DecodeAdmission {
             visible: running.filter { $0.admitted == .visible }.count,
             heavy: running.filter { $0.heavy }.count,
             reservedBytes: running.reduce(0) { $0 + $1.cost }, waiting: pending.count)
+    }
+    func diagnostics() -> DiagnosticsSnapshot.Decoding {
+        let active = activity()
+        return DiagnosticsSnapshot.Decoding(running: active.running, waiting: active.waiting, finished: finishedDecodes)
     }
     private var releasing = false
     private func eligible(_ job: Job, _ active: DecodeActivity) -> Bool {
@@ -239,6 +245,7 @@ public actor DecodeAdmission {
     }
     private func finished(_ id: UUID, result: Result<DecodedImage, Error>) async {
         let job = jobs.removeValue(forKey: id)!
+        finishedDecodes += 1
         memory?.unreserve(job.cost)
         job.trace.release(result)
         if keyed[job.key] == id { keyed.removeValue(forKey: job.key) }

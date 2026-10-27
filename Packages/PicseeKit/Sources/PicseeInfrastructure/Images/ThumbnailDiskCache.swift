@@ -62,6 +62,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
     private var skippedWriteCount = 0
     private var writeRetrySkipsRemaining = 0
     private var lastWriteFailure: String?
+    private var loadHits = 0
+    private var loadMisses = 0
     private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "thumbnail-cache")
 
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -133,6 +135,24 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
                          lastFailure: lastWriteFailure)
     }
     public func hasWriteFailure() -> Bool { lastWriteFailure != nil }
+    /// Load outcomes since launch, with the entry count and stored payload bytes from one index read.
+    /// A missing index is an empty cache; one that can't be read leaves both figures unknown.
+    public func diagnostics() -> DiagnosticsSnapshot.DiskCache {
+        let indexed = withIndexLock { () -> (entries: Int, bytes: Int64)? in
+            guard (try? requireSafeDirectory()) != nil else { return nil }
+            guard FileManager.default.fileExists(atPath: databaseURL.path) else { return (0, 0) }
+            guard let db = openDatabase(create: false) else { return nil }
+            defer { sqlite3_close(db) }
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "SELECT COUNT(*), COALESCE(SUM(byte_count),0) FROM thumbnails",
+                                     -1, &statement, nil) == SQLITE_OK else { return nil }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+            return (Int(sqlite3_column_int64(statement, 0)), sqlite3_column_int64(statement, 1))
+        }
+        return DiagnosticsSnapshot.DiskCache(entries: indexed?.entries, storedBytes: indexed?.bytes,
+                                             hits: loadHits, misses: loadMisses)
+    }
 
     /// Advances the generation before removing any files, so old work can never publish later.
     public func clear() throws {
@@ -202,7 +222,14 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
                                     generation: generation)
     }
 
+    /// A returned image is a hit and nil a miss; a throw (cancellation) is neither.
     public func load(_ ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
+        let image = try await loadPayload(ticket)
+        if image == nil { loadMisses += 1 } else { loadHits += 1 }
+        return image
+    }
+
+    private func loadPayload(_ ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
         try Task.checkCancellation()
         guard ticket.generation == CacheIndexLocks.shared.generation(for: directory) else { return nil }
         guard let render = ticket.request.renderKey,
