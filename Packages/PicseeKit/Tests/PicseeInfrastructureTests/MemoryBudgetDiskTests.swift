@@ -66,10 +66,22 @@ private actor DiskReadGate {
     }
 }
 
-/// Returns once `count` jobs wait in admission. Callers leave no room, so a queued job stays queued; there is no
-/// wall-clock deadline (a loaded runner can take longer than any fixed one), and the suite's time limit bounds a hang.
-private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int) async {
-    while await pipeline.admission.activity().waiting != count { await Task.yield() }
+/// Whether `count` jobs come to wait in admission. It sleeps between looks: a `Task.yield()` spin starved the
+/// loads it waited for on the 3-core CI runner, and kept spinning after the suite's time limit cancelled the test.
+/// Bounded below that limit, and it stops when cancelled; callers leave no room, so a queued job stays queued.
+private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int,
+                              within limit: Duration = .seconds(45)) async -> Bool {
+    let deadline = ContinuousClock.now.advanced(by: limit)
+    while !Task.isCancelled, ContinuousClock.now < deadline {
+        if await pipeline.admission.activity().waiting == count { return true }
+        try? await Task.sleep(for: .milliseconds(5))
+    }
+    return await pipeline.admission.activity().waiting == count
+}
+/// The durable payloads the first load wrote, so the next load of that edge is a warm disk hit.
+private func diskPayloads(_ rig: DiskRig) throws -> [URL] {
+    try FileManager.default.contentsOfDirectory(at: rig.cacheDirectory, includingPropertiesForKeys: nil)
+        .filter { $0.pathExtension == "png" }
 }
 
 @Suite(.timeLimit(.minutes(1))) struct MemoryBudgetDiskTests {
@@ -90,6 +102,7 @@ private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int) async {
         let budget = try #require(pipeline.cache.budget)
         let (_, source) = try await rig.load(pipeline, edge: Self.edge, priority: .visible)
         try #require(decoder.count == 1)
+        try #require(try diskPayloads(rig).count == 1, "the first load left a durable payload, so the next one is warm")
         let payload = source.image.bytesPerRow * source.image.height
         try #require(payload < square && (limit - payload) % 16 == 0)
         // Leaves exactly the real payload's bytes free: enough for the pixels, not for the bound.
@@ -97,7 +110,10 @@ private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int) async {
         await pipeline.pin(filler, image: cacheImage(try cachePixels(rows: (limit - payload) / 16), key: filler))
         try #require(budget.usage == MemoryBudget.Usage(pinned: limit - payload, evictable: 0, reserved: 0))
         let warm = Task { try await rig.load(pipeline, edge: Self.edge, priority: .visible) }
-        await waitUntilWaiting(pipeline, 1)
+        let queued = await waitUntilWaiting(pipeline, 1)
+        if !queued { warm.cancel(); await gate.open() }
+        let activity = await pipeline.admission.activity()
+        try #require(queued, "the warm load never queued in admission: \(activity)")
         #expect(await pipeline.admission.activity().waiting == 1)
         #expect(await pipeline.admission.activity().reservedBytes == 0)
         #expect(await gate.reads == 0)
@@ -169,10 +185,14 @@ private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int) async {
             thumbnailCache: ThumbnailDiskCache(directory: rig.cacheDirectory))
         let budget = try #require(pipeline.cache.budget)
         _ = try await rig.load(pipeline, edge: Self.edge, priority: .visible)
+        try #require(try diskPayloads(rig).count == 1, "the first load left a durable payload, so the next one is warm")
         let filler = cacheKey(901)
         await pipeline.pin(filler, image: cacheImage(try cachePixels(rows: limit / 16), key: filler))
         let warm = Task { try await rig.load(pipeline, edge: Self.edge, priority: .prefetch) }
-        await waitUntilWaiting(pipeline, 1)
+        let queued = await waitUntilWaiting(pipeline, 1)
+        if !queued { warm.cancel() }
+        let activity = await pipeline.admission.activity()
+        try #require(queued, "the warm load never queued in admission: \(activity)")
         #expect(await pipeline.admission.activity().waiting == 1)
         warm.cancel()
         await #expect(throws: CancellationError.self) { try await warm.value }
