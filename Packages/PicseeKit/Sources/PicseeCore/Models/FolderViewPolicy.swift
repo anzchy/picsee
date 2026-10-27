@@ -32,6 +32,12 @@ public struct FolderViewConditions: Equatable, Sendable {
         self.direction = direction
         self.selectedExtensions = selectedExtensions.map { Set($0.map(Self.canonicalExtension)) }
     }
+
+    public func includesExtension(_ value: String) -> Bool {
+        guard let selectedExtensions else { return true }
+        let candidate = Self.canonicalExtension(value)
+        return selectedExtensions.contains { Self.canonicalExtension($0) == candidate }
+    }
 }
 
 extension FolderSnapshot {
