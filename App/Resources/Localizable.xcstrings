@@ -3061,19 +3061,19 @@
         }
       }
     },
-    "Decoding": {
+    "Decode Queue": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Decoding"
+            "value": "Decode Queue"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "解码"
+            "value": "解码队列"
           }
         }
       }

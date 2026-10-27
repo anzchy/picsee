@@ -34,7 +34,8 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
             self.entries = entries; self.storedBytes = storedBytes; self.hits = hits; self.misses = misses
         }
     }
-    /// `finished` counts source decodes whose decoder returned, successfully or not.
+    /// The decode queue: `running` and `waiting` include disk-thumbnail loads, which hold room in the same queue;
+    /// `finished` counts only source decodes whose decoder returned, successfully or not.
     public struct Decoding: Sendable, Equatable {
         public let running: Int
         public let waiting: Int
