@@ -288,3 +288,23 @@ private final class CancellingScope: SecurityScope, @unchecked Sendable {
     #expect(scope.counts[0] == scope.cancelOnStart && scope.counts[0] == scope.counts[1])
     guard case .present = try await resolver.resolve(ref) else { Issue.record("an uncancelled resolve is present"); return }
 }
+
+@Test func personalImageResolverFavoriteHealsAfterRevisit() async throws {
+    let fixture = try await PersonalResolverFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
+    let store = PersonalImageStore(url: fixture.base.appendingPathComponent("support/personal-images.json"))
+    let ref = try await fixture.remember("a.jpg", bytes: Data("old".utf8))
+    _ = try await store.toggleFavorite(ref)
+    // An editor's atomic save replaces the file with a new one.
+    let file = fixture.folder.appendingPathComponent("a.jpg")
+    try Data("new".utf8).write(to: file, options: .atomic)
+    #expect(try await fixture.resolver.resolve(try #require(try await store.favorites().first)) == .missing)
+    let number = try await fixture.access.withLease(.root(fixture.rootID, file: file)) { _ in PersonalImageResolver.fingerprint(of: file) }
+    let seen = try #require(PersonalImageRef(fileURL: file, root: fixture.root, fileNumber: try #require(number)))
+    try #require(seen.fileNumber != ref.fileNumber, "the atomic save made a new file")
+    try await store.recordVisit(seen, at: Date())
+    guard case .present(let url) = try await fixture.resolver.resolve(try #require(try await store.favorites().first)) else {
+        Issue.record("the revisited favorite is present again"); return
+    }
+    #expect(try Data(contentsOf: url) == Data("new".utf8))
+}

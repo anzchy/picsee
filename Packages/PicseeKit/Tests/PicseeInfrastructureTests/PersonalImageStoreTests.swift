@@ -351,3 +351,18 @@ private func setPermissions(_ url: URL, _ mode: Int) throws {
     #expect(try await fresh.favorites() == (0..<200).reversed().map { personalRef("f\($0).jpg") })
     #expect(try await fresh.recents().map(\.ref) == (150..<200).reversed().map { personalRef("v\($0).jpg") })
 }
+
+@Test func personalImageStoreRevisitRefreshesFavoriteFileNumber() async throws {
+    let base = personalStoreDirectory()
+    defer { try? FileManager.default.removeItem(at: base) }
+    let path = base.appendingPathComponent("personal-images.json")
+    let store = PersonalImageStore(url: path)
+    let (a, b) = (personalRef("a.jpg", fileNumber: 1), personalRef("b.jpg", fileNumber: 1))
+    _ = try await store.toggleFavorite(a); _ = try await store.toggleFavorite(b)
+    try await store.recordVisit(personalRef("a.jpg", fileNumber: 9), at: at(1))
+    #expect(try await store.favorites() == [b, a])
+    #expect(try await store.favorites().map(\.fileNumber) == [1, 9])
+    try await store.recordVisit(personalRef("c.jpg", fileNumber: 4), at: at(2))
+    #expect(try await store.favorites() == [b, a], "a visit never adds a favorite")
+    #expect(try await PersonalImageStore(url: path).favorites().map(\.fileNumber) == [1, 9])
+}

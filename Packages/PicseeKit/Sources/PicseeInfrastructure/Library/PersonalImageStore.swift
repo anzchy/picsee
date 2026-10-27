@@ -50,6 +50,8 @@ public actor PersonalImageStore {
             let index = contents.recents.firstIndex { $0.viewedAt <= date } ?? contents.recents.endIndex
             contents.recents.insert(PersonalImageVisit(ref: ref, viewedAt: date), at: index)
             contents.recents = Array(contents.recents.prefix(Self.recentLimit))
+            // Seeing the image again also refreshes a favorite's file number, in place.
+            if let favorite = contents.favorites.firstIndex(of: ref) { contents.favorites[favorite] = ref }
             try save(contents)
         }
     }
