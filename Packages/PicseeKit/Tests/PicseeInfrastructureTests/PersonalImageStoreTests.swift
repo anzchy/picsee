@@ -202,3 +202,130 @@ private func at(_ seconds: Double) -> Date { Date(timeIntervalSince1970: 1_700_0
     #expect(!text.contains(personalStoreRoot.url.path) && !text.contains("/Users") && !text.contains("/private"))
     #expect(data.count < 2048)
 }
+
+/// Writes a valid store file at `url`: favorites toggled in order, then visits, through a store on a
+/// scratch path, so that no store on `url` reads or retires a recovery file next to it.
+private func personalStoreFile(_ url: URL, favorites: [PersonalImageRef] = [], visits: [(PersonalImageRef, Double)] = []) async throws {
+    let fm = FileManager.default
+    let scratch = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+    let writer = PersonalImageStore(url: scratch)
+    for ref in favorites { _ = try await writer.toggleFavorite(ref) }
+    for (ref, time) in visits { try await writer.recordVisit(ref, at: at(time)) }
+    try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    if fm.fileExists(atPath: url.path) { try fm.removeItem(at: url) }
+    try fm.moveItem(at: scratch, to: url)
+}
+private func setPermissions(_ url: URL, _ mode: Int) throws {
+    try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path)
+}
+
+@Test func personalImageStoreTransientReadErrorWritesNothing() async throws {
+    let fm = FileManager.default
+    let base = personalStoreDirectory()
+    defer { try? fm.removeItem(at: base) }
+    let path = base.appendingPathComponent("personal-images.json")
+    let recovery = path.appendingPathExtension("recovered")
+    let (a, b) = (personalRef("a.jpg"), personalRef("b.jpg"))
+    let store = PersonalImageStore(url: path)
+    #expect(try await store.toggleFavorite(a))
+    let bytes = try Data(contentsOf: path)
+    try setPermissions(path, 0o000)
+    for reader in [store, PersonalImageStore(url: path)] {
+        await #expect(throws: (any Error).self) { try await reader.favorites() }
+        await #expect(throws: (any Error).self) { try await reader.recents() }
+        await #expect(throws: (any Error).self) { try await reader.isFavorite(a.itemID) }
+        await #expect(throws: (any Error).self) { try await reader.toggleFavorite(b) }
+        await #expect(throws: (any Error).self) { try await reader.recordVisit(b, at: at(1)) }
+        #expect(await !reader.storeCorrupt)
+    }
+    #expect(!fm.fileExists(atPath: recovery.path), "an unreadable file is not a damaged one")
+    try setPermissions(path, 0o644)
+    #expect(try Data(contentsOf: path) == bytes)
+    #expect(try await store.favorites() == [a])
+    #expect(try await store.toggleFavorite(b))
+    #expect(try await PersonalImageStore(url: path).favorites() == [b, a])
+
+    // While the primary is damaged, an unreadable recovery file is not replaced either.
+    try Data("{nope".utf8).write(to: path)
+    #expect(try await store.toggleFavorite(a))
+    let recovered = try Data(contentsOf: recovery)
+    try setPermissions(recovery, 0o000)
+    let damaged = PersonalImageStore(url: path)
+    await #expect(throws: (any Error).self) { try await damaged.toggleFavorite(b) }
+    await #expect(throws: (any Error).self) { try await damaged.favorites() }
+    #expect(await damaged.storeCorrupt)
+    try setPermissions(recovery, 0o644)
+    #expect(try Data(contentsOf: recovery) == recovered)
+    #expect(try await damaged.favorites() == [a])
+}
+
+@Test func personalImageStoreRecoveredWritesSurviveRepair() async throws {
+    let fm = FileManager.default
+    let (a, b, c, d) = (personalRef("a.jpg"), personalRef("b.jpg"), personalRef("c.jpg"), personalRef("d.jpg"))
+    let (x, y) = (personalRef("x.jpg"), personalRef("y.jpg"))
+    func paths() throws -> (base: URL, path: URL, recovery: URL) {
+        let base = personalStoreDirectory()
+        try fm.createDirectory(at: base, withIntermediateDirectories: true)
+        let path = base.appendingPathComponent("personal-images.json")
+        return (base, path, path.appendingPathExtension("recovered"))
+    }
+
+    // Writes made while the primary was damaged survive its repair, then move into it.
+    let repair = try paths()
+    defer { try? fm.removeItem(at: repair.base) }
+    try Data("{nope".utf8).write(to: repair.path)
+    let store = PersonalImageStore(url: repair.path)
+    #expect(try await store.toggleFavorite(a))
+    try await store.recordVisit(x, at: at(1))
+    try fm.removeItem(at: repair.path)
+    try await personalStoreFile(repair.path, favorites: [b], visits: [(y, 2)])
+    let repaired = PersonalImageStore(url: repair.path)
+    #expect(try await repaired.favorites() == [a, b])
+    #expect(try await repaired.recents().map(\.ref) == [y, x])
+    #expect(await !repaired.storeCorrupt)
+    #expect(try await repaired.toggleFavorite(c))
+    #expect(!fm.fileExists(atPath: repair.recovery.path))
+    #expect(try await PersonalImageStore(url: repair.path).favorites() == [c, a, b])
+    #expect(try await PersonalImageStore(url: repair.path).recents().map(\.ref) == [y, x])
+
+    // A deleted primary does not hide the recovery file.
+    let deleted = try paths()
+    defer { try? fm.removeItem(at: deleted.base) }
+    try Data("{nope".utf8).write(to: deleted.path)
+    #expect(try await PersonalImageStore(url: deleted.path).toggleFavorite(a))
+    try fm.removeItem(at: deleted.path)
+    let fresh = PersonalImageStore(url: deleted.path)
+    #expect(try await fresh.favorites() == [a])
+    #expect(try await fresh.toggleFavorite(d))
+    #expect(!fm.fileExists(atPath: deleted.recovery.path))
+    #expect(try await PersonalImageStore(url: deleted.path).favorites() == [d, a])
+
+    // Merge: recovery favorites first, then the primary's others; each ref keeps its newest visit; by date; at most 50.
+    let merge = try paths()
+    defer { try? fm.removeItem(at: merge.base) }
+    try await personalStoreFile(merge.recovery, favorites: [c, personalRef("a.jpg", fileNumber: 7)],
+        visits: [(x, 3), (personalRef("o.jpg", fileNumber: 2), 5)])
+    try await personalStoreFile(merge.path, favorites: [personalRef("a.jpg", fileNumber: 3), b],
+        visits: [(y, 2), (personalRef("o.jpg", fileNumber: 1), 1), (personalRef("p.jpg", fileNumber: 6), 4)])
+    let merged = PersonalImageStore(url: merge.path)
+    #expect(try await merged.favorites() == [a, c, b])
+    #expect(try await merged.favorites().first?.fileNumber == 7)
+    let mergedRecents = try await merged.recents()
+    #expect(mergedRecents.map(\.ref) == [personalRef("o.jpg"), personalRef("p.jpg"), x, y])
+    #expect(mergedRecents.first?.ref.fileNumber == 2 && mergedRecents.first?.viewedAt == at(5))
+    try fm.removeItem(at: merge.recovery)
+    try await personalStoreFile(merge.recovery, visits: [(personalRef("p.jpg", fileNumber: 9), 0)])
+    let older = try await PersonalImageStore(url: merge.path).recents()
+    #expect(older.first { $0.ref == personalRef("p.jpg") }?.ref.fileNumber == 6, "the primary's newer visit wins")
+
+    let bound = try paths()
+    defer { try? fm.removeItem(at: bound.base) }
+    try await personalStoreFile(bound.recovery, visits: (0..<30).map { (personalRef("s\($0).jpg"), 100 + Double($0) * 2) })
+    try await personalStoreFile(bound.path, visits: (0..<30).map { (personalRef("p\($0).jpg"), 101 + Double($0) * 2) })
+    let boundStore = PersonalImageStore(url: bound.path)
+    let newest = try await boundStore.recents()
+    #expect(newest.count == 50)
+    #expect(newest.map(\.viewedAt) == (0..<50).map { at(159 - Double($0)) })
+    _ = try await boundStore.toggleFavorite(a)
+    #expect(try await PersonalImageStore(url: bound.path).recents() == newest)
+}
