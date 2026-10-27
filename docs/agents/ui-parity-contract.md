@@ -38,6 +38,8 @@
 
 用户 2026-10-25 决定（选项原文）：「分层：PR 自动测 + 批次真机」。每个 UI PR 不再单独跑签名真机对照；真机像素与行为对照按批次做，v0.0.1 发版前（#147）再全量做一次。
 
+用户 2026-10-27 补充（原文）：「for item1, do a one-flow device smoke test of the changed path before merging, and keep the full parity run in batches.」因此每个改变用户可见行为的 PR 合入前另做一次**变更路径真机冒烟**（下文，#175）；与固定版 HTML 的全量对照仍按批次。
+
 ### 每个 UI PR 合入前
 
 delegator 在 brief 中列出**本次新增或改变的所有可达状态和必验条件**（视口、外观、倍率、语言、关键动作）。合入需要：
@@ -46,6 +48,15 @@ delegator 在 brief 中列出**本次新增或改变的所有可达状态和必�
 - **独立代码审计**（当前 roster 的审计者）覆盖上述断言是否真能拦住错误实现。
 - PR 描述放一张逐状态表：设计 tree OID、HTML/manifest SHA256、对应的自动断言，和状态 `AUTO-PASS`（自动断言通过、待批次真机）/`FAIL`/`PENDING(<WP>)`/`NOT VERIFIED`。`AUTO-PASS` 不是视觉通过，账簿不能因此升级。
 - 已有真机证据显示的 `FAIL` 必须先修或经用户决定才能合入。`PENDING` 的规则同下文。
+
+### 变更路径真机冒烟（每个用户可见改动的 PR 合入前，#175）
+
+- **范围**：diff 改变了用户能看到或触发的 App 行为（通常即触及 UI/交互区的账簿行）。只改文档、测试或无 App 接线的模型代码的 PR 免做，PR 描述写一行 `Device-Smoke: n/a — <理由>`。
+- **谁做**：不是实现者的角色（delegator，或有设备权限的审计者）。实现者仍不启动 App、不驱动 GUI。
+- **怎么做**：按 `$macos-device-test`，对 **PR head** 运行 `scripts/device/build.sh`，取共享 GUI 锁，`launch.sh`，`doctor.sh` 全部通过；按 `features/` 里对应配方，经真实用户路径走**一条**变更路径（配方缺失先补写，见 #176）；记录动作与结果状态，`cleanup.sh` 后释放锁。证据留在 `~/.picsee/device-runs/<run-id>/`。
+- **结论**：PR 描述写 `Device-Smoke: PASS|FAIL|NOT VERIFIED <head7> run=<id> — <走过的路径>`。`FAIL` 阻止合入，修复后重做；`NOT VERIFIED` 须写明具体阻碍（例如仅 @2x 可达）并经用户同意才能合入。
+- **时效**：结论只覆盖那份补丁。之后 App 代码有任何改动就重做；只改测试、文档、账簿，或 rebase 后 `rebase-verify.sh` 报 `CODE same`，结论保留。
+- **不是升级**：冒烟不写 `docs/validation` 记录，不升级账簿行，也不替代批次真机对照；它只把「没人在真实 App 里走过这条路」挡在合入之前。
 
 ### 批次真机对照
 
