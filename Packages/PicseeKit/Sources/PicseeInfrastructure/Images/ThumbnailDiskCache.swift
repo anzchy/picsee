@@ -254,7 +254,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
                                     generation: generation)
     }
 
-    /// A returned image is a hit and nil a miss; a throw (cancellation) is neither.
+    /// A returned image is a hit and nil a miss; a throw (cancellation) is neither. Counted per load attempt:
+    /// a caller that discards a returned image afterwards (for example on its size checks) leaves the hit.
     public func load(_ ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
         let image = try await loadPayload(ticket)
         if image == nil { loadMisses += 1 } else { loadHits += 1 }
