@@ -82,6 +82,24 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: io.github.anzchy.picsee.tests
         CODE_SIGNING_ALLOWED: NO
+  PicseeUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+      - path: TestAssets/synthetic/landscape-3x2.png
+        buildPhase: resources
+      - path: TestAssets/synthetic/portrait-2x3.png
+        buildPhase: resources
+      - path: TestAssets/synthetic/orientation-1.tiff
+        buildPhase: resources
+    dependencies:
+      - target: PicseeApp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.anzchy.picsee.uitests
+        TEST_TARGET_NAME: PicseeApp
 schemes:
   Picsee:
     build:
@@ -90,5 +108,15 @@ schemes:
     test:
       targets:
         - PicseeAppTests
+    run:
+      config: Debug
+  PicseeFixtureUI:
+    build:
+      targets:
+        PicseeApp: all
+        PicseeUITests: all
+    test:
+      targets:
+        - PicseeUITests
     run:
       config: Debug

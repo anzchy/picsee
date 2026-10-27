@@ -12,10 +12,10 @@ struct AccessServices: Sendable {
     let watch: WatchHub
     init(buildSHA: String) throws {
         let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                                 appropriateFor: nil, create: true).appendingPathComponent("Picsee")
+            appropriateFor: nil, create: true).appendingPathComponent("Picsee")
         let system = SystemSecurityScope()
         files = try FileAccess(scope: system, bookmarks: system,
-                               store: BookmarkStore(url: support.appendingPathComponent("access-roots.json")), buildSHA: buildSHA)
+            store: BookmarkStore(url: support.appendingPathComponent("access-roots.json")), buildSHA: buildSHA)
         recent = RecentFolderStore(url: support.appendingPathComponent("recent-folders.json"))
         browser = FolderBrowser()
         watch = WatchHub(access: files, source: FSEventSource(), scheduler: DispatchWatchScheduler())
@@ -26,6 +26,18 @@ struct AccessServices: Sendable {
         self.browser = browser
         self.watch = watch
     }
+    #if DEBUG && PICSEE_UI_TEST_FIXTURE
+    init(buildSHA: String, fixtureRoot: URL) throws {
+        let support = fixtureRoot.appendingPathComponent(".test-access", isDirectory: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        let adapter = UITestContainerAccess(root: fixtureRoot)
+        files = try FileAccess(scope: adapter, bookmarks: adapter,
+            store: BookmarkStore(url: support.appendingPathComponent("access-roots.json")), buildSHA: buildSHA)
+        recent = RecentFolderStore(url: support.appendingPathComponent("recent-folders.json"))
+        browser = FolderBrowser()
+        watch = WatchHub(access: files, source: FSEventSource(), scheduler: DispatchWatchScheduler())
+    }
+    #endif
     func grant(_ folder: URL) async throws -> AccessRootID {
         let id = try await files.grant(folder: folder)
         try await recent.add(RecentFolder(rootID: id, url: folder, displayName: folder.lastPathComponent))

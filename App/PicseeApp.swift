@@ -21,9 +21,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var commandMenu: CommandMenu?
     private var cacheSettingsWindow: CacheSettingsWindow?
     private var windowController: CanvasWindowController?
+    #if DEBUG && PICSEE_UI_TEST_FIXTURE
+    private var uiTestFixtureRoot: URL?
+    #endif
     private lazy var accessServices: Task<AccessServices, Error> = {
         let sha = Bundle.main.object(forInfoDictionaryKey: "PicseeGitSHA") as? String ?? "unknown"
+        #if DEBUG && PICSEE_UI_TEST_FIXTURE
+        let fixtureRoot = uiTestFixtureRoot
+        return Task.detached {
+            if let fixtureRoot { return try AccessServices(buildSHA: sha, fixtureRoot: fixtureRoot) }
+            return try AccessServices(buildSHA: sha)
+        }
+        #else
         return Task.detached { try AccessServices(buildSHA: sha) }
+        #endif
     }()
     private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "lifecycle")
 
@@ -41,12 +52,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sha = Bundle.main.object(forInfoDictionaryKey: "PicseeGitSHA") as? String ?? "unknown"
         logger.notice("Picsee launch git=\(sha, privacy: .public)")
         _ = memoryPressure
+        #if DEBUG && PICSEE_UI_TEST_FIXTURE
+        do {
+            uiTestFixtureRoot = try UITestFixtureLaunch.prepare(arguments: ProcessInfo.processInfo.arguments,
+                environment: ProcessInfo.processInfo.environment)
+        } catch {
+            logger.error("UI fixture staging failed: \(String(describing: error), privacy: .public)")
+        }
+        #endif
 
         commandMenu = CommandMenu(preferencesStore: displayPreferences,
                                   openWithoutWindow: { [weak self] in self?.viewer().route(.open, from: .menu) },
                                   openSettings: { [weak self] in self?.showSettings() })
         viewer().showWindow(nil)
         viewer().refreshRecents()
+        #if DEBUG && PICSEE_UI_TEST_FIXTURE
+        if let uiTestFixtureRoot { viewer().openGrantedFolder(uiTestFixtureRoot) }
+        #endif
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
