@@ -113,6 +113,7 @@
 | OPEN-05 | 无法读取的图片 | Partial | 单元 | P1-07、P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerRetryIntent.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图。限制：网格/Esc 仅单元（P3-01）；@1x 三类错误/重试（截断 PNG）与构图/窄窗通过（[P1](validation/P1.md#p1-07空态加载失败取消菜单焦点与中英文本)、[#92](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）；JPEG/加载中未验；过滤后下一张与扫描中重试仅单元，原生组合未验。 |
 | OPEN-06 | 最近打开 | Partial | 单元 | P2-08、P2-09、P3-14 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/RecentFolderStore.swift`、`App/Access/AccessMenus.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Access/AccessRecovery.swift` | 打开一个目录后退出重开，最近列表里有它；授权失效时显示重新授权入口；不保存图片副本。限制：重启后浏览、随改名更新、运行中目录消失后第一次 Open Recent 即提示重连 @1x 通过（[记录](validation/P2.md#p2-01授权根存储重连与租约)，早于 P2-07 监听，未复验）；窗口内正在看的目录不存在时，刷新失败先显示文件夹扫描失败与重试，随后提示重连，仅单元；签名真机未验；最近目录重开现进网格，仅单元（P3-01）；仅文件夹、最多 10 项；不保存图片副本未验；损坏库降级仅单元。 |
 | OPEN-07 | 从剪贴板打开 | Absent | 无 | P4-02 | — | 截图到剪贴板后选“从剪贴板打开”，新窗口显示该图 |
+| OPEN-08 | 首次打开散落相纸（B4） | Absent | 无 | P3-16 | — | 冷启动、没打开过文件夹：窗口边缘散落内置样图相纸（浅色 30%、深色 40%），中央可“选择文件夹…”或拖入；拖入时相纸淡出、中央照片展开，松开即打开。 |
 
 ### 查看与画布
 
