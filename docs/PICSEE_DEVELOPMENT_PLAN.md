@@ -326,6 +326,8 @@ Rust、Windows/iOS、账号、云同步、语义搜图、批量资产管理/批�
 
 所有性能结果写明：机型/芯片/内存、macOS、Release 构建与 SHA、显示器/scale、存储介质、素材 manifest、缓存状态、重复次数。P0 选择一台 16 GiB Apple Silicon Mac 作为建议基准；若实际只有其他机器，先记录实际配置并重新校准，不伪称该基准已测试。
 
+每个报告的性能指标先填写[性能数字核验清单](validation/benchmark-checklist.md)，再写入验证记录或用于账簿状态、限制。
+
 | 集合 | 建议内容 | 核心验证 |
 |---|---|---|
 | S1 | 50 张 1–12MP JPEG/PNG/HEIC，含透明与 EXIF 方向 | 正确显示、颜色/方向、菜单操作 |
