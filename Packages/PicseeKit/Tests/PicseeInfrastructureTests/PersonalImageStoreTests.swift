@@ -4,7 +4,7 @@ import PicseeCore
 import PicseeInfrastructure
 
 private let personalStoreRoot = ItemIdentityRoot(id: AccessRootID(), url: URL(fileURLWithPath: "/pictures-personal"))
-private func personalRef(_ name: String, fileNumber: UInt64? = 1, root: ItemIdentityRoot = personalStoreRoot) -> PersonalImageRef {
+private func personalRef(_ name: String, fileNumber: UInt64 = 1, root: ItemIdentityRoot = personalStoreRoot) -> PersonalImageRef {
     PersonalImageRef(fileURL: root.url.appendingPathComponent(name), root: root, fileNumber: fileNumber)!
 }
 private func personalStoreDirectory() -> URL {
@@ -114,7 +114,7 @@ private func at(_ seconds: Double) -> Date { Date(timeIntervalSince1970: 1_700_0
     for name in ["x.jpg", "y.jpg", "z.jpg"] { _ = try await store.toggleFavorite(personalRef(name, fileNumber: 5)) }
     let times = [0.25, 1.125, 2.5, 3.0625, 4.75]
     for (index, time) in times.enumerated() {
-        try await store.recordVisit(personalRef("v\(index).jpg", fileNumber: index == 2 ? nil : UInt64(index)), at: at(time))
+        try await store.recordVisit(personalRef("v\(index).jpg", fileNumber: UInt64(index)), at: at(time))
     }
     let favorites = try await store.favorites(), recents = try await store.recents()
     let relaunched = PersonalImageStore(url: path)
@@ -123,7 +123,7 @@ private func at(_ seconds: Double) -> Date { Date(timeIntervalSince1970: 1_700_0
     let reread = try await relaunched.recents()
     #expect(reread == recents)
     #expect(reread.map(\.viewedAt) == times.reversed().map(at))
-    #expect(reread.map(\.ref.fileNumber) == [4, 3, nil, 1, 0])
+    #expect(reread.map(\.ref.fileNumber) == [4, 3, 2, 1, 0])
     #expect(await !relaunched.storeCorrupt)
 }
 
@@ -188,7 +188,7 @@ private func at(_ seconds: Double) -> Date { Date(timeIntervalSince1970: 1_700_0
     let path = base.appendingPathComponent("personal-images.json")
     let store = PersonalImageStore(url: path)
     _ = try await store.toggleFavorite(personalRef("a.jpg")); _ = try await store.toggleFavorite(personalRef("sub/b.jpg"))
-    try await store.recordVisit(personalRef("c.jpg"), at: at(1)); try await store.recordVisit(personalRef("d.jpg", fileNumber: nil), at: at(2))
+    try await store.recordVisit(personalRef("c.jpg"), at: at(1)); try await store.recordVisit(personalRef("d.jpg", fileNumber: 2), at: at(2))
     try #require(fm.fileExists(atPath: path.path), "the store wrote its file")
     let data = try Data(contentsOf: path)
     let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -365,4 +365,31 @@ private func setPermissions(_ url: URL, _ mode: Int) throws {
     try await store.recordVisit(personalRef("c.jpg", fileNumber: 4), at: at(2))
     #expect(try await store.favorites() == [b, a], "a visit never adds a favorite")
     #expect(try await PersonalImageStore(url: path).favorites().map(\.fileNumber) == [1, 9])
+}
+
+@Test func personalImageStoreKeepsUnicodeSpellingsApart() async throws {
+    let base = personalStoreDirectory()
+    defer { try? FileManager.default.removeItem(at: base) }
+    let store = PersonalImageStore(url: base.appendingPathComponent("p.json"))
+    let (compatibility, unified) = (personalRef("\u{F900}.jpg"), personalRef("\u{8C48}.jpg"))
+    #expect(try await store.toggleFavorite(compatibility))
+    #expect(try await store.isFavorite(compatibility.itemID))
+    #expect(try await !store.isFavorite(unified.itemID))
+    #expect(try await store.toggleFavorite(unified), "the other spelling is another favorite")
+    #expect(try await store.favorites().map(\.itemID) == [unified.itemID, compatibility.itemID])
+    try await store.recordVisit(compatibility, at: at(1)); try await store.recordVisit(unified, at: at(2))
+    #expect(try await store.recents().map(\.ref.itemID) == [unified.itemID, compatibility.itemID])
+}
+
+@Test func personalImageStoreOldRevisitStaysKept() async throws {
+    let base = personalStoreDirectory()
+    defer { try? FileManager.default.removeItem(at: base) }
+    let store = PersonalImageStore(url: base.appendingPathComponent("p.json"))
+    for index in 0..<50 { try await store.recordVisit(personalRef("v\(index).jpg"), at: at(100 + Double(index))) }
+    // A revisit is kept at its own date, even one older than every kept visit (a clock change).
+    try await store.recordVisit(personalRef("v10.jpg"), at: at(1))
+    let recents = try await store.recents()
+    #expect(recents.count == 50)
+    #expect(recents.last == PersonalImageVisit(ref: personalRef("v10.jpg"), viewedAt: at(1)))
+    #expect(recents.contains { $0.ref == personalRef("v0.jpg") })
 }

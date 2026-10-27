@@ -4,6 +4,7 @@ import os
 
 /// Favorites and recently viewed images, kept apart from Open Recent's folders (recent-folders.json).
 /// Stores references only; access always comes from the Access Root's own bookmark.
+/// Calls are actor-serialized and never suspend between reading and writing the file.
 public actor PersonalImageStore {
     /// Recently viewed keeps the newest visits; favorites are unbounded.
     public static let recentLimit = 50
@@ -42,7 +43,8 @@ public actor PersonalImageStore {
             return !removed
         }
     }
-    /// A visit older than every kept one falls outside the bound and is not kept.
+    /// A visit older than every kept one falls outside the bound and is not kept; a revisit is kept at
+    /// its own date even when that is older than every other kept visit.
     public func recordVisit(_ ref: PersonalImageRef, at date: Date) throws {
         try fileLock.withLock {
             var contents = try load()
