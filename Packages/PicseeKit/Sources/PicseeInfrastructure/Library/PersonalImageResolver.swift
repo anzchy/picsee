@@ -18,6 +18,7 @@ public struct PersonalImageResolver: Sendable {
                       isDirectory.boolValue else { return .revoked }
                 let file = lease.url.appendingPathComponent(ref.relativePath)
                 // A different file at the path has another file number: missing, never its pixels.
+                // A delete-and-create that reuses the number can still pass as present (GRID-12 limit).
                 guard AccessBoundary.contains(file, in: lease.url), let number = Self.fingerprint(of: file),
                       number == ref.fileNumber else { return .missing }
                 return .present(file)
