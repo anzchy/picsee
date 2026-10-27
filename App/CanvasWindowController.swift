@@ -354,7 +354,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 }
             } catch {
                 guard operation.isCurrent else { return }
-                if error is FileAccessError || !FileManager.default.fileExists(atPath: checkedURL.path) {
+                if let accessError = error as? FileAccessError, case .fileDeleted = accessError {
+                    self.clearFolderImageForNoMatches()
+                } else if error is FileAccessError || !FileManager.default.fileExists(atPath: checkedURL.path) {
                     self.clearFolderImageForNoMatches()
                     self.requestFileReconnection(grant)
                 } else {
