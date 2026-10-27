@@ -94,7 +94,7 @@ P0 技术验证、设计映射与命令底座
 | [21 首次打开](../design/prototypes/picsee-browser/states/first-launch.html) | P1-02；外观由 P3-16 改为 B4 散落相纸（用户 2026-10-27 定稿，原型见 #202） | 无目录时选择/拖入；不可用操作明确禁用 |
 | [22 空文件夹](../design/prototypes/picsee-browser/states/empty-folder.html) | P2-08 | 空快照显示“选择其他文件夹”，侧栏与底部工具仍可用 |
 | [23 搜索无结果](../design/prototypes/picsee-browser/states/search-empty.html) | P3-10 | 清除筛选恢复内容与合理当前项 |
-| [24 读取文件夹](../design/prototypes/picsee-browser/states/folder-loading.html) | P2-02/04（读取内容）、P3-10（网格外壳中的状态）；用户 2026-10-25：「先合入，page24 归 P3-10」；签名对照与真机记录 P3-17b（#205） | 打开文件夹时内容区显示读取状态直到扫描完成，再显示完整网格、首张为当前项（ADR-0010）；取消回到上一个状态；以图片打开时该图先可用；未得总数不伪造百分比 |
+| [24 读取文件夹](../design/prototypes/picsee-browser/states/folder-loading.html) | P2-02/04（读取内容）、P3-10（网格外壳中的状态）；用户 2026-10-25：「先合入，page24 归 P3-10」；2026-10-27 起签名对照与真机记录由 P3-17b（#205）承担，侧栏/页脚差距仍属 P3-10 | 打开文件夹时内容区显示读取状态直到扫描完成，再显示完整网格、首张为当前项（ADR-0010）；取消回到上一个状态；以图片打开时该图先可用；未得总数不伪造百分比 |
 | [25 图片无法读取](../design/prototypes/picsee-browser/states/image-error.html) | P1-07、P2-03 | 重试/下一张；经网格按钮或 Esc 返回，错误后不回流旧图 |
 | [26 目录权限失效](../design/prototypes/picsee-browser/states/permission-denied.html) | P2-01/08 | 重新选择/授权；不从缓存绕过撤销权限 |
 | [27 原始尺寸与平移](../design/prototypes/picsee-browser/states/original-size.html) | P0-03、P1-03 | 1×/2×真实 backing pixel、平移边界 |
