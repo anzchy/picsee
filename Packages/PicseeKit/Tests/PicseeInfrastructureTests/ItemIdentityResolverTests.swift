@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import PicseeCore
-import PicseeInfrastructure
+@testable import PicseeInfrastructure
 
 struct IdentityTree {
     let root: URL
@@ -129,4 +129,66 @@ private final class OptionalIdentityReader: FileIdentityResourceReading, @unchec
     try FileManager.default.moveItem(at: tree.file, to: renamed)
     #expect(try await first.identity(for: renamed) == item)
     #expect(try await FileItemIdentityResolver().identity(for: renamed) == item)
+}
+
+@Test func issue140MovedRootKeepsRenamedItemIdentity() async throws {
+    let tree = try IdentityTree()
+    let movedRoot = tree.root.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+    defer {
+        try? FileManager.default.removeItem(at: tree.root)
+        try? FileManager.default.removeItem(at: movedRoot)
+    }
+    let registry = RootIdentityResolvers()
+    let before = await registry.resolver(for: tree.scope)
+    let original = try await before.identity(for: tree.file)
+    let renamed = tree.root.appendingPathComponent("renamed.png")
+    try FileManager.default.moveItem(at: tree.file, to: renamed)
+    #expect(try await before.identity(for: renamed) == original)
+
+    try FileManager.default.moveItem(at: tree.root, to: movedRoot)
+    let moved = await registry.resolver(for: ItemIdentityRoot(id: tree.id, url: movedRoot))
+    let movedRenamed = movedRoot.appendingPathComponent("renamed.png")
+    #expect(try await moved.identity(for: movedRenamed) == original)
+    let movedOriginal = movedRoot.appendingPathComponent("b.png")
+    try FileManager.default.moveItem(at: movedRenamed, to: movedOriginal)
+    #expect(try await moved.identity(for: movedOriginal) == original)
+}
+
+@Test func issue140MovedRootDoesNotBorrowAnotherRootIdentity() async throws {
+    let first = try IdentityTree(), second = try IdentityTree()
+    let movedFirst = first.root.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+    defer {
+        try? FileManager.default.removeItem(at: first.root)
+        try? FileManager.default.removeItem(at: movedFirst)
+        second.remove()
+    }
+    let registry = RootIdentityResolvers()
+    let firstResolver = await registry.resolver(for: first.scope)
+    let secondResolver = await registry.resolver(for: ItemIdentityRoot(id: AccessRootID(), url: second.root))
+    let firstID = try await firstResolver.identity(for: first.file)
+    let secondID = try await secondResolver.identity(for: second.file)
+    #expect(firstID != secondID)
+    try FileManager.default.moveItem(at: first.root, to: movedFirst)
+    let movedResolver = await registry.resolver(for: ItemIdentityRoot(id: first.id, url: movedFirst))
+    #expect(try await movedResolver.identity(for: movedFirst.appendingPathComponent("b.png")) == firstID)
+    #expect(try await secondResolver.identity(for: second.file) == secondID)
+}
+
+@Test func issue140MovedRootKeepsAssociationWhenOldNameIsReused() async throws {
+    let tree = try IdentityTree()
+    let movedRoot = tree.root.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+    defer {
+        try? FileManager.default.removeItem(at: tree.root)
+        try? FileManager.default.removeItem(at: movedRoot)
+    }
+    let registry = RootIdentityResolvers()
+    let initial = await registry.resolver(for: tree.scope)
+    let original = try await initial.identity(for: tree.file)
+    let renamed = tree.root.appendingPathComponent("renamed.png")
+    try FileManager.default.moveItem(at: tree.file, to: renamed)
+    #expect(try await initial.identity(for: renamed) == original)
+    try FileManager.default.moveItem(at: tree.root, to: movedRoot)
+    try FileManager.default.createDirectory(at: tree.root, withIntermediateDirectories: false)
+    let moved = await registry.resolver(for: ItemIdentityRoot(id: tree.id, url: movedRoot))
+    #expect(try await moved.identity(for: movedRoot.appendingPathComponent("renamed.png")) == original)
 }

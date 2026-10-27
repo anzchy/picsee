@@ -26,7 +26,7 @@ public struct URLIdentityResourceReader: FileIdentityResourceReading {
 /// Root paths own identity; resource bytes only let an observed rename retain its established ItemID.
 /// Rename associations are session-local; durable rename tracking belongs to the later library/watcher.
 public actor FileItemIdentityResolver: ItemIdentityResolving {
-    private let root: ItemIdentityRoot?
+    private var root: ItemIdentityRoot?
     private let reader: any FileIdentityResourceReading
     private struct Entry {
         let item: ItemID
@@ -35,6 +35,24 @@ public actor FileItemIdentityResolver: ItemIdentityResolving {
     private var entries: [URL: Entry] = [:]
     public init(root: ItemIdentityRoot? = nil, reader: any FileIdentityResourceReading = URLIdentityResourceReader()) {
         self.root = root; self.reader = reader
+    }
+    /// A moved Access Root keeps its session identity history at the new location.
+    func rebase(to movedRoot: ItemIdentityRoot) {
+        guard let root, root.id == movedRoot.id else { return }
+        let old = root.url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let new = movedRoot.url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        guard old != new else { self.root = movedRoot; return }
+        var relocated: [URL: Entry] = [:]
+        for (path, entry) in entries {
+            let components = path.pathComponents
+            guard components.starts(with: old.pathComponents) else { continue }
+            let suffix = components.dropFirst(old.pathComponents.count)
+            var destination = new
+            for component in suffix { destination.appendPathComponent(component) }
+            relocated[destination.standardizedFileURL] = entry
+        }
+        entries = relocated
+        self.root = movedRoot
     }
     public func identity(for fileURL: URL) throws -> ItemID {
         guard fileURL.isFileURL else { throw FileAccessError.outsideRoot }
