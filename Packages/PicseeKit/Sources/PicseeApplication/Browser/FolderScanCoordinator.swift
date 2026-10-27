@@ -47,9 +47,7 @@ struct FolderScanRestorePoint {
               sourceSnapshot?.isComplete == false ||
                   (refreshTask != nil && sourceSnapshot?.entries.isEmpty == false) else { return false }
         guard let currentURL else { return true }
-        return conditions.selectedExtensions?.contains {
-            $0.caseInsensitiveCompare(currentURL.pathExtension) == .orderedSame
-        } != true
+        return !conditions.includesExtension(currentURL.pathExtension)
     }
     public var availableExtensions: [String] {
         Array(Set(sourceSnapshot?.entries.map(\.normalizedExtension) ?? [])).sorted()
@@ -493,9 +491,7 @@ struct FolderScanRestorePoint {
             return
         }
         // An eligible explicit input may still be in a later batch. An excluded input cannot remain visible.
-        let inputMayBeEligible = conditions.selectedExtensions?.contains {
-            $0.caseInsensitiveCompare(currentURL?.pathExtension ?? "") == .orderedSame
-        } ?? true
+        let inputMayBeEligible = conditions.includesExtension(currentURL?.pathExtension ?? "")
         if let currentItemID, sourceSnapshot.navigationIndex(for: currentItemID) == nil,
            inputMayBeEligible { return }
         guard let first = snapshot.navigationEntries.first else { return }

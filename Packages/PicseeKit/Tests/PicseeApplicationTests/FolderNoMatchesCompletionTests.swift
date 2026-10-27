@@ -135,6 +135,24 @@ import PicseeCore
     #expect(coordinator.currentURL == input && host.clears == 0)
 }
 
+@Test @MainActor func issue127LateJPEGInputStaysCurrentWithJPGFilter() async throws {
+    let fixture = FolderScanFixture(), host = NoMatchesHost(), session = ViewerSession()
+    let coordinator = fixture.coordinator
+    coordinator.host = host; session.folderScan = coordinator
+    let input = fixture.folder.appendingPathComponent("late.jpeg")
+    let task = coordinator.begin(folder: fixture.folder, rootID: fixture.id, input: input)
+    await fixture.scanner.waitForStart()
+    coordinator.setConditions(.init(selectedExtensions: ["jpg"]))
+    try await fixture.scanner.deliver(["other.jpg"])
+    #expect(coordinator.currentURL == input)
+    #expect(host.opens.isEmpty && host.clears == 0)
+    #expect(!coordinator.hasNoMatches && session.imageStatus != .noMatches)
+    try await fixture.scanner.deliver(["late.jpeg"])
+    #expect(coordinator.currentURL == input && host.opens.isEmpty)
+    await fixture.scanner.finish(); try await task.value
+    #expect(coordinator.currentURL == input && !coordinator.hasNoMatches)
+}
+
 @Test(arguments: [false, true])
 @MainActor func issue123NoMatchIsFinalOnlyAfterScanCompletion(grid: Bool) async throws {
     let fixture = FolderScanFixture(), host = NoMatchesHost(), session = ViewerSession()
