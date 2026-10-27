@@ -329,3 +329,25 @@ private func setPermissions(_ url: URL, _ mode: Int) throws {
     _ = try await boundStore.toggleFavorite(a)
     #expect(try await PersonalImageStore(url: bound.path).recents() == newest)
 }
+
+@Test func personalImageStoreTwoInstancesKeepEveryWrite() async throws {
+    let fm = FileManager.default
+    let base = personalStoreDirectory()
+    defer { try? fm.removeItem(at: base) }
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    let path = base.appendingPathComponent("personal-images.json")
+    // The same file through the /var link and through its /private target.
+    let alias = URL(fileURLWithPath: path.path.hasPrefix("/private/") ? String(path.path.dropFirst(8)) : "/private" + path.path)
+    try #require(alias.path != path.path)
+    try Data().write(to: alias.appendingPathExtension("probe"))
+    try #require(fm.fileExists(atPath: path.appendingPathExtension("probe").path), "both spellings name one folder")
+    let (visits, favorites) = (PersonalImageStore(url: path), PersonalImageStore(url: alias))
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask { for i in 0..<200 { try await visits.recordVisit(personalRef("v\(i).jpg"), at: at(Double(i))) } }
+        group.addTask { for i in 0..<200 { _ = try await favorites.toggleFavorite(personalRef("f\(i).jpg")) } }
+        try await group.waitForAll()
+    }
+    let fresh = PersonalImageStore(url: path)
+    #expect(try await fresh.favorites() == (0..<200).reversed().map { personalRef("f\($0).jpg") })
+    #expect(try await fresh.recents().map(\.ref) == (150..<200).reversed().map { personalRef("v\($0).jpg") })
+}
