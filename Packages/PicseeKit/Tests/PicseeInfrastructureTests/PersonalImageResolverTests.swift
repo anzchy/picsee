@@ -57,7 +57,7 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     defer { try? FileManager.default.removeItem(at: fixture.base) }
     let bytes = Data("present".utf8)
     let ref = try await fixture.remember("sub/a.jpg", bytes: bytes)
-    guard case .present(let url) = await fixture.resolver.resolve(ref) else {
+    guard case .present(let url) = try await fixture.resolver.resolve(ref) else {
         Issue.record("expected present"); return
     }
     #expect(personalCanonicalPath(url) == personalCanonicalPath(fixture.folder.appendingPathComponent("sub/a.jpg")))
@@ -75,31 +75,31 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
 
     let moved = try await fixture.remember("moved.jpg")
     try fm.moveItem(at: folder.appendingPathComponent("moved.jpg"), to: outside.appendingPathComponent("moved.jpg"))
-    #expect(await resolver.resolve(moved) == .missing, "moved out of the root")
+    #expect(try await resolver.resolve(moved) == .missing, "moved out of the root")
 
     let deleted = try await fixture.remember("deleted.jpg")
     try fm.removeItem(at: folder.appendingPathComponent("deleted.jpg"))
-    #expect(await resolver.resolve(deleted) == .missing, "deleted")
+    #expect(try await resolver.resolve(deleted) == .missing, "deleted")
 
     let swapped = try await fixture.remember("a.jpg", bytes: Data("A".utf8))
     _ = try await fixture.remember("b.jpg", bytes: Data("B".utf8))
     try fm.removeItem(at: folder.appendingPathComponent("a.jpg"))
     try fm.moveItem(at: folder.appendingPathComponent("b.jpg"), to: folder.appendingPathComponent("a.jpg"))
-    #expect(await resolver.resolve(swapped) == .missing, "another file moved onto the path")
+    #expect(try await resolver.resolve(swapped) == .missing, "another file moved onto the path")
 
     let directory = try await fixture.remember("dir.jpg")
     try fm.removeItem(at: folder.appendingPathComponent("dir.jpg"))
     try fm.createDirectory(at: folder.appendingPathComponent("dir.jpg"), withIntermediateDirectories: true)
-    #expect(await resolver.resolve(directory) == .missing, "replaced by a directory")
+    #expect(try await resolver.resolve(directory) == .missing, "replaced by a directory")
 
     let linked = try await fixture.remember("linked.jpg")
     try fm.moveItem(at: folder.appendingPathComponent("linked.jpg"), to: outside.appendingPathComponent("linked.jpg"))
     try fm.createSymbolicLink(at: folder.appendingPathComponent("linked.jpg"), withDestinationURL: outside.appendingPathComponent("linked.jpg"))
-    #expect(await resolver.resolve(linked) == .missing, "now a link to the same file outside the root")
+    #expect(try await resolver.resolve(linked) == .missing, "now a link to the same file outside the root")
 
     _ = try await fixture.remember("unknown.jpg")
     let unknown = try #require(PersonalImageRef(fileURL: folder.appendingPathComponent("unknown.jpg"), root: fixture.root, fileNumber: nil))
-    #expect(await resolver.resolve(unknown) == .missing, "no recorded file number")
+    #expect(try await resolver.resolve(unknown) == .missing, "no recorded file number")
     #expect(fixture.scope.counts[0] == fixture.scope.counts[1])
 }
 
@@ -108,15 +108,15 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     defer { try? FileManager.default.removeItem(at: fixture.base) }
     let resolver = fixture.resolver
     let ref = try await fixture.remember("a.jpg")
-    guard case .present = await resolver.resolve(ref) else { Issue.record("expected present first"); return }
+    guard case .present = try await resolver.resolve(ref) else { Issue.record("expected present first"); return }
     fixture.scope.deny = true
-    #expect(await resolver.resolve(ref) == .revoked)
-    #expect(await resolver.resolve(ref) == .revoked)
+    #expect(try await resolver.resolve(ref) == .revoked)
+    #expect(try await resolver.resolve(ref) == .revoked)
     fixture.scope.deny = false
     _ = try await fixture.access.reconnect(fixture.rootID, folder: fixture.folder)
-    guard case .present = await resolver.resolve(ref) else { Issue.record("expected present after reconnect"); return }
+    guard case .present = try await resolver.resolve(ref) else { Issue.record("expected present after reconnect"); return }
     try FileManager.default.removeItem(at: fixture.folder.appendingPathComponent("a.jpg"))
-    #expect(await resolver.resolve(ref) == .missing)
+    #expect(try await resolver.resolve(ref) == .missing)
     #expect(fixture.scope.counts[0] == fixture.scope.counts[1])
 }
 
@@ -127,8 +127,8 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     try FileManager.default.removeItem(at: fixture.folder)
     let relaunched = try FileAccess(scope: fixture.scope, bookmarks: SystemSecurityScope(),
         store: BookmarkStore(url: fixture.base.appendingPathComponent("support/roots.json")), buildSHA: "personal")
-    #expect(await PersonalImageResolver(access: relaunched).resolve(ref) == .revoked)
-    #expect(await fixture.resolver.resolve(ref) == .revoked)
+    #expect(try await PersonalImageResolver(access: relaunched).resolve(ref) == .revoked)
+    #expect(try await fixture.resolver.resolve(ref) == .revoked)
 }
 
 @Test func personalImageResolverUsesEachRefsOwnRoot() async throws {
@@ -144,13 +144,13 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     }
     let two = try #require(PersonalImageRef(fileURL: secondFolder.appendingPathComponent("a.jpg"),
         root: ItemIdentityRoot(id: secondID, url: secondFolder), fileNumber: number))
-    guard case .present(let urlOne) = await first.resolver.resolve(one),
-          case .present(let urlTwo) = await first.resolver.resolve(two) else { Issue.record("expected both present"); return }
+    guard case .present(let urlOne) = try await first.resolver.resolve(one),
+          case .present(let urlTwo) = try await first.resolver.resolve(two) else { Issue.record("expected both present"); return }
     #expect(try Data(contentsOf: urlOne) == Data("one".utf8))
     #expect(try Data(contentsOf: urlTwo) == Data("two".utf8))
     try FileManager.default.removeItem(at: secondFolder)
-    #expect(await first.resolver.resolve(two) == .revoked)
-    guard case .present = await first.resolver.resolve(one) else { Issue.record("root one unaffected"); return }
+    #expect(try await first.resolver.resolve(two) == .revoked)
+    guard case .present = try await first.resolver.resolve(one) else { Issue.record("root one unaffected"); return }
 }
 
 @Test func personalImageResolverRevokedOnBookmarkOrScopeFailure() async throws {
@@ -167,13 +167,13 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     let ref = try #require(PersonalImageRef(fileURL: file, root: ItemIdentityRoot(id: id, url: folder),
         fileNumber: PersonalImageResolver.fingerprint(of: file)))
     let resolver = PersonalImageResolver(access: access)
-    guard case .present = await resolver.resolve(ref) else { Issue.record("expected present"); return }
+    guard case .present = try await resolver.resolve(ref) else { Issue.record("expected present"); return }
     codec.fails = true
-    #expect(await resolver.resolve(ref) == .revoked)
+    #expect(try await resolver.resolve(ref) == .revoked)
     codec.fails = false
     let fresh = try FileAccess(scope: scope, bookmarks: codec, store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "personal")
     scope.succeeds = false
-    #expect(await PersonalImageResolver(access: fresh).resolve(ref) == .revoked)
+    #expect(try await PersonalImageResolver(access: fresh).resolve(ref) == .revoked)
     #expect(scope.counts[0] == scope.counts[1] + 1, "the denied start is counted but never stopped")
 }
 
@@ -198,7 +198,7 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     var previous = scope.counts[0]
     for _ in 0..<5 {
         for (value, expected) in [(present, "present"), (deleted, "missing")] {
-            let outcome = await resolver.resolve(value)
+            let outcome = try await resolver.resolve(value)
             switch outcome {
             case .present: #expect(expected == "present")
             case .missing: #expect(expected == "missing")
@@ -229,19 +229,62 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     }
     let top = try ref("a.jpg"), nested = try ref("sub/b.jpg")
     let resolver = PersonalImageResolver(access: access)
-    guard case .present = await resolver.resolve(top) else { Issue.record("expected present"); return }
+    guard case .present = try await resolver.resolve(top) else { Issue.record("expected present"); return }
     // The subfolder going away is a missing file; the root itself is still there.
     try fm.removeItem(at: folder.appendingPathComponent("sub"))
-    #expect(await resolver.resolve(nested) == .missing)
+    #expect(try await resolver.resolve(nested) == .missing)
     // The scope still starts for the stale bookmark, but the root folder is gone.
     try fm.removeItem(at: folder)
-    #expect(await resolver.resolve(top) == .revoked)
-    #expect(await resolver.resolve(top) == .revoked)
-    #expect(await resolver.resolve(nested) == .revoked)
+    #expect(try await resolver.resolve(top) == .revoked)
+    #expect(try await resolver.resolve(top) == .revoked)
+    #expect(try await resolver.resolve(nested) == .revoked)
     try Data([1]).write(to: folder)
-    #expect(await resolver.resolve(top) == .revoked, "a file where the root folder was")
+    #expect(try await resolver.resolve(top) == .revoked, "a file where the root folder was")
     try fm.removeItem(at: folder)
     try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-    #expect(await resolver.resolve(top) == .missing, "the root is back without the file")
+    #expect(try await resolver.resolve(top) == .missing, "the root is back without the file")
     #expect(scope.counts[0] == scope.counts[1])
+}
+
+/// Counts balanced starts and stops, and cancels the calling task on the given start.
+private final class CancellingScope: SecurityScope, @unchecked Sendable {
+    private let lock = NSLock()
+    private var balance = [0, 0]
+    var cancelOnStart = 0
+    var counts: [Int] { lock.withLock { balance } }
+    func start(_ url: URL) -> Bool {
+        let count = lock.withLock { balance[0] += 1; return balance[0] }
+        if count == cancelOnStart { withUnsafeCurrentTask { $0?.cancel() } }
+        return true
+    }
+    func stop(_ url: URL) { lock.withLock { balance[1] += 1 } }
+    func isReadable(_ url: URL) -> Bool { false }
+}
+
+@Test func personalImageResolverCancellationIsNotRevoked() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    let folder = base.appendingPathComponent("root")
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    let file = folder.appendingPathComponent("a.jpg")
+    try Data([3]).write(to: file)
+    let scope = CancellingScope()
+    let access = try FileAccess(scope: scope, bookmarks: FakeBookmarks(), store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "personal")
+    let id = try await access.grant(folder: folder)
+    let ref = try #require(PersonalImageRef(fileURL: file, root: ItemIdentityRoot(id: id, url: folder),
+        fileNumber: PersonalImageResolver.fingerprint(of: file)))
+    let resolver = PersonalImageResolver(access: access)
+    let early = Task {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return try await resolver.resolve(ref)
+    }
+    await #expect(throws: CancellationError.self) { try await early.value }
+    #expect(scope.counts[0] == scope.counts[1])
+    // Cancelled while the lease after the root probe starts its scope.
+    scope.cancelOnStart = scope.counts[0] + 2
+    let during = Task { try await resolver.resolve(ref) }
+    await #expect(throws: CancellationError.self) { try await during.value }
+    #expect(scope.counts[0] == scope.cancelOnStart && scope.counts[0] == scope.counts[1])
+    guard case .present = try await resolver.resolve(ref) else { Issue.record("an uncancelled resolve is present"); return }
 }

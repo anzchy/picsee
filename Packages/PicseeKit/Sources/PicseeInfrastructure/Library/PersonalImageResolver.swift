@@ -7,7 +7,8 @@ public struct PersonalImageResolver: Sendable {
     private let access: FileAccess
     public init(access: FileAccess) { self.access = access }
 
-    public func resolve(_ ref: PersonalImageRef) async -> PersonalImageAvailability {
+    /// Throws only `CancellationError`.
+    public func resolve(_ ref: PersonalImageRef) async throws -> PersonalImageAvailability {
         do {
             let root = try await access.probeRootURL(ref.rootID)
             return try await access.withLease(.root(ref.rootID, file: root)) { lease in
@@ -21,6 +22,9 @@ public struct PersonalImageResolver: Sendable {
                       number == ref.fileNumber else { return .missing }
                 return .present(file)
             }
+        } catch is CancellationError {
+            // A superseded resolution has no answer; it never reports the root as revoked.
+            throw CancellationError()
         } catch {
             return .revoked
         }
