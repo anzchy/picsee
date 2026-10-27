@@ -364,18 +364,10 @@ private func traitSets(_ view: some View) -> [String] {
     #expect(host.fittingSize.width >= 300 && value(model, "memory.hits") == "7")
 }
 
-/// Grid thumbnails the disk cache can hold skip the memory lookup (AccessImageSource decodes a durable miss
-/// fresh), so the memory section must say which lookups its hits and misses count.
-private let memoryLookupNote = "Hits and misses count memory lookups: viewer images and thumbnails the disk cache can’t hold. Grid thumbnails the disk cache holds skip this lookup and count under Thumbnail Disk Cache; their pinned pixels still show in Entries and Size."
-
-@Test @MainActor func diagnosticsPanelSaysWhichLookupsTheMemoryCacheCounts() throws {
-    let sections = DiagnosticsPanelModel(source: ScriptedDiagnostics([fullSnapshot])).sections
-    #expect(sections.first { $0.id == "memory" }?.note == memoryLookupNote)
-    #expect(sections.filter { $0.id != "memory" }.allSatisfy { $0.note == nil })
-    #expect(try catalogValue(memoryLookupNote, "en") == memoryLookupNote)
-    let chinese = try catalogValue(memoryLookupNote, "zh-Hans")
-    #expect(chinese?.isEmpty == false && chinese != memoryLookupNote)
-}
+/// Every request the disk cache can hold (grid thumbnails and viewer images up to 1024 px under a folder grant)
+/// loads through it and decodes a durable miss fresh, so only the rest reach the memory lookup.
+private let memoryLookupNote = "Hits and misses count memory lookups, made only by images the disk cache can’t hold: larger than 1024 px (such as Actual Pixels), opened as a single file without a folder grant, or not prepared by the disk cache. Everything else counts under Thumbnail Disk Cache; pinned pixels still show in Entries and Size."
+private let diskLookupNote = "Counts grid thumbnails and viewer images up to 1024 px from folders you granted."
 
 /// The accessibility label a view value carries, as its dumped text (nil when it has none).
 private func accessibilityLabelDump(_ view: some View) -> String? {
@@ -393,5 +385,17 @@ private func accessibilityLabelDump(_ view: some View) -> String? {
     for title in DiagnosticsPanelModel(source: ScriptedDiagnostics([fullSnapshot])).sections.map(\.title) {
         let label = accessibilityLabelDump(DiagnosticsPanelView.sectionTitle(title))
         #expect(label?.contains("key: \"\(title)\"") == true, "\(title): \(label ?? "no label")")
+    }
+}
+
+@Test @MainActor func diagnosticsPanelNotesNameTheDiskCacheBoundary() throws {
+    let sections = DiagnosticsPanelModel(source: ScriptedDiagnostics([fullSnapshot])).sections
+    #expect(sections.first { $0.id == "memory" }?.note == memoryLookupNote)
+    #expect(sections.first { $0.id == "disk" }?.note == diskLookupNote)
+    #expect(sections.filter { !["memory", "disk"].contains($0.id) }.allSatisfy { $0.note == nil })
+    for note in [memoryLookupNote, diskLookupNote] {
+        #expect(try catalogValue(note, "en") == note)
+        let chinese = try catalogValue(note, "zh-Hans")
+        #expect(chinese?.isEmpty == false && chinese != note)
     }
 }

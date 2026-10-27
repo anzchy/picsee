@@ -135,3 +135,31 @@ private func budgetFigures(_ pipeline: ImageIOPipeline) throws -> DiagnosticsSna
     snapshot = await pipeline.diagnostics()
     #expect(snapshot.memoryCache?.misses == 1)
 }
+
+@Test func diagnosticsViewerImagesUpTo1024TakeTheDiskPathAndLargerOnesTheMemoryLookup() async throws {
+    let rig = try SnapshotRig()
+    defer { rig.remove() }
+    let disk = ThumbnailDiskCache(directory: rig.cacheDirectory)
+    let pipeline = ImageIOPipeline(thumbnailCache: disk)
+    let access = try FileAccess(scope: CountingScope(), bookmarks: FakeBookmarks(),
+        store: BookmarkStore(url: rig.folder.appendingPathComponent("roots.json")), buildSHA: "p307-fix3")
+    let root = try await access.grant(folder: rig.folder)
+    func viewerLoad(_ request: AccessRequest, edge: Int) async throws {
+        let source = try await AccessImageSource.open(request, access: access, pipeline: pipeline)
+        _ = try await source.image(maximumPixelSize: edge)
+        await source.close()
+    }
+    // A fit-size viewer image under a folder grant is one the disk cache holds: a miss, then a hit.
+    try await viewerLoad(.root(root, file: rig.file()), edge: 960)
+    try await viewerLoad(.root(root, file: rig.file()), edge: 960)
+    var snapshot = await pipeline.diagnostics()
+    #expect(snapshot.diskCache?.misses == 1 && snapshot.diskCache?.hits == 1)
+    #expect(snapshot.memoryCache?.hits == 0 && snapshot.memoryCache?.misses == 0)
+    // Larger than 1024 px (Actual Pixels), or a single file without a folder grant: memory lookups only.
+    try await viewerLoad(.root(root, file: rig.file()), edge: 2048)
+    try await viewerLoad(.root(root, file: rig.file()), edge: 2048)
+    try await viewerLoad(.fileGrant(rig.file()), edge: 960)
+    snapshot = await pipeline.diagnostics()
+    #expect(snapshot.memoryCache?.misses == 2 && snapshot.memoryCache?.hits == 1)
+    #expect(snapshot.diskCache?.misses == 1 && snapshot.diskCache?.hits == 1)
+}

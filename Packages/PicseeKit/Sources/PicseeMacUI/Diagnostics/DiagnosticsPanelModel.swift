@@ -61,9 +61,11 @@ public final class DiagnosticsPanelModel {
         } catch { return false }
     }
 
-    /// Thumbnails the disk cache can hold load through it and decode a durable miss fresh (AccessImageSource),
-    /// never asking the memory cache; only their pins land there.
-    static let memoryLookupNote = "Hits and misses count memory lookups: viewer images and thumbnails the disk cache can’t hold. Grid thumbnails the disk cache holds skip this lookup and count under Thumbnail Disk Cache; their pinned pixels still show in Entries and Size."
+    /// Every request the disk cache can prepare (a folder-granted image, oriented SDR, frame 0, edge up to 1024 px),
+    /// grid thumbnail or viewer image alike, loads through it and decodes a durable miss fresh (AccessImageSource),
+    /// never asking the memory cache; only pins land there. The rest are memory lookups.
+    static let memoryLookupNote = "Hits and misses count memory lookups, made only by images the disk cache can’t hold: larger than 1024 px (such as Actual Pixels), opened as a single file without a folder grant, or not prepared by the disk cache. Everything else counts under Thumbnail Disk Cache; pinned pixels still show in Entries and Size."
+    static let diskLookupNote = "Counts grid thumbnails and viewer images up to 1024 px from folders you granted."
 
     static func sections(_ snapshot: DiagnosticsSnapshot?) -> [DiagnosticsSection] {
         let count = { (value: Int?) in value.map(String.init) ?? unknown }
@@ -85,7 +87,8 @@ public final class DiagnosticsPanelModel {
                 note: memoryLookupNote),
             section("disk", "Thumbnail Disk Cache", [
                 ("entries", "Indexed Entries", count(disk?.entries)), ("size", "Indexed Size", file(disk?.storedBytes)),
-                ("hits", "Hits", count(disk?.hits)), ("misses", "Misses", count(disk?.misses))]),
+                ("hits", "Hits", count(disk?.hits)), ("misses", "Misses", count(disk?.misses))],
+                note: diskLookupNote),
             section("decoding", "Decode Queue", [
                 ("running", "Running", count(decoding?.running)), ("waiting", "Waiting", count(decoding?.waiting)),
                 ("finished", "Finished Decodes", count(decoding?.finished))]),
