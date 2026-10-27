@@ -502,6 +502,32 @@ Never pipe `git rebase`; check its exit status. Write logs to `$(git rev-parse -
   - `MESSAGES differ` (exit 2): fix the messages before pushing.
 - Then rerun all gates yourself: `scripts/owner-gates.sh <worktree> <sha> <prefix>` (run it in the background; the
   summary must end with `DONE`).
+
+#### Catch combinations early, not at PR time
+
+The 2026-10-26 combination bugs (#134 × #108, P3-10 × #134, #136 × #134) came from branches that changed the same core
+files in parallel for one or two days, with the clash found only at the PR rebase. The fix is the trunk-based rule:
+keep branches short, integrate often, and never let two branches own one core module at once.
+
+- **Before dispatch:** `scripts/overlap-check.py claim -- <paths from the brief's "You own" line>` (a trailing `/`
+  matches a directory). It lists in-flight branches that already change those files since they left main.
+  `SHARED` code file → sequence the items, or branch the new one from the other branch when that one is close to merge
+  or is groundwork for it. Ledger rows are not core files; `resolve_rows.py` merges them.
+- **After every merge to main:** `git fetch`, then `scripts/overlap-check.py trial`. For every branch in a worktree it
+  runs an in-memory `git merge-tree` (no worktree is touched) and intersects the files each side changed:
+
+  | Status | Meaning | Do |
+  |---|---|---|
+  | `CLEAN` | nothing shared | nothing |
+  | `LEDGER` | only `docs/feature-ledger.*` conflicts | leave it to `rebase-ledger.sh` at PR time |
+  | `OVERLAP` | no textual conflict, but both sides changed the same code file | rebase now, `rebase-verify.sh`, quick combination check by both auditors |
+  | `CODE` | textual conflict in code | rebase now; send the conflict to the implementer if it is not mechanical |
+  | `EMPTY` | no commits of its own yet; `UNCOMMITTED` means edits the check cannot see | tell the implementer what changed on main |
+  | `MERGED` | all its patches are on main | remove the worktree when the user agrees |
+
+  Exit 0 = clean or ledger only, 1 = overlap, 2 = code conflict.
+- **Merge as soon as ready.** A green, audited, smoked branch merges now; holding it for another item only lengthens
+  the window in which combinations form. No merge queue: the delegator already merges one PR at a time.
 - **Rebased PR push:** direct `git push` is blocked. On your own unmerged PR branch, obtain the full current remote
   tip OID and run `python3 scripts/codex-rules/push-guard.py --expected-remote-oid <oid>`. The script uses an exact
   lease and refuses `main`. Ordinary topic pushes use the same script without a lease.

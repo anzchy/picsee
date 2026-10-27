@@ -57,7 +57,10 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    [the C design parity contract](../../../docs/agents/ui-parity-contract.md) before dispatch, including the
    **design-derived assertion rows** (selector · property · media range · viewports, from the pinned CSS) that the
    implementer must turn into the first RED. Late assertions drove P3-01, P3-10 and #136 past the round cap. Read the code before
-   writing fences. Codex uses `$tdd-guardian-workflow`;
+   writing fences. Before dispatch run `$SK/scripts/overlap-check.py claim -- <the brief's "You own" paths>`: a
+   `SHARED` code file with an in-flight branch means sequence the two items, or base the new branch on the other one
+   (only when that one is close to merge, or is groundwork for the new one); never two parallel branches on one core file.
+   Codex uses `$tdd-guardian-workflow`;
    Kimi needs the hand-written test-first steps. Dispatch: `herdr agent prompt <impl> 'New task: … Read and follow <brief>…'`.
 3. **Watch** — mandatory after every dispatch and rearm for every fix/audit round: attach
    `$SK/scripts/listen-notify.py start` with a fresh event/round ID, agent, expected handoff/report path, and an
@@ -105,7 +108,10 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    OK, App code changed since → redo. The smoke promotes no ledger row; full parity stays batched (step 9).
    Push with `python3 scripts/codex-rules/push-guard.py` (exact lease OID after rebasing an owned PR branch). Wait for checks
    to register, `gh pr checks --watch`, then `gh pr merge --rebase` (authorised when no blocking C/H, gardener not BLOCK,
-   CI green, and `Device-Smoke:` is PASS or n/a).
+   CI green, and `Device-Smoke:` is PASS or n/a). Merge as soon as an item is ready; don't hold a green branch for
+   another. **After every merge**, `git fetch` and run `$SK/scripts/overlap-check.py trial`: `OVERLAP` or `CODE` →
+   rebase that branch now while it is small, then the rebase-verify and combination-check path of step 6; `LEDGER` can
+   wait for its PR; `EMPTY … UNCOMMITTED` is invisible to the check, so tell its implementer what changed on main.
 9. **Device validation** — UI parity runs in batches on current `main`: after about 4–6 UI work packages, when a
    group of related pages becomes reachable together, and before v0.0.1 (#147). Each batch covers every `AUTO-PASS` state
    since the last batch; deviations become issues. Full feature validation and ledger promotion follow these runs. **First take the desktop GUI lock shared with mdpro**:
