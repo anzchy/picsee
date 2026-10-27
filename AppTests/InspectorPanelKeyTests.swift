@@ -70,6 +70,46 @@ import PicseeCore
     #expect(shell.searchField.currentEditor() === window.firstResponder)
 }
 
+@MainActor @Test func issue136CombinedWindowWatchedSearchRefreshUpdatesInspectorSynchronously() async throws {
+    _ = NSApplication.shared
+    let delayed = Task<AccessServices, Error> {
+        try await Task.sleep(for: .seconds(60))
+        throw CancellationError()
+    }
+    let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
+        preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: delayed,
+        motionPolicy: MotionPolicy(source: KeyTestMotionSource()))
+    let window = try #require(controller.window)
+    defer { window.close(); delayed.cancel() }
+    let shell = try #require(window.contentView?.subviews.compactMap { $0 as? GridShellView }.first)
+    let grid = try #require(shell.mainContent.subviews.compactMap { $0 as? GridBrowserView }.first)
+    let folder = URL(fileURLWithPath: "/tmp/issue136-combo-refresh")
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
+    let a = FolderEntry(url: folder.appendingPathComponent("match-a.jpg"), root: root)
+    let d = FolderEntry(url: folder.appendingPathComponent("match-d.jpg"), root: root)
+    func snapshot(_ entries: [FolderEntry], generation: UInt64) -> FolderSnapshot {
+        FolderSnapshot(version: .init(rootID: root.id, folder: folder, generation: generation),
+            entries: entries, isComplete: true)
+    }
+    controller.browseRecoveredFolder(folder, rootID: root.id)
+    controller.applyObservedGridSnapshot(snapshot([a, d], generation: 1))
+    grid.setCurrentItemID(d.itemID)
+    controller.session.focus(d.itemID)
+    shell.focusSearch()
+    shell.setSearchTerm("match")
+    shell.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: shell.searchField))
+    let deadline = Date().addingTimeInterval(2)
+    while !shell.searchStatus.stringValue.contains("Search:") && Date() < deadline { await Task.yield() }
+    #expect(shell.searchStatus.stringValue.contains("Search:"))
+    #expect(controller.route(.inspector, from: .key))
+    #expect(controller.inspector.name == d.url.lastPathComponent)
+    controller.applyObservedGridSnapshot(snapshot([a], generation: 2))
+    #expect(controller.inspector.name == a.url.lastPathComponent)
+    controller.applyObservedGridSnapshot(snapshot([], generation: 3))
+    #expect(controller.inspector.name == nil)
+    #expect(controller.session.inspectorFocus.isVisible)
+}
+
 @MainActor private final class PanelResponder: NSView {
     override var acceptsFirstResponder: Bool { true }
 }

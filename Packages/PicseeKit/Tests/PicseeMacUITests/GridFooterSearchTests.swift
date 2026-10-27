@@ -160,6 +160,24 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
     #expect(shell.searchField.frame.maxX + 2 == shell.sortButton.frame.minX)
 }
 
+@Test @MainActor func issue136TiledGridFooterUsesPinnedSearchAndSortFrames() throws {
+    _ = NSApplication.shared
+    for shellWidth in [765.0, 1060.0] {
+        let design = try PinnedDesign.page("grid-light")
+        let gap = try design.length(".grid-toolbar-tools", "gap", viewport: shellWidth)
+        let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: shellWidth, height: 600),
+            preferencesStore: InMemoryDisplayPreferencesStore())
+        shell.layoutSubtreeIfNeeded()
+        #expect(abs(shell.footer.frame.width - shellWidth) < 0.01)
+        #expect(abs(shell.sortButton.frame.maxX - (shellWidth - 12)) < 0.01)
+        #expect(abs(Double(shell.searchButton.frame.maxX - shell.sortButton.frame.minX) + gap) < 0.01)
+        shell.focusSearch()
+        shell.layoutSubtreeIfNeeded()
+        #expect(abs(Double(shell.searchField.frame.maxX - shell.sortButton.frame.minX) + gap) < 0.01)
+        #expect(shell.searchField.frame.minX > shell.toggleButton.frame.maxX)
+    }
+}
+
 @Test @MainActor func gridFooterSearchSortAndEmptyStateFitCompactViewport() throws {
     _ = NSApplication.shared
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),

@@ -5,7 +5,8 @@ import PicseeCore
 @MainActor public enum GridWatchedSearchRefresh {
     public static func apply(_ source: FolderSnapshot, session: ViewerSession,
         search: GridSearchState, scheduler: GridSearchProjectionScheduler,
-        grid: GridBrowserView, shell: GridShellView, gridVisible: Bool) {
+        grid: GridBrowserView, shell: GridShellView, gridVisible: Bool,
+        onReconciled: (() -> Void)? = nil) {
         scheduler.cancel()
         let filtered = search.project(source)
         let version = PreviewSourceVersion(source.version.generation)
@@ -21,6 +22,7 @@ import PicseeCore
             // A preview opened from a searched grid must never regain hidden items during refresh.
             session.updateItems(filtered.navigationEntries.map(\.itemID), sourceVersion: version)
         }
+        onReconciled?()
     }
 
     public static func restoreGrid(_ source: FolderSnapshot, session: ViewerSession,
