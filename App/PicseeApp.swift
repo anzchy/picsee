@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             uiTestFixtureRoot = try UITestFixtureLaunch.prepare(arguments: ProcessInfo.processInfo.arguments,
                 environment: ProcessInfo.processInfo.environment)
         } catch {
-            logger.error("UI fixture staging failed: \(String(describing: error), privacy: .public)")
+            logger.error("UI fixture staging failed: \(String(describing: error), privacy: .private)")
         }
         #endif
 
@@ -71,6 +71,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
+
+    #if DEBUG && PICSEE_UI_TEST_FIXTURE
+    func applicationWillTerminate(_ notification: Notification) {
+        guard let uiTestFixtureRoot else { return }
+        do { try UITestFixtureLaunch.removeRun(folder: uiTestFixtureRoot) }
+        catch { logger.error("UI fixture cleanup failed: \(String(describing: error), privacy: .private)") }
+    }
+    #endif
 
     /// Returning to the foreground reconciles every watched folder (events may have been coalesced or lost),
     /// and a window whose watch failed rescans and subscribes again.
