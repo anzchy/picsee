@@ -30,6 +30,8 @@ Apple's [sandbox file-access guide](https://developer.apple.com/documentation/se
 
 From this worktree, the delegator runs this **one command** on the Mac mini under the shared GUI lock (it builds and executes the single UI test):
 
+Before `launch()`, the test checks for any running `io.github.anzchy.picsee` App using `NSRunningApplication`. If another Picsee is running, it skips with `another Picsee is running; refusing to launch over it`; the probe must not close an App it did not start. Teardown is registered only after this test launches its target, and terminates only that launched App.
+
 ```sh
 scripts/heavy-lock.sh xcodebuild test -scheme PicseeFixtureUI -only-testing:PicseeUITests/PicseeFixtureGridUITests/testContainerFixtureOpensThreeImageGrid -destination 'platform=macOS' SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PICSEE_UI_TEST_FIXTURE' -derivedDataPath .build/dd-issue132-probe
 ```
