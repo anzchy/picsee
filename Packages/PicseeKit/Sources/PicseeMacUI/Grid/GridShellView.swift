@@ -279,6 +279,24 @@ import PicseeCore
         focusAnchor = anchor
         updateKeyViewLoop()
     }
+    private var footerKeyViews: [NSView] {
+        var views: [NSView] = [toggleButton]
+        if preferencesStore.value.gridSidebarVisible { views.append(divider) }
+        if footerActionsEnabled {
+            views.append(searchField.isHidden ? searchButton : searchField)
+            views.append(sortButton)
+            if !emptyState.isHidden { views.append(clearSearchButton) }
+        }
+        return views
+    }
+    public var firstFooterKeyView: NSView { footerKeyViews[0] }
+    public var lastFooterKeyView: NSView { footerKeyViews[footerKeyViews.count - 1] }
+    public func adjacentFooterKeyView(to view: NSView, reverse: Bool) -> NSView? {
+        let views = footerKeyViews
+        guard let index = views.firstIndex(where: { $0 === view }) else { return nil }
+        let next = index + (reverse ? -1 : 1)
+        return views.indices.contains(next) ? views[next] : nil
+    }
     private func updateKeyViewLoop() {
         guard let focusAnchor else { return }
         focusAnchor.nextKeyView = toggleButton

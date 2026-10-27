@@ -27,11 +27,13 @@ import PicseeCore
     #expect(controller.route(.inspector, from: .key))
     #expect(controller.session.inspectorFocus.isVisible)
     #expect(controller.route(.search, from: .key))
-    let editor = try #require(shell.searchField.currentEditor())
+    let editor = try #require(shell.searchField.currentEditor() as? NSTextView)
     RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     #expect(window.firstResponder === editor)
     editor.insertText("cat")
     #expect(shell.searchField.stringValue == "cat")
+    let caret = NSRange(location: 2, length: 0)
+    editor.selectedRange = caret
     let commandI = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
         modifierFlags: .command, timestamp: 0, windowNumber: window.windowNumber,
         context: nil, characters: "i", charactersIgnoringModifiers: "i", isARepeat: false, keyCode: 34))
@@ -39,9 +41,13 @@ import PicseeCore
     #expect(!controller.session.inspectorFocus.isVisible)
     #expect(window.firstResponder === editor)
     #expect(shell.searchField.stringValue == "cat")
+    #expect((shell.searchField.currentEditor() as? NSTextView)?.selectedRange == caret)
     window.sendEvent(commandI)
     #expect(controller.session.inspectorFocus.isVisible)
     #expect(window.firstResponder === editor)
+    #expect((shell.searchField.currentEditor() as? NSTextView)?.selectedRange == caret)
+    shell.searchField.currentEditor()?.insertText("X")
+    #expect(shell.searchField.stringValue == "caXt")
     let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
         modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
         context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
@@ -49,25 +55,6 @@ import PicseeCore
     window.sendEvent(escape)
     #expect(shell.searchField.stringValue.isEmpty)
     #expect(controller.session.inspectorFocus.isVisible)
-    shell.focusSearch()
-    let tab = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
-        modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
-        context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
-        isARepeat: false, keyCode: 48))
-    window.sendEvent(tab)
-    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-    #expect(controller.session.inspectorFocus.focus == .panel)
-    #expect(window.firstResponder !== shell.searchField.currentEditor())
-    let reverseTab = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
-        modifierFlags: .shift, timestamp: 0, windowNumber: window.windowNumber,
-        context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
-        isARepeat: false, keyCode: 48))
-    window.sendEvent(reverseTab)
-    #expect(shell.searchField.currentEditor() === window.firstResponder)
-    window.sendEvent(reverseTab)
-    #expect(window.firstResponder !== shell.searchField.currentEditor())
-    window.sendEvent(tab)
-    #expect(shell.searchField.currentEditor() === window.firstResponder)
 }
 
 @MainActor @Test func issue136CombinedWindowWatchedSearchRefreshUpdatesInspectorSynchronously() async throws {
@@ -155,6 +142,70 @@ import PicseeCore
     type("")
     #expect(controller.session.selection.currentItemID == d.itemID)
     #expect(controller.inspector.name == d.url.lastPathComponent)
+}
+
+@MainActor @Test func issue136Combo2TabVisitsFooterAndInspectorInBothDirections() throws {
+    _ = NSApplication.shared
+    let unavailable = Task<AccessServices, Error> { throw CancellationError() }
+    let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
+        preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: unavailable,
+        motionPolicy: MotionPolicy(source: KeyTestMotionSource()))
+    let window = try #require(controller.window as? CommandWindow)
+    defer { window.close() }
+    let shell = try #require(window.contentView?.subviews.compactMap { $0 as? GridShellView }.first)
+    let grid = try #require(shell.mainContent.subviews.compactMap { $0 as? GridBrowserView }.first)
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: URL(fileURLWithPath: "/tmp/issue136-combo2-tab"))
+    let item = FolderEntry(url: root.url.appendingPathComponent("cat.jpg"), root: root)
+    controller.session.beginBrowsing(items: [item.itemID], sourceVersion: .init(1), scrollAnchor: nil)
+    controller.session.focus(item.itemID)
+    controller.showGrid()
+    #expect(controller.route(.inspector, from: .key))
+    #expect(window.makeFirstResponder(grid.collectionView))
+    let tab = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+        modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+        context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: false, keyCode: 48))
+    let reverse = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+        modifierFlags: .shift, timestamp: 0, windowNumber: window.windowNumber,
+        context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: false, keyCode: 48))
+    let divider = try #require(shell.toggleButton.nextKeyView)
+    let footer: [NSView] = [shell.toggleButton, divider, shell.searchButton, shell.sortButton]
+    for target in footer {
+        window.sendEvent(tab)
+        #expect(window.firstResponder === target)
+        #expect(shell.searchField.isHidden)
+    }
+    window.sendEvent(tab)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    #expect(controller.session.inspectorFocus.focus == .panel)
+    #expect((window.firstResponder as? NSView)?.accessibilityIdentifier() == "inspector.close")
+    window.sendEvent(tab)
+    #expect(window.firstResponder === grid.collectionView)
+    window.sendEvent(reverse)
+    #expect((window.firstResponder as? NSView)?.accessibilityIdentifier() == "inspector.close")
+    for target in footer.reversed() {
+        window.sendEvent(reverse)
+        #expect(window.firstResponder === target)
+        #expect(shell.searchField.isHidden)
+    }
+    window.sendEvent(reverse)
+    #expect(window.firstResponder === grid.collectionView)
+    shell.focusSearch()
+    #expect(!shell.searchField.isHidden)
+    window.sendEvent(tab)
+    #expect(window.firstResponder === shell.sortButton)
+    shell.showSearchEmpty(true, term: "unmatched")
+    window.sendEvent(tab)
+    #expect(window.firstResponder === shell.clearSearchButton)
+    window.sendEvent(tab)
+    #expect(controller.session.inspectorFocus.focus == .panel)
+    #expect((window.firstResponder as? NSView)?.accessibilityIdentifier() == "inspector.close")
+    window.sendEvent(reverse)
+    #expect(window.firstResponder === shell.clearSearchButton)
+    window.sendEvent(reverse)
+    #expect(window.firstResponder === shell.sortButton)
+    window.sendEvent(reverse)
+    #expect(shell.searchField.isHidden)
+    #expect(window.firstResponder === shell.searchButton)
 }
 
 @MainActor private final class PanelResponder: NSView {

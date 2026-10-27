@@ -160,6 +160,32 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
     #expect(shell.searchField.frame.maxX + 2 == shell.sortButton.frame.minX)
 }
 
+@Test @MainActor func issue136Combo2FooterTabTargetsFollowVisibleKeyLoop() {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 765, height: 600),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    let anchor = NSView()
+    shell.linkKeyViews(from: anchor)
+    #expect(shell.searchField.isHidden)
+    #expect(shell.firstFooterKeyView === shell.toggleButton)
+    #expect(shell.lastFooterKeyView === shell.sortButton)
+    #expect(shell.adjacentFooterKeyView(to: shell.toggleButton, reverse: true) == nil)
+    #expect(shell.adjacentFooterKeyView(to: shell.toggleButton, reverse: false) === shell.toggleButton.nextKeyView)
+    #expect(shell.adjacentFooterKeyView(to: shell.searchButton, reverse: false) === shell.sortButton)
+    #expect(shell.adjacentFooterKeyView(to: shell.sortButton, reverse: false) == nil)
+    #expect(shell.searchField.isHidden)
+    shell.focusSearch()
+    #expect(shell.firstFooterKeyView === shell.toggleButton)
+    #expect(shell.lastFooterKeyView === shell.sortButton)
+    #expect(shell.adjacentFooterKeyView(to: shell.searchField, reverse: false) === shell.sortButton)
+    #expect(shell.adjacentFooterKeyView(to: shell.searchField, reverse: true) === shell.toggleButton.nextKeyView)
+    shell.showSearchEmpty(true, term: "unmatched")
+    #expect(shell.lastFooterKeyView === shell.clearSearchButton)
+    #expect(shell.adjacentFooterKeyView(to: shell.sortButton, reverse: false) === shell.clearSearchButton)
+    #expect(shell.adjacentFooterKeyView(to: shell.clearSearchButton, reverse: true) === shell.sortButton)
+    #expect(shell.adjacentFooterKeyView(to: anchor, reverse: false) == nil)
+}
+
 @Test @MainActor func issue136TiledGridFooterUsesPinnedSearchAndSortFrames() throws {
     _ = NSApplication.shared
     for shellWidth in [765.0, 1060.0] {

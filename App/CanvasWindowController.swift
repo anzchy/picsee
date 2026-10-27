@@ -492,6 +492,15 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         guard inspectorHost != nil, let view = window?.firstResponder as? NSView else { return false }
         return view === inspectorHost || view.isDescendant(of: inspectorHost)
     }
+    private func focusInspectorCloseButton() {
+        func findClose(in view: NSView) -> NSView? {
+            if view.accessibilityIdentifier() == "inspector.close" { return view }
+            return view.subviews.lazy.compactMap(findClose).first
+        }
+        session.updateFocus(.panel)
+        inspectorHost.layoutSubtreeIfNeeded()
+        if let close = findClose(in: inspectorHost) { _ = window?.makeFirstResponder(close) }
+    }
     @discardableResult
     func route(_ command: CommandID, from entry: CommandEntry) -> Bool {
         if command == .search, gridSearchAvailable { gridShell.focusSearch(); return true }
@@ -720,8 +729,12 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
            event.modifierFlags.intersection([.control, .option]).isEmpty,
            !menuTracking() {
             let restoreSearch = isGridSearchFocused
+            let selection = (gridShell.searchField.currentEditor() as? NSTextView)?.selectedRange
             let handled = route(.inspector, from: .key)
-            if handled && restoreSearch { gridShell.focusSearch() }
+            if handled && restoreSearch {
+                gridShell.focusSearch()
+                if let selection { (gridShell.searchField.currentEditor() as? NSTextView)?.selectedRange = selection }
+            }
             return handled
         }
         if !gridView.isHidden, !isGridSearchFocused, focusContext != .textInput,
@@ -735,20 +748,29 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             return route(.escape, from: .key)
         }
         guard !menuTracking(), inspectorVisible else { return false }
-        if !gridView.isHidden, event.keyCode == 48, focusContext == .canvas {
-            if !event.modifierFlags.contains(.shift) { gridShell.focusSearch(); return true }
-            return false
-        }
-        if !gridView.isHidden, event.keyCode == 48, isGridSearchFocused {
-            if event.modifierFlags.contains(.shift) {
-                _ = window?.makeFirstResponder(gridView.collectionView)
-            } else {
-                session.updateFocus(.panel)
+        if !gridView.isHidden, event.keyCode == 48 {
+            let reverse = event.modifierFlags.contains(.shift)
+            if isInspectorFocused {
+                _ = window?.makeFirstResponder(reverse ? gridShell.lastFooterKeyView : gridView.collectionView)
+                return true
             }
-            return true
+            if focusContext == .canvas {
+                if reverse { focusInspectorCloseButton() }
+                else { _ = window?.makeFirstResponder(gridShell.firstFooterKeyView) }
+                return true
+            }
+            if isGridSearchFocused || isGridShellFocused {
+                let current = isGridSearchFocused ? gridShell.searchField : window?.firstResponder as? NSView
+                if let current, let adjacent = gridShell.adjacentFooterKeyView(to: current, reverse: reverse) {
+                    _ = window?.makeFirstResponder(adjacent)
+                } else if reverse {
+                    _ = window?.makeFirstResponder(gridView.collectionView)
+                } else {
+                    focusInspectorCloseButton()
+                }
+                return true
+            }
         }
-        if !gridView.isHidden, event.keyCode == 48, event.modifierFlags.contains(.shift),
-           isInspectorFocused { gridShell.focusSearch(); return true }
         if event.keyCode == 48 && session.inspectorFocus.focus == .canvas {
             session.tab(reverse: event.modifierFlags.contains(.shift))
             return true
