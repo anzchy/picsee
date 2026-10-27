@@ -1,9 +1,44 @@
 import AppKit
+import SwiftUI
 import Testing
 import PicseeCore
 @testable import PicseeApplication
 import PicseeInfrastructure
 @testable import PicseeMacUI
+
+private struct ComboInspectorReader: InspectorMetadataReading {
+    func read(_ url: URL, access: AccessRequest) async throws -> InspectorMetadata { .init() }
+}
+
+@Test @MainActor func issue136ComboWatchedRefreshSynchronizesInspectorCurrentAndEmpty() {
+    let scene = SearchedRefreshScene()
+    let model = InspectorModel(reader: ComboInspectorReader())
+    scene.session.setInspectorVisible(true)
+    let panel = NSHostingView(rootView: InspectorPanel(model: model, session: scene.session,
+        close: {}, restoreCanvasFocus: {}, updateFocus: { scene.session.updateFocus($0) }))
+    panel.frame = NSRect(x: 780, y: 0, width: 220, height: 700)
+    scene.window.contentView?.addSubview(panel)
+    let a = scene.entry("match-a.jpg"), d = scene.entry("match-d.jpg")
+    scene.begin(scene.snapshot([a, d], 1), term: "match", current: d.itemID)
+    model.select(itemID: d.itemID, url: d.url, access: .fileGrant(d.url))
+    let survivor = scene.snapshot([a], 2)
+    GridWatchedSearchRefresh.apply(survivor, session: scene.session, search: scene.search,
+        scheduler: scene.scheduler, grid: scene.grid, shell: scene.shell, gridVisible: true,
+        onReconciled: {
+            let current = scene.session.selection.currentItemID
+            let entry = survivor.entries.first { $0.itemID == current }
+            model.select(itemID: current, url: entry?.url,
+                access: entry.map { .fileGrant($0.url) })
+        })
+    #expect(model.name == a.url.lastPathComponent)
+    let empty = scene.snapshot([], 3)
+    GridWatchedSearchRefresh.apply(empty, session: scene.session, search: scene.search,
+        scheduler: scene.scheduler, grid: scene.grid, shell: scene.shell, gridVisible: true,
+        onReconciled: {
+            model.select(itemID: scene.session.selection.currentItemID, url: nil, access: nil)
+        })
+    #expect(model.name == nil)
+}
 
 @MainActor private final class SearchedRefreshHost: ViewerSessionHost {
     var hasImage = true

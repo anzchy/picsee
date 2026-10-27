@@ -51,7 +51,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var folderEntryRestore: ((FolderEntryRestoreTarget) -> Void)?
     private var pendingGridCurrentItemID: ItemID?
     let session: ViewerSession
-    private let inspector: InspectorModel
+    let inspector: InspectorModel
     private let motionPolicy: MotionPolicy
     private let router = CommandRouter()
     private let accessServices: Task<AccessServices, Error>
@@ -927,32 +927,37 @@ extension CanvasWindowController: FolderScanHost {
         withObservationTracking {
             gridView.setMetadataSortState(scan.metadataSortState)
             chromeOverlay.setMetadataSortState(scan.metadataSortState)
-            // A restored source equals the projection already shown; repainting it would cover a restored viewer.
-            if let snapshot = scan.snapshot, gridFolderRoot == snapshot.version.rootID,
-               snapshot != gridProjection.snapshot, gridProjection.apply(snapshot), snapshot.isComplete {
-                let anchor = gridView.firstVisibleItemID() ?? gridProjection.scrollAnchor
-                gridProjection.setScrollAnchor(anchor)
-                // A watched refresh only reconciles: an open Preview Set shrinks in place and the grid stays as shown.
-                let entering = folderEntryRestore != nil
-                let offset = gridView.contentOffset
-                if entering {
-                    completeGridDisplay(snapshot, currentItemID: pendingGridCurrentItemID, offset: nil)
-                    folderEntryRestore = nil
-                    session.completeFolderEntry()
-                } else if !gridView.isHidden {
-                    // Re-filter synchronously without moving keyboard focus out of the search field.
-                    GridWatchedSearchRefresh.apply(snapshot, session: session, search: gridSearch,
-                        scheduler: searchProjection, grid: gridView, shell: gridShell, gridVisible: true)
-                    gridView.restoreContentOffset(offset)
-                } else {
-                    GridWatchedSearchRefresh.apply(snapshot, session: session, search: gridSearch,
-                        scheduler: searchProjection, grid: gridView, shell: gridShell, gridVisible: false)
-                }
-            }
+            if let snapshot = scan.snapshot { applyObservedGridSnapshot(snapshot) }
         } onChange: { [weak self, weak scan] in
             Task { @MainActor [weak self, weak scan] in
                 guard let self, let scan, self.session.folderScan === scan else { return }
                 self.observeGridSnapshot(scan)
+            }
+        }
+    }
+    func applyObservedGridSnapshot(_ snapshot: FolderSnapshot) {
+        // A restored source equals the projection already shown; repainting it would cover a restored viewer.
+        if gridFolderRoot == snapshot.version.rootID,
+           snapshot != gridProjection.snapshot, gridProjection.apply(snapshot), snapshot.isComplete {
+            let anchor = gridView.firstVisibleItemID() ?? gridProjection.scrollAnchor
+            gridProjection.setScrollAnchor(anchor)
+            // A watched refresh only reconciles: an open Preview Set shrinks in place and the grid stays as shown.
+            let entering = folderEntryRestore != nil
+            let offset = gridView.contentOffset
+            if entering {
+                completeGridDisplay(snapshot, currentItemID: pendingGridCurrentItemID, offset: nil)
+                folderEntryRestore = nil
+                session.completeFolderEntry()
+            } else if !gridView.isHidden {
+                // Re-filter synchronously without moving keyboard focus out of the search field.
+                GridWatchedSearchRefresh.apply(snapshot, session: session, search: gridSearch,
+                    scheduler: searchProjection, grid: gridView, shell: gridShell, gridVisible: true,
+                    onReconciled: { [weak self] in self?.syncInspector() })
+                gridView.restoreContentOffset(offset)
+            } else {
+                GridWatchedSearchRefresh.apply(snapshot, session: session, search: gridSearch,
+                    scheduler: searchProjection, grid: gridView, shell: gridShell, gridVisible: false,
+                    onReconciled: { [weak self] in self?.syncInspector() })
             }
         }
     }
