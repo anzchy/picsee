@@ -11,6 +11,10 @@ public struct PersonalImageResolver: Sendable {
         do {
             let root = try await access.probeRootURL(ref.rootID)
             return try await access.withLease(.root(ref.rootID, file: root)) { lease in
+                // A scope can still start for a deleted root's bookmark; the root itself must be a folder.
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: lease.url.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else { return .revoked }
                 let file = lease.url.appendingPathComponent(ref.relativePath)
                 // A different file at the path has another file number: missing, never its pixels.
                 guard AccessBoundary.contains(file, in: lease.url), let number = Self.fingerprint(of: file),

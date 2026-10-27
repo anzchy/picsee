@@ -211,3 +211,37 @@ private func personalCanonicalPath(_ url: URL) -> String { url.standardizedFileU
     }
     #expect(PersonalImageResolver.fingerprint(of: folder.appendingPathComponent("deleted.jpg")) == nil)
 }
+
+@Test func personalImageResolverDeletedRootIsRevokedThroughPorts() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? fm.removeItem(at: base) }
+    let folder = base.appendingPathComponent("root")
+    try fm.createDirectory(at: folder.appendingPathComponent("sub"), withIntermediateDirectories: true)
+    let scope = CountingScope(), codec = FakeBookmarks()
+    let access = try FileAccess(scope: scope, bookmarks: codec, store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "personal")
+    let id = try await access.grant(folder: folder)
+    let root = ItemIdentityRoot(id: id, url: folder)
+    func ref(_ name: String) throws -> PersonalImageRef {
+        let file = folder.appendingPathComponent(name)
+        try Data([5]).write(to: file)
+        return try #require(PersonalImageRef(fileURL: file, root: root, fileNumber: PersonalImageResolver.fingerprint(of: file)))
+    }
+    let top = try ref("a.jpg"), nested = try ref("sub/b.jpg")
+    let resolver = PersonalImageResolver(access: access)
+    guard case .present = await resolver.resolve(top) else { Issue.record("expected present"); return }
+    // The subfolder going away is a missing file; the root itself is still there.
+    try fm.removeItem(at: folder.appendingPathComponent("sub"))
+    #expect(await resolver.resolve(nested) == .missing)
+    // The scope still starts for the stale bookmark, but the root folder is gone.
+    try fm.removeItem(at: folder)
+    #expect(await resolver.resolve(top) == .revoked)
+    #expect(await resolver.resolve(top) == .revoked)
+    #expect(await resolver.resolve(nested) == .revoked)
+    try Data([1]).write(to: folder)
+    #expect(await resolver.resolve(top) == .revoked, "a file where the root folder was")
+    try fm.removeItem(at: folder)
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    #expect(await resolver.resolve(top) == .missing, "the root is back without the file")
+    #expect(scope.counts[0] == scope.counts[1])
+}
