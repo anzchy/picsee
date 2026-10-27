@@ -46,6 +46,7 @@ private final class ManualSleeper: @unchecked Sendable {
     private var cancelledEarly: Set<UUID> = []
     private var asked: [Duration] = []
     private var cancelledCount = 0
+    private var waiters: [UUID: (count: Int, waiter: CheckedContinuation<Bool, Never>)] = [:]
     var requested: [Duration] { lock.withLock { asked } }
     var pendingCount: Int { lock.withLock { pending.count } }
     var cancelled: Int { lock.withLock { cancelledCount } }
@@ -53,13 +54,16 @@ private final class ManualSleeper: @unchecked Sendable {
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (sleeper: CheckedContinuation<Void, Error>) in
-                let early = lock.withLock { () -> Bool in
+                let (early, reached) = lock.withLock { () -> (Bool, [CheckedContinuation<Bool, Never>]) in
                     asked.append(duration)
-                    if cancelledEarly.remove(id) != nil { cancelledCount += 1; return true }
+                    if cancelledEarly.remove(id) != nil { cancelledCount += 1; return (true, []) }
                     pending[id] = sleeper
-                    return false
+                    let reached = waiters.filter { $0.value.count <= asked.count }
+                    for key in reached.keys { waiters[key] = nil }
+                    return (false, reached.values.map(\.waiter))
                 }
                 if early { sleeper.resume(throwing: CancellationError()) }
+                for waiter in reached { waiter.resume(returning: true) }
             }
         } onCancel: {
             let sleeper = lock.withLock { () -> CheckedContinuation<Void, Error>? in
@@ -68,6 +72,26 @@ private final class ManualSleeper: @unchecked Sendable {
                 return sleeper
             }
             sleeper?.resume(throwing: CancellationError())
+        }
+    }
+    /// Whether the `count`-th sleep comes to be requested and pending. The sleep itself resumes the waiter, so the
+    /// wait needs no main-actor turn and no wall-clock deadline: a poll against a deadline failed on a loaded CI
+    /// runner, where the main actor every @MainActor test shares was too busy to give the refresh loop its turns
+    /// before the deadline passed. False only when the waiting task is cancelled (the suite's time limit bounds it).
+    func sleeping(_ count: Int) async -> Bool {
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (waiter: CheckedContinuation<Bool, Never>) in
+                let ready = lock.withLock { () -> Bool? in
+                    if Task.isCancelled { return false }
+                    if asked.count >= count && !pending.isEmpty { return true }
+                    waiters[id] = (count, waiter)
+                    return nil
+                }
+                if let ready { waiter.resume(returning: ready) }
+            }
+        } onCancel: {
+            lock.withLock { waiters.removeValue(forKey: id)?.waiter }?.resume(returning: false)
         }
     }
     func advance() {
@@ -79,10 +103,11 @@ private final class ManualSleeper: @unchecked Sendable {
     }
 }
 
-/// Waits for a condition with short sleeps, bounded well inside the suite's time limit.
+/// Waits for a condition the sleeper can't signal, sleeping 10 ms between looks so the polls add little to a busy
+/// main actor. Bounded at 45 s, inside the suite's time limit, and stops when cancelled.
 @MainActor private func until(_ condition: @MainActor () -> Bool) async -> Bool {
-    let deadline = ContinuousClock.now.advanced(by: .seconds(20))
-    while !condition(), !Task.isCancelled, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(2)) }
+    let deadline = ContinuousClock.now.advanced(by: .seconds(45))
+    while !condition(), !Task.isCancelled, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(10)) }
     return condition()
 }
 
@@ -124,7 +149,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         #expect(DiagnosticsPanelModel.unknown == "Unknown")
 
         model.setVisible(true)
-        try #require(await until { sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(1))
         for id in ids.prefix(11) { #expect(value(model, id) == "Unknown", "\(id)") }
         #expect(value(model, "disk.hits") == "4" && value(model, "disk.misses") == "6")
         #expect(value(model, "decoding.running") == "1" && value(model, "decoding.waiting") == "2")
@@ -137,7 +162,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         let sleeper = ManualSleeper()
         let model = DiagnosticsPanelModel(source: source, sleep: { try await sleeper.sleep($0) })
         model.setVisible(true)
-        try #require(await until { sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(1))
         let memory = { ByteCountFormatter.string(fromByteCount: $0, countStyle: .memory) }
         #expect(value(model, "budget.limit") == memory(536_870_912))
         #expect(value(model, "budget.pinned") == memory(1_024))
@@ -192,7 +217,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         let sleeper = ManualSleeper()
         let model = DiagnosticsPanelModel(source: pipeline, sleep: { try await sleeper.sleep($0) })
         model.setVisible(true)
-        try #require(await until { sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(1))
         model.setVisible(false)
         let rows = model.sections.flatMap(\.rows)
         // The read was real: these figures came from the folder's loads.
@@ -214,13 +239,13 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         let model = DiagnosticsPanelModel(source: source, sleep: { try await sleeper.sleep($0) })
         model.setVisible(true)
         #expect(model.isVisible)
-        try #require(await until { sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(1))
         #expect(source.reads == 1 && value(model, "decoding.waiting") == "2")
         sleeper.advance()
-        try #require(await until { sleeper.requested.count == 2 && sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(2))
         #expect(source.reads == 2 && value(model, "decoding.waiting") == "5" && value(model, "decoding.finished") == "12")
         sleeper.advance()
-        try #require(await until { sleeper.requested.count == 3 && sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(3))
         #expect(source.reads == 3)
         #expect(sleeper.requested == [.seconds(1), .seconds(1), .seconds(1)])
         model.setVisible(false)
@@ -231,7 +256,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         let sleeper = ManualSleeper()
         let model = DiagnosticsPanelModel(source: source, sleep: { try await sleeper.sleep($0) })
         model.setVisible(true)
-        try #require(await until { sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(1))
         model.setVisible(false)
         #expect(!model.isVisible)
         try #require(await until { sleeper.cancelled == 1 && sleeper.pendingCount == 0 })
@@ -240,7 +265,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         #expect(source.reads == 1 && sleeper.requested.count == 1)
 
         model.setVisible(true)
-        try #require(await until { sleeper.requested.count == 2 && sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(2))
         #expect(source.reads == 2)
         model.setVisible(false)
     }
@@ -251,9 +276,9 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         let model = DiagnosticsPanelModel(source: source, sleep: { try await sleeper.sleep($0) })
         model.setVisible(true)
         model.setVisible(true)
-        try #require(await until { sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(1))
         sleeper.advance()
-        try #require(await until { sleeper.requested.count == 2 })
+        try #require(await sleeper.sleeping(2))
         #expect(source.reads == 2 && sleeper.pendingCount == 1)
 
         // Hide and show while a read is suspended: the old loop must end with its read, not keep going.
@@ -264,11 +289,11 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         model.setVisible(true)
         try #require(await until { source.heldReads == 2 })
         source.releaseReads()
-        try #require(await until { sleeper.requested.count == 3 && sleeper.pendingCount == 1 })
+        try #require(await sleeper.sleeping(3))
         try await Task.sleep(for: .milliseconds(50))
         #expect(sleeper.pendingCount == 1 && sleeper.requested.count == 3 && source.reads == 4)
         sleeper.advance()
-        try #require(await until { sleeper.requested.count == 4 })
+        try #require(await sleeper.sleeping(4))
         try await Task.sleep(for: .milliseconds(50))
         #expect(source.reads == 5 && sleeper.pendingCount == 1)
         model.setVisible(false)
@@ -315,7 +340,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         let model = DiagnosticsPanelModel(source: pipeline, sleep: { try await sleeper.sleep($0) })
         model.setVisible(true)
         for tick in 1...5 {
-            try #require(await until { sleeper.requested.count == tick && sleeper.pendingCount == 1 })
+            try #require(await sleeper.sleeping(tick))
             sleeper.advance()
         }
         model.setVisible(false)
@@ -358,7 +383,7 @@ private func traitSets(_ view: some View) -> [String] {
     let unknownSize = host.fittingSize
     #expect(unknownSize.width >= 300 && unknownSize.height >= 360)
     model.setVisible(true)
-    try #require(await until { sleeper.pendingCount == 1 })
+    try #require(await sleeper.sleeping(1))
     model.setVisible(false)
     host.layoutSubtreeIfNeeded()
     #expect(host.fittingSize.width >= 300 && value(model, "memory.hits") == "7")
