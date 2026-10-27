@@ -27,8 +27,12 @@ public enum ViewerMode: Sendable { case browsing, viewing }
     public var searchTerm = ""
     public var displayPreferences: DisplayPreferences { preferencesStore.value }
     public private(set) var selection = BrowserSelection()
-    public private(set) var previewSet: PreviewSet?
-    public internal(set) var filePreviewSet: FilePreviewSet?
+    public private(set) var previewSet: PreviewSet? {
+        didSet { if oldValue != nil && previewSet == nil { applyPreferredFolderSort() } }
+    }
+    public internal(set) var filePreviewSet: FilePreviewSet? {
+        didSet { if oldValue != nil && filePreviewSet == nil { applyPreferredFolderSort() } }
+    }
     public var folderScan: FolderScanCoordinator? { didSet { applyPreferredFolderSort() } }
     let inputNavigationIntent = AccessIntent()
     public private(set) var mode: ViewerMode = .viewing

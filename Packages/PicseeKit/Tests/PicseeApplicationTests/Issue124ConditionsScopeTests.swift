@@ -215,3 +215,113 @@ private final class Issue124MetadataReader: FolderMetadataReading, @unchecked Se
     #expect(scan.snapshot == frozen)
     #expect(scan.conditions.sort == .name)
 }
+
+@Test @MainActor func issue124Fix2FolderPreviewReplaysSharedSortAfterEscape() async throws {
+    let fixture = FolderScanFixture(), scan = fixture.coordinator
+    let store = InMemoryDisplayPreferencesStore()
+    let session = ViewerSession(preferencesStore: store)
+    session.folderScan = scan
+    let task = scan.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await task.value
+    let original = try #require(scan.snapshot?.navigationEntries.map(\.itemID))
+    session.beginBrowsing(items: original, sourceVersion: .init(1), scrollAnchor: nil)
+    #expect(CommandRouter().route(.preview, from: .key, to: session))
+    var changed = store.value
+    changed.folderSortDirection = .descending
+    store.value = changed
+    #expect(session.previewSet?.itemIDs == original)
+    #expect(scan.snapshot?.navigationEntries.map(\.itemID) == original)
+    #expect(session.folderConditions.direction == .ascending)
+
+    #expect(CommandRouter().route(.escape, from: .key, to: session))
+    #expect(session.previewSet == nil)
+    #expect(session.folderConditions.direction == .descending)
+    #expect(scan.snapshot?.navigationEntries.map(\.itemID) == original.reversed())
+    let menu = FolderMenuSelection(conditions: session.folderConditions, loopEnabled: session.folderLoopEnabled)
+    #expect(FolderMenuPolicy.state(for: .direction(.descending), selection: menu,
+        hasFolderSource: session.hasFolderSource, previewActive: false).checked)
+}
+
+@Test @MainActor func issue124Fix2FilePreviewReplaysSharedSortOnEnd() async throws {
+    let fixture = FolderScanFixture(), scan = fixture.coordinator
+    let store = InMemoryDisplayPreferencesStore()
+    let session = ViewerSession(preferencesStore: store)
+    session.folderScan = scan
+    let task = scan.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await task.value
+    let original = scan.snapshot
+    let files = [fixture.folder.appendingPathComponent("a.jpg"), fixture.folder.appendingPathComponent("b.png")]
+    session.filePreviewSet = FilePreviewSet(files: files)
+    var changed = store.value
+    changed.folderSort = .size
+    changed.folderSortDirection = .descending
+    store.value = changed
+    #expect(session.filePreviewSet?.members == files)
+    #expect(scan.snapshot == original && session.folderConditions == .init())
+
+    session.endFilePreviewSet()
+    #expect(session.filePreviewSet == nil)
+    #expect(session.folderConditions == .init(sort: .size, direction: .descending))
+    let menu = FolderMenuSelection(conditions: session.folderConditions, loopEnabled: session.folderLoopEnabled)
+    #expect(FolderMenuPolicy.state(for: .sort(.size), selection: menu,
+        hasFolderSource: session.hasFolderSource, previewActive: false).checked)
+    #expect(FolderMenuPolicy.state(for: .direction(.descending), selection: menu,
+        hasFolderSource: session.hasFolderSource, previewActive: false).checked)
+}
+
+@Test @MainActor func issue124Fix2ChangedBackAndUnchangedExitsDoNotReadMetadata() async throws {
+    let fixture = FolderScanFixture(), reader = Issue124MetadataReader()
+    let store = InMemoryDisplayPreferencesStore()
+    var initial = store.value
+    initial.folderSort = .captureDate
+    store.value = initial
+    let scan = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner, metadataReader: reader)
+    let session = ViewerSession(preferencesStore: store)
+    session.folderScan = scan
+    let task = scan.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg", "b.png"])
+    await fixture.scanner.finish(); try await task.value
+    for _ in 0..<100 where reader.requested.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(reader.requested.count == 2)
+    let original = try #require(scan.snapshot)
+    let ids = original.navigationEntries.map(\.itemID)
+    session.beginBrowsing(items: ids, sourceVersion: .init(1), scrollAnchor: nil)
+    #expect(CommandRouter().route(.preview, from: .key, to: session))
+    var changed = store.value
+    changed.folderSort = .size
+    store.value = changed
+    store.value = initial
+    #expect(CommandRouter().route(.escape, from: .key, to: session))
+    #expect(scan.conditions.sort == .captureDate && scan.snapshot == original)
+    #expect(reader.requested.count == 2)
+
+    #expect(CommandRouter().route(.preview, from: .key, to: session))
+    #expect(CommandRouter().route(.escape, from: .key, to: session))
+    #expect(scan.conditions.sort == .captureDate && scan.snapshot == original)
+    #expect(reader.requested.count == 2)
+}
+
+@Test @MainActor func issue124Fix2AutomaticPreviewClearReplaysSharedSort() async throws {
+    let fixture = FolderScanFixture(), scan = fixture.coordinator
+    let store = InMemoryDisplayPreferencesStore()
+    let session = ViewerSession(preferencesStore: store)
+    session.folderScan = scan
+    let task = scan.begin(folder: fixture.folder, rootID: fixture.id)
+    await fixture.scanner.waitForStart()
+    try await fixture.scanner.deliver(["a.jpg"])
+    await fixture.scanner.finish(); try await task.value
+    let ids = try #require(scan.snapshot?.navigationEntries.map(\.itemID))
+    session.beginBrowsing(items: ids, sourceVersion: .init(1), scrollAnchor: nil)
+    #expect(CommandRouter().route(.preview, from: .key, to: session))
+    var changed = store.value
+    changed.folderSortDirection = .descending
+    store.value = changed
+    session.updateItems([], sourceVersion: .init(2))
+    #expect(session.previewSet == nil)
+    #expect(session.folderConditions.direction == .descending)
+}
