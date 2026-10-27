@@ -13,7 +13,7 @@ public struct DiagnosticsSection: Sendable, Equatable, Identifiable {
     public let id: String
     public let title: String
     public let rows: [DiagnosticsRow]
-    public var note: String? = nil
+    public let note: String?
 }
 
 /// The diagnostics panel's rows (CACHE-04). While visible it reads the source now and then once per interval;
