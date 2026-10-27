@@ -192,3 +192,40 @@ private final class OptionalIdentityReader: FileIdentityResourceReading, @unchec
     let moved = await registry.resolver(for: ItemIdentityRoot(id: tree.id, url: movedRoot))
     #expect(try await moved.identity(for: movedRoot.appendingPathComponent("renamed.png")) == original)
 }
+
+private struct ReusedResourceReader: FileIdentityResourceReading {
+    func identity(for fileURL: URL) throws -> FileResourceIdentity? {
+        FileResourceIdentity(volumeUUID: "fixture", fileIdentifier: "reused")
+    }
+}
+
+@Test func issue140CompletedScanPrunesDeletedResourceAssociation() async throws {
+    let tree = try IdentityTree(); defer { tree.remove() }
+    let resolver = FileItemIdentityResolver(root: tree.scope, reader: ReusedResourceReader())
+    let deletedID = try await resolver.identity(for: tree.file)
+    try FileManager.default.removeItem(at: tree.file)
+    await resolver.pruneMissing(in: tree.root, recursive: false)
+    let replacement = tree.root.appendingPathComponent("new.png")
+    try Data("different".utf8).write(to: replacement)
+    #expect(try await resolver.identity(for: replacement) != deletedID)
+}
+
+@Test func issue140IndexedResolverKeepsThousandsOfRealFilesDistinctAcrossRescan() async throws {
+    let tree = try IdentityTree(); defer { tree.remove() }
+    let resolver = FileItemIdentityResolver(root: tree.scope)
+    let count = 2_500
+    var files: [URL] = []
+    files.reserveCapacity(count)
+    for index in 0..<count {
+        let file = tree.root.appendingPathComponent(String(format: "bulk-%04d.png", index))
+        try Data().write(to: file)
+        files.append(file)
+    }
+    var first: [ItemID] = []
+    first.reserveCapacity(count)
+    for file in files { first.append(try await resolver.identity(for: file)) }
+    #expect(Set(first).count == count)
+    for (index, file) in files.enumerated() {
+        #expect(try await resolver.identity(for: file) == first[index])
+    }
+}
