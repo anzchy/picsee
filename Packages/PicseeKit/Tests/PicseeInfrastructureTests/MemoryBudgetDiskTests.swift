@@ -66,9 +66,10 @@ private actor DiskReadGate {
     }
 }
 
+/// Returns once `count` jobs wait in admission. Callers leave no room, so a queued job stays queued; there is no
+/// wall-clock deadline (a loaded runner can take longer than any fixed one), and the suite's time limit bounds a hang.
 private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int) async {
-    let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-    while await pipeline.admission.activity().waiting != count, ContinuousClock.now < deadline { await Task.yield() }
+    while await pipeline.admission.activity().waiting != count { await Task.yield() }
 }
 
 @Suite(.timeLimit(.minutes(1))) struct MemoryBudgetDiskTests {
