@@ -33,7 +33,8 @@ final class DiagnosticsWindow: NSObject {
     func show() {
         appearanceAdapter.register(panel)
         panel.makeKeyAndOrderFront(nil)
-        model.setVisible(true)
+        // On screen only if the panel isn't covered; otherwise the occlusion notification starts the loop.
+        visibilityChanged(Notification(name: NSWindow.didChangeOcclusionStateNotification, object: panel))
     }
 
     @objc private func visibilityChanged(_ notification: Notification) {

@@ -136,7 +136,8 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
     }
     public func hasWriteFailure() -> Bool { lastWriteFailure != nil }
     /// Load outcomes since launch, with the entry count and stored payload bytes from one index read.
-    /// A missing index is an empty cache; one that can't be read leaves both figures unknown.
+    /// Counts current-version rows only (older rows always miss). A missing index is an empty cache;
+    /// one that can't be read leaves both figures unknown.
     public func diagnostics() -> DiagnosticsSnapshot.DiskCache {
         let indexed = withIndexLock { () -> (entries: Int, bytes: Int64)? in
             guard (try? requireSafeDirectory()) != nil else { return nil }
@@ -144,7 +145,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
             guard let db = openDatabase(create: false) else { return nil }
             defer { sqlite3_close(db) }
             var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, "SELECT COUNT(*), COALESCE(SUM(byte_count),0) FROM thumbnails",
+            guard sqlite3_prepare_v2(db, "SELECT COUNT(*), COALESCE(SUM(byte_count),0) FROM thumbnails WHERE cache_version=2",
                                      -1, &statement, nil) == SQLITE_OK else { return nil }
             defer { sqlite3_finalize(statement) }
             guard sqlite3_step(statement) == SQLITE_ROW else { return nil }

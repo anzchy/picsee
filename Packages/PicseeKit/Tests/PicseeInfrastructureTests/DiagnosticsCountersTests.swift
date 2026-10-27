@@ -188,3 +188,23 @@ private struct FailingEdgeDecoder: ImageDecoding {
     let after = await cache.diagnostics()
     #expect(after.hits == 0 && after.misses == 1)
 }
+
+@Test func diagnosticsQueueShowsAHeldDiskLoadButNotAsADecode() async throws {
+    let admission = DecodeAdmission(configuration: DecodeConfiguration(budget: 64),
+        executor: OperationDecodeExecutor(workers: 1), decoder: TinyDecoder(), memory: MemoryBudget(limit: 64), release: nil)
+    let (entered, enter) = AsyncStream<Void>.makeStream()
+    let (gate, open) = AsyncStream<Void>.makeStream()
+    let load = Task {
+        try await admission.staged(tinyRequest, key: decodeKey(1), cost: 4, priority: .current) {
+            enter.yield()
+            for await _ in gate { break }
+            return nil
+        }
+    }
+    for await _ in entered { break }
+    // The disk load holds a running slot in the queue, but it is not a source decode.
+    #expect(await admission.diagnostics() == .init(running: 1, waiting: 0, finished: 0))
+    open.yield()
+    _ = try await load.value
+    #expect(await admission.diagnostics() == .init(running: 0, waiting: 0, finished: 0))
+}

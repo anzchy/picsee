@@ -1,6 +1,7 @@
 import PicseeCore
 
 /// Reads each source once. The groups are not one atomic moment: each is consistent within itself.
+/// Only the App's ThumbnailDiskCache reports a disk group; another ThumbnailCaching shows it as unknown.
 extension ImageIOPipeline: DiagnosticsProviding {
     public func diagnostics() async -> DiagnosticsSnapshot {
         let budget = cache.budget.map { ledger in

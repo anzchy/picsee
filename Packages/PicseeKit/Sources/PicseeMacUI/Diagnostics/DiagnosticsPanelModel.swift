@@ -79,7 +79,7 @@ public final class DiagnosticsPanelModel {
             section("disk", "Thumbnail Disk Cache", [
                 ("entries", "Entries", count(disk?.entries)), ("size", "Stored Size", file(disk?.storedBytes)),
                 ("hits", "Hits", count(disk?.hits)), ("misses", "Misses", count(disk?.misses))]),
-            section("decoding", "Decoding", [
+            section("decoding", "Decode Queue", [
                 ("running", "Running", count(decoding?.running)), ("waiting", "Waiting", count(decoding?.waiting)),
                 ("finished", "Finished Decodes", count(decoding?.finished))]),
         ]
