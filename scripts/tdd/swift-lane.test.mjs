@@ -121,9 +121,11 @@ test('a started Swift Testing stream must finish even when XCTest finished elsew
 });
 test('all discovery probes share the heavy lock and issue-specific integration stays manual', () => {
   const config=JSON.parse(readFileSync('.claude/tdd-guardian/config.json','utf8'));
-  const probes=config.lanes.map(l=>l.probeCommand);
-  assert.deepEqual(config.lanes.map(l=>l.name).sort(), ['integration','swift-red','unit']);
+  const probes=config.lanes.flatMap(l=>l.probeCommand ? [l.probeCommand] : []);
+  assert.deepEqual(config.lanes.map(l=>l.name).sort(), ['app-red','integration','swift-red','unit']);
   assert.deepEqual(config.lanes.find(l=>l.name==='integration').gateOn, ['manual']);
+  assert.deepEqual(config.lanes.find(l=>l.name==='app-red').gateOn, ['manual']);
+  assert.match(readFileSync('scripts/tdd/app-lane.mjs','utf8'), /spawnSync\(lock, \["xcrun", "xctest"/);
   assert.ok(probes.every(command=>command.startsWith('scripts/heavy-lock.sh swift test ')));
 });
 

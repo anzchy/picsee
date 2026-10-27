@@ -10,6 +10,51 @@ import PicseeCore
     var onChange: (@MainActor () -> Void)?
 }
 
+@MainActor @Test func issue136SmokeInspectorMenuEquivalentPreservesGridSearchEditor() throws {
+    _ = NSApplication.shared
+    let preferences = InMemoryDisplayPreferencesStore()
+    let previousMenu = NSApp.mainMenu
+    let unavailable = Task<AccessServices, Error> { throw CancellationError() }
+    let controller = CanvasWindowController(pipeline: ImageIOPipeline(), preferencesStore: preferences,
+        accessServices: unavailable, motionPolicy: MotionPolicy(source: KeyTestMotionSource()))
+    let menu = CommandMenu(preferencesStore: preferences, openWithoutWindow: {}, openSettings: {},
+        windowController: { controller })
+    let window = try #require(controller.window as? CommandWindow)
+    defer { window.close(); NSApp.mainMenu = previousMenu; withExtendedLifetime(menu) {} }
+    let shell = try #require(window.contentView?.subviews.compactMap { $0 as? GridShellView }.first)
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: URL(fileURLWithPath: "/tmp/issue136-smoke-menu"))
+    let item = FolderEntry(url: root.url.appendingPathComponent("cat.jpg"), root: root)
+    controller.session.beginBrowsing(items: [item.itemID], sourceVersion: .init(1), scrollAnchor: nil)
+    controller.session.focus(item.itemID)
+    controller.showGrid()
+    func command(_ letter: String, keyCode: UInt16) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: letter,
+            charactersIgnoringModifiers: letter, isARepeat: false, keyCode: keyCode))
+    }
+    let mainMenu = try #require(NSApp.mainMenu)
+    #expect(controller.route(.search, from: .key))
+    let editor = try #require(shell.searchField.currentEditor() as? NSTextView)
+    editor.insertText("ca")
+    let caret = NSRange(location: 2, length: 0)
+    editor.selectedRange = caret
+    #expect(window.firstResponder === editor)
+    let commandI = try command("i", keyCode: 34)
+    #expect(mainMenu.performKeyEquivalent(with: commandI))
+    #expect(controller.session.inspectorFocus.isVisible)
+    #expect(!shell.searchField.isHidden)
+    #expect(window.firstResponder === shell.searchField.currentEditor())
+    #expect(shell.searchField.stringValue == "ca")
+    #expect((shell.searchField.currentEditor() as? NSTextView)?.selectedRange == caret)
+    #expect(mainMenu.performKeyEquivalent(with: commandI))
+    #expect(!controller.session.inspectorFocus.isVisible)
+    #expect(!shell.searchField.isHidden)
+    #expect(window.firstResponder === shell.searchField.currentEditor())
+    #expect((shell.searchField.currentEditor() as? NSTextView)?.selectedRange == caret)
+    shell.searchField.currentEditor()?.insertText("t")
+    #expect(shell.searchField.stringValue == "cat")
+}
+
 @MainActor @Test func issue136CombinedWindowSearchFocusEscapeAndInspectorToggle() throws {
     _ = NSApplication.shared
     let unavailable = Task<AccessServices, Error> { throw CancellationError() }

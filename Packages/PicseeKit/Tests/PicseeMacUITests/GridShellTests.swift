@@ -10,6 +10,29 @@ import PicseeInfrastructure
     func preferencesDidChange(_ preferences: DisplayPreferences) { writes += 1 }
 }
 
+@Test @MainActor func issue136RestoredSearchEditorIgnoresOnlyPendingMenuEndEditing() async throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 680),
+        styleMask: [], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView!.addSubview(shell)
+    defer { window.close() }
+    let ended = Notification(name: NSControl.textDidEndEditingNotification, object: shell.searchField)
+    shell.focusSearch()
+    #expect(window.firstResponder === shell.searchField.currentEditor())
+    shell.preserveRestoredSearchEditorThroughMenuDispatch()
+    shell.controlTextDidEndEditing(ended)
+    #expect(!shell.searchField.isHidden)
+    #expect(window.firstResponder === shell.searchField.currentEditor())
+
+    shell.preserveRestoredSearchEditorThroughMenuDispatch()
+    try await Task.sleep(for: .milliseconds(20))
+    shell.controlTextDidEndEditing(ended)
+    #expect(shell.searchField.isHidden)
+}
+
 @Test @MainActor func gridShellFramesAndColumnsFollowSidebarAtDesignViewports() throws {
     _ = NSApplication.shared
     let store = InMemoryDisplayPreferencesStore()

@@ -483,6 +483,20 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
               let responder = window?.firstResponder else { return false }
         return responder === gridShell.searchField || responder === gridShell.searchField.currentEditor()
     }
+    struct GridSearchEditorState {
+        let selection: NSRange?
+    }
+    func captureGridSearchEditor() -> GridSearchEditorState? {
+        guard isGridSearchFocused else { return nil }
+        return GridSearchEditorState(selection: (gridShell.searchField.currentEditor() as? NSTextView)?.selectedRange)
+    }
+    func restoreGridSearchEditor(_ state: GridSearchEditorState) {
+        gridShell.preserveRestoredSearchEditorThroughMenuDispatch()
+        gridShell.focusSearch()
+        if let selection = state.selection {
+            (gridShell.searchField.currentEditor() as? NSTextView)?.selectedRange = selection
+        }
+    }
     private var isGridShellFocused: Bool {
         guard gridShell != nil, !gridShell.isHidden,
               let view = window?.firstResponder as? NSView else { return false }
@@ -728,13 +742,9 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         if event.keyCode == 34, event.modifierFlags.contains(.command),
            event.modifierFlags.intersection([.control, .option]).isEmpty,
            !menuTracking() {
-            let restoreSearch = isGridSearchFocused
-            let selection = (gridShell.searchField.currentEditor() as? NSTextView)?.selectedRange
+            let searchEditor = captureGridSearchEditor()
             let handled = route(.inspector, from: .key)
-            if handled && restoreSearch {
-                gridShell.focusSearch()
-                if let selection { (gridShell.searchField.currentEditor() as? NSTextView)?.selectedRange = selection }
-            }
+            if handled, let searchEditor { restoreGridSearchEditor(searchEditor) }
             return handled
         }
         if !gridView.isHidden, !isGridSearchFocused, focusContext != .textInput,

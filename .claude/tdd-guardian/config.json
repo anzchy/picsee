@@ -44,6 +44,16 @@
       "coverage": "none",
       "probeCommand": "scripts/heavy-lock.sh swift test --package-path Packages/PicseeKit --list-tests",
       "timeoutMs": 600000
+    },
+    {
+      "name": "app-red",
+      "description": "Compiled PicseeAppTests through installed NSApp main menu and real NSEvent key equivalent. Build-for-testing before RED record.",
+      "command": "node scripts/tdd/app-lane.mjs",
+      "gateOn": [
+        "manual"
+      ],
+      "coverage": "none",
+      "timeoutMs": 600000
     }
   ],
   "coverageThresholds": {

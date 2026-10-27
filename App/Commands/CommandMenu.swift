@@ -24,12 +24,30 @@ extension CommandID {
 
 /// Bare equivalents must defer to the native field editor before menu dispatch.
 final class CommandMainMenu: NSMenu {
+    // NSMenu's nonisolated override runs on AppKit's main thread; the owner is main-actor bound.
+    nonisolated(unsafe) weak var commandOwner: CommandMenu?
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
-            guard NSApp.keyWindow?.windowController is CanvasWindowController,
-                  !(NSApp.keyWindow?.firstResponder is NSTextInputClient) else { return false }
+            let allowsBareEquivalent = MainActor.assumeIsolated {
+                NSApp.keyWindow?.windowController is CanvasWindowController
+                    && !(NSApp.keyWindow?.firstResponder is NSTextInputClient)
+            }
+            guard allowsBareEquivalent else { return false }
         }
-        return super.performKeyEquivalent(with: event)
+        let inspectorKey = event.keyCode == 34 && event.modifierFlags.contains(.command)
+            && event.modifierFlags.intersection([.control, .option, .shift]).isEmpty
+        // Key equivalents may end field editing before the menu action runs.
+        let owner = commandOwner
+        let targetAndEditor = inspectorKey ? MainActor.assumeIsolated {
+            let target = owner?.activeWindowController
+            return (target, target?.captureGridSearchEditor())
+        } : nil
+        let handled = super.performKeyEquivalent(with: event)
+        if handled, let (target, editor) = targetAndEditor, let target, let editor {
+            MainActor.assumeIsolated { target.restoreGridSearchEditor(editor) }
+        }
+        return handled
     }
 }
 
@@ -39,18 +57,25 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     private var trackingMenus: Set<ObjectIdentifier> = []
     private let openWithoutWindow: () -> Void
     private let openSettings: () -> Void
+    private let windowController: () -> CanvasWindowController?
+    var activeWindowController: CanvasWindowController? { windowController() }
     private(set) var isTracking = false
     private let recentFolders = NSMenu(title: String(localized: "Open Recent"))
     private let recentTarget = RecentFolderMenuTarget()
     private let extensionMenu = NSMenu(title: String(localized: "Extensions"))
 
     init(preferencesStore: any DisplayPreferencesStore, openWithoutWindow: @escaping () -> Void,
-         openSettings: @escaping () -> Void) {
+         openSettings: @escaping () -> Void,
+         windowController: @escaping () -> CanvasWindowController? = {
+             NSApp.keyWindow?.windowController as? CanvasWindowController
+         }) {
         self.preferencesStore = preferencesStore
         self.openWithoutWindow = openWithoutWindow
         self.openSettings = openSettings
+        self.windowController = windowController
         super.init()
         let main = CommandMainMenu(title: "Picsee")
+        main.commandOwner = self
         func submenu(_ title: String) -> NSMenu {
             let menu = NSMenu(title: title)
             menu.delegate = self
@@ -180,8 +205,10 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
     @objc private func invoke(_ item: NSMenuItem) {
         guard let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return }
-        if let target = NSApp.keyWindow?.windowController as? CanvasWindowController {
-            target.route(id, from: .menu)
+        if let target = windowController() {
+            let searchEditor = id == .inspector ? target.captureGridSearchEditor() : nil
+            let handled = target.route(id, from: .menu)
+            if handled, let searchEditor { target.restoreGridSearchEditor(searchEditor) }
         } else if id == .open { openWithoutWindow() }
     }
 
@@ -196,7 +223,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         (NSApp.keyWindow?.windowController as? CanvasWindowController)?.toggleGridSidebar()
     }
     @objc private func focusGridSearch(_ item: NSMenuItem) {
-        (NSApp.keyWindow?.windowController as? CanvasWindowController)?.route(.search, from: .menu)
+        windowController()?.route(.search, from: .menu)
     }
     @objc private func selectAppearance(_ item: NSMenuItem) {
         guard let raw = item.representedObject as? String, let appearance = DisplayAppearance(rawValue: raw) else { return }
@@ -252,7 +279,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
             return (NSApp.keyWindow?.windowController as? CanvasWindowController)?.gridSearchAvailable == true
         }
         guard let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return false }
-        let target = NSApp.keyWindow?.windowController as? CanvasWindowController
+        let target = windowController()
         if id == .inspector { item.title = target?.inspectorVisible == true ? String(localized: "Hide Inspector") : String(localized: "Show Inspector") }
         return target?.session.isEnabled(id) ?? (id == .open)
     }
