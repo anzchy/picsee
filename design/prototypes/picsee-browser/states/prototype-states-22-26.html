@@ -1,0 +1,276 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Questions:
+    22 "How should an opened folder with no images look?"
+    26 "How should a folder whose access has failed look?"
+  ?page=22|26 picks the question, ?variant= picks the answer, ?theme=dark, ?embed=1 hides prototype chrome.
+  The sidebar follows v0.0.1 (plan P3-15 deferred): current folder and its subfolders, plus Favourites / Recently Viewed.
+  Not the native app; buttons only show a toast.
+-->
+<html lang="zh-CN" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picsee · 22 空文件夹 / 26 权限失效 · 备选设计</title>
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/globals.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/light.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/dark.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: var(--font-sans); font-size: var(--font-size-ui); color: var(--color-text);
+         background: color-mix(in srgb, var(--color-surface) 70%, var(--color-text) 6%);
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding-bottom: 64px; -webkit-font-smoothing: antialiased; }
+  .embed body { padding: 0; gap: 0; background: var(--color-bg); }
+  .embed .proto-caption, .embed .proto-bar { display: none; }
+  .embed .window { border-radius: 0; box-shadow: none; }
+  button { font: inherit; color: inherit; }
+  kbd { font-family: var(--font-mono); font-size: 11px; padding: 0 5px; border-radius: var(--radius-inner); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-muted); }
+
+  .proto-caption { width: 1120px; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; color: var(--color-muted); font-size: 12px; }
+  .proto-caption b { color: var(--color-text); font-size: 14px; }
+  .proto-caption .warn { color: var(--color-error-text); text-align: right; }
+  .proto-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 6px; padding: 6px;
+               border-radius: 999px; background: #111; color: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 13px; white-space: nowrap; }
+  .proto-bar button { border: 0; background: transparent; color: #fff; height: 30px; min-width: 30px; border-radius: 999px; cursor: pointer; padding: 0 10px; }
+  .proto-bar button:hover { background: rgba(255,255,255,.14); }
+  .proto-bar button.on { background: rgba(255,255,255,.24); }
+  .proto-bar .label { min-width: 250px; text-align: center; font-weight: 600; }
+  .proto-bar .sep { width: 1px; height: 18px; background: rgba(255,255,255,.25); }
+
+  /* window shell, after states/empty-folder.html */
+  .window { width: 1120px; height: 700px; border-radius: 12px; overflow: hidden; position: relative; background: var(--color-bg);
+            box-shadow: 0 0 0 .5px rgba(0,0,0,.25), 0 22px 60px rgba(0,0,0,.28); display: grid; grid-template: 38px 1fr 40px / 196px 1fr; }
+  .embed .window { width: 100vw; height: 100vh; }
+  .titlebar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; position: relative; background: var(--color-surface);
+              border-bottom: 1px solid var(--color-border); font-weight: 500; gap: 6px; }
+  .traffic { position: absolute; left: 14px; top: 13px; display: flex; gap: 8px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; background: color-mix(in srgb, var(--color-text) 22%, transparent); }
+  .sidebar { background: var(--color-surface); border-right: 1px solid var(--color-border); padding: 14px 10px; overflow: hidden; }
+  .sb-h { font-size: 12px; color: var(--color-muted); font-weight: 600; padding: 6px 10px; margin-top: 6px; }
+  .sb-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-radius: var(--radius-control); font-size: 13px; }
+  .sb-row .n { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--color-muted); }
+  .sb-row.sel { background: var(--color-accent-soft); color: var(--color-accent-text); }
+  .sb-row.sub { padding-left: 28px; }
+  .sb-row.dim { color: var(--color-muted); }
+  .sb-row .warn { color: var(--color-banner-unsaved); margin-left: auto; }
+  .sb-row svg { flex: none; }
+  .main { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .footer { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--color-surface); border-top: 1px solid var(--color-border); color: var(--color-muted); font-size: 12px; }
+  .footer .ic { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; }
+  .footer .ic.dis { opacity: .35; }
+  .footer .right { margin-left: auto; display: flex; gap: 6px; }
+  .footer .vsep { width: 1px; height: 16px; background: var(--color-border); }
+
+  /* shared empty-state pieces */
+  .es { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; max-width: 520px; }
+  .es .icon { color: var(--color-muted); }
+  .es h2 { margin: 6px 0 0; font-size: 16px; font-weight: 600; }
+  .es p { margin: 0; color: var(--color-muted); line-height: 1.55; }
+  .actions { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
+  .btn { height: 30px; padding: 0 14px; border-radius: var(--radius-control); border: 0; cursor: pointer; background: var(--color-accent-fill); color: var(--color-on-accent); font-weight: 600; }
+  .btn:hover { background: var(--color-accent-fill-hover); }
+  .btn2 { height: 30px; padding: 0 12px; border-radius: var(--radius-control); border: 1px solid var(--color-border); background: var(--color-bg); cursor: pointer; }
+  .btn2:hover { background: var(--color-hover); }
+  .link { border: 0; background: none; color: var(--color-accent-text); cursor: pointer; padding: 0 4px; }
+  .btn:focus-visible, .btn2:focus-visible, .link:focus-visible, .tile:focus-visible, .rrow:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+
+  /* 22-B subfolder tiles */
+  .tiles { display: grid; grid-template-columns: repeat(3, 150px); gap: 14px; margin-top: 10px; }
+  .tile { border: 1px solid var(--color-border); background: var(--color-bg); border-radius: 10px; padding: 14px 12px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 8px; }
+  .tile:hover { background: var(--color-hover); }
+  .tile .fn { font-weight: 600; } .tile .meta { font-size: 12px; color: var(--color-muted); }
+  .tile .fi { color: var(--color-accent); }
+  /* 22-C found types */
+  .found { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+  .found span { font-family: var(--font-mono); font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--color-surface); color: var(--color-muted); }
+  /* 22-D recents */
+  .recent { width: 380px; margin-top: 10px; border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; text-align: left; }
+  .recent .rh { font-size: 12px; color: var(--color-muted); padding: 8px 12px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+  .rrow { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: var(--color-bg); padding: 9px 12px; cursor: pointer; text-align: left; }
+  .rrow + .rrow { border-top: 1px solid var(--color-border-subtle); }
+  .rrow:hover { background: var(--color-hover); }
+  .rrow .when { margin-left: auto; font-size: 12px; color: var(--color-muted); }
+  .dropzone { position: absolute; inset: 18px; border: 1.5px dashed transparent; border-radius: 14px; transition: border-color var(--motion-duration-fast), background var(--motion-duration-fast); pointer-events: none; }
+  .main.over .dropzone { border-color: var(--color-accent); background: var(--color-accent-soft); }
+
+  /* 0: native sheet */
+  .sheet-scrim { position: absolute; inset: 38px 0 0 0; }
+  .sheet { position: absolute; top: 38px; left: 50%; transform: translateX(-50%); width: 300px; background: var(--color-panel); border-radius: 0 0 12px 12px;
+           box-shadow: 0 14px 40px rgba(0,0,0,.25), 0 0 0 .5px var(--color-border); padding: 20px 18px 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; z-index: 5; }
+  .sheet .appicon { width: 54px; height: 54px; border-radius: 12px; background: linear-gradient(140deg, #3b82f6, #1e40af); display: grid; place-items: center; color: #fff; font-weight: 700; }
+  .sheet b { font-size: 13px; } .sheet p { margin: 0; font-size: 11.5px; color: var(--color-muted); }
+  .sheet .sbtn { width: 100%; height: 26px; border-radius: 6px; border: 0; background: var(--color-hover); cursor: pointer; font-size: 12.5px; }
+  .sheet .sbtn.pri { background: var(--color-accent-fill); color: var(--color-on-accent); }
+  .blank-msg { color: var(--color-muted); }
+
+  /* 26-C cause tabs */
+  .causes { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--color-surface); border: 1px solid var(--color-border); margin-bottom: 14px; }
+  .causes button { border: 0; background: none; height: 26px; padding: 0 12px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--color-muted); }
+  .causes button.on { background: var(--color-bg); color: var(--color-text); box-shadow: 0 0 0 .5px var(--color-border), 0 1px 2px rgba(0,0,0,.08); }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-muted); }
+  .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--color-banner-unsaved); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .live i { animation: none; } }
+  /* 26-D steps */
+  .steps { display: grid; grid-template-columns: repeat(3, 170px); gap: 14px; margin-top: 12px; text-align: left; }
+  .step { border: 1px solid var(--color-border); border-radius: 10px; padding: 12px; background: var(--color-bg); }
+  .step .k { font-family: var(--font-mono); font-size: 11px; color: var(--color-accent-text); }
+  .step .t { font-weight: 600; margin: 4px 0; } .step .d { font-size: 12px; color: var(--color-muted); line-height: 1.5; }
+  .crumb { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 3px 8px; border-radius: 6px; background: var(--color-surface); margin-top: 6px; }
+
+  .toast { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 20; padding: 8px 14px; border-radius: var(--radius-popover);
+           background: var(--color-panel); box-shadow: var(--shadow-soft); font-size: 12px; opacity: 0; transition: opacity var(--motion-duration-fast); pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="proto-caption"><span><b id="cap-title"></b>&nbsp; <span id="cap-desc"></span></span><span id="cap-note" class="warn"></span></div>
+<div class="window" id="win">
+  <div class="titlebar"><div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div><span id="ticon"></span><span id="ttext">待整理</span></div>
+  <aside class="sidebar" id="sidebar" aria-label="侧栏"></aside>
+  <div class="main" id="main"></div>
+  <div class="footer" id="footer"></div>
+  <div class="toast" id="toast" role="status"></div>
+</div>
+<div class="proto-bar" role="toolbar" aria-label="原型切换">
+  <button id="p22">22 空文件夹</button><button id="p26">26 权限失效</button><span class="sep"></span>
+  <button id="prev" aria-label="上一个方案">←</button><span class="label" id="label"></span><button id="next" aria-label="下一个方案">→</button>
+  <span class="sep"></span><button id="theme">浅色 / 深色</button>
+</div>
+<script>
+const I = {
+  folder: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  folderBig: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  lockBig: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><rect x="9.5" y="12" width="5" height="4" rx="1"/><path d="M10.5 12v-1.2a1.5 1.5 0 0 1 3 0V12"/></svg>',
+  driveBig: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 13h.01M11 13h6"/></svg>',
+  movedBig: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="2.5 2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  heart: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
+  clock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
+  warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>',
+  side: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>',
+  search: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>',
+  sort: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 4v16M3 16l4 4 4-4M14 6h7M14 11h5M14 16h3"/></svg>',
+  info: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>',
+  grid: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg>',
+};
+const RECENTS = [['日本 · 山海之间', '昨天'], ['2024 家庭', '3 天前'], ['壁纸', '上周']];
+const SUBS = [['2024 冲绳', 'sub'], ['手机备份', 'sub'], ['扫描件', 'sub']];
+const A22 = `<div class="actions"><button class="btn" data-say="弹出系统“打开”面板，选择其他文件夹">选择其他文件夹…</button></div>`;
+
+const PAGES = {
+  '22': { name: '空文件夹', variants: {
+    '22-BD': ['定稿：子文件夹 + 换文件夹', '用户 2026-10-28 选定 B+D：这一层有子文件夹时列出子文件夹并可“包含子文件夹浏览”；没有子文件夹时列出最近打开的文件夹。两种情况下整个内容区都可拖入其他文件夹。', '原型上方的分段控件只用于切换两种情况，不是界面的一部分', { subs: () => hasSubs, drop: true, main: () => `<div class="dropzone"></div><div class="es">${seg('subs', [['1', '有子文件夹'], ['0', '没有子文件夹']], hasSubs ? '1' : '0')}<div class="icon">${I.folderBig}</div>` + (hasSubs
+        ? `<h2>这一层没有图片，但有 3 个子文件夹</h2><p>打开一个子文件夹，把子文件夹里的图片一起显示，或把其他文件夹拖到这里。</p>
+        <div class="tiles">${SUBS.map(([n]) => `<button class="tile" data-say="进入子文件夹 “${n}”"><span class="fi">${I.folder}</span><span class="fn">${n}</span><span class="meta">子文件夹</span></button>`).join('')}</div>
+        <div class="actions"><button class="btn" data-say="开启“包含子文件夹”并重新读取">包含子文件夹浏览</button><button class="link" data-say="弹出系统“打开”面板">选择其他文件夹…</button></div></div>`
+        : `<h2>这个文件夹还没有可浏览的图片</h2><p>换一个文件夹继续，或把文件夹拖到这里。</p>
+        <div class="recent"><div class="rh">最近打开</div>${RECENTS.map(([n, w]) => `<button class="rrow" data-say="打开最近文件夹 “${n}”">${I.folder}<span>${n}</span><span class="when">${w}</span></button>`).join('')}</div>
+        <div class="actions"><button class="btn2" data-say="弹出系统“打开”面板">选择其他文件夹…</button></div></div>`) }],
+    '22-0': ['现状：提示框', '代码现在的做法：弹出“此文件夹没有图片”提示框，点“好”后窗口变回空白失败态，侧栏与底栏都不在。', '对照，不建议保留：用户点“好”后无路可走', { sheet: 'empty', blank: true }],
+    '22-A': ['原稿：页内空态', '状态稿 22 页：窗口内居中提示和一个主按钮，侧栏与底部工具仍可用。', '', { main: () => `<div class="es"><div class="icon">${I.folderBig}</div><h2>这个文件夹还没有可浏览的图片</h2><p>可以选择其他文件夹，或稍后再来查看。</p>${A22}</div>` }],
+    '22-B': ['子文件夹引导', '这一层没有图片但有子文件夹时，直接列出子文件夹，并提供“包含子文件夹”一键重扫（P2-04 已有该开关）。没有子文件夹时退回 22-A。', '只列名字；子文件夹里有几张图在扫描前未知，不显示数字', { subs: true, main: () => `<div class="es"><div class="icon">${I.folderBig}</div><h2>这一层没有图片，但有 3 个子文件夹</h2><p>打开一个子文件夹，或把子文件夹里的图片一起显示。</p>
+        <div class="tiles">${SUBS.map(([n]) => `<button class="tile" data-say="进入子文件夹 “${n}”"><span class="fi">${I.folder}</span><span class="fn">${n}</span><span class="meta">子文件夹</span></button>`).join('')}</div>
+        <div class="actions"><button class="btn" data-say="开启“包含子文件夹”并重新读取">包含子文件夹浏览</button><button class="link" data-say="弹出系统“打开”面板">选择其他文件夹…</button></div></div>` }],
+    '22-C': ['说明原因', '告诉用户这里有什么：找到了哪些不是图片的文件，或者真的什么都没有，让“为什么是空的”一目了然。', '需要扫描时按扩展名统计非图片文件，现在的扫描不统计；数字必须来自真实扫描', { main: () => `<div class="es"><div class="icon">${I.folderBig}</div><h2>这个文件夹里没有 picsee 能打开的图片</h2><p>读取到 14 个其他文件：</p>
+        <div class="found"><span>.pdf × 6</span><span>.mov × 5</span><span>.zip × 3</span></div>
+        <p style="font-size:12px">picsee 可打开 JPEG、PNG、HEIC、TIFF 等常见图片格式。</p>${A22}</div>` }],
+    '22-D': ['换一个文件夹', '空态直接给出最近打开的文件夹（OPEN-06 已有，最多 10 项），一步切走；整个内容区同时是拖放目标，拖入其他文件夹即打开。', '', { drop: true, main: () => `<div class="dropzone"></div><div class="es"><div class="icon">${I.folderBig}</div><h2>这个文件夹还没有可浏览的图片</h2><p>换一个文件夹继续，或把文件夹拖到这里。</p>
+        <div class="recent"><div class="rh">最近打开</div>${RECENTS.map(([n, w]) => `<button class="rrow" data-say="打开最近文件夹 “${n}”">${I.folder}<span>${n}</span><span class="when">${w}</span></button>`).join('')}</div>
+        <div class="actions"><button class="btn2" data-say="弹出系统“打开”面板">选择其他文件夹…</button></div></div>` }],
+  } },
+  '26': { name: '目录权限失效', variants: {
+    '26-BC': ['定稿：侧栏标记 + 按原因区分', '用户 2026-10-28 选定 B+C：出问题的文件夹在侧栏变灰带 ⚠，收藏和最近查看照常可用；主区按原因给出路：授权失效 → 重新选择；磁盘未连接 → 插上自动恢复；被移走或改名 → 到新位置选择。', '原型上方的分段控件只用于切换三种原因；能否可靠区分原因要在实现前确认', { broken: true, mark: true, cause: true, main: () => causeView(true) }],
+    '26-0': ['现状：提示框', '代码现在的做法：弹出“无法访问此文件夹”提示框，三个按钮；取消后窗口里没有任何说明，也没有再次重连的入口。', '对照：@1x 已验证的就是这一版', { sheet: 'access', blank: true, broken: true }],
+    '26-A': ['原稿：页内状态', '状态稿 26 页：窗口内居中说明，“重新选择文件夹”为主按钮，“选择其他文件夹”为次要链接。', '', { broken: true, main: () => `<div class="es"><div class="icon">${I.lockBig}</div><h2>无法访问这个文件夹</h2><p>访问权限可能已失效，请重新选择该文件夹。</p><div class="actions"><button class="btn" data-say="弹出“打开”面板，定位到上次的位置">重新选择文件夹…</button><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button></div></div>` }],
+    '26-B': ['侧栏标记 + 其他内容照常', '只有出问题的文件夹在侧栏里带 ⚠ 并变灰，子文件夹收起；收藏和最近查看照常可点，让用户知道“坏的只是这一个”。主区同 26-A。', '收藏/最近里来自该文件夹的图片同样不可用，点开时应走同一个重连页', { broken: true, mark: true, main: () => `<div class="es"><div class="icon">${I.lockBig}</div><h2>无法访问“待整理”</h2><p>访问权限可能已失效。重新选择这个文件夹后，picsee 会回到你刚才的位置。<br>侧栏里的收藏和最近查看不受影响。</p><div class="actions"><button class="btn" data-say="弹出“打开”面板，定位到上次的位置">重新选择文件夹…</button><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button></div></div>` }],
+    '26-C': ['按原因区分', '分清三种原因，各给最合适的出路：授权失效 → 重新选择；外接磁盘未连接 → 插上后自动恢复，无需操作；文件夹被移走或改名 → 到新位置重新选择。', '能否可靠区分要在实现前确认：卷未挂载可由 FOLDER-09 检测，“移走”需要书签解析结果', { broken: true, mark: true, cause: true, main: () => causeView() }],
+    '26-D': ['引导式重连', '用三步说明为什么要重新选择（沙盒只允许读取你授权过的文件夹），并告诉用户面板会停在哪、要选哪个。', '面板定位只能“尽量”：系统面板可能不接受上次的位置', { broken: true, main: () => `<div class="es"><div class="icon">${I.lockBig}</div><h2>需要重新允许 picsee 读取“待整理”</h2><p>macOS 只允许 picsee 读取你亲自选择过的文件夹。这个授权已经失效，重新选择一次即可恢复，不会移动或复制任何文件。</p>
+        <div class="steps"><div class="step"><div class="k">1</div><div class="t">点“重新选择”</div><div class="d">系统会打开选择面板。</div></div>
+        <div class="step"><div class="k">2</div><div class="t">找到这个文件夹</div><div class="d">上次的位置：<br><span class="crumb">${I.folder} 图片 › 待整理</span></div></div>
+        <div class="step"><div class="k">3</div><div class="t">点“授权”</div><div class="d">picsee 回到你刚才浏览的位置。</div></div></div>
+        <div class="actions"><button class="btn" data-say="弹出“打开”面板，定位到上次的位置">重新选择文件夹…</button><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button></div></div>` }],
+  } },
+};
+
+let cause = 'grant';
+function causeView(final) {
+  const keep = final ? '<br>侧栏里的收藏和最近查看不受影响。' : '';
+  const C = {
+    grant: [I.lockBig, '无法访问“待整理”', '访问权限已失效。重新选择这个文件夹即可恢复，picsee 会回到你刚才的位置。' + keep, `<button class="btn" data-say="弹出“打开”面板">重新选择文件夹…</button><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button>`],
+    volume: [I.driveBig, '外接磁盘“T7”未连接', '“待整理”在外接磁盘上。重新连接磁盘后，这里会自动恢复，不需要再选择一次。' + keep, `<span class="live"><i></i>等待磁盘连接…</span><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button>`],
+    moved: [I.movedBig, '“待整理”不在原来的位置', '它可能被移动、改名或移到了废纸篓。在新位置重新选择它即可继续。' + keep, `<button class="btn" data-say="弹出“打开”面板">在新位置选择…</button><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button>`],
+  }[cause];
+  return `<div class="es">${seg('cause', [['grant', '授权失效'], ['volume', '磁盘未连接'], ['moved', '被移走或改名']], cause)}
+    <div class="icon">${C[0]}</div><h2>${C[1]}</h2><p>${C[2]}</p><div class="actions">${C[3]}</div></div>`;
+}
+
+function seg(name, opts, on) {
+  return `<div class="causes" role="tablist" aria-label="原型切换">${opts.map(([k, n]) => `<button role="tab" aria-selected="${k === on}" class="${k === on ? 'on' : ''}" data-seg="${name}" data-k="${k}">${n}</button>`).join('')}</div>`;
+}
+const params = new URLSearchParams(location.search);
+let hasSubs = params.get('subs') !== '0';
+if (['grant', 'volume', 'moved'].includes(params.get('cause'))) cause = params.get('cause');
+let page = params.get('page') === '26' ? '26' : '22';
+let cur = params.get('variant');
+if (!cur || !PAGES[page].variants[cur]) cur = page === '22' ? '22-BD' : '26-BC';
+let theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+const $ = id => document.getElementById(id);
+
+function sidebar(opt) {
+  const folderRow = opt.blank ? '' : `<div class="sb-h">文件夹</div>
+    <div class="sb-row ${opt.mark ? 'dim' : 'sel'}">${I.folder}<span>待整理</span>${opt.mark ? `<span class="warn" title="无法访问">${I.warn}</span>` : `<span class="n">${opt.broken ? '—' : '0'}</span>`}</div>
+    ${!opt.broken && (typeof opt.subs === 'function' ? opt.subs() : opt.subs) ? SUBS.map(([n]) => `<div class="sb-row sub">${I.folder}<span>${n}</span></div>`).join('') : ''}`;
+  return `<div class="sb-h" style="margin-top:0">图库</div><div class="sb-row">${I.heart}<span>个人收藏</span><span class="n">3</span></div><div class="sb-row">${I.clock}<span>最近查看</span><span class="n">1</span></div>${folderRow}`;
+}
+function footer(opt) {
+  const status = opt.blank ? '' : (opt.broken ? '无法访问' : '0 张图片');
+  return `<span class="ic">${I.side}</span><span class="vsep"></span><span>${status}</span><span class="right">${[I.search, I.sort, I.info, I.grid].map(i => `<span class="ic dis">${i}</span>`).join('')}</span>`;
+}
+function render() {
+  document.documentElement.className = `theme-${theme}` + (params.has('embed') ? ' embed' : '');
+  const v = PAGES[page].variants[cur], opt = v[3];
+  $('ticon').innerHTML = opt.sheet === 'empty' ? '' : I.folder;
+  $('ttext').textContent = opt.sheet === 'empty' ? 'Picsee' : '待整理';
+  $('sidebar').innerHTML = sidebar(opt);
+  $('footer').innerHTML = footer(opt);
+  $('win').style.gridTemplateColumns = opt.blank ? '0 1fr' : '';
+  $('sidebar').style.visibility = opt.blank ? 'hidden' : '';
+  $('sidebar').style.padding = opt.blank ? '0' : '';
+  $('main').className = 'main';
+  if (opt.sheet) {
+    $('main').innerHTML = `<span class="blank-msg">${opt.sheet === 'empty' ? '' : ''}</span>`;
+    const sheet = opt.sheet === 'empty'
+      ? `<div class="sheet" role="alertdialog"><div class="appicon">P</div><b>此文件夹没有图片</b><button class="sbtn pri" data-say="关闭提示：窗口停在空白页">好</button></div>`
+      : `<div class="sheet" role="alertdialog"><div class="appicon">P</div><b>无法访问此文件夹</b><p>访问权限可能已失效。请重新选择“待整理”。</p><button class="sbtn pri" data-say="弹出“打开”面板">重新选择文件夹…</button><button class="sbtn" data-say="弹出“打开”面板">选择其他文件夹…</button><button class="sbtn" data-say="关闭提示：窗口里不再有任何说明">取消</button></div>`;
+    $('main').insertAdjacentHTML('beforeend', sheet);
+  } else {
+    $('main').innerHTML = opt.main();
+  }
+  if (opt.drop) $('main').classList.add('droppable');
+  $('label').textContent = `${cur} · ${v[0]}`;
+  $('cap-title').textContent = `${PAGES[page].name} · ${cur} ${v[0]}`;
+  $('cap-desc').textContent = v[1];
+  $('cap-note').textContent = v[2] ? '⚠ ' + v[2] : '';
+  $('p22').classList.toggle('on', page === '22'); $('p26').classList.toggle('on', page === '26');
+  const p = new URLSearchParams(location.search); p.set('page', page); p.set('variant', cur); p.set('theme', theme); if (page === '22') { p.set('subs', hasSubs ? '1' : '0'); p.delete('cause'); } else { p.set('cause', cause); p.delete('subs'); } history.replaceState(null, '', '?' + p);
+}
+const keys = () => Object.keys(PAGES[page].variants);
+const step = k => { const ks = keys(); cur = ks[(ks.indexOf(cur) + k + ks.length) % ks.length]; render(); };
+$('prev').onclick = () => step(-1); $('next').onclick = () => step(1);
+$('p22').onclick = () => { page = '22'; cur = '22-BD'; render(); };
+$('p26').onclick = () => { page = '26'; cur = '26-BC'; render(); };
+$('theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; render(); };
+document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('.causes')) return; if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); });
+let tt; const say = m => { $('toast').textContent = '（原型）' + m; $('toast').classList.add('show'); clearTimeout(tt); tt = setTimeout(() => $('toast').classList.remove('show'), 1800); };
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-seg]'); if (c) { if (c.dataset.seg === 'cause') cause = c.dataset.k; else hasSubs = c.dataset.k === '1'; render(); return; }
+  const s = e.target.closest('[data-say]'); if (s) say(s.dataset.say);
+});
+const main = $('main');
+['dragenter', 'dragover'].forEach(ev => main.addEventListener(ev, e => { if (!main.classList.contains('droppable')) return; e.preventDefault(); main.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => main.addEventListener(ev, e => { if (!main.classList.contains('droppable')) return; e.preventDefault(); main.classList.remove('over'); if (ev === 'drop') say('打开拖入的文件夹'); }));
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!doctype html>
+<!--
+  picsee user journeys (wireflow). Organises the static state pages in manifest.json into the paths a user takes.
+  Every card is a live, scaled iframe of the real state page. Arrow labels are triggers from DESIGN.md §6, or plain
+  UI actions where DESIGN.md defines no shortcut. Pages from manifest.json that no journey uses are listed at the end
+  automatically. Works over HTTP (npm run preview:states) and from file:// (titles then come from the fallback list).
+-->
+<html lang="zh-CN" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picsee · 用户旅程</title>
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/globals.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/light.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/dark.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: var(--font-size-ui)/1.45 var(--font-sans); background: var(--color-surface); color: var(--color-text); -webkit-font-smoothing: antialiased; }
+  a { color: var(--color-accent-text); }
+  header.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 12px 24px;
+               background: color-mix(in srgb, var(--color-surface) 92%, transparent); border-bottom: 1px solid var(--color-border); backdrop-filter: blur(8px); }
+  header.top strong { font-size: var(--font-size-title); }
+  header.top .meta { color: var(--color-muted); font-size: var(--font-size-ui-sm); }
+  header.top nav { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  header.top nav a, .seg button { font-size: var(--font-size-ui-sm); padding: 4px 10px; border-radius: 999px; text-decoration: none;
+               color: var(--color-text); background: var(--color-bg); border: 1px solid var(--color-border); cursor: pointer; font-family: inherit; }
+  header.top nav a:hover { background: var(--color-hover); }
+  main { padding: 8px 24px 80px; max-width: 1680px; margin: 0 auto; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 16px 0 4px; color: var(--color-muted); font-size: var(--font-size-ui-sm); }
+  .legend i { display: inline-block; width: 28px; vertical-align: middle; margin-right: 6px; border-top: 2px solid var(--color-text); }
+  .legend i.dash { border-top: 2px dashed var(--color-muted); }
+  .legend .tag { margin-right: 6px; }
+
+  section.journey { margin-top: 28px; padding: 20px 22px 22px; border-radius: 14px; background: var(--color-bg); box-shadow: var(--shadow-soft); scroll-margin-top: 70px; }
+  .jhead { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .jhead h2 { margin: 0; font-size: 18px; }
+  .jhead .no { font-family: var(--font-mono); color: var(--color-muted); font-size: var(--font-size-ui-sm); }
+  .jhead .goal { color: var(--color-muted); }
+  .jhead button.play { margin-left: auto; height: 28px; padding: 0 12px; border: 0; border-radius: var(--radius-control); cursor: pointer;
+                       background: var(--color-accent-fill); color: var(--color-on-accent); font: 600 var(--font-size-ui-sm) var(--font-sans); }
+  .jhead button.play:hover { background: var(--color-accent-fill-hover); }
+  .stages { display: flex; gap: 6px; margin: 10px 0 0; flex-wrap: wrap; }
+  .stages span { font-size: 11px; color: var(--color-muted); background: var(--color-surface); padding: 2px 8px; border-radius: 999px; }
+
+  .flow { display: flex; align-items: flex-start; gap: 0; margin-top: 18px; overflow-x: auto; padding-bottom: 6px; }
+  .col { display: flex; flex-direction: column; gap: 0; align-items: center; flex: none; }
+  .branch { display: flex; flex-direction: column; align-items: center; }
+  .branch .down { height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; width: 100%; }
+  .branch .down::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 50%; border-left: 2px dashed var(--color-muted); }
+  .branch .down span { position: relative; z-index: 1; background: var(--color-bg); padding: 1px 6px; font-size: 11px; color: var(--color-muted); max-width: 230px; text-align: center; }
+
+  .arrow { flex: none; width: 128px; align-self: flex-start; margin-top: 64px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .arrow .line { width: 100%; height: 2px; background: var(--color-text); position: relative; }
+  .arrow .line::after { content: ""; position: absolute; right: -1px; top: -5px; border: 6px solid transparent; border-left: 8px solid var(--color-text); border-right: 0; }
+  .arrow .lab { font-size: 11px; text-align: center; line-height: 1.35; color: var(--color-text); padding: 0 6px; }
+  .arrow .lab kbd, .branch kbd { font-family: var(--font-mono); font-size: 10.5px; padding: 0 4px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); }
+  .arrow.back .line { background: none; border-top: 2px dashed var(--color-muted); height: 0; }
+  .arrow.back .line::after { left: -1px; right: auto; top: -7px; border-left: 0; border-right: 8px solid var(--color-muted); }
+  .arrow.back .lab { color: var(--color-muted); }
+
+  .card { width: 256px; flex: none; text-align: left; border: 0; padding: 0; background: none; cursor: pointer; font: inherit; color: inherit; }
+  .thumb { width: 256px; height: 160px; position: relative; overflow: hidden; border-radius: 8px; background: var(--color-surface);
+           box-shadow: 0 0 0 1px var(--color-border), 0 6px 18px color-mix(in srgb, var(--color-text) 8%, transparent); transition: box-shadow var(--motion-duration-fast), transform var(--motion-duration-fast); }
+  .card:hover .thumb, .card:focus-visible .thumb { box-shadow: 0 0 0 2px var(--color-accent), 0 10px 24px color-mix(in srgb, var(--color-text) 14%, transparent); transform: translateY(-2px); }
+  .card:focus-visible { outline: none; }
+  .thumb iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; pointer-events: none; background: var(--color-bg); }
+  .thumb .shield { position: absolute; inset: 0; }
+  .cap { margin-top: 8px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .cap b { font-size: var(--font-size-ui); font-weight: 600; }
+  .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--color-surface); color: var(--color-muted); white-space: nowrap; }
+  .tag.cand { background: color-mix(in srgb, var(--color-banner-unsaved) 18%, transparent); color: color-mix(in srgb, var(--color-banner-unsaved) 60%, var(--color-text)); }
+  .tag.err { background: var(--color-danger-soft); color: var(--color-error-text); }
+  .st { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; white-space: nowrap; font-weight: 600; }
+  .st.dev { background: var(--color-running-fill); color: var(--color-running-text); }
+  .st.unit { background: var(--color-accent-soft); color: var(--color-accent-text); }
+  .st.none { background: var(--color-surface); color: var(--color-muted); border: 1px dashed var(--color-border); }
+  .thumb .badge { position: absolute; left: 6px; top: 6px; z-index: 2; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+  .stnote { font-size: 11px; color: var(--color-error-text); margin-top: 2px; max-width: 256px; }
+  .note { font-size: 11.5px; color: var(--color-muted); margin-top: 2px; max-width: 256px; }
+
+  .ref { display: grid; grid-template-columns: repeat(auto-fill, minmax(256px, 1fr)); gap: 22px 18px; margin-top: 18px; }
+
+  /* player */
+  .player { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; background: color-mix(in srgb, #000 82%, transparent); color: #fff; }
+  .player.open { display: flex; }
+  .player .bar { display: flex; align-items: center; gap: 12px; padding: 10px 18px; font-size: 13px; }
+  .player .bar b { font-size: 14px; }
+  .player .bar .trig { color: #cbd5e1; }
+  .player .bar .sp { margin-left: auto; }
+  .player button { height: 30px; min-width: 30px; padding: 0 10px; border: 0; border-radius: 999px; background: rgba(255,255,255,.12); color: #fff; cursor: pointer; font: inherit; }
+  .player button:hover { background: rgba(255,255,255,.22); }
+  .player button:disabled { opacity: .35; cursor: default; }
+  .player .stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 18px 18px; }
+  .player .frame { position: relative; flex: none; border-radius: 10px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .player .frame iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #fff; }
+  .player .dots { display: flex; gap: 6px; }
+  .player .dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.3); }
+  .player .dots i.on { background: #fff; }
+</style>
+</head>
+<body>
+<header class="top">
+  <strong>picsee · 用户旅程</strong>
+  <span class="meta" id="meta"></span>
+  <nav id="jnav" aria-label="旅程"></nav>
+</header>
+<main>
+  <div class="legend">
+    <span><i></i>主路径（箭头上是触发方式）</span>
+    <span><i class="dash"></i>分支、空态、异常或返回</span>
+    <span><span class="tag">P1-02</span>开发计划工作包（计划 §1.3）</span>
+    <span><span class="tag cand">候选</span>已定稿、未实现的新设计</span>
+    <span><span class="st dev">部分真机</span> <span class="st unit">仅单元</span> <span class="st none">未开始</span> 实现进度，取自功能账簿（<span id="asof"></span>）；还没有一页是 Shipped</span>
+    <span>点卡片看大图；“播放”按 ← / → 走完整条旅程，Esc 关闭</span>
+  </div>
+  <div id="journeys"></div>
+</main>
+
+<div class="player" id="player" role="dialog" aria-modal="true" aria-label="旅程播放">
+  <div class="bar">
+    <b id="p-title"></b><span id="p-step"></span><span class="trig" id="p-trig"></span>
+    <span class="sp"></span><span class="dots" id="p-dots"></span>
+    <button id="p-prev" aria-label="上一步">←</button><button id="p-next" aria-label="下一步">→</button>
+    <a id="p-open" target="_blank" rel="noopener" style="color:#cbd5e1">新窗口打开 ↗</a>
+    <button id="p-close" aria-label="关闭">Esc</button>
+  </div>
+  <div class="stage" id="p-stage"><div class="frame" id="p-frame"></div></div>
+</div>
+
+<script>
+// Fallback titles, used only when manifest.json cannot be fetched (file://). Over HTTP the manifest wins.
+const FALLBACK = {
+  'grid-light': ['11 网格 · 浅色', 1280, 800], 'grid-dark': ['12 网格 · 深色', 1280, 800], 'viewer-quiet': ['13 大图 · 沉浸隐藏', 1280, 800],
+  'viewer-controls': ['14 大图 · 工具显示', 1280, 800], 'grid-display': ['15 网格 · 显示与外观', 1280, 800], 'viewer-inspector': ['16 大图 · 图片信息', 1280, 800],
+  'first-launch': ['21 首次打开', 1280, 800], 'empty-folder': ['22 空文件夹', 1280, 800], 'search-empty': ['23 搜索无结果', 1280, 800],
+  'folder-loading': ['24 读取文件夹', 1280, 800], 'image-error': ['25 图片无法读取', 1280, 800], 'permission-denied': ['26 目录权限失效', 1280, 800],
+  'original-size': ['27 原始尺寸与平移', 1280, 800], 'keyboard-focus': ['28 键盘焦点', 1280, 800], 'compact-grid': ['29 紧凑窗口', 800, 680],
+  'components': ['30 组件与状态', 1280, 800], 'grid-context-menu': ['31 图片右键菜单 · C', 1280, 800], 'grid-multiselect': ['32 基础多选 · C', 1280, 800],
+  'viewer-filmstrip': ['33 胶片条展开 · C', 1280, 800], 'viewer-inspector-light': ['34 图片信息 · 浅色 · C', 1280, 800],
+};
+// Pages that are not in manifest.json (candidates). src overrides the default <name>.html.
+const EXTRA = {
+  'first-launch-b4': { title: '21′ 首次打开 · B4 散落相纸', src: 'prototype-first-launch-b.html?variant=B4&embed=1', w: 1000, h: 700, cand: true },
+  'empty-folder-bd': { title: '22′ 空文件夹 · 子文件夹 + 换文件夹', src: 'prototype-states-22-26.html?page=22&variant=22-BD&subs=1&embed=1', w: 1120, h: 700, cand: true },
+  'permission-denied-bc': { title: '26′ 权限失效 · 侧栏标记 + 按原因区分', src: 'prototype-states-22-26.html?page=26&variant=26-BC&cause=volume&embed=1', w: 1120, h: 700, cand: true },
+};
+// Work packages from the development plan §1.3 mapping.
+const WP = { 'grid-light': 'P3-01/10', 'grid-dark': 'P1-09 · P3-10', 'viewer-quiet': 'P1-08', 'viewer-controls': 'P1-08', 'grid-display': 'P1-09 · P3-11',
+  'viewer-inspector': 'P3-13 · P5-01', 'first-launch': 'P1-02', 'empty-folder': 'P2-08', 'search-empty': 'P3-10', 'folder-loading': 'P2-02/04 · P3-10',
+  'image-error': 'P1-07 · P2-03', 'permission-denied': 'P2-01/08', 'original-size': 'P0-03 · P1-03', 'first-launch-b4': '待排期', 'empty-folder-bd': 'P2-08 待排期', 'permission-denied-bc': 'P2-08 待排期' };
+
+// Implementation status per page, from docs/feature-ledger.md on origin/main and the code at that commit.
+// dev = implemented, some @1x device record; unit = implemented, unit tests only; none = ledger row Absent.
+// No page is Shipped. Update this table when the ledger moves.
+const STATUS_ASOF = '账簿 origin/main 4c01d88 · 2026-10-27';
+const STATUS = {
+  'first-launch': ['dev', 'OPEN-01'], 'viewer-quiet': ['dev', 'CHROME-01'], 'viewer-controls': ['dev', 'CHROME-02'],
+  'original-size': ['dev', 'VIEW-02/04'], 'image-error': ['dev', 'OPEN-05'], 'keyboard-focus': ['dev', 'A11Y-02'],
+  'permission-denied': ['dev', 'ACCESS-03', '实现为弹出提示框，不是页内状态；浏览中被撤销（ACCESS-04）未开始'],
+  'grid-light': ['unit', 'GRID-01/02', '侧栏“所有照片”（GRID-16）未开始'], 'grid-dark': ['unit', 'PREF-01 · GRID-01'],
+  'folder-loading': ['unit', 'FOLDER-01/05'], 'search-empty': ['unit', 'GRID-07'], 'grid-multiselect': ['unit', 'GRID-04'],
+  'compact-grid': ['unit', 'GRID-08'], 'viewer-inspector': ['unit', 'INFO-01'], 'viewer-inspector-light': ['unit', 'INFO-01'],
+  'empty-folder': ['none', 'FOLDER-08', '现在只弹“此文件夹没有图片”提示框，不是本页设计'],
+  'grid-display': ['none', 'PREF-03'], 'viewer-filmstrip': ['none', 'FILM-01'], 'grid-context-menu': ['none', 'GRID-09'],
+  'first-launch-b4': ['none', 'OPEN-08'], 'empty-folder-bd': ['none', 'FOLDER-08'], 'permission-denied-bc': ['none', 'ACCESS-03/04 · FOLDER-09'],
+};
+const ST_LABEL = { dev: '部分真机', unit: '仅单元', none: '未开始' };
+
+// A journey: main steps left to right; `t` is the trigger on the arrow INTO that step; `branches` hang below a step.
+const JOURNEYS = [
+  { id: 'J1', name: '第一次打开一个文件夹', goal: '从空窗口到看见自己的照片', stages: ['发现', '授权', '读取', '浏览'],
+    steps: [
+      { p: 'first-launch', note: '无目录：选择或拖入；不可用操作禁用', branches: [{ p: 'first-launch-b4', t: '定稿的新首屏（替换 21）' }] },
+      { p: 'folder-loading', t: '「选择文件夹…」<br>或拖入文件夹', note: '未得总数不伪造百分比',
+        branches: [{ p: 'empty-folder', t: '文件夹里没有图片' }, { p: 'empty-folder-bd', t: '定稿的新设计（替换 22，2026-10-28）' }] },
+      { p: 'grid-light', t: '扫描完成', note: '首张为当前项',
+        branches: [{ p: 'permission-denied', t: '之后打开时授权已失效' }, { p: 'permission-denied-bc', t: '定稿的新设计（替换 26，2026-10-28）' }] },
+    ] },
+  { id: 'J2', name: '看一张图', goal: '打开、翻看、看细节，再回到原处', stages: ['选择', '沉浸查看', '唤回工具', '细看', '返回'],
+    steps: [
+      { p: 'grid-light', note: '选中缩略图' },
+      { p: 'viewer-quiet', t: '<kbd>Space</kbd> / <kbd>Enter</kbd><br>或双击', note: '工具与红绿灯一起隐藏',
+        branches: [{ p: 'image-error', t: '图片无法读取 → 重试 / 下一张 / <kbd>Esc</kbd>' }] },
+      { p: 'viewer-controls', t: '移到边缘 / <kbd>Tab</kbd>', note: '<kbd>←</kbd> <kbd>→</kbd> 翻图',
+        branches: [{ p: 'viewer-filmstrip', t: '展开胶片条' }] },
+      { p: 'original-size', t: '<kbd>1</kbd> 原始尺寸<br><kbd>0</kbd> 适应窗口', note: '拖动平移，限制边界' },
+      { back: true, t: '<kbd>Esc</kbd> 回到网格<br>保留选择与滚动位置' },
+    ] },
+  { id: 'J3', name: '找到并挑出几张', goal: '缩小范围，选中多张，对它们做事', stages: ['筛选', '多选', '操作'],
+    steps: [
+      { p: 'grid-light', note: '浏览当前文件夹', branches: [{ p: 'search-empty', t: '<kbd>⌘F</kbd> 搜索无结果 → 清除搜索' }] },
+      { p: 'grid-multiselect', t: '<kbd>⌘</kbd> 点击切换<br><kbd>Shift</kbd> 范围选择', note: '选择集合、当前项、焦点是三种状态' },
+      { p: 'grid-context-menu', t: '右键 / 菜单键', note: '<kbd>Esc</kbd> 关闭并回到触发处' },
+    ] },
+  { id: 'J4', name: '了解一张图，调整外观', goal: '看真实元数据；按喜好改主题、密度和显示', stages: ['查看信息', '调整显示', '深色'],
+    steps: [
+      { p: 'viewer-controls', note: '大图工具显示时' },
+      { p: 'viewer-inspector', t: '图片信息按钮', note: '读不到的显示“未知”', branches: [{ p: 'viewer-inspector-light', t: '浅色外观' }] },
+      { p: 'grid-display', t: '回到网格<br>点「显示」', note: '主题、密度、文件名、裁剪' },
+      { p: 'grid-dark', t: '选深色 / 跟随系统' },
+    ] },
+];
+const REF_TITLE = '贯穿所有旅程的参考页';
+const REF_NOTE = '这些页面不是某一步，而是每条旅程都要满足的约束：键盘焦点、小窗口布局和组件状态。';
+
+let INFO = {};
+const info = n => INFO[n] || (EXTRA[n] && { title: EXTRA[n].title, w: EXTRA[n].w, h: EXTRA[n].h }) || { title: n, w: 1280, h: 800 };
+const srcOf = n => (EXTRA[n] && EXTRA[n].src) || n + '.html';
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function card(n, note, extraTag) {
+  const i = info(n), s = 256 / i.w, h = Math.round(i.h * s);
+  const tags = [WP[n] ? `<span class="tag${EXTRA[n] && EXTRA[n].cand ? ' cand' : ''}">${EXTRA[n] && EXTRA[n].cand ? '候选 · ' : ''}${WP[n]}</span>` : '', extraTag || ''].join('');
+  const st = STATUS[n];
+  const badge = st ? `<span class="st ${st[0]} badge">${ST_LABEL[st[0]]} · ${st[1]}</span>` : '';
+  return `<button class="card" data-page="${n}" aria-label="${esc(i.title)}${st ? '，' + ST_LABEL[st[0]] : ''}">
+    <div class="thumb" style="height:${Math.min(h, 200)}px">${badge}<iframe loading="lazy" tabindex="-1" aria-hidden="true" src="${srcOf(n)}" style="width:${i.w}px;height:${i.h}px;transform:scale(${s})"></iframe><div class="shield"></div></div>
+    <div class="cap"><b>${esc(i.title)}</b>${tags}</div>${note ? `<div class="note">${note}</div>` : ''}${st && st[2] ? `<div class="stnote">${st[2]}</div>` : ''}</button>`;
+}
+function arrow(t, back) { return `<div class="arrow${back ? ' back' : ''}"><div class="lab">${t || ''}</div><div class="line"></div></div>`; }
+
+function render() {
+  const used = new Set();
+  const out = JOURNEYS.map(j => {
+    const parts = j.steps.map((s, k) => {
+      if (s.back) return arrow(s.t, true);
+      used.add(s.p);
+      const br = (s.branches || []).map(b => { used.add(b.p); return `<div class="branch"><div class="down"><span>${b.t}</span></div>${card(b.p, '', b.p === 'image-error' || b.p === 'permission-denied' ? '<span class="tag err">异常</span>' : '')}</div>`; }).join('');
+      return (k ? arrow(s.t) : '') + `<div class="col">${card(s.p, s.note)}${br}</div>`;
+    }).join('');
+    return `<section class="journey" id="${j.id}"><div class="jhead"><span class="no">${j.id}</span><h2>${j.name}</h2><span class="goal">目标：${j.goal}</span>
+      <button class="play" data-play="${j.id}">▶ 播放旅程</button></div>
+      <div class="stages">${j.stages.map(s => `<span>${s}</span>`).join('<span style="background:none">→</span>')}</div>
+      <div class="flow">${parts}</div></section>`;
+  });
+  const rest = Object.keys(INFO).filter(n => !used.has(n));
+  out.push(`<section class="journey" id="REF"><div class="jhead"><span class="no">REF</span><h2>${REF_TITLE}</h2><span class="goal">${REF_NOTE}</span></div>
+    <div class="ref">${rest.map(n => card(n, '')).join('')}</div></section>`);
+  document.getElementById('journeys').innerHTML = out.join('');
+  document.getElementById('jnav').innerHTML = JOURNEYS.map(j => `<a href="#${j.id}">${j.id} ${j.name}</a>`).join('') + `<a href="#REF">参考页</a><a href="index.html">逐页索引</a>`;
+  const total = Object.keys(INFO).length;
+  const cnt = k => Object.keys(INFO).filter(n => STATUS[n] && STATUS[n][0] === k).length;
+  document.getElementById('meta').textContent = `${JOURNEYS.length} 条旅程 · 覆盖 ${[...used].filter(n => INFO[n]).length}/${total} 份状态稿 · 进度：部分真机 ${cnt('dev')} · 仅单元 ${cnt('unit')} · 未开始 ${cnt('none')}`;
+  document.getElementById('asof').textContent = STATUS_ASOF;
+}
+
+// player
+let seq = [], at = 0, jname = '';
+const P = id => document.getElementById(id);
+function sequenceOf(j) {
+  const s = [];
+  j.steps.forEach(st => { if (st.back) { s.push({ p: j.steps[0].p, t: st.t }); return; } s.push({ p: st.p, t: st.t || '起点' }); (st.branches || []).forEach(b => s.push({ p: b.p, t: '分支：' + b.t, br: true })); });
+  return s;
+}
+function show() {
+  const { p, t } = seq[at], i = info(p);
+  P('p-title').textContent = jname; P('p-step').textContent = `${at + 1} / ${seq.length} · ${i.title}`; P('p-trig').innerHTML = '← ' + t.replace(/<br>/g, ' ');
+  P('p-dots').innerHTML = seq.map((_, k) => `<i class="${k === at ? 'on' : ''}"></i>`).join('');
+  P('p-prev').disabled = at === 0; P('p-next').disabled = at === seq.length - 1; P('p-open').href = srcOf(p);
+  const st = P('p-stage').getBoundingClientRect(), sc = Math.min((st.width - 36) / i.w, (st.height - 18) / i.h, 1);
+  P('p-frame').style.width = i.w * sc + 'px'; P('p-frame').style.height = i.h * sc + 'px';
+  P('p-frame').innerHTML = `<iframe title="${esc(i.title)}" src="${srcOf(p)}" style="width:${i.w}px;height:${i.h}px;transform:scale(${sc})"></iframe>`;
+}
+function open(list, start, name) { seq = list; at = start; jname = name; P('player').classList.add('open'); show(); P('p-next').focus(); }
+function close() { P('player').classList.remove('open'); P('p-frame').innerHTML = ''; }
+document.addEventListener('click', e => {
+  const pl = e.target.closest('[data-play]'); if (pl) { const j = JOURNEYS.find(x => x.id === pl.dataset.play); open(sequenceOf(j), 0, `${j.id} ${j.name}`); return; }
+  const c = e.target.closest('.card'); if (c) open([{ p: c.dataset.page, t: '单页' }], 0, info(c.dataset.page).title);
+});
+P('p-prev').onclick = () => { if (at > 0) { at--; show(); } };
+P('p-next').onclick = () => { if (at < seq.length - 1) { at++; show(); } };
+P('p-close').onclick = close;
+document.addEventListener('keydown', e => { if (!P('player').classList.contains('open')) return;
+  if (e.key === 'Escape') close(); if (e.key === 'ArrowLeft') P('p-prev').click(); if (e.key === 'ArrowRight') P('p-next').click(); });
+addEventListener('resize', () => { if (P('player').classList.contains('open')) show(); });
+
+fetch('manifest.json').then(r => { if (!r.ok) throw 0; return r.json(); })
+  .then(m => { m.states.forEach(s => INFO[s.name] = { title: s.title, w: s.viewport.width, h: s.viewport.height }); })
+  .catch(() => { Object.entries(FALLBACK).forEach(([n, [title, w, h]]) => INFO[n] = { title, w, h }); })
+  .finally(render);
+</script>
+</body>
+</html>
