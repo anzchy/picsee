@@ -13,7 +13,7 @@ The isolated test adapter treats readable files **inside that fixture directory*
 
 The delegated smoke probe confirmed that the test build can show the completed Grid through the ordinary scan/presentation code after fixture staging. It does not establish a user grant or production bookmark behavior; those remain signed device checks.
 
-The UI test uses `XCUIApplication()` with `PicseeApp` set as its Target Application (`TEST_TARGET_NAME`), so Xcode launches the product built for that test run. A bundle-ID lookup is forbidden here: LaunchServices can select another registered `io.github.anzchy.picsee` copy, including the user's installed App. Before checking the Grid, the test waits for the unique fixture name at `grid.sidebar.folder`; a flag-off or wrong build then fails with an explicit fixture-entry message. The first proposed probe was aborted before launch when this risk was found.
+The UI test uses `XCUIApplication()` with `PicseeApp` set as its Target Application (`TEST_TARGET_NAME`), so Xcode launches the product built for that test run. A bundle-ID lookup is forbidden for choosing the launch target: LaunchServices can select another registered `io.github.anzchy.picsee` copy, including the user's installed App. The pre-launch check only looks for another running copy by bundle ID and skips the test if one exists. Before checking the Grid, the test waits for the unique fixture name at `grid.sidebar.folder`; a flag-off or wrong build then fails with an explicit fixture-entry message. The first proposed probe was aborted before launch when this risk was found.
 
 ## Options considered
 
@@ -40,7 +40,7 @@ The expected observation is `grid.collection` containing exactly three `grid.cel
 
 ### Probe result — 2026-10-27
 
-Delegator run `probe-132b-10271749` ran under the shared GUI lock at head `ea85dc2`. Xcode reported **“Executed 1 test, with 0 failures”** in 5.5 seconds, with 0 skips. The test launched the build under test, found the unique fixture name at `grid.sidebar.folder`, then found exactly three `grid.cell` items. Teardown terminated only the process started by this run. macOS showed a one-time UI Automation authorization prompt; the user approved it for this probe. This observation verifies the fixture-to-Grid smoke path on that Mac mini run only. It does not verify Powerbox grants, production bookmarks, VoiceOver, or the other A11Y-01/CMD-01 acceptance steps.
+Delegator run `probe-132b-10271749` ran under the shared GUI lock at pre-rebase head `ea85dc2`; the harness files are identical at the rebased head. Xcode reported **“Executed 1 test, with 0 failures”** in 5.5 seconds, with 0 skips. The test launched the build under test, found the unique fixture name at `grid.sidebar.folder`, then found exactly three `grid.cell` items. Teardown terminated only the process started by this run. macOS showed a one-time UI Automation authorization prompt; the user approved it for this probe. This observation verifies the fixture-to-Grid smoke path on that Mac mini run only. It does not verify Powerbox grants, production bookmarks, VoiceOver, or the other A11Y-01/CMD-01 acceptance steps.
 
 ## Consequences
 
