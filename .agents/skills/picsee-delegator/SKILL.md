@@ -77,26 +77,33 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    Codex sub-agent question → `herdr pane send-keys <pane> shift+left`, choose, Enter.
 4. **Audit** — every tier: `gpt-auditor` and `opus-auditor` blind and in parallel, neither sees the other's report. Reset
    `gpt-auditor` and `/clear` `opus-auditor` before every audit or confirm; neither runs Swift tests, so the delegator
-   supplies and reruns owner gate evidence.
+   supplies and reruns owner gate evidence: `$SK/scripts/owner-gates.sh <worktree> <sha> <prefix>` in the background;
+   a summary without `DONE` is no evidence.
 5. **Apply verdict** — merge both verdicts. C/H block → fix + fresh-context confirm by each auditor; at most 2 auditor rounds
    per item (blind audit + one confirm). C/H still open after round 2 → stop and ask the user whether to continue. User-visible/AC Medium → one fix round, no
    confirm. Other Medium/Low → PR "Still open". If consulting
    [confirm-and-fix-templates.md](references/templates/confirm-and-fix-templates.md), fill its `<auditor>` placeholders
    once per auditor.
-6. **Rebase** — `$SK/scripts/rebase-ledger.sh` in the PR worktree (never pipe `git rebase`); confirm code unchanged
-   vs the audited head; rerun all gates yourself (guide §5.2 item 7).
+6. **Rebase** — `$SK/scripts/rebase-ledger.sh` in the PR worktree (never pipe `git rebase`; it keeps `#` body
+   lines), then `$SK/scripts/rebase-verify.sh <old-base> <audited-head> <new-base> <new-head>`. A verdict covers a
+   patch: `CODE same` keeps audits and smoke; `CODE differ` (a hand-resolved conflict) → quick combination check by
+   both auditors before gates; `MESSAGES differ` → fix before pushing. Rerun all gates yourself (guide §5.6).
 7. **Gardener** — `picsee-doc-gardener` (Claude subagent on Haiku / Codex custom agent), mode `pr`, `base..head`. UPDATED →
    commit its diff as `docs(ledger): garden <b>..<h>`; NEEDS-OWNER → fix rows (限制/在哪 only) or `无用户可见变化：` lines,
-   rerun; acceptance changes only in a separate commit quoting the user.
+   rerun; acceptance changes only in a separate commit quoting the user. Run it in a clean detached worktree
+   (`picsee-wt/owner-gates`), never in one an implementer is using; carry its diff to the branch as a patch (guide §5.7).
 8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. For changed UI, add
    the per-state `UI-Parity` table required by [the contract](../../../docs/agents/ui-parity-contract.md). Before
    merge, every changed reachable state needs design-derived automated assertions (geometry from the pinned CSS checked
    on rendered frames, colours, truncation, visible states, keyboard/menu behaviour), marked `AUTO-PASS`, plus both
    audits. A known device `FAIL` blocks merge unless the user decides otherwise; `PENDING` is only for genuinely
-   unreachable future-work states.
+   unreachable future-work states. **Every PR that changes user-visible behaviour also needs a `Device-Smoke:` line
+   before merge** (user 2026-10-27, #175): you, not the implementer, drive one flow through the changed path in a
+   signed build of the PR head under the GUI lock; `FAIL` blocks, `NOT VERIFIED` needs a named blocker and the user's
+   OK, App code changed since → redo. The smoke promotes no ledger row; full parity stays batched (step 9).
    Push with `python3 scripts/codex-rules/push-guard.py` (exact lease OID after rebasing an owned PR branch). Wait for checks
    to register, `gh pr checks --watch`, then `gh pr merge --rebase` (authorised when no blocking C/H, gardener not BLOCK,
-   CI green).
+   CI green, and `Device-Smoke:` is PASS or n/a).
 9. **Device validation** — UI parity runs in batches on current `main`: after about 4–6 UI work packages, when a
    group of related pages becomes reachable together, and before v0.0.1 (#147). Each batch covers every `AUTO-PASS` state
    since the last batch; deviations become issues. Full feature validation and ledger promotion follow these runs. **First take the desktop GUI lock shared with mdpro**:

@@ -413,10 +413,13 @@ in [Durable listener notification](#durable-listener-notification).
 
 Put each request at `~/.picsee/herdr/delegator/opus-<item>-audit-r<round>.md` and its report at
 `~/.picsee/herdr/opus-auditor/opus-<item>-audit-r<round>.md` (exactly one `Report-Task:` line), ending with the VERDICT
-block. `/clear` opus-auditor before every audit and confirm. Do not dispatch gpt-auditor until the user restores it.
+block; gpt-auditor's go to `~/.picsee/herdr/gpt-auditor/gpt-<item>-…` the same way. Since 2026-10-25 every tier gets
+both auditors, blind and in parallel (SKILL.md step 4): `/clear` opus-auditor and `reset.sh` gpt-auditor before every
+audit and confirm.
 
 **opus-auditor runs no builds or tests unless the request asks for a lane re-run** (its agent file). Tell it which owner
-gate logs to judge; the delegator reruns applicable gates; no absent second auditor is implied.
+gate logs to judge. Neither auditor runs Swift tests; the delegator reruns the gates with `scripts/owner-gates.sh` and
+points both at the same summary.
 
 Every request carries:
 - item, exact range `base..head`, worktree, commit list, and the note "objects are shared; use git show/diff";
@@ -427,16 +430,16 @@ Every request carries:
 - "Judge specifically", 5–10 bullets on the risky points;
 - for a new implementer, ask the auditor for an "Implementer assessment" paragraph.
 
-Dispatch only opus-auditor. Its round-one request is blind to previous audit conclusions. For a C/H confirm, reset it
-again so the confirmation begins in fresh context, then provide the earlier finding, merged/sole verdict, fix range,
-and counter-proof inputs required to judge closure.
+Round-one requests are blind: neither auditor sees the other's report or earlier conclusions. For a C/H confirm,
+reset each auditor again so the confirmation begins in fresh context, then provide the earlier finding, the merged
+verdict, the fix range and the counter-proof inputs required to judge closure.
 
 **Confirm requests** (`opus-<item>-confirm-r<n>.md`; template `p2-02-confirm-gpt.md`) list each finding in scope
 with its requested fix, the fix diff range, any rebase, and "Still open (do not re-judge)". They ask for
 CLOSED/PARTIAL/OPEN per finding plus any new C/H.
 
-**Challenge mode is unavailable** under the sole-auditor override. Resolve doubtful C/H with counter-proof or a fix,
-then use the required fresh-context opus-auditor confirm.
+**Challenge mode** (one auditor rules on a finding only the other raised) is available again; prefer counter-proof or
+a fix, then the fresh-context confirm, inside the 2-round cap.
 
 ### 5.5 Applying the verdict and severity policy
 
@@ -462,8 +465,19 @@ Never pipe `git rebase`; check its exit status. Write logs to `$(git rev-parse -
 - **Part 3 area-review conflicts.** Use `.agents/skills/picsee-delegator/scripts/resolve_part3.py <file>`: 分发 keeps HEAD, other rows take theirs.
 - **Any other conflict** (Swift, `CanvasWindowController`, xcstrings): stop and resolve deliberately, or send it back
   to the implementer.
-- After a rebase, confirm the code is unchanged versus the audited head (`git diff --stat <audited> HEAD -- App
-  Packages`), then rerun all gates yourself.
+- The script runs git with `core.commentChar=';'`. The default message cleanup on `--continue` deletes every body
+  line that starts with `#`, and implementers often begin bodies with `#<issue> <WP> <ledger IDs>` (2026-10-26: five
+  P2-04 commits lost them; three on main lost them for good). For a manual `rebase --continue`, pass the same `-c`.
+- After a rebase run `scripts/rebase-verify.sh <old-base> <audited-head> <new-base> <new-head>`. It compares commit
+  messages and the sorted changed lines under App, Packages and project.yml. An audit or smoke verdict covers a patch,
+  not a SHA:
+  - `CODE same`: the verdicts carry over; rerun the gates.
+  - `CODE differ` (exit 1): a conflict was resolved in code, so the combination is new. Send both auditors a quick
+    combination check of the resolved hunks, then gates and a new device smoke. (2026-10-26: #134 × #108 and P3-10 ×
+    #134 combination bugs were caught exactly this way.)
+  - `MESSAGES differ` (exit 2): fix the messages before pushing.
+- Then rerun all gates yourself: `scripts/owner-gates.sh <worktree> <sha> <prefix>` (run it in the background; the
+  summary must end with `DONE`).
 - **Rebased PR push:** direct `git push` is blocked. On your own unmerged PR branch, obtain the full current remote
   tip OID and run `python3 scripts/codex-rules/push-guard.py --expected-remote-oid <oid>`. The script uses an exact
   lease and refuses `main`. Ordinary topic pushes use the same script without a lease.
@@ -478,6 +492,11 @@ Run it before opening a PR and before every push of a new head:
 
 Pass it the mode `pr`, the worktree, `base..head`, a context paragraph and the handoff path. It edits only Part 3
 area-review rows and cautious fixes, and never commits.
+
+It edits files in whatever worktree it is given. **Never give it a worktree an implementer is using** (2026-10-26:
+it left uncommitted ledger edits in two active implementer worktrees). Use the clean detached worktree
+`picsee-wt/owner-gates`: `git switch --detach <head>`, run the gardener there, save `git diff` as a patch,
+`git restore` the worktree, then apply the patch on the branch and commit it there.
 
 | Verdict | Action |
 |---|---|
@@ -501,19 +520,27 @@ Typical NEEDS-OWNER causes:
 
 PR body sections:
 - **Summary**, what and why;
-- **Review**, the opus-auditor rounds plus a Still open list; do not claim dual review while gpt-auditor is paused;
+- **Review**, both auditors' rounds plus a Still open list;
 - **Gates**, with numbers;
 - the `无用户可见变化` lines;
 - the exact `Ledger-Gardener:` line;
+- the `Device-Smoke:` line (below);
 - the attribution line.
 
-For a UI PR, include the contract's `UI-Parity` table for each changed reachable state: pinned Prototype file and
-hashes, viewport/appearance/scale, signed App build SHA and run ID, independent verifier and opus-auditor report,
-verdict and remaining limits. The independent verifier captures raw App and HTTP HTML images before merge; the
-auditor reviews those exact images and input hashes. All required conditions must be `PASS` on the current PR head
-(or have a proved App/design/input-identical documentation-only successor). A `FAIL` or `NOT VERIFIED` required
-condition means keep the PR draft and fix or capture it; CI and static code review do not clear it. Do not apply
-`PENDING` to a reachable state. Other prototype states remain separately tracked, including #92.
+For a UI PR, include the contract's per-state table: pinned design tree OID and HTML/manifest hashes, the
+design-derived automated assertions for each changed reachable state, and its status (`AUTO-PASS` / `FAIL` /
+`PENDING(<WP>)` / `NOT VERIFIED`). `AUTO-PASS` is not a visual pass; signed App versus pinned Prototype parity runs in
+batches on `main` (user 2026-10-25: 「分层：PR 自动测 + 批次真机」; see `docs/agents/ui-parity-contract.md`). Do not
+apply `PENDING` to a reachable state. Other prototype states remain separately tracked, including #92.
+
+**Device smoke before merge** (user 2026-10-27: 「do a one-flow device smoke test of the changed path before
+merging, and keep the full parity run in batches」, #175). CI and audits never drive the App as a user does. For
+every PR that changes user-visible behaviour, you (never the implementer) build the PR head signed, take the GUI lock,
+launch, pass doctor, drive one flow through the changed path from its `features/` recipe, clean up and release. Put
+`Device-Smoke: PASS|FAIL|NOT VERIFIED <head7> run=<id> — <flow>` in the body, or `Device-Smoke: n/a — <reason>` for
+docs/test/model-only PRs. `FAIL` blocks; `NOT VERIFIED` needs a named blocker and the user's OK; any App change
+after the smoke means a new smoke (`rebase-verify.sh` decides for rebases). The smoke writes no validation record and
+promotes no ledger row.
 
 Then wait for CI and merge:
 
@@ -691,6 +718,14 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 | Kimi poller false "question" | word match on screen | poll herdr status + handoff file |
 | Implementer committed workflow reports into `.claude/tdd-guardian/` | the workflow writes prose there | fix-round item: remove them, keep copies beside the handoff |
 | `matchingRoot`-style dead-code briefs | stale finding | check the current main first |
+| Rebased commits lost their `#123 P2-05 …` body lines (2026-10-26) | `rebase --continue` message cleanup strips `#` lines | `rebase-ledger.sh` now passes `core.commentChar=';'`; check with `rebase-verify.sh` |
+| A rebase looked clean but the merged code was wrong (#134 × #108, P3-10 × #134) | the conflict resolution created a new combination nobody audited | `rebase-verify.sh` exit 1 → quick combination check by both auditors before gates |
+| Gardener left uncommitted ledger edits in implementer worktrees | it edits whatever worktree it is given | run it in `picsee-wt/owner-gates`, carry the diff as a patch |
+| A later step committed on a detached HEAD | a `git switch` in a chained command failed and the chain went on | end every step of a multi-step command with `\|\| exit 1` |
+| Base looked old / wrong diff range | the main checkout's local `main` is stale | always use `origin/main` after `git fetch` |
+| Listener fired but the agent had not finished | a Codex "model at capacity" / TLS drop, or a Claude ECONNRESET, made the pane idle | read the pane; prompt "resume …"; re-arm a fresh listener event |
+| A prompt sent right after `/clear` vanished | the pane was still redrawing | confirm `Context 0%` first, then resend |
+| Owner-gates script gone after a session ended | it lived in a session scratchpad | use `scripts/owner-gates.sh` |
 
 ---
 
