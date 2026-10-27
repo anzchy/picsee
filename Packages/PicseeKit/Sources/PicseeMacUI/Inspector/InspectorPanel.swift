@@ -46,6 +46,9 @@ struct InspectorFieldRow: View {
 
 /// Pages 16/34 share the same hierarchy; DesignColor resolves the window appearance.
 public struct InspectorPanel: View {
+    static func shouldFocusCloseButton(_ focus: FocusContext, allows: Bool) -> Bool {
+        focus == .panel || (focus == .textInput && allows)
+    }
     @Bindable public var model: InspectorModel
     public let session: ViewerSession
     let translations: [String: String]
@@ -53,14 +56,17 @@ public struct InspectorPanel: View {
     public let close: () -> Void
     public let restoreCanvasFocus: () -> Void
     public let updateFocus: (FocusContext) -> Void
+    public let allowsCloseFocus: () -> Bool
 
     public init(model: InspectorModel, session: ViewerSession, translations: [String: String] = [:],
                 topInset: CGFloat = 0,
                 close: @escaping () -> Void,
-                restoreCanvasFocus: @escaping () -> Void, updateFocus: @escaping (FocusContext) -> Void) {
+                restoreCanvasFocus: @escaping () -> Void, updateFocus: @escaping (FocusContext) -> Void,
+                allowsCloseFocus: @escaping () -> Bool = { true }) {
         self.model = model; self.session = session; self.translations = translations; self.close = close
         self.topInset = topInset
         self.restoreCanvasFocus = restoreCanvasFocus; self.updateFocus = updateFocus
+        self.allowsCloseFocus = allowsCloseFocus
     }
 
     private func localized(_ key: String) -> String {
@@ -104,7 +110,8 @@ public struct InspectorPanel: View {
             HStack {
                 Text(verbatim: localized("Image Information")).font(.system(size: 13, weight: .medium))
                 Spacer()
-                InspectorCloseControl(focused: session.inspectorFocus.focus == .textInput || session.inspectorFocus.focus == .panel,
+                InspectorCloseControl(focused: Self.shouldFocusCloseButton(session.inspectorFocus.focus,
+                    allows: allowsCloseFocus()),
                     close: close, updateFocus: updateFocus, restoreCanvasFocus: restoreCanvasFocus)
                     .frame(width: 24, height: 24)
             }
