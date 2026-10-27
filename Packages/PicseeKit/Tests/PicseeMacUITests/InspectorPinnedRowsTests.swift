@@ -52,6 +52,42 @@ private func peakGlyphColor(_ pixels: NSBitmapImageRep, x: Range<Int>, y: Range<
 
 // The pinned pages give a 48 px label column, 7 px column gap, dt=--color-muted,
 // dd=--color-text. A long probe exposes the value-column origin via wrapping.
+@Test @MainActor func issue136SmokeMeasuredLabelColumnKeepsSevenPointValueGap() throws {
+    _ = NSApplication.shared
+    for panelWidth in [195, 220] {
+        let contentWidth = CGFloat(panelWidth - 34)
+        for labels in [["Dimensions", "Modified", "Created", "Type", "Size"],
+                       ["尺寸", "修改日期", "创建日期", "类型", "大小"]] {
+            let column = InspectorPanelLayout.labelWidth(labels)
+            let valueWidth = contentWidth - column - 7
+            let probe = try #require((1...30).map { String(repeating: "M", count: $0) }.first {
+                (try? drawnText($0, width: valueWidth).height) == 15 &&
+                (try? drawnText($0, width: valueWidth - 7).height) ?? 0 > 15
+            })
+            let renderer = ImageRenderer(content: InspectorFieldRow(label: labels[0], value: probe,
+                id: "measured-gap", columnWidth: column).frame(width: contentWidth)
+                .background(Color.white))
+            renderer.scale = 1
+            let image = try #require(renderer.cgImage)
+            #expect(image.height == 15,
+                    "\(panelWidth) pt panel must give the value exactly the remaining width after the 7 pt gap")
+            let origin = Int(column + 7)
+            let white = NSColor(deviceRed: 1, green: 1, blue: 1, alpha: 1)
+            let valueInk = try #require(inkBounds(NSBitmapImageRep(cgImage: image),
+                x: origin..<Int(contentWidth), y: 0..<image.height, background: white))
+            let reference = ImageRenderer(content: Text(verbatim: probe)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(DesignColor.textPrimary.color)
+                .frame(width: valueWidth, alignment: .trailing).background(Color.white))
+            reference.scale = 1
+            let referenceImage = try #require(reference.cgImage)
+            let referenceInk = try #require(inkBounds(NSBitmapImageRep(cgImage: referenceImage),
+                x: 0..<referenceImage.width, y: 0..<referenceImage.height, background: white))
+            #expect(abs(valueInk.minX - referenceInk.minX - CGFloat(origin)) <= 1)
+        }
+    }
+}
+
 @Test @MainActor func issue136PinnedInspectorRendersEveryEnglishAndChineseFieldInColumns() throws {
     _ = NSApplication.shared
     for (pageName, theme) in [("viewer-inspector", DesignTheme.dark),

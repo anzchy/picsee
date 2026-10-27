@@ -14,6 +14,11 @@ public enum InspectorPanelLayout {
     public static func labelWidth(_ label: String) -> CGFloat {
         48 // pages 16/34: .inspector dl grid-template-columns: 48px 1fr
     }
+    public static func labelWidth(_ labels: [String]) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: 12)
+        let widest = labels.map { ceil(($0 as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0
+        return max(48, widest)
+    }
     public static func frame(in bounds: NSRect, grid: Bool) -> NSRect {
         let width = min(Self.width(for: bounds.width), bounds.width)
         if overlaysContent(at: bounds.width) {
@@ -29,12 +34,16 @@ struct InspectorFieldRow: View {
     let label: String
     let value: String
     let id: String
+    let columnWidth: CGFloat?
+    init(label: String, value: String, id: String, columnWidth: CGFloat? = nil) {
+        self.label = label; self.value = value; self.id = id; self.columnWidth = columnWidth
+    }
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Text(label).foregroundStyle(DesignColor.textSecondary.color)
-                .frame(width: InspectorPanelLayout.labelWidth(label), alignment: .leading)
+                .frame(width: columnWidth ?? InspectorPanelLayout.labelWidth(label), alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            // Pinned pages 16/34: .inspector dl uses 48px 1fr with one 7px column gap.
+            // Keep the pinned 7 pt gap; the panel shares a measured localized label column.
             Text(value).font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(DesignColor.textPrimary.color).multilineTextAlignment(.trailing)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -102,8 +111,11 @@ public struct InspectorPanel: View {
         if let ext = UTType(identifier)?.preferredFilenameExtension { return ext.uppercased() }
         return identifier
     }
+    private var labelColumnWidth: CGFloat {
+        InspectorPanelLayout.labelWidth(["Dimensions", "Type", "Created", "Modified", "Size"].map(localized))
+    }
     private func row(_ label: String, _ value: String, id: String) -> some View {
-        InspectorFieldRow(label: label, value: value, id: id)
+        InspectorFieldRow(label: label, value: value, id: id, columnWidth: labelColumnWidth)
     }
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
