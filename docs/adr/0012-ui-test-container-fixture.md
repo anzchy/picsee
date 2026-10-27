@@ -13,6 +13,8 @@ The isolated test adapter treats readable files **inside that fixture directory*
 
 This is a smoke probe to see whether the real signed, sandboxed App can show the completed Grid through the ordinary scan/presentation code after fixture staging. Only the delegator runs it under the GUI lock. Until that result arrives, the probe is **pending**, not a verified Grid claim. If the probe fails because the container or AX behavior differs from this design, record the failure here and keep XCUITest to the reachable keyboard/focus, menu-enable and accessibility-audit checks; user grants, bookmark persistence and panel behavior remain signed device checks.
 
+The UI test uses `XCUIApplication()` with `PicseeApp` set as its Target Application (`TEST_TARGET_NAME`), so Xcode launches the product built for that test run. A bundle-ID lookup is forbidden here: LaunchServices can select another registered `io.github.anzchy.picsee` copy, including the user's installed App. Before checking the Grid, the test waits for the unique fixture name at `grid.sidebar.folder`; a flag-off or wrong build then fails with an explicit fixture-entry message. The first proposed probe was aborted before launch when this risk was found.
+
 ## Options considered
 
 | Option | Sandbox authority and entitlement | Release risk | What it covers and misses |
@@ -37,5 +39,5 @@ The expected observation is `grid.collection` containing exactly three `grid.cel
 ## Consequences
 
 - The UI test target packages only three small synthetic files from `TestAssets`; no `TestAssets`, HTML, research material or test adapter is added to the production App bundle.
-- The test hook creates a unique fixture directory per run and keeps test-only access records there. Cleanup can remove those directories after a run; a failing run retains its evidence.
+- This fixture build has the same bundle ID and team as the developer's installed Picsee. It shares that App container, thumbnail cache and preferences. The test hook keeps synthetic access records in only its unique fixture subfolder. At test teardown, `app.terminate()` invokes test-only App cleanup; the test also attempts `FileManager` removal of that exact run folder as a fallback. Neither path deletes the container or another run's folder. A forced process kill or denied test-runner container access may leave the one run folder for later manual inspection.
 - A11Y-01 and CMD-01 do not advance from this harness or its unsigned build. Their native/VoiceOver and keyboard claims still require the specified device observations.

@@ -52,4 +52,18 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: root.deletingLastPathComponent()
         .appendingPathComponent("outside").path))
 }
+
+@Test func fixtureCleanupRemovesOnlyTheNamedRun() throws {
+    let support = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: support) }
+    let first = support.appendingPathComponent("run-one", isDirectory: true)
+    let second = support.appendingPathComponent("run-two", isDirectory: true)
+    try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+
+    try UITestFixtureLaunch.removeRun(name: "run-one", under: support)
+    #expect(!FileManager.default.fileExists(atPath: first.path))
+    #expect(FileManager.default.fileExists(atPath: second.path))
+}
 #endif

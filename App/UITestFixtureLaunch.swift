@@ -50,6 +50,20 @@ enum UITestFixtureLaunch {
         return folder
     }
 
+    static func removeRun(name: String, under support: URL) throws {
+        guard fixtureName(arguments: ["-PicseeUITestFixture", name]) != nil else { throw FixtureError.invalidName }
+        let folder = support.appendingPathComponent(name, isDirectory: true)
+        guard folder.resolvingSymlinksInPath().deletingLastPathComponent().standardizedFileURL ==
+              support.resolvingSymlinksInPath().standardizedFileURL else { throw FixtureError.outsideContainer }
+        try FileManager.default.removeItem(at: folder)
+    }
+
+    static func removeRun(folder: URL) throws {
+        let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: false).appendingPathComponent("Picsee/UITestFixtures", isDirectory: true)
+        try removeRun(name: folder.lastPathComponent, under: support)
+    }
+
     enum FixtureError: Error, Equatable { case invalidName, missingImage(Int), folderAlreadyExists, outsideContainer }
     #endif
 }
