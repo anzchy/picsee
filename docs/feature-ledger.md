@@ -185,11 +185,11 @@
 | GRID-09 | 图片右键菜单 | Absent | 无 | P3-12 | — | 右键显示快速查看、在访达中显示、拷贝路径、收藏、图片信息五项；能用键盘操作，Esc 关闭后焦点回到原处（31 页） |
 | GRID-10 | 在访达中显示 | Absent | 无 | P3-12 | — | 右键选“在访达中显示”，Finder 打开并选中该文件 |
 | GRID-11 | 拷贝路径 | Absent | 无 | P3-12 | — | 右键选“拷贝路径”，粘贴到文本编辑出现该文件的完整路径 |
-| GRID-12 | 收藏 | Partial | 单元 | P3-14 | `Packages/PicseeKit/Sources/PicseeCore/Library/PersonalImages.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Library/`、`Packages/PicseeKit/Sources/PicseeApplication/Library/PersonalImageProjection.swift` | 收藏后缩略图左上角出现心形标记，侧栏“个人收藏”里能找到；文件被移走后显示“找不到”，不显示错图。限制：仅存储与模型（P3-14 切片 1，单元）：收藏按授权根与根内相对路径加文件号保存，重启后仍在；移走、删除、换成别的文件或目录时解析为“找不到”，授权根失效或其文件夹被删除时为不可用且每次重新检查、不用旧结果；不复制图片或缩略图，单图授权的图片不能收藏。心形标记、侧栏“个人收藏”与收藏操作均未接线（待 P3-10/P3-01 切片 2）；按文件号判断，外部编辑器原子保存后也会显示“找不到”，再次查看该图后恢复；删除后新建的文件若恰好复用同一文件号，可能被当作原图显示；签名沙盒与真机未验。 |
+| GRID-12 | 收藏 | Partial | 单元 | P3-14 | `Packages/PicseeKit/Sources/PicseeCore/Library/PersonalImages.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Library/`、`Packages/PicseeKit/Sources/PicseeApplication/Library/PersonalImageProjection.swift` | 收藏后缩略图左上角出现心形标记，侧栏“个人收藏”里能找到；文件被移走后显示“找不到”，不显示错图。限制：仅存储与模型（单元）：收藏按授权根与根内相对路径加文件号保存，重启后仍在；移走、删除、换成别的文件或目录时解析为“找不到”，授权根失效或其文件夹被删除时为不可用且每次重新检查、不用旧结果；不复制图片或缩略图，单图授权的图片不能收藏。心形标记、侧栏“个人收藏”与收藏操作均未接线（待 P3-10/P3-01）；按文件号判断，外部编辑器原子保存后也会显示“找不到”，再次查看该图后恢复；删除后新建的文件若恰好复用同一文件号，可能被当作原图显示；签名沙盒与真机未验。 |
 | GRID-14 | 子文件夹树 | Absent | 无 | P3-10 | — | 侧栏里当前文件夹下列出子文件夹和各自数量，点子文件夹只浏览它；数量未知时不显示数字 |
 | GRID-15 | 添加多个文件夹 | Absent | 无 | P3-15、P2-01 | — | 用“添加文件夹”加入第二个文件夹，两者都在侧栏，退出重开仍在；不复制任何图片 |
 | GRID-16 | 所有照片汇总 | Absent | 无 | P3-15 | — | 点“所有照片”看到已加入的全部文件夹的图片；其中一个授权失效时只少掉它的图片，并提示重新授权 |
-| GRID-17 | 最近查看 | Partial | 单元 | P3-14 | `Packages/PicseeKit/Sources/PicseeCore/Library/PersonalImages.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Library/`、`Packages/PicseeKit/Sources/PicseeApplication/Library/PersonalImageProjection.swift` | 看过几张图后，侧栏“最近查看”按时间列出它们；文件被移走后显示“找不到”。限制：仅存储与模型（P3-14 切片 1，单元）：按查看时间从新到旧保存最多 50 张，重看移到最前，重启后保留；移走后解析为“找不到”；计数在全部解析前为空，之后只数可用项；与“最近打开”的文件夹分开保存，互不影响。查看图片尚未记录访问、侧栏“最近查看”未接线（待 P3-10/P3-01 切片 2）；签名沙盒与真机未验。 |
+| GRID-17 | 最近查看 | Partial | 单元 | P3-14 | `Packages/PicseeKit/Sources/PicseeCore/Library/PersonalImages.swift`、`Packages/PicseeKit/Sources/PicseeInfrastructure/Library/`、`Packages/PicseeKit/Sources/PicseeApplication/Library/PersonalImageProjection.swift` | 看过几张图后，侧栏“最近查看”按时间列出它们；文件被移走后显示“找不到”。限制：仅存储与模型（单元）：按查看时间从新到旧保存最多 50 张，重看移到最前，重启后保留；移走后解析为“找不到”；计数在全部解析前为空，之后只数可用项；与“最近打开”的文件夹分开保存，互不影响。查看图片尚未记录访问、侧栏“最近查看”未接线（待 P3-10/P3-01）；签名沙盒与真机未验。 |
 | GRID-13 | 自适应 / 瀑布流布局 | Absent | 无 | P7-06 | — | 切到瀑布流，混合长宽比的图片按原比例排列，当前选中项不跳走 |
 
 ### 信息与元数据
