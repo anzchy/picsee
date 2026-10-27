@@ -78,7 +78,7 @@ final class FakeBookmarks: BookmarkCoding, @unchecked Sendable {
     let second = try FileAccess(scope: scope, bookmarks: codec, store: store, buildSHA: "B")
     #expect(await second.rootCovering(file) == nil)
     #expect(try store.load().isEmpty)
-    #expect(codec.count == 0)
+    #expect(codec.count == 0) // The synthetic missing file cannot yield a session bookmark.
     try Data("broken JSON".utf8).write(to: store.url)
     let recovered = try FileAccess(scope: scope, bookmarks: codec, store: store, buildSHA: "C")
     #expect(await recovered.storeCorrupt)
