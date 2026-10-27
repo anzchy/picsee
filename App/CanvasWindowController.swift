@@ -302,8 +302,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 if let root {
                     guard self.rootScanAdmission.claim(scanGeneration) else { return }
                     let scan = self.folderScanner(services)
-                    try? await scan.begin(folder: url.deletingLastPathComponent(), rootID: root,
-                                          input: url, canPresent: { operation.isCurrent && inputOperation.isCurrent }).value
+                    do {
+                        try await scan.begin(folder: url.deletingLastPathComponent(), rootID: root,
+                            input: url, canPresent: { operation.isCurrent && inputOperation.isCurrent }).value
+                    } catch {
+                        self.filesystemLogger.error("Background folder scan outcome=failed error=\(String(describing: error), privacy: .private)")
+                    }
                 } else {
                     self.standaloneGrantURL = url
                     self.watchStandaloneFile(at: url)
