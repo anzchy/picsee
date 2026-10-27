@@ -4,7 +4,7 @@ import ImageIO
 import Testing
 import UniformTypeIdentifiers
 import PicseeCore
-import PicseeInfrastructure
+@testable import PicseeInfrastructure
 @testable import PicseeMacUI
 
 /// Returns the queued snapshots in turn (the last one repeats) and counts reads.
@@ -285,5 +285,39 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         try await Task.sleep(for: .milliseconds(100))
         #expect(source.reads == stopped)
         #expect(value(model, "decoding.finished") == "9")
+    }
+}
+
+@Suite(.timeLimit(.minutes(1))) @MainActor struct DiagnosticsPanelIndexCostTests {
+    @Test func diagnosticsPanelTicksDoNotScanTheDiskIndexEachTime() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("image.png")
+        let context = try #require(CGContext(data: nil, width: 64, height: 48, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(red: 0.5, green: 0.3, blue: 0.1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 64, height: 48))
+        let destination = try #require(CGImageDestinationCreateWithURL(file as CFURL, UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
+        #expect(CGImageDestinationFinalize(destination))
+        // The disk cache's own clock stands still while the panel ticks.
+        let disk = ThumbnailDiskCache(directory: folder.appendingPathComponent("cache"), statsClock: { 500 })
+        let pipeline = ImageIOPipeline(thumbnailCache: disk)
+        let request = try await pipeline.request(for: file, maximumPixelSize: 32,
+                                                 identityRoot: ItemIdentityRoot(id: AccessRootID(), url: folder))
+        let ticket = try #require(try await disk.prepare(request))
+        try await disk.store(try await pipeline.image(for: request), for: ticket)
+
+        let sleeper = ManualSleeper()
+        let model = DiagnosticsPanelModel(source: pipeline, sleep: { try await sleeper.sleep($0) })
+        model.setVisible(true)
+        for tick in 1...5 {
+            try #require(await until { sleeper.requested.count == tick && sleeper.pendingCount == 1 })
+            sleeper.advance()
+        }
+        model.setVisible(false)
+        #expect(value(model, "disk.entries") == "1")
+        #expect(await disk.indexScans == 1)
     }
 }
