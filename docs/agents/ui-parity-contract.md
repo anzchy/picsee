@@ -47,6 +47,7 @@ delegator 在 brief 中列出**本次新增或改变的所有可达状态和必�
 - **从固定版设计推出的自动断言**：几何（列数、尺寸、间距、内边距按 HTML/CSS 规则推导，并断言实际渲染的 frame，不只断言布局输入）、颜色与外观、文字截断、选中/当前项等可见状态，以及键盘、菜单、焦点等行为测试。测试写明它对应的设计文件与规则。
 - **独立代码审计**（当前 roster 的审计者）覆盖上述断言是否真能拦住错误实现。
 - PR 描述放一张逐状态表：设计 tree OID、HTML/manifest SHA256、对应的自动断言，和状态 `AUTO-PASS`（自动断言通过、待批次真机）/`FAIL`/`PENDING(<WP>)`/`NOT VERIFIED`。`AUTO-PASS` 不是视觉通过，账簿不能因此升级。
+- 写好 PR 描述后，在本地运行 `node scripts/agents/ui-parity-pr-body-lint.mjs --base main --body-file /path/to/pr-body.md`。若 `main` 与 `HEAD` 间改动了 `App/UI/` 或 `Packages/PicseeKit/Sources/PicseeMacUI/`，脚本要求描述有含数据行的 `## UI-Parity` Markdown 表格；它只检查表格存在，不替代独立审计。此脚本未接入 CI。
 - 已有真机证据显示的 `FAIL` 必须先修或经用户决定才能合入。`PENDING` 的规则同下文。
 
 ### 变更路径真机冒烟（每个用户可见改动的 PR 合入前，#175）
