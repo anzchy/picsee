@@ -17,6 +17,9 @@ public actor PersonalImageStore {
         var version = 1
         var favorites: [PersonalImageRef] = []
         var recents: [PersonalImageVisit] = []
+        /// Only in the recovery file: favorites removed during recovery, so the merge cannot bring
+        /// them back from the repaired primary. A later add clears the marker.
+        var removedFavorites: [PersonalImageRef]?
     }
     private let fileLock: NSLock
     public init(url: URL) {
@@ -39,6 +42,12 @@ public actor PersonalImageStore {
             let removed = contents.favorites.contains(ref)
             contents.favorites.removeAll { $0 == ref }
             if !removed { contents.favorites.insert(ref, at: 0) }
+            if storeCorrupt {
+                var markers = contents.removedFavorites ?? []
+                markers.removeAll { $0 == ref }
+                if removed { markers.append(ref) }
+                contents.removedFavorites = markers.isEmpty ? nil : markers
+            }
             try save(contents)
             return !removed
         }
@@ -86,7 +95,9 @@ public actor PersonalImageStore {
     /// (recovery first on a tie), ordered by visit time and bounded.
     private static func merge(_ recovered: Contents, into primary: Contents) -> Contents {
         var merged = recovered
-        merged.favorites += primary.favorites.filter { !recovered.favorites.contains($0) }
+        let removed = recovered.removedFavorites ?? []
+        merged.favorites += primary.favorites.filter { !recovered.favorites.contains($0) && !removed.contains($0) }
+        merged.removedFavorites = nil
         var kept: [PersonalImageVisit] = []
         for visit in recovered.recents + primary.recents {
             if let index = kept.firstIndex(where: { $0.ref == visit.ref }) {
@@ -110,6 +121,8 @@ public actor PersonalImageStore {
 
 /// One lock per store file in this process: two stores on one file (through any link to it) never
 /// interleave one store's read and write with the other's. Each call holds it without suspending.
+/// A second store on the same file waits on it by blocking its thread (a cooperative one); the hold is one
+/// short file read and write, and the App keeps a single store per file.
 private final class FileLocks: @unchecked Sendable {
     static let shared = FileLocks()
     private let guardLock = NSLock()
