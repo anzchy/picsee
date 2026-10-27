@@ -191,3 +191,9 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     #expect(restored > 0)
     #expect(session.inspectorFocus.focus == .canvas)
 }
+
+@Test @MainActor func issue136ComboGridSearchKeepsEditorWithInspectorOpen() {
+    #expect(!InspectorPanel.shouldFocusCloseButton(.textInput, allows: false))
+    #expect(InspectorPanel.shouldFocusCloseButton(.textInput, allows: true))
+    #expect(InspectorPanel.shouldFocusCloseButton(.panel, allows: false))
+}
