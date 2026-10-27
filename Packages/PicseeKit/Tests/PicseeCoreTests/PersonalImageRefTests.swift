@@ -109,9 +109,11 @@ private func personalGeneratedPath(_ rng: inout PersonalSplitMix) -> String {
 
 @Test func personalImageRefDecodeMalformedThrows() throws {
     let root = AccessRootID().rawValue.uuidString
-    let payloads = [#"{"relativePath":"a.jpg"}"#, #"{"rootID":"\#(root)","relativePath":5}"#,
-                    #"{"rootID":"\#(root)","relativePath":""}"#, #"{"rootID":"\#(root)","relativePath":"a/../../b.jpg"}"#,
-                    #"{"rootID":"\#(root)","relativePath":"/a.jpg"}"#]
+    // Every payload carries a file number, so only the malformed field can reject it.
+    let payloads = [#"{"relativePath":"a.jpg","fileNumber":1}"#, #"{"rootID":"\#(root)","relativePath":5,"fileNumber":1}"#,
+                    #"{"rootID":"\#(root)","relativePath":"","fileNumber":1}"#,
+                    #"{"rootID":"\#(root)","relativePath":"a/../../b.jpg","fileNumber":1}"#,
+                    #"{"rootID":"\#(root)","relativePath":"/a.jpg","fileNumber":1}"#]
     for payload in payloads {
         #expect(throws: DecodingError.self, "\(payload)") {
             try JSONDecoder().decode(PersonalImageRef.self, from: Data(payload.utf8))
