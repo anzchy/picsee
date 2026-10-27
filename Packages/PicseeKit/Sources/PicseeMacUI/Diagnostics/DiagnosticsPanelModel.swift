@@ -24,11 +24,12 @@ public final class DiagnosticsPanelModel {
     public private(set) var isVisible = false
     private let source: any DiagnosticsProviding
     private let interval: Duration
-    private let sleep: @Sendable (Duration) async throws -> Void
+    private let sleep: (@Sendable (Duration) async throws -> Void)?
     private var loop: Task<Void, Never>?
 
+    /// `sleep` injects a clock for tests; nil sleeps on the real clock.
     public init(source: any DiagnosticsProviding, interval: Duration = .seconds(1),
-                sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+                sleep: (@Sendable (Duration) async throws -> Void)? = nil) {
         self.source = source; self.interval = interval; self.sleep = sleep
     }
 
@@ -39,13 +40,23 @@ public final class DiagnosticsPanelModel {
         loop = nil
         guard visible else { return }
         loop = Task { [weak self, source, interval, sleep] in
-            while !Task.isCancelled {
+            // Cancellation ends the loop at the check after a read or in the pause.
+            repeat {
                 let snapshot = await source.diagnostics()
-                guard !Task.isCancelled, let self else { return }
+                guard !Task.isCancelled, let self else { break }
                 self.sections = Self.sections(snapshot)
-                do { try await sleep(interval) } catch { return }
-            }
+            } while await Self.pause(interval, sleep)
         }
+    }
+
+    /// False when the sleep was cancelled. The real clock is called directly: passing `Task.sleep` as a
+    /// function value aborted the test process in the concurrency task allocator.
+    private nonisolated static func pause(_ interval: Duration,
+                                          _ sleep: (@Sendable (Duration) async throws -> Void)?) async -> Bool {
+        do {
+            if let sleep { try await sleep(interval) } else { try await Task.sleep(for: interval) }
+            return true
+        } catch { return false }
     }
 
     static func sections(_ snapshot: DiagnosticsSnapshot?) -> [DiagnosticsSection] {

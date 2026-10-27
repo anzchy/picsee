@@ -272,3 +272,18 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         model.setVisible(false)
     }
 }
+
+@Suite(.timeLimit(.minutes(1))) @MainActor struct DiagnosticsPanelClockTests {
+    @Test func diagnosticsPanelDefaultClockRefreshesUntilHidden() async throws {
+        let source = ScriptedDiagnostics([fullSnapshot])
+        let model = DiagnosticsPanelModel(source: source, interval: .milliseconds(10))
+        model.setVisible(true)
+        try #require(await until { source.reads >= 3 })
+        model.setVisible(false)
+        try await Task.sleep(for: .milliseconds(30))
+        let stopped = source.reads
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(source.reads == stopped)
+        #expect(value(model, "decoding.finished") == "9")
+    }
+}
