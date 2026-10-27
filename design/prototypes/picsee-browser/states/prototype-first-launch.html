@@ -1,0 +1,351 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Question: "What should picsee show the first time it opens (no folder yet)?"
+  Five structurally different variants of the first-launch window, switchable via ?variant=A..E
+  and the floating bar (← / → keys). ?theme=dark switches tokens. Not the native app; nothing is persisted.
+  Serve: npm run preview:states  →  http://127.0.0.1:4313/prototype-first-launch.html?variant=A
+-->
+<html lang="zh-CN" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picsee · 首次打开 · 原型</title>
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/globals.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/light.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/dark.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--font-sans); font-size: var(--font-size-ui); color: var(--color-text);
+    background: color-mix(in srgb, var(--color-surface) 70%, var(--color-text) 6%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    -webkit-font-smoothing: antialiased; padding-bottom: 64px;
+  }
+  button { font: inherit; color: inherit; }
+  .mono { font-family: var(--font-mono); }
+  kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 6px; border-radius: var(--radius-inner);
+        border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-muted); }
+
+  /* ---------- prototype chrome (not part of the design) ---------- */
+  .proto-caption { width: 960px; display: flex; justify-content: space-between; align-items: baseline;
+                   color: var(--color-muted); font-size: 12px; }
+  .proto-caption b { color: var(--color-text); font-size: 14px; }
+  .proto-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100;
+               display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 999px;
+               background: #111; color: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 13px; }
+  .proto-bar button { border: 0; background: transparent; color: #fff; height: 30px; min-width: 30px;
+                      border-radius: 999px; cursor: pointer; padding: 0 10px; }
+  .proto-bar button:hover { background: rgba(255,255,255,.14); }
+  .proto-bar .label { min-width: 230px; text-align: center; font-weight: 600; }
+  .proto-bar .sep { width: 1px; height: 18px; background: rgba(255,255,255,.25); }
+
+  /* ---------- mock native window ---------- */
+  .window { width: 960px; height: 640px; border-radius: 12px; overflow: hidden; position: relative;
+            background: var(--color-bg); box-shadow: 0 0 0 0.5px rgba(0,0,0,.25), 0 22px 60px rgba(0,0,0,.28);
+            display: flex; flex-direction: column; }
+  .titlebar { height: 38px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px;
+              font-weight: 600; font-size: 13px; color: var(--color-text); position: relative; z-index: 3; }
+  .traffic { display: flex; gap: 8px; margin-right: 10px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1) { background: #ff5f57; } .traffic i:nth-child(2) { background: #febc2e; } .traffic i:nth-child(3) { background: #28c840; }
+  .content { flex: 1; min-height: 0; position: relative; display: flex; }
+  .variant { display: none; flex: 1; min-width: 0; }
+  .variant.on { display: flex; }
+
+  .btn { height: 30px; padding: 0 14px; border-radius: var(--radius-control); border: 1px solid var(--color-control-border);
+         background: var(--color-panel); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .btn:hover { background: var(--color-hover); }
+  .btn.primary { background: var(--color-accent-fill); border-color: transparent; color: var(--color-on-accent); font-weight: 600; }
+  .btn.primary:hover { background: var(--color-accent-fill-hover); }
+  .btn:focus-visible, .row:focus-visible, .cmd-item:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+  .muted { color: var(--color-muted); }
+  .toast { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 20; padding: 8px 14px;
+           border-radius: var(--radius-popover); background: var(--color-panel); box-shadow: var(--shadow-soft);
+           font-size: 12px; opacity: 0; transition: opacity var(--motion-duration-fast); pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  /* mark: three stacked frames (outline icon family) */
+  .mark { width: 56px; height: 56px; border-radius: 14px; background: var(--color-accent-fill); display: grid; place-items: center; }
+  .mark svg { width: 32px; height: 32px; }
+
+  /* ===== A · Welcome window ===== */
+  #A { flex-direction: row; }
+  .a-left { width: 360px; padding: 40px 36px 28px; display: flex; flex-direction: column; gap: 22px; }
+  .a-left h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+  .a-left p { margin: 0; color: var(--color-muted); line-height: 1.5; }
+  .a-actions { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: var(--radius-control);
+         border: 0; background: transparent; cursor: pointer; text-align: left; width: 100%; }
+  .row:hover { background: var(--color-hover); }
+  .row .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+              background: var(--color-accent-soft); color: var(--color-accent-text); flex: none; }
+  .row .t { font-weight: 600; } .row .s { font-size: 12px; color: var(--color-muted); }
+  .row .k { margin-left: auto; }
+  .a-foot { margin-top: auto; font-size: 12px; color: var(--color-muted); display: flex; gap: 6px; align-items: center; }
+  .a-right { flex: 1; background: var(--color-surface); border-left: 1px solid var(--color-border-subtle);
+             padding: 40px 32px 28px; display: flex; flex-direction: column; gap: 18px; }
+  .a-right h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--color-muted); margin: 0; }
+  .a-empty { border: 1px dashed var(--color-border); border-radius: var(--radius-popover); padding: 22px; color: var(--color-muted);
+             display: flex; gap: 14px; align-items: center; }
+  .a-ghosts { display: flex; gap: 6px; }
+  .a-ghosts span { width: 40px; height: 30px; border-radius: 4px; background: var(--color-border-subtle); }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; align-items: center; }
+  .keys div { color: var(--color-muted); }
+
+  /* ===== B · Drop canvas ===== */
+  #B { padding: 0 24px 24px; }
+  .drop { flex: 1; border: 1.5px dashed var(--color-border); border-radius: 16px; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; gap: 18px; transition: background var(--motion-duration-fast), border-color var(--motion-duration-fast); }
+  .drop.over { border-color: var(--color-accent); background: var(--color-accent-soft); }
+  .stack { position: relative; width: 220px; height: 150px; margin-bottom: 30px; }
+  .stack .f { position: absolute; inset: 0; border-radius: 10px; background-size: cover; background-position: center;
+              box-shadow: 0 0 0 1px var(--color-border), 0 10px 26px rgba(0,0,0,.14); transition: transform .35s ease; }
+  .stack .f:nth-child(1) { transform: rotate(-9deg) translate(-36px, 8px); }
+  .stack .f:nth-child(2) { transform: rotate(7deg) translate(34px, 6px); }
+  .stack .f:nth-child(3) { transform: rotate(0); }
+  .drop.over .stack .f:nth-child(1) { transform: rotate(-14deg) translate(-58px, 10px); }
+  .drop.over .stack .f:nth-child(2) { transform: rotate(12deg) translate(56px, 8px); }
+  .drop.over .stack .f:nth-child(3) { transform: translateY(-8px) scale(1.04); }
+  .drop h1 { margin: 0; font-size: 20px; }
+  .drop .sub { display: flex; gap: 12px; align-items: center; color: var(--color-muted); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+  .chips span { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--color-surface); color: var(--color-muted); }
+
+  /* ===== C · Locations sidebar ===== */
+  #C { flex-direction: column; }
+  .c-body { flex: 1; display: flex; min-height: 0; }
+  .c-side { width: 208px; background: var(--color-surface); border-right: 1px solid var(--color-border-subtle); padding: 10px 8px; }
+  .c-side h3 { font-size: 11px; color: var(--color-muted); margin: 10px 8px 6px; font-weight: 600; }
+  .nav { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-control); cursor: pointer; border: 0;
+         background: transparent; width: 100%; text-align: left; }
+  .nav:hover { background: var(--color-hover); }
+  .nav.sel { background: var(--color-accent-soft); }
+  .nav .lock { margin-left: auto; color: var(--color-muted); font-size: 11px; }
+  .c-main { flex: 1; position: relative; padding: 18px 20px; overflow: hidden; }
+  .ghost-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; opacity: .55; }
+  .ghost-grid div { aspect-ratio: 4/3; border-radius: 6px; background: var(--color-border-subtle); }
+  .c-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 380px; padding: 22px 24px;
+            border-radius: var(--radius-popover); background: var(--color-panel); box-shadow: var(--shadow-soft);
+            display: flex; flex-direction: column; gap: 10px; }
+  .c-card h1 { margin: 0; font-size: 17px; }
+  .c-card p { margin: 0; color: var(--color-muted); line-height: 1.5; }
+  .bottombar { height: 40px; flex: none; border-top: 1px solid var(--color-border-subtle); display: flex; align-items: center;
+               gap: 10px; padding: 0 10px; color: var(--color-muted); font-size: 12px; }
+  .bottombar .ib { width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-control); }
+  .bottombar .dis { opacity: .4; }
+
+  /* ===== D · Sample folder ===== */
+  #D { flex-direction: column; }
+  .d-banner { margin: 10px 20px 0; padding: 10px 12px; border-radius: var(--radius-popover); background: var(--color-accent-soft);
+              display: flex; align-items: center; gap: 12px; }
+  .d-banner .x { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: var(--color-muted); }
+  .d-grid { flex: 1; padding: 14px 20px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; align-content: start; overflow: hidden; }
+  .d-grid figure { margin: 0; }
+  .d-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; display: block; }
+  .d-grid figcaption { font-size: 12px; color: var(--color-muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-grid figure.cur img { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
+  /* ===== E · Command palette ===== */
+  #E { align-items: flex-start; justify-content: center; padding-top: 70px; background: var(--color-surface); }
+  .cmd { width: 540px; border-radius: 14px; background: var(--color-panel); box-shadow: var(--shadow-soft); overflow: hidden; }
+  .cmd-in { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--color-border-subtle); }
+  .cmd-in input { flex: 1; border: 0; outline: 0; background: transparent; font: inherit; font-size: 16px; color: var(--color-text); }
+  .cmd-sec { padding: 8px 8px 10px; }
+  .cmd-sec h4 { margin: 6px 10px; font-size: 11px; color: var(--color-muted); font-weight: 600; }
+  .cmd-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  .cmd-item.hl { background: var(--color-accent-soft); }
+  .cmd-item .k { margin-left: auto; }
+  .cmd-foot { display: flex; gap: 14px; padding: 9px 16px; border-top: 1px solid var(--color-border-subtle); font-size: 12px; color: var(--color-muted); }
+  .e-hint { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; color: var(--color-muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="proto-caption"><span><b id="cap-title"></b> &nbsp;<span id="cap-desc"></span></span><span id="cap-ref"></span></div>
+
+<div class="window" id="win">
+  <div class="titlebar"><div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div><span id="wtitle">Picsee</span></div>
+  <div class="content">
+
+    <!-- A · Welcome window -->
+    <section class="variant" id="A" data-name="欢迎窗口">
+      <div class="a-left">
+        <div class="mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"><rect x="5" y="9" width="18" height="15" rx="2.5"/><path d="M9 6h16a2 2 0 0 1 2 2v13"/><path d="M8 21l5-5 4 4 2-2 4 3"/></svg></div>
+        <div><h1>欢迎使用 picsee</h1><p>按文件夹安静地浏览照片。图片只留在这台 Mac 上。</p></div>
+        <div class="a-actions">
+          <button class="row" data-act="panel"><span class="ico">📁</span><span><div class="t">打开文件夹…</div><div class="s">选择一个包含照片的文件夹</div></span><kbd class="k">⌘O</kbd></button>
+          <button class="row" data-act="pictures"><span class="ico">🖼</span><span><div class="t">从“图片”开始</div><div class="s">系统面板会定位到“图片”，由你确认</div></span></button>
+          <button class="row" data-act="file"><span class="ico">◻︎</span><span><div class="t">打开单张图片…</div><div class="s">也可以直接把图片拖进窗口</div></span></button>
+        </div>
+        <div class="a-foot">🔒 只读取你选择的文件夹</div>
+      </div>
+      <div class="a-right">
+        <h2>最近打开</h2>
+        <div class="a-empty"><div class="a-ghosts"><span></span><span></span><span></span></div><div>打开过的文件夹会出现在这里，下次一键回到上次看到的那张。</div></div>
+        <h2 style="margin-top:8px">看图只需要几个键</h2>
+        <div class="keys">
+          <kbd>Space</kbd><div>打开 / 关闭大图</div>
+          <kbd>← →</kbd><div>上一张 / 下一张</div>
+          <kbd>Esc</kbd><div>回到网格，保留位置</div>
+          <kbd>0 · 1</kbd><div>适应窗口 · 原始尺寸</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- B · Drop canvas -->
+    <section class="variant" id="B" data-name="拖放画布">
+      <div class="drop" id="drop">
+        <div class="stack" aria-hidden="true">
+          <div class="f" style="background-image:url(assets/images/8897d43d5dc551830572.jpg)"></div>
+          <div class="f" style="background-image:url(assets/images/0a76039c539ba52fbd71.jpg)"></div>
+          <div class="f" style="background-image:url(assets/images/b2b2e3fddb8288fe4613.jpg)"></div>
+        </div>
+        <h1 id="drop-h">把照片文件夹拖到这里</h1>
+        <div class="sub"><button class="btn primary" data-act="panel">选择文件夹…</button><span>或按 <kbd>⌘O</kbd></span></div>
+        <div class="chips"><span>文件夹</span><span>单张或多张图片</span><span>常见图片格式</span></div>
+      </div>
+    </section>
+
+    <!-- C · Locations sidebar -->
+    <section class="variant" id="C" data-name="位置侧栏">
+      <div class="c-body">
+        <aside class="c-side">
+          <h3>位置</h3>
+          <button class="nav sel" data-act="pictures">🖼 图片 <span class="lock">授权</span></button>
+          <button class="nav" data-act="panel">🖥 桌面 <span class="lock">授权</span></button>
+          <button class="nav" data-act="panel">⬇︎ 下载 <span class="lock">授权</span></button>
+          <button class="nav" data-act="panel">☁︎ iCloud 云盘 <span class="lock">授权</span></button>
+          <h3>最近</h3>
+          <div class="muted" style="padding:4px 8px;font-size:12px">还没有打开过文件夹</div>
+        </aside>
+        <main class="c-main">
+          <div class="ghost-grid" aria-hidden="true"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+          <div class="c-card">
+            <h1>选一个位置，照片会铺满这里</h1>
+            <p>点左侧的位置或“选择文件夹”。picsee 只在你确认后读取该文件夹，不扫描整个磁盘。</p>
+            <div style="display:flex;gap:8px;margin-top:6px"><button class="btn primary" data-act="panel">选择文件夹…</button><button class="btn" data-act="pictures">打开“图片”</button></div>
+          </div>
+        </main>
+      </div>
+      <div class="bottombar"><span class="ib">▤</span><span>0 张图片</span><span style="margin-left:auto" class="ib dis">⌕</span><span class="ib dis">⇅</span><span class="ib dis">ⓘ</span></div>
+    </section>
+
+    <!-- D · Sample folder (content-first) -->
+    <section class="variant" id="D" data-name="示例文件夹">
+      <div class="d-banner"><span>👋 这是 picsee 自带的示例照片。用 <kbd>Space</kbd> 打开大图，<kbd>← →</kbd> 翻看。</span>
+        <button class="btn primary" data-act="panel" style="margin-left:8px">打开我的文件夹…</button><button class="x" title="关闭">✕</button></div>
+      <div class="d-grid" id="dgrid"></div>
+      <div class="bottombar"><span class="ib">▤</span><span>示例照片 · 12 张</span><span style="margin-left:auto" class="ib">⌕</span><span class="ib">⇅</span><span class="ib">ⓘ</span></div>
+    </section>
+
+    <!-- E · Command palette -->
+    <section class="variant" id="E" data-name="命令面板">
+      <div class="cmd">
+        <div class="cmd-in"><span class="muted">⌕</span><input id="cmdq" placeholder="打开文件夹、图片，或直接拖进来…" aria-label="命令"></div>
+        <div class="cmd-sec" id="cmdlist"></div>
+        <div class="cmd-foot"><span><kbd>↑↓</kbd> 选择</span><span><kbd>↩</kbd> 执行</span><span style="margin-left:auto">照片只留在这台 Mac 上</span></div>
+      </div>
+      <div class="e-hint">任何时候按 <kbd>⌘O</kbd> 回到这里</div>
+    </section>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<div class="proto-bar" role="toolbar" aria-label="原型切换">
+  <button id="prev" aria-label="上一个方案">←</button>
+  <span class="label" id="label"></span>
+  <button id="next" aria-label="下一个方案">→</button>
+  <span class="sep"></span>
+  <button id="theme">浅色 / 深色</button>
+</div>
+
+<script>
+const VARIANTS = ['A','B','C','D','E'];
+const INFO = {
+  A: ['欢迎窗口', '左：品牌 + 三个起步动作；右：最近打开 + 4 个核心按键。', '参考：Xcode / Pages 欢迎窗、ApolloOne 起始窗'],
+  B: ['拖放画布', '整窗即拖放区，照片叠层在拖入时散开；一个主按钮。', '参考：Pixea 拖放窗口、Preview 直接打开'],
+  C: ['位置侧栏', '直接呈现网格外壳：侧栏列出常用位置，主区是待填充的网格。', '参考：Lyn / XnView MP 的浏览器首屏（picsee 需用户授权）'],
+  D: ['示例文件夹', '内容优先：首次打开即是一个带示例照片的网格，横幅引导打开自己的文件夹。', '参考：Apple 照片首屏即内容'],
+  E: ['命令面板', '居中命令框：可输入筛选，↑↓↩ 操作，键盘优先。', '参考：Raycast / Spotlight 式启动'],
+};
+const params = new URLSearchParams(location.search);
+let current = VARIANTS.includes(params.get('variant')) ? params.get('variant') : 'A';
+let theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+
+function render() {
+  document.documentElement.className = 'theme-' + theme;
+  for (const v of VARIANTS) document.getElementById(v).classList.toggle('on', v === current);
+  const [name, desc, ref] = INFO[current];
+  document.getElementById('label').textContent = `${current} · ${name}`;
+  document.getElementById('cap-title').textContent = `方案 ${current} · ${name}`;
+  document.getElementById('cap-desc').textContent = desc;
+  document.getElementById('cap-ref').textContent = ref;
+  document.getElementById('wtitle').textContent = current === 'D' ? '示例照片' : 'Picsee';
+  const p = new URLSearchParams(location.search); p.set('variant', current); p.set('theme', theme);
+  history.replaceState(null, '', '?' + p.toString());
+  if (current === 'E') setTimeout(() => document.getElementById('cmdq').focus(), 0);
+}
+function step(d) { current = VARIANTS[(VARIANTS.indexOf(current) + d + VARIANTS.length) % VARIANTS.length]; render(); }
+document.getElementById('prev').onclick = () => step(-1);
+document.getElementById('next').onclick = () => step(1);
+document.getElementById('theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; render(); };
+document.addEventListener('keydown', e => {
+  const t = e.target; if (t.matches('input, textarea, [contenteditable]')) return;
+  if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1);
+});
+
+const toast = document.getElementById('toast'); let tt;
+function say(msg) { toast.textContent = msg; toast.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => toast.classList.remove('show'), 1800); }
+const ACT = { panel: '（原型）弹出系统“打开”面板，由你选择文件夹', pictures: '（原型）系统面板定位到“图片”，你点“打开”后才授权',
+              file: '（原型）弹出系统面板选择图片' };
+document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) say(ACT[b.dataset.act]); });
+
+// B: real drag-over feedback + hover preview
+const drop = document.getElementById('drop');
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); document.getElementById('drop-h').textContent = '松开即可打开'; }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); document.getElementById('drop-h').textContent = '把照片文件夹拖到这里'; if (ev === 'drop') say('（原型）打开拖入的文件夹'); }));
+drop.addEventListener('mouseenter', () => drop.classList.add('over'));
+drop.addEventListener('mouseleave', () => drop.classList.remove('over'));
+
+// D: sample grid
+const imgs = ['8897d43d5dc551830572','0a76039c539ba52fbd71','bfacd632b6f4783f5181','b2b2e3fddb8288fe4613','675a412cb8c3b1ac4404',
+  '027bdb1e0a18ecc32ce5','0507fad8b25695d8a7d9','0cf207b2a79464a24b34','43d4b1abd0797dad6e85','7522c3c4cb0bd95c0d7a','b3525a0437e56edf3a3f','d83eaf54fbbb9e975300'];
+document.getElementById('dgrid').innerHTML = imgs.map((h, i) =>
+  `<figure class="${i === 0 ? 'cur' : ''}"><img src="assets/images/${h}.jpg" alt=""><figcaption>示例 ${String(i + 1).padStart(2, '0')}.jpg</figcaption></figure>`).join('');
+document.querySelector('#D .x').onclick = () => document.querySelector('.d-banner').remove();
+
+// E: filterable command list
+const CMDS = [
+  { sec: '开始', t: '📁 选择文件夹…', k: '⌘O', act: 'panel' },
+  { sec: '开始', t: '🖼 从“图片”开始', k: '', act: 'pictures' },
+  { sec: '开始', t: '◻︎ 打开单张图片…', k: '', act: 'file' },
+  { sec: '了解', t: '⌨︎ 看图快捷键：Space · ← → · Esc · 0 / 1', k: '', act: null },
+  { sec: '了解', t: '🔒 picsee 只读取你选择的文件夹', k: '', act: null },
+];
+let hl = 0;
+function drawCmd() {
+  const q = document.getElementById('cmdq').value.trim();
+  const list = CMDS.filter(c => !q || c.t.includes(q));
+  hl = Math.min(hl, Math.max(0, list.length - 1));
+  let html = '', last = '';
+  list.forEach((c, i) => {
+    if (c.sec !== last) { html += `<h4>${c.sec}</h4>`; last = c.sec; }
+    html += `<div class="cmd-item ${i === hl ? 'hl' : ''}" data-i="${i}" ${c.act ? `data-act="${c.act}"` : ''}>${c.t}${c.k ? `<kbd class="k">${c.k}</kbd>` : ''}</div>`;
+  });
+  document.getElementById('cmdlist').innerHTML = html || '<div class="muted" style="padding:10px">没有匹配的命令</div>';
+  drawCmd.list = list;
+}
+document.getElementById('cmdq').addEventListener('input', () => { hl = 0; drawCmd(); });
+document.getElementById('cmdq').addEventListener('keydown', e => {
+  const n = (drawCmd.list || []).length;
+  if (e.key === 'ArrowDown') { hl = (hl + 1) % n; drawCmd(); e.preventDefault(); }
+  if (e.key === 'ArrowUp') { hl = (hl - 1 + n) % n; drawCmd(); e.preventDefault(); }
+  if (e.key === 'Enter') { const c = drawCmd.list[hl]; if (c && c.act) say(ACT[c.act]); }
+});
+drawCmd();
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Question: "Variant B (drop canvas) was chosen; how can its background feel less plain?"
+  Six variants on the same first-launch window, switchable via ?variant=B0..B5 and the floating bar (← / →).
+  ?theme=dark switches tokens. Not the native app; nothing is persisted.
+-->
+<html lang="zh-CN" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picsee · 首次打开 · B 变体原型</title>
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/globals.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/light.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/dark.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: var(--font-sans); font-size: var(--font-size-ui); color: var(--color-text);
+         background: color-mix(in srgb, var(--color-surface) 70%, var(--color-text) 6%);
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+         padding-bottom: 64px; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; }
+  kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 6px; border-radius: var(--radius-inner);
+        border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-muted); }
+
+  /* prototype chrome */
+  .proto-caption { width: 960px; display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+                   color: var(--color-muted); font-size: 12px; }
+  .proto-caption b { color: var(--color-text); font-size: 14px; }
+  .proto-caption .warn { color: var(--color-error-text); white-space: nowrap; }
+  .proto-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100; display: flex;
+               align-items: center; gap: 6px; padding: 6px; border-radius: 999px; background: #111; color: #fff;
+               box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 13px; }
+  .proto-bar button { border: 0; background: transparent; color: #fff; height: 30px; min-width: 30px; border-radius: 999px; cursor: pointer; padding: 0 10px; }
+  .proto-bar button:hover { background: rgba(255,255,255,.14); }
+  .proto-bar { white-space: nowrap; }
+  .proto-bar .label { min-width: 150px; text-align: center; font-weight: 600; }
+  .proto-bar .sep { width: 1px; height: 18px; background: rgba(255,255,255,.25); }
+
+  /* window */
+  .window { width: 960px; height: 640px; border-radius: 12px; overflow: hidden; position: relative; background: var(--color-bg);
+            box-shadow: 0 0 0 0.5px rgba(0,0,0,.25), 0 22px 60px rgba(0,0,0,.28); display: flex; flex-direction: column; }
+  .titlebar { height: 38px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px; font-weight: 600; font-size: 13px;
+              position: relative; z-index: 5; color: var(--color-text); }
+  .traffic { display: flex; gap: 8px; margin-right: 10px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1) { background: #ff5f57; } .traffic i:nth-child(2) { background: #febc2e; } .traffic i:nth-child(3) { background: #28c840; }
+  .content { flex: 1; min-height: 0; position: relative; display: flex; }
+
+  /* shared drop UI */
+  .bg { position: absolute; inset: -38px 0 0 0; overflow: hidden; z-index: 0; pointer-events: none; }
+  .drop { position: relative; z-index: 2; flex: 1; margin: 0 24px 24px; border: 1.5px dashed var(--color-border); border-radius: 16px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+          transition: background var(--motion-duration-fast), border-color var(--motion-duration-fast); }
+  .drop.over { border-color: var(--color-accent); background: var(--color-accent-soft); }
+  .stack { position: relative; width: 220px; height: 150px; margin-bottom: 30px; }
+  .stack .f { position: absolute; inset: 0; border-radius: 10px; background-size: cover; background-position: center;
+              box-shadow: 0 0 0 1px var(--color-border), 0 10px 26px rgba(0,0,0,.18); transition: transform .35s ease; }
+  .stack .f:nth-child(1) { transform: rotate(-9deg) translate(-36px, 8px); }
+  .stack .f:nth-child(2) { transform: rotate(7deg) translate(34px, 6px); }
+  .drop.over .stack .f:nth-child(1) { transform: rotate(-14deg) translate(-58px, 10px); }
+  .drop.over .stack .f:nth-child(2) { transform: rotate(12deg) translate(56px, 8px); }
+  .drop.over .stack .f:nth-child(3) { transform: translateY(-8px) scale(1.04); }
+  .drop h1 { margin: 0; font-size: 20px; }
+  .sub { display: flex; gap: 12px; align-items: center; color: var(--color-muted); }
+  .chips { display: flex; gap: 6px; justify-content: center; }
+  .chips span { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--color-surface); color: var(--color-muted); }
+  .btn { height: 30px; padding: 0 14px; border-radius: var(--radius-control); border: 0; cursor: pointer;
+         background: var(--color-accent-fill); color: var(--color-on-accent); font-weight: 600; }
+  .btn:hover { background: var(--color-accent-fill-hover); }
+  .btn:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+  .toast { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 20; padding: 8px 14px; border-radius: var(--radius-popover);
+           background: var(--color-panel); box-shadow: var(--shadow-soft); font-size: 12px; opacity: 0; transition: opacity var(--motion-duration-fast); pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  /* ---- B1 photo wall: faint, desaturated mosaic behind ---- */
+  .v-B1 .bg .wall { position: absolute; inset: -20px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; transform: rotate(-6deg) scale(1.15); }
+  .v-B1 .bg .wall div { aspect-ratio: 4/3; border-radius: 6px; background-size: cover; background-position: center; filter: grayscale(.6); opacity: .16; }
+  .v-B1 .drop { background: color-mix(in srgb, var(--color-bg) 82%, transparent); border-color: var(--color-border); }
+  .v-B1 .drop.over { background: color-mix(in srgb, var(--color-accent-soft) 70%, var(--color-bg)); }
+
+  /* ---- B2 light table: surface + dot grid, like a lightbox ---- */
+  .v-B2 .window, .v-B2 .content { background: var(--color-surface); }
+  .v-B2 .bg { background-image: radial-gradient(circle, color-mix(in srgb, var(--color-text) 16%, transparent) 1px, transparent 1.4px);
+              background-size: 18px 18px; }
+  .v-B2 .drop { border-style: solid; border-color: var(--color-border-subtle); background: transparent; }
+  .v-B2 .stack .f { box-shadow: 0 0 0 6px #fff, 0 0 0 7px var(--color-border), 0 14px 30px rgba(0,0,0,.18); }
+
+  /* ---- B3 gallery: dark canvas always, photo is the light source ---- */
+  .v-B3 .window { background: #0b0d11; }
+  .v-B3 .titlebar { color: #e5e7eb; }
+  .v-B3 .bg .glow { position: absolute; left: 50%; top: 44%; width: 520px; height: 360px; transform: translate(-50%,-50%);
+                    background-size: cover; background-position: center; filter: blur(70px) saturate(1.3); opacity: .45; }
+  .v-B3 .drop { border-color: rgba(255,255,255,.14); color: #e5e7eb; }
+  .v-B3 .drop .sub, .v-B3 .chips span { color: #9aa4b2; }
+  .v-B3 .chips span { background: rgba(255,255,255,.07); }
+  .v-B3 kbd { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.14); color: #9aa4b2; }
+
+  /* ---- B4 scattered prints around the edges ---- */
+  .v-B4 .bg .print { position: absolute; width: 150px; height: 110px; border-radius: 6px; background-size: cover; background-position: center;
+                     box-shadow: 0 0 0 5px var(--color-bg), 0 0 0 6px var(--color-border), 0 10px 22px rgba(0,0,0,.14);
+                     transition: transform .45s ease, opacity .45s ease; opacity: var(--print-opacity, .5); }
+  .v-B4 .drop { border-color: transparent; }
+  .v-B4 .drop.over { border-color: var(--color-accent); }
+  .v-B4.over .bg .print { opacity: calc(var(--print-opacity, .5) * .4); }
+  .proto-bar .op { display: none; align-items: center; gap: 6px; }
+  .v-B4 .proto-bar .op { display: flex; }
+  .proto-bar .op input { width: 140px; accent-color: #fff; }
+  .proto-bar .op output { min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+  .proto-bar .op button.on { background: rgba(255,255,255,.22); }
+
+  /* ---- B5 slow filmstrip band ---- */
+  .v-B5 .bg .band { position: absolute; left: 0; right: 0; top: 50%; height: 168px; transform: translateY(-62%) rotate(-4deg);
+                    background: color-mix(in srgb, var(--color-text) 88%, transparent); display: flex; align-items: center; overflow: hidden; }
+  .v-B5 .bg .track { display: flex; gap: 12px; padding-left: 12px; animation: slide 60s linear infinite; }
+  .v-B5 .bg .track div { width: 170px; height: 124px; flex: none; border-radius: 3px; background-size: cover; background-position: center; opacity: .9; }
+  .v-B5 .bg .band::before, .v-B5 .bg .band::after { content: ""; position: absolute; left: 0; right: 0; height: 12px;
+        background-image: repeating-linear-gradient(90deg, transparent 0 10px, var(--color-bg) 10px 18px); opacity: .55; }
+  .v-B5 .bg .band::before { top: 6px; } .v-B5 .bg .band::after { bottom: 6px; }
+  @keyframes slide { to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .v-B5 .bg .track { animation: none; } }
+  .v-B5 .stack { display: none; }
+  .v-B5 .drop { justify-content: flex-end; padding-bottom: 54px; border-color: transparent; }
+  .v-B5 .drop.over { border-color: var(--color-accent); }
+</style>
+</head>
+<body>
+<div class="proto-caption"><span><b id="cap-title"></b>&nbsp; <span id="cap-desc"></span></span><span id="cap-note" class="warn"></span></div>
+<div class="window" id="win">
+  <div class="titlebar"><div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>Picsee</div>
+  <div class="content" id="content">
+    <div class="bg" id="bg" aria-hidden="true"></div>
+    <div class="drop" id="drop">
+      <div class="stack" aria-hidden="true">
+        <div class="f" style="background-image:url(assets/images/8897d43d5dc551830572.jpg)"></div>
+        <div class="f" style="background-image:url(assets/images/0a76039c539ba52fbd71.jpg)"></div>
+        <div class="f" style="background-image:url(assets/images/b2b2e3fddb8288fe4613.jpg)"></div>
+      </div>
+      <h1 id="drop-h">把照片文件夹拖到这里</h1>
+      <div class="sub"><button class="btn" id="open">选择文件夹…</button><span>或按 <kbd>⌘O</kbd></span></div>
+      <div class="chips"><span>文件夹</span><span>单张或多张图片</span><span>常见图片格式</span></div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+<div class="proto-bar" role="toolbar" aria-label="原型切换">
+  <button id="prev" aria-label="上一个方案">←</button><span class="label" id="label"></span><button id="next" aria-label="下一个方案">→</button>
+  <span class="op" id="op"><span class="sep"></span><span id="opname">相纸透明度</span><input type="range" id="opr" min="10" max="100" step="5" aria-label="散落相纸不透明度"><output id="opv"></output><button data-o="30">30%</button><button data-o="40">40%</button><button data-o="50">50%</button><button data-o="80">80%</button></span>
+  <span class="sep"></span><button id="theme">浅色 / 深色</button>
+</div>
+<script>
+const IMGS = ['8897d43d5dc551830572','0a76039c539ba52fbd71','bfacd632b6f4783f5181','b2b2e3fddb8288fe4613','675a412cb8c3b1ac4404','027bdb1e0a18ecc32ce5',
+  '0507fad8b25695d8a7d9','0cf207b2a79464a24b34','43d4b1abd0797dad6e85','7522c3c4cb0bd95c0d7a','b3525a0437e56edf3a3f','d83eaf54fbbb9e975300'];
+const url = h => `url(assets/images/${h}.jpg)`;
+const V = {
+  B0: ['原版 B', '对照：白底 + 虚线拖放区 + 照片叠层。', ''],
+  B1: ['照片墙', '背景是一面倾斜、去饱和、16% 透明的照片墙，拖放区是半透明的白卡。', '照片作装饰底纹：需确认是否算“营销首屏”'],
+  B2: ['看片台', '灰色表面 + 细点阵，照片像放在看片台上的带白边相纸；不用任何照片作背景。', ''],
+  B3: ['暗房画廊', '始终深色画布，中间照片的模糊色光照亮周围；最有“看图软件”的气质。', '模糊色光接近“装饰渐变”，需你拍板'],
+  B4: ['散落相纸', '十几张带白边的照片散落在窗口四周，中央留白给文字；拖入时照片退后。', ''],
+  B5: ['胶片带', '一条倾斜的胶片带缓慢横向滚动穿过窗口（尊重“减少动态效果”）。', '常驻动画：需确认是否接受'],
+};
+const KEYS = Object.keys(V);
+const params = new URLSearchParams(location.search);
+let cur = KEYS.includes(params.get('variant')) ? params.get('variant') : 'B4';
+let theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+// chosen 2026-10-27: light 30%, dark 40%; the slider edits the current theme's value
+const clampOp = v => Math.min(100, Math.max(10, parseInt(v, 10)));
+const OPS = { light: clampOp(params.get('op-light')) || 30, dark: clampOp(params.get('op-dark')) || 40 };
+let op = OPS[theme];
+const bg = document.getElementById('bg'), content = document.getElementById('content');
+
+function buildBg(v) {
+  bg.innerHTML = '';
+  if (v === 'B1') {
+    const wall = document.createElement('div'); wall.className = 'wall';
+    for (let i = 0; i < 56; i++) { const d = document.createElement('div'); d.style.backgroundImage = url(IMGS[(i * 5) % IMGS.length]); wall.append(d); }
+    bg.append(wall);
+  }
+  if (v === 'B3') { const g = document.createElement('div'); g.className = 'glow'; g.style.backgroundImage = url(IMGS[3]); bg.append(g); }
+  if (v === 'B4') {
+    const spots = [[30,40,-8],[200,10,6],[720,20,-5],[800,150,9],[20,240,7],[790,330,-7],[60,440,-4],[230,470,8],[600,470,-9],[780,470,5],[400,500,3],[420,-20,-3]];
+    spots.forEach(([x, y, r], i) => { const p = document.createElement('div'); p.className = 'print';
+      p.style.left = x + 'px'; p.style.top = (y + 38) + 'px'; p.style.transform = `rotate(${r}deg)`; p.style.backgroundImage = url(IMGS[i % IMGS.length]); bg.append(p); });
+  }
+  if (v === 'B5') {
+    const band = document.createElement('div'); band.className = 'band'; const tr = document.createElement('div'); tr.className = 'track';
+    for (let i = 0; i < IMGS.length * 2; i++) { const d = document.createElement('div'); d.style.backgroundImage = url(IMGS[i % IMGS.length]); tr.append(d); }
+    band.append(tr); bg.append(band);
+  }
+}
+function render() {
+  document.documentElement.className = `theme-${theme} v-${cur}`;
+  applyOp();
+  buildBg(cur);
+  const [n, d, note] = V[cur];
+  document.getElementById('label').textContent = `${cur} · ${n}`;
+  document.getElementById('cap-title').textContent = `方案 ${cur} · ${n}`;
+  document.getElementById('cap-desc').textContent = d;
+  document.getElementById('cap-note').textContent = note ? '⚠ ' + note : '';
+  const p = new URLSearchParams(location.search); p.set('variant', cur); p.set('theme', theme); history.replaceState(null, '', '?' + p);
+}
+function applyOp() {
+  document.documentElement.style.setProperty('--print-opacity', op / 100);
+  document.getElementById('opr').value = op; document.getElementById('opv').textContent = op + '%';
+  document.getElementById('opname').textContent = (theme === 'dark' ? '深色' : '浅色') + '相纸透明度';
+  document.querySelectorAll('#op button').forEach(b => b.classList.toggle('on', +b.dataset.o === op));
+  OPS[theme] = op;
+  const p = new URLSearchParams(location.search); p.delete('opacity'); p.set('op-light', OPS.light); p.set('op-dark', OPS.dark); history.replaceState(null, '', '?' + p);
+}
+document.getElementById('opr').addEventListener('input', e => { op = +e.target.value; applyOp(); });
+document.querySelectorAll('#op button').forEach(b => b.onclick = () => { op = +b.dataset.o; applyOp(); });
+const step = k => { cur = KEYS[(KEYS.indexOf(cur) + k + KEYS.length) % KEYS.length]; render(); };
+document.getElementById('prev').onclick = () => step(-1);
+document.getElementById('next').onclick = () => step(1);
+document.getElementById('theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; op = OPS[theme]; render(); };
+document.addEventListener('keydown', e => { if (e.target.id === 'opr') return; if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); });
+
+const drop = document.getElementById('drop'), h = document.getElementById('drop-h'), toast = document.getElementById('toast'); let tt;
+const say = m => { toast.textContent = m; toast.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => toast.classList.remove('show'), 1800); };
+const on = () => { drop.classList.add('over'); document.documentElement.classList.add('over'); h.textContent = '松开即可打开'; };
+const off = () => { drop.classList.remove('over'); document.documentElement.classList.remove('over'); h.textContent = '把照片文件夹拖到这里'; };
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); on(); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); off(); if (ev === 'drop') say('（原型）打开拖入的文件夹'); }));
+drop.addEventListener('mouseenter', on); drop.addEventListener('mouseleave', off);
+document.getElementById('open').onclick = () => say('（原型）弹出系统“打开”面板，由你选择文件夹');
+render();
+</script>
+</body>
+</html>
