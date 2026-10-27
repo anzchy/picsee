@@ -1200,6 +1200,7 @@ extension CanvasWindowController: FolderScanHost {
         retryFromFolderScan = false
         fileURL = nil
         session.closeImage()
+        syncInspector()
         canvas.showFailure()
         WindowImageTitle.apply(to: window, imageURL: nil)
     }

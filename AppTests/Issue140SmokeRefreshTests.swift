@@ -154,3 +154,79 @@ import Darwin
     #expect(controller.session.folderScan?.currentURL?.lastPathComponent == neighbour.lastPathComponent)
     #expect(chrome.position == "Images: 1")
 }
+
+@Test @MainActor func issue140InspectorFollowsWatchedRenameReplacementAndDeletion() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    let original = base.appendingPathComponent("03-landscape.png")
+    let renamed = base.appendingPathComponent("03-renamed.png")
+    let neighbour = base.appendingPathComponent("04-neighbour.png")
+    let replacement = base.appendingPathComponent(".replacement.png")
+    try fm.copyItem(at: smokeFixture("landscape-3x2.png"), to: original)
+    try fm.copyItem(at: smokeFixture("portrait-2x3.png"), to: neighbour)
+    let (controller, services, window, _) = try await smokeViewer(in: base, image: original)
+    defer { window.close() }
+    #expect(controller.route(.inspector, from: .key))
+    let firstDeadline = ContinuousClock.now + .seconds(8)
+    while controller.inspector.value == .loading && ContinuousClock.now < firstDeadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    guard case .known(let firstMetadata) = controller.inspector.value else {
+        Issue.record("Inspector did not read the initial image"); return
+    }
+    #expect(controller.inspector.name == original.lastPathComponent)
+
+    try fm.moveItem(at: original, to: renamed)
+    services.watch.reconcileAll()
+    let renameDeadline = ContinuousClock.now + .seconds(8)
+    while (controller.inspector.name != renamed.lastPathComponent ||
+           controller.session.imageLoader.presented?.fileURL.lastPathComponent != renamed.lastPathComponent) &&
+          ContinuousClock.now < renameDeadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(controller.inspector.name == renamed.lastPathComponent)
+    #expect(controller.session.imageLoader.presented?.fileURL.lastPathComponent == renamed.lastPathComponent)
+
+    try fm.copyItem(at: smokeFixture("portrait-2x3.png"), to: replacement)
+    let replaceResult = replacement.path.withCString { from in
+        renamed.path.withCString { to in Darwin.rename(from, to) }
+    }
+    #expect(replaceResult == 0)
+    services.watch.reconcileAll()
+    let replacementDeadline = ContinuousClock.now + .seconds(8)
+    while ContinuousClock.now < replacementDeadline {
+        if case .known(let metadata) = controller.inspector.value,
+           metadata.pixelWidth != firstMetadata.pixelWidth,
+           metadata.pixelHeight != firstMetadata.pixelHeight { break }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    guard case .known(let replacementMetadata) = controller.inspector.value else {
+        Issue.record("Inspector did not read the replacement"); return
+    }
+    #expect(replacementMetadata.pixelWidth != firstMetadata.pixelWidth)
+    #expect(replacementMetadata.pixelHeight != firstMetadata.pixelHeight)
+    #expect(controller.inspector.name == renamed.lastPathComponent)
+
+    try fm.removeItem(at: renamed)
+    services.watch.reconcileAll()
+    let successorDeadline = ContinuousClock.now + .seconds(8)
+    while (controller.inspector.name != neighbour.lastPathComponent ||
+           controller.session.imageLoader.presented?.fileURL.lastPathComponent != neighbour.lastPathComponent) &&
+          ContinuousClock.now < successorDeadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(controller.inspector.name == neighbour.lastPathComponent)
+    #expect(controller.session.imageLoader.presented?.fileURL.lastPathComponent == neighbour.lastPathComponent)
+
+    try fm.removeItem(at: neighbour)
+    services.watch.reconcileAll()
+    let emptyDeadline = ContinuousClock.now + .seconds(8)
+    while controller.inspector.name != nil && ContinuousClock.now < emptyDeadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(controller.inspector.name == nil)
+    #expect(controller.inspector.value == .unknown)
+    #expect(controller.session.inspectorFocus.isVisible)
+}
