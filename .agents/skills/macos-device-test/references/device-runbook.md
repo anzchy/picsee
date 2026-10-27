@@ -392,6 +392,7 @@ inside `.build/device-<run-id>/`. Heavy jobs use `scripts/heavy-lock.sh`: picsee
 
 ## 16. Recording the result
 
+- Before recording any performance number in `docs/validation/` or citing it for a ledger status or limitation, fill the [benchmark vetting checklist](../../../../docs/validation/benchmark-checklist.md) for each metric.
 - Write the record to `docs/validation/P<n>.md`, a section per run: date, machine/chip/memory/macOS, display
   and scale, bundle path, git SHA (and how it was verified, §6), fixtures, the verdict table, deviations and
   NOT VERIFIED reasons. Mention each ledger row ID it covers; the gardener matches on them. Evidence stays in
