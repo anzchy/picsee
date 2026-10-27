@@ -31,8 +31,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   } else {
     try {
       const base = execFileSync('git', ['merge-base', args[baseAt + 1], 'HEAD'], { encoding: 'utf8' }).trim();
-      const files = execFileSync('git', ['diff', '--name-only', '--diff-filter=ACMR', `${base}..HEAD`], { encoding: 'utf8' }).trim().split('\n');
-      const result = checkUIParity(readFileSync(args[bodyAt + 1], 'utf8'), files);
+      const files = execFileSync('git', ['diff', '--name-only', '--diff-filter=ACMRD', `${base}..HEAD`], { encoding: 'utf8' }).trim().split('\n');
+      const body = readFileSync(args[bodyAt + 1], 'utf8');
+      const result = checkUIParity(body, files);
+      if (result.ok && files.some(isUIFile) &&
+          !/^Device-Smoke:\s*(?:PASS|FAIL|NOT VERIFIED)\s+[0-9a-f]{7,40}\s+run=\S+\s+—\s+\S.*$/m.test(body)) {
+        result.ok = false;
+        result.reason = 'UI files changed; PR body needs a Device-Smoke: line for the changed path';
+      }
       if (!result.ok) { console.error(result.reason); process.exitCode = 1; }
       else console.log('UI-Parity PR body: PASS');
     } catch (error) {
