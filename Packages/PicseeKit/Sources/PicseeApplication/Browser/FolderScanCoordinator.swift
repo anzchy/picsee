@@ -217,7 +217,8 @@ struct FolderScanRestorePoint {
                     failure = nil; refreshFailed = false
                     host?.folderScanDidComplete(count: fresh.navigationEntries.count)
                 }
-                if fresh.entries == sourceSnapshot?.entries {
+                if fresh.entries == sourceSnapshot?.entries &&
+                    fresh.version.folder.standardizedFileURL.pathComponents == sourceSnapshot?.version.folder.standardizedFileURL.pathComponents {
                     projectSource()
                     enqueueMetadata()
                 } else {
