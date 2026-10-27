@@ -38,6 +38,58 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     }
 }
 
+@Test @MainActor func issue136SmokeInspectorLabelsStayOneLineAtTiledWidths() throws {
+    _ = NSApplication.shared
+    #expect(InspectorPanelLayout.labelWidth([]) == 48)
+    let font = NSFont.systemFont(ofSize: 12)
+    let lineHeight = ceil(font.ascender - font.descender + font.leading)
+    let localizedLabels = [
+        ["Dimensions", "Modified", "Created", "Type", "Size"],
+        ["尺寸", "修改日期", "创建日期", "类型", "大小"]
+    ]
+    for panelWidth in [195.0, 220.0] {
+        let contentWidth = panelWidth - 34
+        for labels in localizedLabels {
+            let column = InspectorPanelLayout.labelWidth(labels)
+            let widest = labels.map { ceil(($0 as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0
+            #expect(column >= max(48, widest))
+            for label in labels {
+                let measured = ceil((label as NSString).size(withAttributes: [.font: font]).width)
+                #expect(column >= max(48, measured))
+                let row = InspectorFieldRow(label: label, value: "PNG", id: "smoke", columnWidth: column)
+                    .frame(width: contentWidth, alignment: .leading)
+                    .background(Color.white)
+                let host = NSHostingView(rootView: row)
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: contentWidth, height: 48),
+                    styleMask: [], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                defer { window.close() }
+                window.contentView = host
+                host.layoutSubtreeIfNeeded()
+                let renderedHeight = host.fittingSize.height
+                #expect(renderedHeight <= lineHeight + 1)
+                #expect(renderedHeight >= lineHeight - 1)
+                #expect(contentWidth - column - 7 > 0)
+                let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                let scale = CGFloat(bitmap.pixelsWide) / host.bounds.width
+                let labelEdge = min(bitmap.pixelsWide, Int(ceil(column * scale)))
+                let rows = (0..<bitmap.pixelsHigh).filter { y in
+                    (0..<labelEdge).contains { x in
+                        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { return false }
+                        return color.redComponent < 0.7 || color.greenComponent < 0.7 || color.blueComponent < 0.7
+                    }
+                }
+                #expect(!rows.isEmpty)
+                if let first = rows.first, let last = rows.last {
+                    #expect(CGFloat(last - first + 1) <= lineHeight * scale)
+                }
+                window.close()
+            }
+        }
+    }
+}
+
 // design/prototypes/picsee-browser/states/viewer-inspector.html and viewer-inspector-light.html:
 // .inspector dl uses a 7 px column gap and 12 px type; the label and value must remain distinct.
 @Test @MainActor func issue136Pages16And34DrawEnglishAndChineseRowsWithoutOverlap() throws {

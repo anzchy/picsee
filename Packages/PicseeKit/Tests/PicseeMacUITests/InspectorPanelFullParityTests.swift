@@ -95,10 +95,12 @@ private func ink(_ image: CGImage, background: PinnedDesign.Color) -> (width: In
             let rows = [(word("Dimensions"), "6000 × 4000"), (word("Type"), "PNG"),
                         (word("Created"), word("Unknown")), (word("Modified"), word("Unknown")),
                         (word("Size"), word("Unknown"))]
+            let labelColumnWidth = InspectorPanelLayout.labelWidth(rows.map(\.0))
             var previousTop = 0, previousHeight = 0
             for (index, row) in rows.enumerated() {
                 let rowRenderer = ImageRenderer(content: InspectorFieldRow(label: row.0, value: row.1,
-                    id: "expected-\(index)").frame(width: 186).background(backgroundView)
+                    id: "expected-\(index)", columnWidth: labelColumnWidth)
+                    .frame(width: 186).background(backgroundView)
                     .environment(\.colorScheme, theme == .dark ? .dark : .light))
                 rowRenderer.scale = 1
                 let reference = ink(try #require(rowRenderer.cgImage), background: background)
