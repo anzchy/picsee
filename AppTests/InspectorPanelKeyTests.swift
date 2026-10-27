@@ -110,6 +110,53 @@ import PicseeCore
     #expect(controller.session.inspectorFocus.isVisible)
 }
 
+@MainActor @Test func issue136Combo2DirectSearchUpdatesInspectorWithoutWindowUpdate() async throws {
+    _ = NSApplication.shared
+    let delayed = Task<AccessServices, Error> {
+        try await Task.sleep(for: .seconds(60))
+        throw CancellationError()
+    }
+    let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
+        preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: delayed,
+        motionPolicy: MotionPolicy(source: KeyTestMotionSource()))
+    let window = try #require(controller.window)
+    defer { window.close(); delayed.cancel() }
+    let shell = try #require(window.contentView?.subviews.compactMap { $0 as? GridShellView }.first)
+    let grid = try #require(shell.mainContent.subviews.compactMap { $0 as? GridBrowserView }.first)
+    let folder = URL(fileURLWithPath: "/tmp/issue136-combo2-search")
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
+    let a = FolderEntry(url: folder.appendingPathComponent("match-a.jpg"), root: root)
+    let d = FolderEntry(url: folder.appendingPathComponent("match-d.jpg"), root: root)
+    let source = FolderSnapshot(version: .init(rootID: root.id, folder: folder, generation: 1),
+        entries: [a, d], isComplete: true)
+    controller.browseRecoveredFolder(folder, rootID: root.id)
+    controller.applyObservedGridSnapshot(source)
+    grid.setCurrentItemID(d.itemID)
+    controller.session.focus(d.itemID)
+    #expect(controller.route(.inspector, from: .key))
+    #expect(controller.inspector.name == d.url.lastPathComponent)
+    func type(_ term: String) {
+        shell.focusSearch()
+        shell.setSearchTerm(term)
+        shell.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification,
+            object: shell.searchField))
+    }
+    type("match-a")
+    let firstDeadline = Date().addingTimeInterval(2)
+    while !shell.searchStatus.stringValue.contains("match-a") && Date() < firstDeadline { await Task.yield() }
+    #expect(shell.searchStatus.stringValue.contains("match-a"))
+    #expect(controller.session.selection.currentItemID == a.itemID)
+    #expect(controller.inspector.name == a.url.lastPathComponent)
+    type("unmatched")
+    let emptyDeadline = Date().addingTimeInterval(2)
+    while !shell.searchStatus.stringValue.contains("unmatched") && Date() < emptyDeadline { await Task.yield() }
+    #expect(shell.searchEmptyVisible)
+    #expect(controller.inspector.name == nil)
+    type("")
+    #expect(controller.session.selection.currentItemID == d.itemID)
+    #expect(controller.inspector.name == d.url.lastPathComponent)
+}
+
 @MainActor private final class PanelResponder: NSView {
     override var acceptsFirstResponder: Bool { true }
 }

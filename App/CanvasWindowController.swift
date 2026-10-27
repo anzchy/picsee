@@ -643,15 +643,11 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func presentSearchedGrid(_ filtered: FolderSnapshot, source: FolderSnapshot) {
-        let current = gridSearch.currentItemID(in: filtered, currentItemID: gridView.currentItemID)
-        session.updateItems(filtered.navigationEntries.map(\.itemID),
-            sourceVersion: .init(source.version.generation))
-        gridView.display(filtered, selection: session.selection)
-        gridView.setCurrentItemID(current)
-        if let current { session.focus(current) }
-        gridShell.showSearchEmpty(!gridSearch.term.isEmpty && filtered.navigationEntries.isEmpty, term: gridSearch.term)
-        gridShell.setSearchStatus(resultCount: filtered.navigationEntries.count, term: gridSearch.term)
+        GridSearchReconciler.present(filtered, source: source, session: session,
+            search: gridSearch, grid: gridView, shell: gridShell,
+            onReconciled: { [weak self] in self?.syncInspectorAfterGridReconciliation() })
     }
+    private func syncInspectorAfterGridReconciliation() { syncInspector() }
     private func applyGridSort(_ action: FolderMenuAction) {
         guard gridSearchAvailable, session.hasFolderSource,
               session.filePreviewSet == nil, session.previewSet == nil else { return }
@@ -952,12 +948,12 @@ extension CanvasWindowController: FolderScanHost {
                 // Re-filter synchronously without moving keyboard focus out of the search field.
                 GridWatchedSearchRefresh.apply(snapshot, session: session, search: gridSearch,
                     scheduler: searchProjection, grid: gridView, shell: gridShell, gridVisible: true,
-                    onReconciled: { [weak self] in self?.syncInspector() })
+                    onReconciled: { [weak self] in self?.syncInspectorAfterGridReconciliation() })
                 gridView.restoreContentOffset(offset)
             } else {
                 GridWatchedSearchRefresh.apply(snapshot, session: session, search: gridSearch,
                     scheduler: searchProjection, grid: gridView, shell: gridShell, gridVisible: false,
-                    onReconciled: { [weak self] in self?.syncInspector() })
+                    onReconciled: { [weak self] in self?.syncInspectorAfterGridReconciliation() })
             }
         }
     }

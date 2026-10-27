@@ -10,6 +10,32 @@ private struct ComboInspectorReader: InspectorMetadataReading {
     func read(_ url: URL, access: AccessRequest) async throws -> InspectorMetadata { .init() }
 }
 
+@Test @MainActor func issue136Combo2DirectSearchReconcilesInspectorCurrentAndEmpty() {
+    let scene = SearchedRefreshScene()
+    let model = InspectorModel(reader: ComboInspectorReader())
+    let a = scene.entry("match-a.jpg"), d = scene.entry("match-d.jpg")
+    let source = scene.snapshot([a, d], 1)
+    scene.begin(source, term: "match", current: d.itemID)
+    model.select(itemID: d.itemID, url: d.url, access: .fileGrant(d.url))
+    func present(_ term: String) {
+        scene.search.setTerm(term, currentItemID: scene.grid.currentItemID)
+        let filtered = scene.search.project(source)
+        GridSearchReconciler.present(filtered, source: source, session: scene.session,
+            search: scene.search, grid: scene.grid, shell: scene.shell, onReconciled: {
+                let current = scene.session.selection.currentItemID
+                let entry = source.entries.first { $0.itemID == current }
+                model.select(itemID: current, url: entry?.url,
+                    access: entry.map { .fileGrant($0.url) })
+            })
+    }
+    present("match-a")
+    #expect(model.name == a.url.lastPathComponent)
+    present("unmatched")
+    #expect(model.name == nil)
+    present("")
+    #expect(model.name == d.url.lastPathComponent)
+}
+
 @Test @MainActor func issue136ComboWatchedRefreshSynchronizesInspectorCurrentAndEmpty() {
     let scene = SearchedRefreshScene()
     let model = InspectorModel(reader: ComboInspectorReader())
