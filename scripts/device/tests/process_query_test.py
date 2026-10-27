@@ -112,6 +112,19 @@ class ProcessQueryTests(unittest.TestCase):
             self.assertTrue(any(line.startswith('FAIL single-instance — pgrep')
                                 for line in lines), lines)
 
+    def test_cleanup_refuses_pid_without_run_ownership_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            (run / 'bundle.path').write_text(str(run / 'Picsee.app') + '\n')
+            (run / 'picsee.pid').write_text('4242\n')
+            with patch.object(d.os, 'kill') as kill, \
+                    patch.object(d, 'process_snapshot') as snapshot:
+                with self.assertRaisesRegex(RuntimeError, 'invalid process identity record'):
+                    d.cleanup(run)
+            kill.assert_not_called()
+            snapshot.assert_not_called()
+            self.assertTrue((run / 'retired').exists())
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
