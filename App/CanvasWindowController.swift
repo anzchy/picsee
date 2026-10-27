@@ -85,12 +85,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     /// Under memory pressure the grid keeps only visible thumbnails; prefetch resumes when it ends.
     func memoryPressure(_ active: Bool) { gridView.setMemoryPressure(active) }
 
-    init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore, accessServices: Task<AccessServices, Error>, motionPolicy: MotionPolicy) {
+    init(pipeline: any ImagePipeline, preferencesStore: any DisplayPreferencesStore, accessServices: Task<AccessServices, Error>,
+         motionPolicy: MotionPolicy, inspectorReader: (any InspectorMetadataReading)? = nil) {
         self.pipeline = pipeline
         self.accessServices = accessServices
         session = ViewerSession(preferencesStore: preferencesStore, imageLoader: ViewerImageLoader(trace: NativeFirstPreviewTrace(), presentation: pipeline as? any ImagePresentationPinning))
         canvas = CanvasInputBridge(frame: .zero, session: session)
-        inspector = InspectorModel(reader: WindowInspectorReader(services: accessServices))
+        inspector = InspectorModel(reader: inspectorReader ?? WindowInspectorReader(services: accessServices))
         self.motionPolicy = motionPolicy
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -754,7 +755,11 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
                   let root = gridFolderRoot else {
                 inspector.select(itemID: nil, url: nil, access: nil); return
             }
-            inspector.select(itemID: id, url: entry.url, access: .root(root, file: entry.url), refresh: refresh)
+            let revisionKey = "\(entry.resourceIdentifier.map { "id:\($0)" } ?? "id:nil")|" +
+                "\(entry.fileSize.map { "bytes:\($0)" } ?? "bytes:nil")|" +
+                "\(entry.modificationDate.map { "modified:\($0.timeIntervalSinceReferenceDate)" } ?? "modified:nil")"
+            inspector.select(itemID: id, url: entry.url, access: .root(root, file: entry.url),
+                revision: revisionKey, refresh: refresh)
         } else if let fileURL {
             let access = retryIntent?.accessRequest ?? gridFolderRoot.map { AccessRequest.root($0, file: fileURL) } ?? .fileGrant(fileURL)
             let revision = session.imageLoader.presented?.key.revision
