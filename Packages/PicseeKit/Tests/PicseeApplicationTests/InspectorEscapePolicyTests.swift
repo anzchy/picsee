@@ -2,6 +2,13 @@ import Testing
 import PicseeCore
 @testable import PicseeApplication
 
+@Test func issue136ComboGridSearchEscapePrecedesInspector() {
+    #expect(!InspectorEscapePolicy.handlesEscape(inspectorVisible: true, menuTracking: false,
+        focus: .textInput, keyCode: 53, gridSearchFocused: true))
+    #expect(InspectorEscapePolicy.handlesEscape(inspectorVisible: true, menuTracking: false,
+        focus: .panel, keyCode: 53, gridSearchFocused: false))
+}
+
 @Test func inspectorEscapePrecedesGridTextInputGuard() {
     for focus in [FocusContext.textInput, .panel] {
         #expect(InspectorEscapePolicy.handlesEscape(inspectorVisible: true,

@@ -734,7 +734,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             if event.keyCode == 36 || event.keyCode == 76 { return route(.enter, from: .key) }
         }
         if InspectorEscapePolicy.handlesEscape(inspectorVisible: inspectorVisible,
-            menuTracking: menuTracking(), focus: focusContext, keyCode: event.keyCode) {
+            menuTracking: menuTracking(), focus: focusContext, keyCode: event.keyCode,
+            gridSearchFocused: isGridSearchFocused) {
             return route(.escape, from: .key)
         }
         guard !menuTracking(), inspectorVisible else { return false }
