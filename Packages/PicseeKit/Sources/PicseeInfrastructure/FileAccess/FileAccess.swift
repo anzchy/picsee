@@ -37,11 +37,15 @@ public actor FileAccess: AccessLeasing {
     public let storeCorrupt: Bool
     private var saved: [AccessRootRecord]
     private var roots: [AccessRootID: URL] = [:]
+    private var previousRoots: [AccessRootID: [URL]] = [:]
     private var outcomes: [AccessRootID: String] = [:]
     private struct Active { let session: ScopeSession; var tokens: Set<UUID> }
-    private enum SessionKey: Hashable { case root(AccessRootID, URL), file(URL) }
+    private enum SessionKey: Hashable { case root(AccessRootID, URL), file(URL, URL) }
     private var active: [SessionKey: Active] = [:]
     private var requests: [UUID: SessionKey] = [:]
+    /// Session-only: File Grants never become persisted Access Roots.
+    private struct FileGrantBookmark { var data: Data; var resource: FileResourceIdentity? }
+    private var fileBookmarks: [URL: FileGrantBookmark] = [:]
 
     public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String,
                 boundary: @escaping @Sendable (URL, URL) -> Bool = { AccessBoundary.contains($0, in: $1) }) throws {
@@ -82,6 +86,44 @@ public actor FileAccess: AccessLeasing {
     public func launchOutcomes() -> [AccessRootID: String] { outcomes }
     /// Published location only; Recent queries never create or refresh authority.
     public func rootURL(_ id: AccessRootID) -> URL? { roots[id] }
+    private func publishRoot(_ id: AccessRootID, url: URL) {
+        if let old = roots[id], old.standardizedFileURL != url.standardizedFileURL {
+            var history = previousRoots[id] ?? []
+            history.append(old)
+            if history.count > 8 { history.removeFirst() }
+            previousRoots[id] = history
+        }
+        roots[id] = url
+    }
+    public func resolveFileGrant(_ file: URL) throws -> URL {
+        let key = file.standardizedFileURL
+        guard let bookmark = fileBookmarks[key] else { return file }
+        // A new inode at the old name could be a replacement or reuse after rename.
+        if FileManager.default.fileExists(atPath: file.path) {
+            let current = try? URLIdentityResourceReader().identity(for: file)
+            if bookmark.resource == nil || current == bookmark.resource { return file }
+            if let moved = try? resolveFileBookmark(bookmark, original: file), moved != file,
+               FileManager.default.fileExists(atPath: moved.path) { return moved }
+            let session = try ScopeSession(scope: scope, url: file, rootID: nil)
+            defer { session.stop() }
+            if let data = try? bookmarks.create(for: file) {
+                fileBookmarks[key] = FileGrantBookmark(data: data, resource: current)
+            }
+            return file
+        }
+        return try resolveFileBookmark(bookmark, original: file)
+    }
+    private func resolveFileBookmark(_ bookmark: FileGrantBookmark, original: URL) throws -> URL {
+        do {
+            let resolved = try bookmarks.resolve(bookmark.data)
+            if resolved.stale {
+                let session = try ScopeSession(scope: scope, url: resolved.url, rootID: nil)
+                defer { session.stop() }
+                fileBookmarks[original.standardizedFileURL]?.data = try bookmarks.create(for: resolved.url)
+            }
+            return resolved.url
+        } catch { throw FileAccessError.needsFileReconnection(original) }
+    }
     /// A point-in-time access check for Recent, balanced before any UI decision.
     public func probeRootURL(_ id: AccessRootID) throws -> URL {
         guard let record = saved.first(where: { $0.id == id }), roots[id] != nil else {
@@ -95,6 +137,22 @@ public actor FileAccess: AccessLeasing {
         let lease = try acquire(.root(id, file: current))
         release(lease)
         return lease.url
+    }
+    public func relocatedFolder(_ folder: URL, rootID id: AccessRootID) throws -> URL? {
+        var candidates = previousRoots[id] ?? []
+        if let currentRoot = roots[id] { candidates.append(currentRoot) }
+        var oldRoot: URL?
+        for candidate in candidates where folder.standardizedFileURL.pathComponents.starts(with: candidate.standardizedFileURL.pathComponents) {
+            if let current = oldRoot, current.pathComponents.count >= candidate.pathComponents.count { continue }
+            oldRoot = candidate
+        }
+        guard let oldRoot else { return nil }
+        let newRoot = try probeRootURL(id)
+        guard newRoot.standardizedFileURL != oldRoot.standardizedFileURL else { return nil }
+        let suffix = folder.standardizedFileURL.pathComponents.dropFirst(oldRoot.standardizedFileURL.pathComponents.count)
+        var rebased = newRoot
+        for component in suffix { rebased.appendPathComponent(component) }
+        return rebased
     }
     /// Only an explicit system-panel selection may replace a persisted root.
     public func reconnect(_ id: AccessRootID, folder: URL) throws -> URL {
@@ -122,7 +180,7 @@ public actor FileAccess: AccessLeasing {
             else { replacement.append(record) }
             phase = "store"
             try store.save(replacement)
-            saved = replacement; roots[id] = folder
+            saved = replacement; publishRoot(id, url: folder)
             logger.notice("AccessReconnect root=\(id.rawValue.uuidString, privacy: .public) outcome=reconnected error=none path=\(folder.path, privacy: .private)")
             return folder
         } catch {
@@ -183,7 +241,7 @@ public actor FileAccess: AccessLeasing {
             }
             phase = "store"
             try store.save(replacement)
-            saved = replacement; roots[id] = folder
+            saved = replacement; publishRoot(id, url: folder)
             logger.notice("AccessGrant kind=panelFolder scopeStarted=true root=\(id.rawValue.uuidString, privacy: .public) existing=\(existing, privacy: .public) outcome=granted path=\(folder.path, privacy: .private)")
             return id
         } catch {
@@ -212,9 +270,10 @@ public actor FileAccess: AccessLeasing {
             catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
             if active[key] != nil, !boundary(file, url) { throw FileAccessError.outsideRoot }
         case .fileGrant(let file):
-            key = .file(file.standardizedFileURL); url = file; rootID = nil
+            url = try resolveFileGrant(file)
+            key = .file(file.standardizedFileURL, url.standardizedFileURL); rootID = nil
         }
-        let lease = AccessLease(url: url, rootID: rootID)
+        let lease = AccessLease(url: url, rootID: rootID, resolvedFileURL: rootID == nil ? url : nil)
         if var entry = active[key] {
             if let record = staleRecord, roots[record.id] != url {
                 do { try refreshBookmark(record, for: url) }
@@ -225,7 +284,14 @@ public actor FileAccess: AccessLeasing {
             }
             entry.tokens.insert(lease.token); active[key] = entry
         } else {
-            let session = try ScopeSession(scope: scope, url: url, rootID: rootID)
+            let session: ScopeSession
+            do { session = try ScopeSession(scope: scope, url: url, rootID: rootID) }
+            catch {
+                if case .fileGrant(let file) = request, fileBookmarks[file.standardizedFileURL] != nil {
+                    throw FileAccessError.needsFileReconnection(file)
+                }
+                throw error
+            }
             if case .root(_, let file) = request, !boundary(file, url) {
                 session.stop()
                 throw FileAccessError.outsideRoot
@@ -239,8 +305,15 @@ public actor FileAccess: AccessLeasing {
                 }
             }
             active[key] = Active(session: session, tokens: [lease.token])
+            if case .fileGrant(let file) = request, FileManager.default.fileExists(atPath: url.path),
+               fileBookmarks[file.standardizedFileURL] == nil {
+                if let data = try? bookmarks.create(for: url) {
+                    fileBookmarks[file.standardizedFileURL] = FileGrantBookmark(data: data,
+                        resource: try? URLIdentityResourceReader().identity(for: url))
+                }
+            }
         }
-        if let rootID { roots[rootID] = url }
+        if let rootID { publishRoot(rootID, url: url) }
         requests[lease.token] = key
         return lease
     }

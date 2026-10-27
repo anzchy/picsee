@@ -78,7 +78,7 @@ func p201CompatibilityRecoveryReconnectPreservesCorruptPrimaryAndFileGrants(reco
     #expect(await access.records() == initialRecords)
     #expect(try Data(contentsOf: f.store.url) == primary)
     #expect((try? Data(contentsOf: recoveryURL)) == initialRecoveryBytes)
-    #expect(codec.count == 0)
+    #expect(codec.count == 1) // Session-only File Grant bookmark; root store bytes remain unchanged.
     let missingID = AccessRootID(rawValue: UUID(uuidString: "11111111-2222-4333-8444-555555555555")!)
     let recent = RecentFolder(rootID: missingID,
         url: f.base.appendingPathComponent("unavailable", isDirectory: true), displayName: "old-reference")

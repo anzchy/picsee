@@ -36,6 +36,8 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
         var subscribers: [UUID: Subscriber] = [:]
         var stream: (any FolderEventStream)?
         var lease: AccessLease?
+        var preferredFolder: URL?
+        var restartRequested = false
         var tail: Task<(any Error)?, Never>?, queued = 0
     }
     private struct Subscription: FolderWatchSubscription {
@@ -50,16 +52,24 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
     public func subscribe(rootID: AccessRootID, folder: URL, recursive: Bool,
         onChange: @escaping @Sendable () -> Void) async throws -> any FolderWatchSubscription {
         let subscriber = Subscriber(folder: folder, recursive: recursive, onChange: onChange)
-        let (root, transition) = lock.withLock { () -> (Root, Task<(any Error)?, Never>) in
+        let (root, transition, siblings) = lock.withLock { () -> (Root, Task<(any Error)?, Never>, [Subscriber]) in
             let root = roots[rootID] ?? Root()
             roots[rootID] = root
+            let relocated = root.lease.map { !AccessBoundary.contains(folder, in: $0.url) } ?? false
+            let siblings = relocated ? Array(root.subscribers.values) : []
             root.subscribers[subscriber.id] = subscriber
-            return (root, enqueue(root, rootID))
+            if relocated {
+                root.preferredFolder = folder
+                root.restartRequested = true
+            }
+            return (root, enqueue(root, rootID), siblings)
         }
         if let error = await transition.value {
             await remove(subscriber.id, from: root, rootID)
             throw error
         }
+        // Every old window must rebase its own folder URL after the shared stream moves.
+        for sibling in siblings { sibling.onChange() }
         return Subscription(hub: self, root: root, rootID: rootID, id: subscriber.id)
     }
 
@@ -102,11 +112,14 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
     private enum Step { case none, start(URL), stop(any FolderEventStream, AccessLease) }
     private func transition(_ root: Root, _ rootID: AccessRootID) async -> (any Error)? {
         let step = lock.withLock { () -> Step in
-            if root.subscribers.isEmpty, let stream = root.stream, let lease = root.lease {
+            if root.subscribers.isEmpty || root.restartRequested,
+               let stream = root.stream, let lease = root.lease {
                 root.stream = nil; root.lease = nil
+                root.restartRequested = false
                 return .stop(stream, lease)
             }
-            guard root.stream == nil, let folder = root.subscribers.values.first?.folder else { return .none }
+            guard !root.subscribers.isEmpty else { root.preferredFolder = nil; return .none }
+            guard root.stream == nil, let folder = root.preferredFolder ?? root.subscribers.values.first?.folder else { return .none }
             return .start(folder)
         }
         switch step {
@@ -115,7 +128,7 @@ public final class WatchHub: FolderWatching, @unchecked Sendable {
             stream.stop()
             log.notice("FolderWatch stop root=\(rootID.rawValue.uuidString, privacy: .public)")
             await access.release(lease)
-            return nil
+            return await transition(root, rootID)
         case .start(let folder):
             let lease: AccessLease
             do { lease = try await access.acquire(.root(rootID, file: folder)) } catch {

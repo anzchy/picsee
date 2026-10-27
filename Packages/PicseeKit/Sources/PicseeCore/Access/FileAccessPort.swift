@@ -1,7 +1,7 @@
 import Foundation
 
 public enum FileAccessError: Error, Equatable, Sendable {
-    case needsReconnection(AccessRootID), outsideRoot, startFailed, corruptStore, invalidFolder
+    case needsReconnection(AccessRootID), needsFileReconnection(URL), outsideRoot, startFailed, corruptStore, invalidFolder
     case alreadyGranted(AccessRootID)
 }
 
@@ -14,8 +14,10 @@ public struct AccessLease: Hashable, Sendable {
     public let token: UUID
     public let url: URL
     public let rootID: AccessRootID?
-    public init(token: UUID = UUID(), url: URL, rootID: AccessRootID?) {
-        self.token = token; self.url = url; self.rootID = rootID
+    /// Set only when a File Grant's bookmark resolved to a new file URL.
+    public let resolvedFileURL: URL?
+    public init(token: UUID = UUID(), url: URL, rootID: AccessRootID?, resolvedFileURL: URL? = nil) {
+        self.token = token; self.url = url; self.rootID = rootID; self.resolvedFileURL = resolvedFileURL
     }
 }
 
@@ -29,9 +31,12 @@ public protocol SecurityScope: Sendable {
 public protocol AccessLeasing: Sendable {
     func acquire(_ request: AccessRequest) async throws -> AccessLease
     func release(_ lease: AccessLease) async
+    /// Rebase a previously authorized folder after its Access Root bookmark moved.
+    func relocatedFolder(_ folder: URL, rootID: AccessRootID) async throws -> URL?
 }
 
 extension AccessLeasing {
+    public func relocatedFolder(_ folder: URL, rootID: AccessRootID) async throws -> URL? { nil }
     public func withLease<T: Sendable>(_ request: AccessRequest,
         operation: @Sendable (AccessLease) async throws -> T) async throws -> T {
         let lease = try await acquire(request)
