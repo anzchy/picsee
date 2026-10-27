@@ -23,7 +23,20 @@ Use [`docs/agents/ui-parity-contract.md`](../../../../../docs/agents/ui-parity-c
 | `<manifest name>` / `<states/file.html>` | `<tree OID; HTML SHA256; manifest SHA256>` | `<width×height; light/dark; @1x/@2x>` | `<steps + deterministic input>` | `<ID / Pn-nn>` | `<specific mapped exception or 无>` | `<region/behavior/focus/a11y/zh-en checks; NOT VERIFIED items>` |
 
 Define comparison regions, measurement coordinates and any dynamic-data masks before seeing the App screenshot. Implement from the design token/component contract; do not treat browser mockup clicks as native behavior. Device evidence requires a signed sandboxed App at matching viewport/appearance and raw reference/native PNGs tied to source/build SHAs outside the repo. A visual match alone never upgrades the ledger to `Shipped`.
-List every changed reachable state and required viewport/appearance/scale/language/action as a pre-merge gate. The independent device verifier and the active auditor (opus-auditor) must mark each required condition `PASS` against this PR head before merge. `FAIL` or `NOT VERIFIED` blocks merge; `PENDING` requires an unreachable state and named future work package.
+List every changed reachable state and required viewport/appearance/scale/language/action. Before merge each needs green design-derived assertions (`AUTO-PASS`, below), both audits, and the delegator's `Device-Smoke:` of the changed path; signed parity against the HTML runs in batches. `PENDING` requires an unreachable state and named future work package.
+
+### Design-derived assertions (written first; the delegator pre-fills the left columns)
+
+Each changed state gets one row per design rule it depends on. The delegator copies selector, property and media range from the pinned CSS **before dispatch**; the implementer writes these tests as the **first RED** of the UI work item, using `PinnedDesign` (`Packages/PicseeKit/Tests/PicseeMacUITests/PinnedDesign.swift`: `assertLength`, `assertEdges`, `assertFont`, `assertColor`) against the **rendered frame**, not layout inputs or constants.
+
+| State | Selector · property · `@media` range | Viewports to assert | Rendered-frame test | Content pressure |
+|---|---|---|---|---|
+| `<manifest name>` | `<.grid-footer · padding · max-width: 1023px>` | `<both sides of every breakpoint the rule has, plus the manifest viewport>` | `<test name>` | `<longest zh/en label; scroll bar on/off; column-count boundary widths>` |
+
+- Assert on both sides of every breakpoint. A hard-coded value that matches the CSS at one viewport only is a failing implementation (P3-10 footer 7/2 pt vs 12/6 pt; #136 Inspector 220 vs 195 pt at 960).
+- Include content pressure: the longest English and Chinese label (#136 labels overflowed 48 pt), the scroll bar taking width (P3-01 lost a column), and the window widths where the column count changes.
+- No state is `AUTO-PASS` until all its rows are green. A row that can't be asserted gets `NOT VERIFIED` and a reason in the handoff, never a silent omission.
+- Auditors check each row against the pinned CSS; a missing row is at least Medium for a user-visible state.
 
 ## WI-0 — probe the risky seam first (only if an assumption needs the device)
 <exact probe; throwaway code allowed, never committed; what to record; "if it can't be delivered, record NOT VERIFIED
