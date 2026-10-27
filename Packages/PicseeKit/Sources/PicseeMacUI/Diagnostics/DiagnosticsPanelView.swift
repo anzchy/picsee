@@ -24,6 +24,13 @@ public struct DiagnosticsPanelView: View {
                             .accessibilityElement(children: .combine)
                             .accessibilityIdentifier("diagnostics.\(row.id)")
                         }
+                        if let note = section.note {
+                            Text(LocalizedStringKey(note))
+                                .font(Font(DesignMetrics.font("uiSmall")))
+                                .foregroundStyle(DesignColor.textSecondary.color)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("diagnostics.\(section.id).note")
+                        }
                     }
                 }
             }
@@ -39,6 +46,7 @@ public struct DiagnosticsPanelView: View {
             .font(Font(DesignMetrics.font("uiLarge")).weight(.semibold))
             .foregroundStyle(DesignColor.textPrimary.color)
             .accessibilityAddTraits(.isHeader)
+            .accessibilityLabel(Text(LocalizedStringKey(title)))
     }
 
     /// Only the Unknown marker is a localization key; counts and sizes are already formatted.

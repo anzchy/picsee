@@ -8,10 +8,12 @@ public struct DiagnosticsRow: Sendable, Equatable, Identifiable {
     public let title: String
     public let value: String
 }
+/// `note`, when present, is a localization key that says what the section's figures count.
 public struct DiagnosticsSection: Sendable, Equatable, Identifiable {
     public let id: String
     public let title: String
     public let rows: [DiagnosticsRow]
+    public var note: String? = nil
 }
 
 /// The diagnostics panel's rows (CACHE-04). While visible it reads the source now and then once per interval;
@@ -59,14 +61,18 @@ public final class DiagnosticsPanelModel {
         } catch { return false }
     }
 
+    /// Thumbnails the disk cache can hold load through it and decode a durable miss fresh (AccessImageSource),
+    /// never asking the memory cache; only their pins land there.
+    static let memoryLookupNote = "Hits and misses count memory lookups: viewer images and thumbnails the disk cache can’t hold. Grid thumbnails the disk cache holds skip this lookup and count under Thumbnail Disk Cache; their pinned pixels still show in Entries and Size."
+
     static func sections(_ snapshot: DiagnosticsSnapshot?) -> [DiagnosticsSection] {
         let count = { (value: Int?) in value.map(String.init) ?? unknown }
         let memory = { (value: Int?) in value.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .memory) } ?? unknown }
         let file = { (value: Int64?) in value.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? unknown }
         let budget = snapshot?.budget, cache = snapshot?.memoryCache, disk = snapshot?.diskCache, decoding = snapshot?.decoding
-        func section(_ id: String, _ title: String, _ rows: [(String, String, String)]) -> DiagnosticsSection {
+        func section(_ id: String, _ title: String, _ rows: [(String, String, String)], note: String? = nil) -> DiagnosticsSection {
             DiagnosticsSection(id: id, title: title,
-                               rows: rows.map { DiagnosticsRow(id: "\(id).\($0.0)", title: $0.1, value: $0.2) })
+                               rows: rows.map { DiagnosticsRow(id: "\(id).\($0.0)", title: $0.1, value: $0.2) }, note: note)
         }
         return [
             section("budget", "Memory Budget", [
@@ -75,7 +81,8 @@ public final class DiagnosticsPanelModel {
                 ("peak", "Peak", memory(budget?.peak))]),
             section("memory", "Memory Cache", [
                 ("entries", "Entries", count(cache?.entries)), ("size", "Size", memory(cache?.bytes)),
-                ("hits", "Hits", count(cache?.hits)), ("misses", "Misses", count(cache?.misses))]),
+                ("hits", "Hits", count(cache?.hits)), ("misses", "Misses", count(cache?.misses))],
+                note: memoryLookupNote),
             section("disk", "Thumbnail Disk Cache", [
                 ("entries", "Indexed Entries", count(disk?.entries)), ("size", "Indexed Size", file(disk?.storedBytes)),
                 ("hits", "Hits", count(disk?.hits)), ("misses", "Misses", count(disk?.misses))]),

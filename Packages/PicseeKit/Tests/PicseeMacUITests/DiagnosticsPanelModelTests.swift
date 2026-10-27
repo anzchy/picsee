@@ -363,3 +363,35 @@ private func traitSets(_ view: some View) -> [String] {
     host.layoutSubtreeIfNeeded()
     #expect(host.fittingSize.width >= 300 && value(model, "memory.hits") == "7")
 }
+
+/// Grid thumbnails the disk cache can hold skip the memory lookup (AccessImageSource decodes a durable miss
+/// fresh), so the memory section must say which lookups its hits and misses count.
+private let memoryLookupNote = "Hits and misses count memory lookups: viewer images and thumbnails the disk cache can’t hold. Grid thumbnails the disk cache holds skip this lookup and count under Thumbnail Disk Cache; their pinned pixels still show in Entries and Size."
+
+@Test @MainActor func diagnosticsPanelSaysWhichLookupsTheMemoryCacheCounts() throws {
+    let sections = DiagnosticsPanelModel(source: ScriptedDiagnostics([fullSnapshot])).sections
+    #expect(sections.first { $0.id == "memory" }?.note == memoryLookupNote)
+    #expect(sections.filter { $0.id != "memory" }.allSatisfy { $0.note == nil })
+    #expect(try catalogValue(memoryLookupNote, "en") == memoryLookupNote)
+    let chinese = try catalogValue(memoryLookupNote, "zh-Hans")
+    #expect(chinese?.isEmpty == false && chinese != memoryLookupNote)
+}
+
+/// The accessibility label a view value carries, as its dumped text (nil when it has none).
+private func accessibilityLabelDump(_ view: some View) -> String? {
+    var text = ""
+    dump(view, to: &text)
+    let lines = text.components(separatedBy: "\n")
+    guard let start = lines.firstIndex(where: { $0.contains("label: Optional") }) else { return nil }
+    let indent = lines[start].prefix { $0 == " " }.count
+    let body = lines[(start + 1)...].prefix { $0.prefix { $0 == " " }.count > indent }
+    return ([lines[start]] + body).joined(separator: "\n")
+}
+
+@Test @MainActor func diagnosticsPanelHeadingsCarryTheirTitleAsLabel() {
+    #expect(accessibilityLabelDump(Text("x").accessibilityAddTraits(.isHeader)) == nil)
+    for title in DiagnosticsPanelModel(source: ScriptedDiagnostics([fullSnapshot])).sections.map(\.title) {
+        let label = accessibilityLabelDump(DiagnosticsPanelView.sectionTitle(title))
+        #expect(label?.contains("key: \"\(title)\"") == true, "\(title): \(label ?? "no label")")
+    }
+}

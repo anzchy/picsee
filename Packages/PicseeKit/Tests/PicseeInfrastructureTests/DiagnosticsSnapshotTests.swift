@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+import PicseeApplication
 import PicseeCore
 @testable import PicseeInfrastructure
 
@@ -110,4 +111,27 @@ private func budgetFigures(_ pipeline: ImageIOPipeline) throws -> DiagnosticsSna
     #expect(snapshot.diskCache == nil)
     #expect(snapshot.memoryCache == .init(entries: 0, bytes: 0, hits: 0, misses: 0))
     #expect(snapshot.decoding == .init(running: 0, waiting: 0, finished: 0))
+}
+
+@Test func diagnosticsDiskCacheableThumbnailsSkipTheMemoryLookup() async throws {
+    let rig = try SnapshotRig()
+    defer { rig.remove() }
+    let disk = ThumbnailDiskCache(directory: rig.cacheDirectory)
+    let pipeline = ImageIOPipeline(thumbnailCache: disk)
+    let access = try FileAccess(scope: CountingScope(), bookmarks: FakeBookmarks(),
+        store: BookmarkStore(url: rig.folder.appendingPathComponent("roots.json")), buildSHA: "p307-fix2")
+    let root = try await access.grant(folder: rig.folder)
+    for _ in 0..<2 {
+        let source = try await AccessImageSource.open(.root(root, file: rig.file()), access: access, pipeline: pipeline)
+        _ = try await source.image(maximumPixelSize: 64, priority: .visible)
+        await source.close()
+    }
+    // A durable miss decodes fresh and the repeat is a disk hit: the memory cache is never asked.
+    var snapshot = await pipeline.diagnostics()
+    #expect(snapshot.diskCache?.misses == 1 && snapshot.diskCache?.hits == 1)
+    #expect(snapshot.memoryCache?.hits == 0 && snapshot.memoryCache?.misses == 0)
+    // A load outside the disk cache (here a direct pipeline request, as the viewer's full image) is a memory lookup.
+    _ = try await pipeline.image(for: try await pipeline.request(for: rig.file(), maximumPixelSize: 2048, identityRoot: rig.root))
+    snapshot = await pipeline.diagnostics()
+    #expect(snapshot.memoryCache?.misses == 1)
 }
