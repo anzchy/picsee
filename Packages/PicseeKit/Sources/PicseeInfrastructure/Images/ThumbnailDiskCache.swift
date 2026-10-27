@@ -64,6 +64,13 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
     private var lastWriteFailure: String?
     private var loadHits = 0
     private var loadMisses = 0
+    private let statsClock: @Sendable () -> TimeInterval
+    private static let uptime: @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    /// Full index aggregates run so far; diagnostics test seam.
+    private(set) var indexScans = 0
+    /// The last aggregate, reused for `indexScanInterval` so a visible panel doesn't scan the index every second.
+    private var lastIndexScan: (at: TimeInterval, entries: Int, bytes: Int64)?
+    static let indexScanInterval: TimeInterval = 10
     private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "thumbnail-cache")
 
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -74,6 +81,17 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = nil
         self.afterOrphanSnapshot = nil
+        self.statsClock = Self.uptime
+    }
+
+    init(directory: URL, statsClock: @escaping @Sendable () -> TimeInterval) {
+        self.directory = directory
+        self.highWaterBytes = Self.defaultHighWaterBytes
+        self.lowWaterBytes = Self.defaultLowWaterBytes
+        self.afterPayloadWrite = nil
+        self.afterReadLeaseAcquired = nil
+        self.afterOrphanSnapshot = nil
+        self.statsClock = statsClock
     }
 
     init(directory: URL, afterPayloadWrite: @escaping @Sendable () throws -> Void) {
@@ -83,6 +101,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
         self.afterPayloadWrite = afterPayloadWrite
         self.afterReadLeaseAcquired = nil
         self.afterOrphanSnapshot = nil
+        self.statsClock = Self.uptime
     }
 
     init(directory: URL, highWaterBytes: Int, lowWaterBytes: Int) {
@@ -92,6 +111,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = nil
         self.afterOrphanSnapshot = nil
+        self.statsClock = Self.uptime
     }
 
     init(directory: URL, afterReadLeaseAcquired: @escaping @Sendable () async -> Void) {
@@ -101,6 +121,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = afterReadLeaseAcquired
         self.afterOrphanSnapshot = nil
+        self.statsClock = Self.uptime
     }
 
     init(directory: URL, afterOrphanSnapshot: @escaping @Sendable () async -> Void) {
@@ -110,6 +131,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
         self.afterPayloadWrite = nil
         self.afterReadLeaseAcquired = nil
         self.afterOrphanSnapshot = afterOrphanSnapshot
+        self.statsClock = Self.uptime
     }
 
     /// Logical bytes of cache-owned regular files. A failed measurement is an error, not zero.
@@ -135,10 +157,15 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
                          lastFailure: lastWriteFailure)
     }
     public func hasWriteFailure() -> Bool { lastWriteFailure != nil }
-    /// Load outcomes since launch, with the entry count and stored payload bytes from one index read.
-    /// Counts current-version rows only (older rows always miss). A missing index is an empty cache;
-    /// one that can't be read leaves both figures unknown.
+    /// Load outcomes since launch, with the entry count and payload bytes the index records for current-version
+    /// rows (older rows always miss). The index can still list a payload deleted outside the App until a load
+    /// repairs it. One aggregate query, reused for up to `indexScanInterval` seconds; this cache's `clear()`
+    /// drops it. A missing index is an empty cache; one that can't be read leaves both figures unknown.
     public func diagnostics() -> DiagnosticsSnapshot.DiskCache {
+        let now = statsClock()
+        if let last = lastIndexScan, now - last.at < Self.indexScanInterval {
+            return DiagnosticsSnapshot.DiskCache(entries: last.entries, storedBytes: last.bytes, hits: loadHits, misses: loadMisses)
+        }
         let indexed = withIndexLock { () -> (entries: Int, bytes: Int64)? in
             guard (try? requireSafeDirectory()) != nil else { return nil }
             guard FileManager.default.fileExists(atPath: databaseURL.path) else { return (0, 0) }
@@ -148,8 +175,11 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
             guard sqlite3_prepare_v2(db, "SELECT COUNT(*), COALESCE(SUM(byte_count),0) FROM thumbnails WHERE cache_version=2",
                                      -1, &statement, nil) == SQLITE_OK else { return nil }
             defer { sqlite3_finalize(statement) }
+            indexScans += 1
             guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
-            return (Int(sqlite3_column_int64(statement, 0)), sqlite3_column_int64(statement, 1))
+            let scanned = (entries: Int(sqlite3_column_int64(statement, 0)), bytes: sqlite3_column_int64(statement, 1))
+            lastIndexScan = (now, scanned.entries, scanned.bytes)
+            return scanned
         }
         return DiagnosticsSnapshot.DiskCache(entries: indexed?.entries, storedBytes: indexed?.bytes,
                                              hits: loadHits, misses: loadMisses)
@@ -157,6 +187,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
 
     /// Advances the generation before removing any files, so old work can never publish later.
     public func clear() throws {
+        lastIndexScan = nil
         try withIndexLock {
             try requireSafeDirectory()
             CacheIndexLocks.shared.advanceGeneration(for: directory)
