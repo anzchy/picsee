@@ -38,3 +38,13 @@ import Foundation
         }
     }
 }
+
+@MainActor public final class RootScanAdmission {
+    private var claimedGeneration: UUID?
+    public init() {}
+    public func claim(_ generation: UUID) -> Bool {
+        guard claimedGeneration != generation else { return false }
+        claimedGeneration = generation
+        return true
+    }
+}

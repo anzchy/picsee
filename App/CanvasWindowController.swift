@@ -18,6 +18,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var generation: UUID { session.imageLoader.generation }
     private let accessIntent = AccessIntent()
     private let inputIntent = AccessIntent()
+    private let rootScanAdmission = RootScanAdmission()
 
     private var chromeOverlay: ViewerChromeOverlay!
     private var stateHost: ViewerStateHost!
@@ -290,15 +291,19 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         window?.makeFirstResponder(canvas)
         if !fromFolderScan {
             let operation = accessIntent.current
+            let inputOperation = inputIntent.current
+            let scanGeneration = UUID()
             Task { [weak self, accessServices] in
                 guard let self, let services = try? await accessServices.value else { return }
-                let root = await services.files.rootCovering(url)
+                let root: AccessRootID?
+                if case .root(let explicitRoot, _)? = accessRequest { root = explicitRoot }
+                else { root = await services.files.rootCovering(url) }
                 guard operation.isCurrent, self.fileURL == url else { return }
                 if let root {
-                    self.standaloneGrantURL = nil
+                    guard self.rootScanAdmission.claim(scanGeneration) else { return }
                     let scan = self.folderScanner(services)
                     try? await scan.begin(folder: url.deletingLastPathComponent(), rootID: root,
-                                          input: url, canPresent: { operation.isCurrent }).value
+                                          input: url, canPresent: { operation.isCurrent && inputOperation.isCurrent }).value
                 } else {
                     self.standaloneGrantURL = url
                     self.watchStandaloneFile(at: url)
@@ -1087,20 +1092,7 @@ extension CanvasWindowController: ViewerInputHost {
     }
     private func endInput() { inputIntent.invalidate(); session.endFilePreviewSet() }
     func openInputImage(_ url: URL, accessRequest: AccessRequest?) {
-        session.endFolderScan()
         open(url, accessRequest: accessRequest)
-        guard case .root(let rootID, _)? = accessRequest else { return }
-        let operation = accessIntent.current
-        navigationTask = Task { [self] in
-            do {
-                let authority = FolderScanPresentationAuthority(access: operation, input: inputIntent.current, originatingTask: navigationTask)
-                let services = try await operation.wait { try await accessServices.value }
-                try await folderScanner(services).begin(folder: url.deletingLastPathComponent(), rootID: rootID,
-                    input: url, canPresent: { authority.isCurrent }).value
-            } catch {
-                filesystemLogger.error("Background folder scan outcome=failed error=\(String(describing: error), privacy: .private)")
-            }
-        }
     }
     func showInputNotice(_ notice: ViewerInputNotice) { showInputMessage(notice) }
     func promptForInputFolder(_ folder: URL) { promptForFolder(folder, currentImage: nil, direction: .next) }
