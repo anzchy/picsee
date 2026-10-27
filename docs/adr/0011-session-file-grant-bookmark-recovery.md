@@ -15,3 +15,5 @@ Apple 的 [NSURL bookmark 文档](https://developer.apple.com/documentation/foun
 ## 取舍
 
 此机制维持 File Grant 的单文件边界及 ADR-008 的持久化边界。会话结束即失去追踪，重新打开由用户再次选择；bookmark 失效时不猜测目录中的同名文件。外部同路径替换仍以新修订和内容摘要区分旧像素。
+
+使用“先跟随旧文件资源”的编辑器若把原图重命名为备份，再在原路径写入新图，picsee 会继续显示备份文件；这是保留所看文件身份的取舍。
