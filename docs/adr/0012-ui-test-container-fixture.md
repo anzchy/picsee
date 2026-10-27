@@ -11,7 +11,7 @@ The small local/nightly XCUITest set may launch a **test-compiled** Picsee with 
 
 The isolated test adapter treats readable files **inside that fixture directory** as a local root. It does not obtain a user grant or extend the OS sandbox. It keeps its synthetic bookmark records inside the unique fixture directory; they are not production Access Roots and are not evidence for the security-scoped grant or bookmark path in ADR-008. The production entitlements and Info.plist do not change. The normal system access adapter remains the only production path.
 
-This is a smoke probe to see whether the real signed, sandboxed App can show the completed Grid through the ordinary scan/presentation code after fixture staging. Only the delegator runs it under the GUI lock. Until that result arrives, the probe is **pending**, not a verified Grid claim. If the probe fails because the container or AX behavior differs from this design, record the failure here and keep XCUITest to the reachable keyboard/focus, menu-enable and accessibility-audit checks; user grants, bookmark persistence and panel behavior remain signed device checks.
+The delegated smoke probe confirmed that the test build can show the completed Grid through the ordinary scan/presentation code after fixture staging. It does not establish a user grant or production bookmark behavior; those remain signed device checks.
 
 The UI test uses `XCUIApplication()` with `PicseeApp` set as its Target Application (`TEST_TARGET_NAME`), so Xcode launches the product built for that test run. A bundle-ID lookup is forbidden here: LaunchServices can select another registered `io.github.anzchy.picsee` copy, including the user's installed App. Before checking the Grid, the test waits for the unique fixture name at `grid.sidebar.folder`; a flag-off or wrong build then fails with an explicit fixture-entry message. The first proposed probe was aborted before launch when this risk was found.
 
@@ -37,6 +37,10 @@ scripts/heavy-lock.sh xcodebuild test -scheme PicseeFixtureUI -only-testing:Pics
 ```
 
 The expected observation is `grid.collection` containing exactly three `grid.cell` descendants after the scan completes. A passing probe establishes only that the test build can stage those images in its sandbox container and reach the Grid. It does not validate production user authorization or bookmark behavior. The UI test is local/nightly and outside PR gates and Swift package coverage.
+
+### Probe result — 2026-10-27
+
+Delegator run `probe-132b-10271749` ran under the shared GUI lock at head `ea85dc2`. Xcode reported **“Executed 1 test, with 0 failures”** in 5.5 seconds, with 0 skips. The test launched the build under test, found the unique fixture name at `grid.sidebar.folder`, then found exactly three `grid.cell` items. Teardown terminated only the process started by this run. macOS showed a one-time UI Automation authorization prompt; the user approved it for this probe. This observation verifies the fixture-to-Grid smoke path on that Mac mini run only. It does not verify Powerbox grants, production bookmarks, VoiceOver, or the other A11Y-01/CMD-01 acceptance steps.
 
 ## Consequences
 
