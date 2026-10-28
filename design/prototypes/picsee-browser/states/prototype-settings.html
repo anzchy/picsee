@@ -1,0 +1,151 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Question: what should picsee's Settings window (new journey page) look like?
+  ?variant=A|B|C picks the layout, ?tab=general|display|cache|update|about, ?theme=dark.
+  Tabs per user 2026-10-28 grilling B: 通用、缓存、关于、显示 (+ 更新 from grilling A: Sparkle).
+  Only existing or decided preferences appear; nothing invented. Controls only show a toast.
+-->
+<html lang="zh-CN" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picsee · 设置 · 备选设计</title>
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/globals.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/light.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/dark.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; font-family: var(--font-sans); font-size: var(--font-size-ui); color: var(--color-text);
+         background: color-mix(in srgb, var(--color-surface) 70%, var(--color-text) 6%); display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 18px 0 90px; }
+  .cap { width: 900px; color: var(--color-muted); font-size: 12px; line-height: 1.5; } .cap b { color: var(--color-text); }
+  .win { background: var(--color-panel); border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 .5px rgba(0,0,0,.25), 0 22px 60px rgba(0,0,0,.28); }
+  .tb { height: 38px; display: flex; align-items: center; justify-content: center; font-weight: 600; position: relative; background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+  .tl { position: absolute; left: 14px; display: flex; gap: 8px; } .tl i { width: 12px; height: 12px; border-radius: 50%; background: color-mix(in srgb, var(--color-text) 22%, transparent); }
+  /* A: toolbar tabs */
+  .tabs { display: flex; justify-content: center; gap: 4px; padding: 6px 8px 8px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+  .tab { width: 72px; height: 52px; border: 0; background: none; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+         color: var(--color-muted); font: inherit; font-size: 11px; cursor: pointer; }
+  .tab svg { width: 22px; height: 22px; } .tab:hover { background: var(--color-hover); }
+  .tab.on { background: var(--color-accent-soft); color: var(--color-accent-text); }
+  /* B: sidebar */
+  .split { display: grid; grid-template-columns: 180px 1fr; min-height: 420px; }
+  .side { background: var(--color-surface); border-right: 1px solid var(--color-border); padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .side button { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 0; background: none; border-radius: var(--radius-control); color: var(--color-text); font: inherit; cursor: pointer; text-align: left; }
+  .side button svg { width: 16px; height: 16px; color: var(--color-muted); }
+  .side button.on { background: var(--color-accent-soft); color: var(--color-accent-text); } .side button.on svg { color: inherit; }
+  .pane { padding: 18px 26px 24px; }
+  .pane h2 { margin: 0 0 12px; font-size: 15px; }
+  .form { display: grid; grid-template-columns: 150px 1fr; gap: 14px 16px; align-items: center; }
+  .form .l { text-align: right; color: var(--color-text); }
+  .hint { color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--color-surface); border: 1px solid var(--color-border); }
+  .seg button { border: 0; background: none; height: 24px; padding: 0 12px; border-radius: 6px; font: inherit; font-size: 12px; color: var(--color-muted); cursor: pointer; }
+  .seg button.on { background: var(--color-bg); color: var(--color-text); box-shadow: 0 0 0 .5px var(--color-border), 0 1px 2px rgba(0,0,0,.08); }
+  .tog { width: 32px; height: 18px; border-radius: 999px; background: var(--color-toggle-track-off); position: relative; border: 0; cursor: pointer; }
+  .tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left var(--motion-duration-fast); }
+  .tog.on { background: var(--color-accent-fill); } .tog.on::after { left: 16px; }
+  input[type=range] { width: 220px; accent-color: var(--color-accent); }
+  .btn { height: 26px; padding: 0 12px; border-radius: var(--radius-control); border: 1px solid var(--color-border); background: var(--color-bg); font: inherit; color: var(--color-text); cursor: pointer; }
+  .btn.pri { background: var(--color-accent-fill); color: var(--color-on-accent); border: 0; }
+  .btn.danger { color: var(--color-danger); }
+  .link { border: 0; background: none; color: var(--color-accent-text); font: inherit; cursor: pointer; padding: 0; }
+  .mono { font-family: var(--font-mono); font-size: 12px; }
+  .about { display: flex; gap: 18px; align-items: flex-start; }
+  .icon { width: 64px; height: 64px; border-radius: 14px; background: linear-gradient(140deg, #3b82f6, #1e40af); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 24px; flex: none; }
+  .lic { margin-top: 12px; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 12px; font-size: 12px; line-height: 1.6; color: var(--color-muted); }
+  /* C: single scrolling page with sections */
+  .one { padding: 8px 26px 24px; max-height: 560px; overflow: auto; }
+  .sec { padding: 16px 0; border-bottom: 1px solid var(--color-border-subtle); } .sec:last-child { border: 0; }
+  .sec h3 { margin: 0 0 10px; font-size: 13px; }
+  .bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100; display: flex; gap: 6px; align-items: center; padding: 6px;
+         border-radius: 999px; background: rgba(20,20,22,.88); color: #fff; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+  .bar button { border: 0; background: transparent; color: #fff; height: 30px; padding: 0 12px; border-radius: 999px; cursor: pointer; }
+  .bar button.on { background: rgba(255,255,255,.24); } .bar button:hover { background: rgba(255,255,255,.14); }
+  .bar .sep { width: 1px; height: 18px; background: rgba(255,255,255,.25); }
+  .toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); padding: 8px 14px; border-radius: var(--radius-popover);
+           background: var(--color-panel); box-shadow: var(--shadow-soft); font-size: 12px; opacity: 0; transition: opacity var(--motion-duration-fast); }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="cap"><b id="ct"></b>　<span id="cd"></span></div>
+<div id="stage"></div>
+<div class="bar" role="toolbar" aria-label="原型切换">
+  <button data-v="A">A 顶部图标 Tab</button><button data-v="B">B 左侧边栏</button><button data-v="C">C 单页分节</button>
+  <span class="sep"></span><button id="theme">浅色 / 深色</button>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const ic = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const TABS = [
+  ['general', '通用', ic('<circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>')],
+  ['display', '显示', ic('<rect x="4" y="4" width="7" height="7" rx="1.2"/><rect x="13" y="4" width="7" height="7" rx="1.2"/><rect x="4" y="13" width="7" height="7" rx="1.2"/><rect x="13" y="13" width="7" height="7" rx="1.2"/>')],
+  ['cache', '缓存', ic('<ellipse cx="12" cy="6" rx="7" ry="2.5"/><path d="M5 6v12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/>')],
+  ['update', '更新', ic('<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>')],
+  ['about', '关于', ic('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>')],
+];
+let state = { appearance: 'system', tools: false, size: 3, names: true, fit: 'fill', auto: true };
+const seg = (k, opts) => `<span class="seg">${opts.map(([v, n]) => `<button class="${state[k] === v ? 'on' : ''}" data-set="${k}" data-val="${v}">${n}</button>`).join('')}</span>`;
+const tog = k => `<button class="tog ${state[k] ? 'on' : ''}" role="switch" aria-checked="${state[k]}" data-tog="${k}"></button>`;
+const PANES = {
+  general: () => `<div class="form">
+      <span class="l">外观</span><span>${seg('appearance', [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']])}</span>
+      <span class="l">大图工具</span><span>${tog('tools')} 始终显示 <div class="hint">关闭时工具在不操作后自动隐藏，鼠标移到边缘或按 Tab 唤回。</div></span>
+      <span class="l">语言</span><span class="hint">跟随系统语言（中文 / English）。可在“系统设置 → 通用 → 语言与地区”为 picsee 单独设置。</span></div>`,
+  display: () => `<div class="form">
+      <span class="l">缩略图大小</span><span><input type="range" min="1" max="5" value="${state.size}" data-range="size" aria-label="缩略图大小"></span>
+      <span class="l">文件名</span><span>${tog('names')} 在缩略图下显示文件名</span>
+      <span class="l">缩略图</span><span>${seg('fit', [['fill', '填充裁剪'], ['whole', '完整显示']])}</span>
+      <span></span><span class="hint">与网格底栏「显示」面板是同一组设置，任一处修改立即同步。</span></div>`,
+  cache: () => `<div class="form">
+      <span class="l">缩略图缓存</span><span><span class="mono">212 MB</span> <span class="hint">· 上限 1 GB（数值为示意）</span></span>
+      <span class="l"></span><span><button class="btn danger" data-say="确认后清理缓存，下次浏览时重建">清理缓存…</button>
+      <div class="hint">只删除 picsee 生成的缩略图，不会动你的图片。清理后浏览时会重新生成。</div></span></div>`,
+  update: () => `<div class="form">
+      <span class="l">当前版本</span><span class="mono">0.0.1（构建 1234）</span>
+      <span class="l">自动检查更新</span><span>${tog('auto')} <div class="hint">picsee 只在检查更新时访问 GitHub，不发送系统信息。</div></span>
+      <span class="l"></span><span><button class="btn" data-say="Sparkle 立即检查">立即检查</button> <span class="hint">上次检查：今天 09:12（示意）</span></span></div>`,
+  about: () => `<div class="about"><div class="icon">P</div><div>
+      <div style="font-weight:600;font-size:15px">picsee</div><div class="hint">版本 0.0.1（构建 1234）</div>
+      <p class="hint" style="margin:10px 0 0">一个直接浏览磁盘上图片的 macOS 看图应用。picsee 不收集数据，不上传图片；沙盒开启，只读取你授权的文件夹。</p>
+      <div style="margin-top:10px;display:flex;gap:14px"><button class="link" data-say="打开 GitHub Issues">报告问题…</button><button class="link" data-say="打开隐私说明">隐私说明</button><button class="link" data-say="打开源码">源代码（MIT）</button></div>
+      <div class="lic">MIT License © 2026 picsee<br>第三方：Sparkle（MIT）· 首次打开页样图来自 Unsplash（Unsplash License）</div></div></div>`,
+};
+const V = {
+  A: ['A · 顶部图标 Tab（macOS 标准设置窗）', '像 Finder、预览、Safari 的设置：标题栏下一排图标 Tab，窗口宽度固定，高度随 Tab 内容变化。⌘, 打开，记住上次的 Tab。',
+      () => `<div class="win" style="width:620px"><div class="tb"><div class="tl"><i></i><i></i><i></i></div>${title()}</div>
+        <div class="tabs">${TABS.map(([k, n, s]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}">${s}${n}</button>`).join('')}</div>
+        <div class="pane">${PANES[tab]()}</div></div>`],
+  B: ['B · 左侧边栏（系统设置式）', '像 macOS 14 的“系统设置”：左侧列表，右侧内容，窗口大小固定。分类多时更好扩展，但 5 项内容略显空。',
+      () => `<div class="win" style="width:760px"><div class="tb"><div class="tl"><i></i><i></i><i></i></div>${title()}</div>
+        <div class="split"><div class="side">${TABS.map(([k, n, s]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${s}${n}</button>`).join('')}</div>
+        <div class="pane"><h2>${TABS.find(t => t[0] === tab)[1]}</h2>${PANES[tab]()}</div></div></div>`],
+  C: ['C · 单页分节', '一个可滚动的单页，五节自上而下排列；一眼看全，不用切换。项多时会变长，后续加项需要注意顺序。',
+      () => `<div class="win" style="width:620px"><div class="tb"><div class="tl"><i></i><i></i><i></i></div>设置</div>
+        <div class="one">${TABS.map(([k, n]) => `<div class="sec"><h3>${n}</h3>${PANES[k]()}</div>`).join('')}</div></div>`],
+};
+const title = () => TABS.find(t => t[0] === tab)[1];
+const p = new URLSearchParams(location.search);
+let v = V[p.get('variant')] ? p.get('variant') : 'A', theme = p.get('theme') === 'dark' ? 'dark' : 'light';
+let tab = TABS.some(t => t[0] === p.get('tab')) ? p.get('tab') : 'general';
+const $ = id => document.getElementById(id);
+function render() {
+  document.documentElement.className = 'theme-' + theme;
+  $('stage').innerHTML = V[v][2](); $('ct').textContent = V[v][0]; $('cd').textContent = V[v][1];
+  document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  const q = new URLSearchParams(location.search); q.set('variant', v); q.set('tab', tab); q.set('theme', theme); history.replaceState(null, '', '?' + q);
+}
+let t; const say = m => { $('toast').textContent = '（原型）' + m; $('toast').classList.add('show'); clearTimeout(t); t = setTimeout(() => $('toast').classList.remove('show'), 1600); };
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-v]'); if (b) { v = b.dataset.v; return render(); }
+  const tb = e.target.closest('[data-tab]'); if (tb) { tab = tb.dataset.tab; return render(); }
+  const s = e.target.closest('[data-set]'); if (s) { state[s.dataset.set] = s.dataset.val; return render(); }
+  const g = e.target.closest('[data-tog]'); if (g) { state[g.dataset.tog] = !state[g.dataset.tog]; return render(); }
+  const y = e.target.closest('[data-say]'); if (y) say(y.dataset.say);
+});
+document.addEventListener('input', e => { if (e.target.dataset.range) state[e.target.dataset.range] = +e.target.value; });
+$('theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; render(); };
+render();
+</script>
+</body>
+</html>
