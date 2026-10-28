@@ -11,6 +11,18 @@ import PicseeApplication
     return nil
 }
 
+@MainActor private func b4RenderedRing(_ view: NSView, in root: NSView) throws -> NSRect {
+    let layer = try #require(view.layer)
+    _ = root
+    let ring = try #require(layer.sublayers?.last)
+    let tilt = layer.affineTransform()
+    let extraX = (ring.frame.width - layer.bounds.width) * abs(tilt.a) +
+        (ring.frame.height - layer.bounds.height) * abs(tilt.c)
+    let extraY = (ring.frame.width - layer.bounds.width) * abs(tilt.b) +
+        (ring.frame.height - layer.bounds.height) * abs(tilt.d)
+    return layer.frame.insetBy(dx: -extraX / 2, dy: -extraY / 2)
+}
+
 // Design: 9234b14, prototype-first-launch-b4-final.html SHA-256
 // 8ba81de68f67911b0c3bdfbc90ff1513860ebf41d32c9b216fef6be8576d50da.
 @Test @MainActor func p316B4FirstLaunchPresentsPinnedCentre() throws {
@@ -71,6 +83,13 @@ import PicseeApplication
     try css.assertLength(Double(stack.frame.width), ".stack", "width", viewport: 960)
     try css.assertLength(Double(stack.frame.height), ".stack", "height", viewport: 960)
     try css.assertLength(Double(heading.font!.pointSize), ".drop h1", "font-size", viewport: 960)
+    let chip = try #require(b4View("first-launch.chip.images", in: scene.state) as? NSTextField)
+    let firstChip = try #require(b4View("first-launch.chip.folder", in: scene.state))
+    let chipPadding = try css.edges(".chips span", "padding", viewport: 960)
+    let chipTextWidth = ceil((chip.stringValue as NSString).size(withAttributes: [.font: chip.font!]).width)
+    #expect(abs(Double(chip.frame.width - chipTextWidth) - chipPadding.left - chipPadding.right) <= 1)
+    try css.assertLength(Double(chip.font!.pointSize), ".chips span", "font-size", viewport: 960)
+    try css.assertLength(Double(chip.frame.minX - firstChip.frame.maxX), ".chips", "gap", viewport: 960)
     let margins = try css.edges(".drop", "margin", viewport: 960)
     #expect(Double(drop.frame.minX) == margins.left)
     #expect(Double(scene.state.bounds.maxX - drop.frame.maxX) == margins.right)
@@ -78,6 +97,9 @@ import PicseeApplication
 }
 
 @Test @MainActor func p316B4LongestChipsRemainVisibleAt800() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
+    let padding = try css.edges(".chips span", "padding", viewport: 800)
     let scene = StatesScene(width: 800)
     defer { scene.window.close() }
     let size = NSSize(width: 800, height: 600)
@@ -91,27 +113,40 @@ import PicseeApplication
         chip.stringValue = label
         launch.needsLayout = true; launch.layoutSubtreeIfNeeded()
         let measured = ceil((label as NSString).size(withAttributes: [.font: chip.font!]).width)
-        #expect(chip.frame.width >= measured + 18)
+        #expect(chip.frame.width >= measured + CGFloat(padding.left + padding.right))
         #expect(chip.frame.minX >= 16 && chip.frame.maxX <= size.width - 16)
         #expect(chip.font?.pointSize == 12)
     }
 }
 
 @Test @MainActor func p316B4AllSixRenderedPrintsKeepCentreClear() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
     let scene = StatesScene()
     defer { scene.window.close() }
     scene.state.layoutSubtreeIfNeeded()
-    let expected960: [(String, CGFloat, CGFloat, CGFloat)] = [
-        ("alley", 70, 470, -7), ("lakeside", 601, 504, 4),
-        ("hillside", 780, 239, 8), ("gate", 634, 14, -5),
-        ("temple", 52, 30, 6), ("lakehouse", 26, 299, -4)
-    ]
+    let expected960: [(String, CGFloat, CGFloat, CGFloat)] = try css.b4PrintSpecs().map { spec in
+        let a = CGFloat(spec.a), b = CGFloat(spec.b)
+        let x: CGFloat, y: CGFloat
+        switch spec.anchor {
+        case "TL": x = a; y = 640 - b - 110
+        case "T": x = 480 + a - 75; y = 640 - b - 110
+        case "R": x = 960 - a - 150; y = 320 - b - 55
+        case "BR": x = 960 - a - 150; y = b
+        case "BL": x = a; y = b
+        default: x = a; y = 320 - b - 55
+        }
+        return (spec.name, x, y, CGFloat(spec.angle))
+    }
     for (name, x, y, _) in expected960 {
         let print = try #require(b4View("first-launch.print.\(name)", in: scene.state))
         #expect(!print.isHidden)
         #expect(abs(print.frame.minX - x) <= 0.5)
         #expect(abs(print.frame.minY - y) <= 0.5)
-        #expect(abs(print.alphaValue - 0.3) < 0.001)
+        #expect(abs(print.alphaValue - (try css.b4PrintOpacity("light"))) < 0.001)
+        let ring = try b4RenderedRing(print, in: scene.state)
+        #expect(abs(ring.midX - print.frame.midX) < 0.5)
+        #expect(abs(ring.midY - print.frame.midY) < 0.5)
     }
     let launch = try #require(scene.state.subviews.compactMap { $0 as? FirstLaunchView }.first)
     for size in [NSSize(width: 800, height: 600), NSSize(width: 720, height: 480)] {
@@ -129,9 +164,111 @@ import PicseeApplication
             let radians = abs(angle) * .pi / 180
             let halfW = ((print.frame.width + 12) * cos(radians) + (print.frame.height + 12) * sin(radians)) / 2
             let halfH = ((print.frame.width + 12) * sin(radians) + (print.frame.height + 12) * cos(radians)) / 2
-            let rotated = NSRect(x: print.frame.midX - halfW, y: print.frame.midY - halfH,
-                                 width: 2 * halfW, height: 2 * halfH)
+            let rotated = try b4RenderedRing(print, in: scene.state)
+            #expect(abs(rotated.width - 2 * halfW) < 0.5)
+            #expect(abs(rotated.height - 2 * halfH) < 0.5)
             if !print.isHidden { #expect(!rotated.intersects(centre), "\(name) overlaps centre at \(size)") }
         }
     }
+}
+
+@Test @MainActor func p316B4TiltUsesPinnedCentrePivot() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
+    let alleyAngle = try #require(css.b4PrintSpecs().first { $0.name == "alley" }?.angle)
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    scene.state.layoutSubtreeIfNeeded()
+    let print = try #require(b4View("first-launch.print.alley", in: scene.state))
+    let layer = try #require(print.layer)
+    let radians = abs(CGFloat(alleyAngle)) * .pi / 180
+    let expectedWidth = print.frame.width * cos(radians) + print.frame.height * sin(radians)
+    let expectedHeight = print.frame.width * sin(radians) + print.frame.height * cos(radians)
+    #expect(abs(layer.frame.midX - print.frame.midX) < 0.5)
+    #expect(abs(layer.frame.midY - print.frame.midY) < 0.5)
+    #expect(abs(layer.frame.width - expectedWidth) < 0.5)
+    #expect(abs(layer.frame.height - expectedHeight) < 0.5)
+    // CSS negative rotation becomes positive in AppKit's upward Y axis.
+    let corner = layer.convert(CGPoint(x: 0, y: layer.bounds.height), to: layer.superlayer)
+    #expect(corner.x < print.frame.minX)
+}
+
+@Test @MainActor func p316B4FrontPhotoFollowsPinnedDragTransform() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
+    let target = try css.b4FrontDrag()
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    let launch = try #require(scene.state.subviews.compactMap { $0 as? FirstLaunchView }.first)
+    let stack = try #require(b4View("first-launch.stack", in: scene.state))
+    let front = try #require(stack.subviews.last)
+    launch.setDragActive(true); launch.layoutSubtreeIfNeeded()
+    let frame = try #require(front.layer?.frame)
+    #expect(abs(frame.width - stack.bounds.width * CGFloat(target.scale)) < 0.5)
+    #expect(abs(frame.height - stack.bounds.height * CGFloat(target.scale)) < 0.5)
+    #expect(abs(frame.midX - stack.frame.midX) < 0.5)
+    #expect(abs(frame.midY - stack.frame.midY + CGFloat(target.dy)) < 0.5)
+    launch.reduceMotionOverride = true
+    launch.setDragActive(false); launch.setDragActive(true); launch.layoutSubtreeIfNeeded()
+    let reduced = try #require(front.layer?.frame)
+    #expect(abs(reduced.width - stack.bounds.width) < 0.5)
+    #expect(abs(reduced.midY - stack.frame.midY) < 0.5)
+}
+
+@Test @MainActor func p316B4SideCardsComposePinnedRotateTranslate() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    let launch = try #require(scene.state.subviews.compactMap { $0 as? FirstLaunchView }.first)
+    let stack = try #require(b4View("first-launch.stack", in: scene.state))
+    for active in [false, true] {
+        launch.setDragActive(active); launch.layoutSubtreeIfNeeded()
+        for index in 1...2 {
+            let selector = "\(active ? ".over " : "").stack .f:nth-child(\(index))"
+            let pinned = try css.b4CardTransform(selector)
+            let native = CGAffineTransform(rotationAngle: -CGFloat(pinned.angle) * .pi / 180)
+                .translatedBy(x: CGFloat(pinned.dx), y: -CGFloat(pinned.dy))
+            let card = try #require(stack.subviews[index - 1].layer)
+            #expect(abs(card.frame.midX - stack.frame.midX - native.tx) < 0.5)
+            #expect(abs(card.frame.midY - stack.frame.midY - native.ty) < 0.5)
+            #expect(abs(card.affineTransform().b - sin(-CGFloat(pinned.angle) * .pi / 180)) < 0.001)
+        }
+    }
+}
+
+@Test @MainActor func p316B4PinnedCentreSpacingAndButtonGroup() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    scene.state.layoutSubtreeIfNeeded()
+    let stack = try #require(b4View("first-launch.stack", in: scene.state))
+    let heading = try #require(b4View("first-launch.heading", in: scene.state))
+    let button = try #require(scene.state.buttons.first)
+    let shortcut = try #require(b4View("first-launch.shortcut", in: scene.state))
+    let key = try #require(b4View("first-launch.shortcut-key", in: scene.state) as? NSTextField)
+    let chip = try #require(b4View("first-launch.chip.images", in: scene.state))
+    let group = button.frame.union(shortcut.frame).union(key.frame)
+    #expect(abs(group.midX - stack.frame.midX) <= 1)
+    #expect(abs(group.midY - button.frame.midY) <= 1)
+    let gap = try css.length(".centre", "gap", viewport: 960)
+    let stackMargin = try css.length(".stack", "margin-bottom", viewport: 960)
+    #expect(abs(Double(stack.frame.minY - heading.frame.maxY) - stackMargin - gap) <= 1)
+    #expect(abs(Double(heading.frame.minY - button.frame.maxY) - gap) <= 1)
+    #expect(abs(Double(button.frame.minY - chip.frame.maxY) - gap) <= 1)
+    try css.assertLength(Double(shortcut.frame.minX - button.frame.maxX), ".sub", "gap", viewport: 960, tolerance: 1)
+    let padding = try css.edges(".btn", "padding", viewport: 960)
+    let titleWidth = ceil((button.title as NSString).size(withAttributes: [.font: button.font!]).width)
+    #expect(abs(Double(button.frame.width - titleWidth) - padding.left - padding.right) <= 2)
+    try css.assertLength(Double(key.font!.pointSize), "kbd", "font-size", viewport: 960)
+    #expect(abs(key.frame.midY - button.frame.midY) <= 1)
+}
+
+@Test @MainActor func p316B4ChipTextIsVerticallyCentred() throws {
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    scene.state.layoutSubtreeIfNeeded()
+    let chip = try #require(b4View("first-launch.chip.images", in: scene.state) as? CenteredChipLabel)
+    #expect(abs(chip.textDrawRect.midY - chip.bounds.midY) <= 1)
 }

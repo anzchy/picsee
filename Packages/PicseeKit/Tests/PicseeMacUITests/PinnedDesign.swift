@@ -14,6 +14,7 @@ struct PinnedDesign {
     private let name: String
     private let rules: [Rule]
     private let appearance: String
+    private let html: String
 
     static func page(_ name: String, source: String? = nil, appearance: String? = nil) throws -> Self {
         let tests = URL(fileURLWithPath: source ?? #filePath).deletingLastPathComponent()
@@ -32,8 +33,22 @@ struct PinnedDesign {
             throw Error("\(entry.file) SHA256 mismatch: manifest expected \(entry.sha256), actual \(actual). Re-pin the design deliberately.")
         }
         guard let html = String(data: data, encoding: .utf8) else { throw Error("\(entry.file) is not UTF-8") }
-        let styles = matches("(?s)<style\\b[^>]*>(.*?)</style>", in: html).compactMap { $0.first }
+        var styles = matches("(?s)<style\\b[^>]*>(.*?)</style>", in: html).compactMap { $0.first }
         guard !styles.isEmpty else { throw Error("\(entry.file) has no inline CSS") }
+        if name == "b4-first-launch" {
+            let tokenDirectory = directory.appendingPathComponent("_ds/picsee-ui-system/tokens")
+            for (file, expected) in [
+                ("light.css", "20bf9c01c80c1a863b94097778990431a958bc9dbf517aa82fb3f54d67a867d7"),
+                ("dark.css", "71f5ceec615b7f9cad6684d086d01aaa62e9ab49faa7efe5021bea2a2a5d3b58")
+            ] {
+                let bytes = try Data(contentsOf: tokenDirectory.appendingPathComponent(file))
+                let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+                guard digest == expected, let css = String(data: bytes, encoding: .utf8) else {
+                    throw Error("\(file) differs from the whitespace-normalized 9234b14 token stylesheet")
+                }
+                styles.insert(css, at: 0)
+            }
+        }
         var rules: [Rule] = []
         for style in styles {
             do {
@@ -43,7 +58,74 @@ struct PinnedDesign {
             }
         }
         let resolvedAppearance = appearance ?? (html.contains("class=\"theme-dark\"") ? "dark" : "light")
-        return Self(name: name, rules: rules, appearance: resolvedAppearance)
+        return Self(name: name, rules: rules, appearance: resolvedAppearance, html: html)
+    }
+
+    func b4PrintSpecs() throws -> [(name: String, anchor: String, a: Double, b: Double, angle: Double)] {
+        guard name == "b4-first-launch" else { throw Error("print angles requested from \(name)") }
+        let rows = Self.matches(#"\['(TL|T|R|BR|BL|L)',\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*'([^']+)'\]"#, in: html)
+        guard rows.count == 6 else { throw Error("B4 PRINTS array does not contain six pinned rows") }
+        return try rows.map { row in
+            guard row.count == 5, let a = Double(row[1]), let b = Double(row[2]),
+                  let angle = Double(row[3]) else { throw Error("invalid B4 print angle") }
+            return (name: row[4], anchor: row[0], a: a, b: b, angle: angle)
+        }
+    }
+
+    func b4CardTransform(_ selector: String) throws -> (angle: Double, dx: Double, dy: Double) {
+        let value = try exactDeclaration(selector, "transform")
+        guard let parts = Self.matches(#"rotate\((-?[\d.]+)deg\) translate\((-?[\d.]+)px,\s*(-?[\d.]+)px\)"#, in: value).first,
+              parts.count == 3, let angle = Double(parts[0]), let dx = Double(parts[1]),
+              let dy = Double(parts[2]) else { throw Error("B4 card transform is not rotate · translate: \(value)") }
+        return (angle, dx, dy)
+    }
+
+    func b4FrontDrag() throws -> (dy: Double, scale: Double) {
+        let value = try exactDeclaration(".over .stack .f:nth-child(3)", "transform")
+        guard let parts = Self.matches(#"translateY\((-?[\d.]+)px\) scale\(([\d.]+)\)"#, in: value).first,
+              parts.count == 2, let dy = Double(parts[0]), let scale = Double(parts[1]) else {
+            throw Error("B4 front transform is not translateY · scale: \(value)")
+        }
+        return (dy, scale)
+    }
+
+    func b4PrintOpacity(_ theme: String, drag: Bool = false) throws -> Double {
+        guard let values = Self.matches(#"const OPACITY = \{ light: (\d+), dark: (\d+) \}"#, in: html).first,
+              values.count == 2, let light = Double(values[0]), let dark = Double(values[1]),
+              let dimText = Self.matches(#"const DIM = ([\d.]+)"#, in: html).first?.first,
+              let dim = Double(dimText) else { throw Error("B4 opacity values missing from pinned script") }
+        return (theme == "dark" ? dark : light) / 100 * (drag ? dim : 1)
+    }
+
+    func b4PrintShadow() throws -> (ring: Double, hairline: Double, y: Double) {
+        let value = try exactDeclaration(".print", "box-shadow")
+        guard let parts = Self.matches(#"0 0 0 (\d+)px .*0 0 0 (\d+)px .*0 (\d+)px"#, in: value).first,
+              parts.count == 3, let ring = Double(parts[0]), let hairline = Double(parts[1]),
+              let y = Double(parts[2]) else { throw Error("B4 print shadow differs from pinned layers: \(value)") }
+        return (ring, hairline, y)
+    }
+
+    func b4FanDuration() throws -> Double {
+        let value = try exactDeclaration(".stack .f", "transition")
+        guard let seconds = Self.matches(#"transform ([\d.]+)s"#, in: value).first?.first,
+              let duration = Double(seconds) else { throw Error("B4 fan duration missing: \(value)") }
+        return duration
+    }
+
+    func declaration(_ selector: String, _ property: String, viewport: Double) throws -> String {
+        guard let value = try matchingRules(selector, property, viewport: viewport)
+            .last(where: { $0.declarations[property] != nil })?.declarations[property] else {
+            throw Error("\(name) selector '\(selector)' property '\(property)' at \(viewport)pt: no declaration")
+        }
+        return value
+    }
+
+    func exactDeclaration(_ selector: String, _ property: String) throws -> String {
+        guard let value = rules.last(where: { $0.selector == selector && $0.declarations[property] != nil })?
+            .declarations[property] else {
+            throw Error("\(name) selector '\(selector)' property '\(property)': no exact declaration")
+        }
+        return value
     }
 
     func raw(_ selector: String, _ property: String, viewport: Double) throws -> String {

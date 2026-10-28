@@ -57,12 +57,20 @@ import PicseeApplication
 }
 
 @Test @MainActor func p316B4AppearanceDragAndAccessibilityPresentation() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
+    let shadow = try css.b4PrintShadow()
     let scene = StatesScene()
     defer { scene.window.close() }
     let launch = try #require(scene.state.subviews.compactMap { $0 as? FirstLaunchView }.first)
+    launch.layoutSubtreeIfNeeded()
     let alley = try #require(b4View("first-launch.print.alley", in: scene.state))
-    #expect(alley.layer?.borderWidth == 5)
-    #expect(alley.layer?.sublayers?.first?.borderWidth == 1)
+    #expect(alley.layer?.borderWidth == 0)
+    #expect(alley.layer?.sublayers?.first?.borderWidth == CGFloat(shadow.ring))
+    #expect(alley.layer?.sublayers?.last?.borderWidth == 1)
+    #expect(alley.layer?.sublayers?.first?.frame.width == alley.bounds.width + 2 * CGFloat(shadow.ring))
+    #expect(alley.layer?.sublayers?.last?.frame.width == alley.bounds.width + 2 * CGFloat(shadow.hairline))
+    #expect(alley.layer?.shadowOffset.height == -CGFloat(shadow.y))
     let heading = try #require(b4View("first-launch.heading", in: scene.state) as? NSTextField)
     let drop = try #require(b4View("first-launch.drop", in: scene.state))
     let outline = try #require(drop.layer?.sublayers?.compactMap { $0 as? CAShapeLayer }.first)
@@ -70,23 +78,23 @@ import PicseeApplication
     launch.layoutSubtreeIfNeeded()
     let stack = try #require(b4View("first-launch.stack", in: scene.state))
     let firstPhoto = try #require(stack.subviews.first)
-    #expect(firstPhoto.layer?.animation(forKey: "b4.fan")?.duration == 0.35)
+    #expect(firstPhoto.layer?.animation(forKey: "b4.fan")?.duration == (try css.b4FanDuration()))
     #expect(heading.stringValue == "Release to open")
-    #expect(abs(alley.alphaValue - 0.12) < 0.001)
+    #expect(abs(alley.alphaValue - (try css.b4PrintOpacity("light", drag: true))) < 0.001)
     #expect(outline.lineWidth == 1.5 && !outline.isHidden)
     #expect(outline.lineDashPattern == [6, 4])
     #expect((drop.layer?.backgroundColor?.alpha ?? 0) > 0)
     launch.setDragActive(false)
     #expect(heading.stringValue == "Drop a photo folder here")
-    #expect(abs(alley.alphaValue - 0.3) < 0.001)
+    #expect(abs(alley.alphaValue - (try css.b4PrintOpacity("light"))) < 0.001)
     #expect(outline.isHidden)
     #expect((drop.layer?.backgroundColor?.alpha ?? 1) == 0)
     launch.themeOverride = .dark; launch.setDragActive(true)
-    #expect(abs(alley.alphaValue - 0.16) < 0.001)
+    #expect(abs(alley.alphaValue - (try css.b4PrintOpacity("dark", drag: true))) < 0.001)
     launch.reduceMotionOverride = true
     launch.setDragActive(false); launch.setDragActive(true)
     launch.layoutSubtreeIfNeeded()
-    #expect(abs(alley.alphaValue - 0.16) < 0.001)
+    #expect(abs(alley.alphaValue - (try css.b4PrintOpacity("dark", drag: true))) < 0.001)
     #expect(firstPhoto.layer?.animation(forKey: "b4.fan") == nil)
     launch.reduceTransparencyOverride = true
     launch.setDragActive(false); launch.setDragActive(true)
@@ -131,4 +139,49 @@ import PicseeApplication
     #expect((chip.layer?.backgroundColor?.alpha ?? 0) == 1)
     let stack = try #require(b4View("first-launch.stack", in: scene.state))
     #expect(stack.subviews.first?.layer?.animation(forKey: "b4.fan") == nil)
+}
+
+@Test @MainActor func p316B4PhotosDoNotInterceptFileDrags() throws {
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    let stack = try #require(b4View("first-launch.stack", in: scene.state))
+    let print = try #require(b4View("first-launch.print.alley", in: scene.state))
+    for image in stack.subviews + [print] {
+        #expect(!(image.registeredDraggedTypes ?? []).contains(.fileURL))
+        #expect(!(image.registeredDraggedTypes ?? []).contains(NSPasteboard.PasteboardType("NSFilenamesPboardType")))
+    }
+    let drop = ViewerDropView(frame: scene.state.bounds, acceptsDrop: { true }, onDrop: { _ in })
+    #expect((drop.registeredDraggedTypes ?? []).contains(.fileURL))
+}
+
+@Test @MainActor func p316B4AppearanceResolvesLayerColours() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let source = fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path
+    let light = try PinnedDesign.page("b4-first-launch", source: source)
+    let dark = try PinnedDesign.page("b4-first-launch", source: source, appearance: "dark")
+    func colour(_ cg: CGColor?) throws -> PinnedDesign.Color {
+        let input = try #require(cg)
+        let resolved = try #require(NSColor(cgColor: input)?.usingColorSpace(.deviceRGB))
+        return .init(red: resolved.redComponent, green: resolved.greenComponent,
+                     blue: resolved.blueComponent, alpha: resolved.alphaComponent)
+    }
+    let scene = StatesScene()
+    defer { scene.window.close() }
+    let launch = try #require(scene.state.subviews.compactMap { $0 as? FirstLaunchView }.first)
+    let drop = try #require(b4View("first-launch.drop", in: scene.state))
+    let chip = try #require(b4View("first-launch.chip.images", in: scene.state))
+    launch.appearance = NSAppearance(named: .aqua)
+    launch.setDragActive(true)
+    try light.assertColor(colour(drop.layer?.backgroundColor), ".theme-light", "--color-accent-soft", viewport: 960)
+    try light.assertColor(colour(chip.layer?.backgroundColor), ".theme-light", "--color-group-bg", viewport: 960)
+    let lightBorder = chip.layer?.borderColor
+    launch.appearance = NSAppearance(named: .darkAqua)
+    launch.setDragActive(false); launch.setDragActive(true)
+    try dark.assertColor(colour(drop.layer?.backgroundColor), ".theme-dark", "--color-accent-soft", viewport: 960)
+    try dark.assertColor(colour(chip.layer?.backgroundColor), ".theme-dark", "--color-group-bg", viewport: 960)
+    #expect(chip.layer?.borderColor != lightBorder)
+    launch.reduceTransparencyOverride = true
+    launch.setDragActive(false); launch.setDragActive(true)
+    try dark.assertColor(colour(chip.layer?.backgroundColor), ".theme-dark", "--color-surface", viewport: 960)
+    try dark.assertColor(colour(drop.layer?.backgroundColor), ".rt.over .drop", "background", viewport: 960)
 }
