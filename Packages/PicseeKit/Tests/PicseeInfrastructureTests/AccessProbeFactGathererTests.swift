@@ -109,7 +109,7 @@ private final class AccessProbeBookmarkRecorder: AccessProbeBookmarkCoding, @unc
     let report = gatherer.gather(bookmarkData: bookmark)
 
     #expect(report.resolution.url?.resolvingSymlinksInPath() == renamed.resolvingSymlinksInPath())
-    #expect(report.resolution.stale != nil)
+    #expect(report.resolution.stale == true)
     #expect(report.listing?.entryCount == 0)
     #expect(report.classification.cause == .readable)
 }
@@ -126,8 +126,8 @@ private final class AccessProbeBookmarkRecorder: AccessProbeBookmarkCoding, @unc
     try fileManager.removeItem(at: folder)
     let report = gatherer.gather(bookmarkData: bookmark)
 
-    #expect(report.resolution.error != nil || report.listing?.error != nil)
-    #expect(report.classification.cause != .readable)
+    #expect(report.resolution.error != nil)
+    #expect(report.classification.cause == .notFound)
 }
 
 @Test func accessProbeGathererMarksFolderInTrash() throws {
