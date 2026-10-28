@@ -62,3 +62,41 @@ import PicseeInfrastructure
     #expect(chosen == child)
 }
 
+@Test @MainActor func sidebarTreeCompactIndentUsesPinnedBreakpoint() throws {
+    _ = NSApplication.shared
+    let design = try PinnedDesign.page("compact-grid")
+    let tree = GridSidebarTreeView(frame: NSRect(x: 0, y: 0, width: 196, height: 612))
+    tree.viewportWidth = 800
+    let root = URL(fileURLWithPath: "/tmp/Photos")
+    tree.show(current: .init(url: root), parent: nil, children: [.init(url: root.appendingPathComponent("Long child"), count: 0)])
+    tree.layoutSubtreeIfNeeded()
+    let wideMargin = try design.edges(".folder-children", "margin", viewport: 800).left
+    let widePadding = try design.length(".folder-children", "padding-left", viewport: 800)
+    #expect(abs(Double(tree.rows[1].frame.minX) - (12 + wideMargin + 1 + widePadding)) < 0.1)
+    #expect(tree.rows[1].nameLabel.font?.pointSize == 13)
+    tree.viewportWidth = 700
+    tree.layoutSubtreeIfNeeded()
+    let narrowMargin = try design.edges(".folder-children", "margin", viewport: 700).left
+    let narrowPadding = try design.length(".folder-children", "padding-left", viewport: 700)
+    #expect(abs(Double(tree.rows[1].frame.minX) - (12 + narrowMargin + 1 + narrowPadding)) < 0.1)
+    #expect(tree.rows[1].nameLabel.font?.pointSize == 12)
+    #expect(tree.rows[1].frame.maxX <= tree.bounds.maxX)
+}
+
+@Test @MainActor func sidebarTreeSelectedFillFollowsPinnedLightAndDarkCSS() throws {
+    _ = NSApplication.shared
+    for (name, appearanceName) in [("grid-light", NSAppearance.Name.aqua), ("grid-dark", .darkAqua)] {
+        let design = try PinnedDesign.page(name)
+        let tree = GridSidebarTreeView(frame: NSRect(x: 0, y: 0, width: 196, height: 732))
+        tree.appearance = try #require(NSAppearance(named: appearanceName))
+        tree.show(current: .init(url: URL(fileURLWithPath: "/tmp/Images"), count: 4), parent: nil, children: [])
+        tree.layoutSubtreeIfNeeded()
+        let row = try #require(tree.rows.first)
+        let color = try #require(row.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB))
+        let pinned = try design.color(".ds-nav-row[aria-current=\"page\"]", "background", viewport: 1280)
+        #expect(abs(Double(color.redComponent) - pinned.red) < 0.01)
+        #expect(abs(Double(color.greenComponent) - pinned.green) < 0.01)
+        #expect(abs(Double(color.blueComponent) - pinned.blue) < 0.01)
+        #expect(abs(Double(color.alphaComponent) - pinned.alpha) < 0.01)
+    }
+}
