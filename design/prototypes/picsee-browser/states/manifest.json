@@ -240,6 +240,30 @@
       "kind": "static-mockup",
       "origin": "local-C-adaptation",
       "sha256": "a2e2331cef71140452d0d8070a814f0a875f1d5bcf0f697d87758f75a0c9d01e"
+    },
+    {
+      "name": "settings",
+      "title": "35 设置 · B",
+      "file": "settings.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "local-C-adaptation",
+      "sha256": "69134f262c36325fe701b071c9de58f50ae236b7b6c387fe30bb8bc2429bf2e2"
+    },
+    {
+      "name": "shortcuts",
+      "title": "36 键盘快捷键 · C",
+      "file": "shortcuts.html",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "kind": "static-mockup",
+      "origin": "local-C-adaptation",
+      "sha256": "b005a24b6b93946f5ea8cc408ba500bcabba0aa2576f4c97af0b1d42d1d97419"
     }
   ]
 }

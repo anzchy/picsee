@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN" class="theme-light"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1280, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>picsee · 36 键盘快捷键 · C</title>
+  <!--
+  36 键盘快捷键 · C (#214, spec #212; user: 「选 C」). Static design state, not the native app. Promoted from
+  prototype-shortcuts.html?variant=C on branch prototype/shortcuts-sheet (047ae7d). A read-only window opened from
+  帮助 → 键盘快捷键, one card per context; no search. Each row's data-shortcut names its command-model entries, and
+  scripts/design/shortcut-model.mjs (npm run design:check) fails when the rows and the implemented shortcuts differ.
+  The bare URL is the pinned main case: all three cards, light. Sub-cases, by query:
+    ?card=files|grid|viewer   outlines that card for review only (the app has no such state)
+    ?theme=dark               dark tokens
+-->
+  <style data-stitch-inlined="_ds/picsee-ui-system/tokens/globals.css">:root{--color-bg: #ffffff;--color-surface: #f6f7fb;--color-panel: #ffffff;--color-text: #1a1a1a;--color-muted: #6b7280;--color-border: color-mix(in srgb, var(--color-text) 10%, transparent);--color-border-subtle: color-mix(in srgb, var(--color-text) 6%, transparent);--color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);--shadow-soft: 0 0 0 0.5px color-mix(in srgb, var(--color-text) 12%, transparent), 0 8px 24px color-mix(in srgb, var(--color-text) 8%, transparent);--color-accent: #2563eb;--color-accent-soft: color-mix(in srgb, var(--color-accent) 14%, transparent);--color-accent-text: color-mix(in srgb, var(--color-accent) 80%, var(--color-text));--color-accent-fill: var(--color-accent);--color-accent-fill-hover: color-mix(in srgb, var(--color-accent) 88%, var(--color-text));--color-tab-active-fill: color-mix(in srgb, var(--color-text) 16%, var(--color-surface));--color-tab-active-accent: var(--color-accent);--tab-active-close-opacity: 0.5;--color-focus-ring: var(--color-accent);--color-danger: #dc2626;--color-danger-soft: color-mix(in srgb, var(--color-danger) 12%, transparent);--color-error-text: #b91c1c;--color-highlight: rgba(255, 85, 130, 0.65);--color-control-border: color-mix(in srgb, var(--color-text) 50%, transparent);--color-editor-bg: #ffffff;--color-code-bg: color-mix(in srgb, var(--color-editor-bg) 94%, var(--color-text));--font-sans: "SF Pro Text", "Avenir Next", "Helvetica Neue", sans-serif;--font-mono: "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;--title-bar-height: 38px;--traffic-lights-end: 0px;--traffic-lights-clearance: 0px;--traffic-lights-clearance-main: 0px;--sidebar-width: 220px;--sidebar-width-min: 180px;--main-min-width: 320px;--bottom-tabs-height: 36px;--editor-content-width: 780px;--content-padding: 40px;--editor-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;--editor-font-size: 16px;--editor-line-height: 1.6;--color-toggle-track-off: #cccccc;--color-running-fill: #dcfce7;--color-running-text: #16a34a;--color-banner-unsaved: #f59e0b;--color-group-bg: color-mix(in srgb, var(--color-surface) 80%, transparent);--color-input-bg: color-mix(in srgb, var(--color-panel) 90%, transparent);--color-text-secondary: #6b7280;--color-bg-secondary: #f6f7fb;--color-bg-tertiary: #eeeff3;--color-on-accent: #fff;--color-scrim: rgba(15, 23, 42, 0.35);--font-size-ui-sm: 12px;--font-size-ui: 13px;--font-size-ui-lg: 14px;--font-size-title: 16px;--radius-inner: 4px;--radius-control: 6px;--radius-popover: 10px;--motion-duration-fast: 150ms;} @media (prefers-reduced-motion: reduce){:root{--motion-duration-fast: 0ms;}} *{box-sizing: border-box;} html, body, #root{height: 100%;} body{margin: 0;font-family: var(--font-sans);background: var(--color-bg);color: var(--color-text);} body.tauri-macos{--traffic-lights-end: 78px;--traffic-lights-clearance: calc(var(--traffic-lights-end) - 16px);--traffic-lights-clearance-main: calc(var(--traffic-lights-end) + 2px);} a{color: inherit;text-decoration: none;}</style>
+  <style data-stitch-inlined="_ds/picsee-ui-system/tokens/light.css">.theme-light{color-scheme: light;--color-bg: #ffffff;--color-surface: #f6f7fb;--color-panel: #ffffff;--color-text: #1a1a1a;--color-muted: #6b7280;--color-border: color-mix(in srgb, var(--color-text) 10%, transparent);--color-border-subtle: color-mix(in srgb, var(--color-text) 6%, transparent);--color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);--shadow-soft: 0 0 0 0.5px color-mix(in srgb, var(--color-text) 12%, transparent), 0 8px 24px color-mix(in srgb, var(--color-text) 8%, transparent);--color-accent: #2563eb;--color-accent-soft: color-mix(in srgb, var(--color-accent) 14%, transparent);--color-accent-text: color-mix(in srgb, var(--color-accent) 80%, var(--color-text));--color-accent-fill: var(--color-accent);--color-accent-fill-hover: color-mix(in srgb, var(--color-accent) 88%, var(--color-text));--color-tab-active-fill: color-mix(in srgb, var(--color-text) 16%, var(--color-surface));--color-tab-active-accent: var(--color-accent);--tab-active-close-opacity: 0.5;--color-danger: #dc2626;--color-danger-soft: color-mix(in srgb, var(--color-danger) 12%, transparent);--color-error-text: #b91c1c;--color-highlight: rgba(255, 85, 130, 0.65);--color-control-border: color-mix(in srgb, var(--color-text) 50%, transparent);--color-editor-bg: #ffffff;--color-code-bg: color-mix(in srgb, var(--color-editor-bg) 94%, var(--color-text));--color-toggle-track-off: #cccccc;--color-running-fill: #dcfce7;--color-running-text: #16a34a;--color-banner-unsaved: #f59e0b;--color-group-bg: color-mix(in srgb, var(--color-surface) 80%, transparent);--color-input-bg: color-mix(in srgb, var(--color-panel) 90%, transparent);--color-text-secondary: var(--color-muted);--color-bg-secondary: var(--color-surface);--color-bg-tertiary: #eeeff3;}</style>
+  <style data-stitch-inlined="_ds/picsee-ui-system/tokens/dark.css">.theme-dark{color-scheme: dark;--color-bg: #0f1115;--color-surface: #161a22;--color-panel: #141821;--color-text: #e5e7eb;--color-muted: #9aa4b2;--color-border: color-mix(in srgb, var(--color-text) 12%, transparent);--color-border-subtle: color-mix(in srgb, var(--color-text) 7%, transparent);--color-hover: color-mix(in srgb, var(--color-text) 8%, transparent);--shadow-soft: 0 0 0 0.5px color-mix(in srgb, var(--color-text) 16%, transparent), 0 8px 24px color-mix(in srgb, black 45%, transparent);--color-accent: #60a5fa;--color-accent-soft: color-mix(in srgb, var(--color-accent) 22%, transparent);--color-accent-text: var(--color-accent);--color-accent-fill: #1d4ed8;--color-accent-fill-hover: color-mix(in srgb, var(--color-accent-fill) 88%, #000);--color-tab-active-fill: color-mix(in srgb, var(--color-text) 30%, var(--color-surface));--color-tab-active-accent: #93c5fd;--tab-active-close-opacity: 0.6;--color-danger: #f87171;--color-danger-soft: color-mix(in srgb, var(--color-danger) 18%, transparent);--color-error-text: #f87171;--color-highlight: rgba(255, 85, 130, 0.40);--color-control-border: color-mix(in srgb, var(--color-text) 50%, transparent);--color-editor-bg: #0f1115;--color-code-bg: color-mix(in srgb, var(--color-editor-bg) 94%, var(--color-text));--color-toggle-track-off: #cccccc;--color-running-fill: #dcfce7;--color-running-text: #16a34a;--color-banner-unsaved: #f59e0b;--color-group-bg: rgba(15, 18, 28, 0.6);--color-input-bg: rgba(15, 18, 28, 0.9);--color-text-secondary: var(--color-muted);--color-bg-secondary: var(--color-surface);--color-bg-tertiary: #1e2330;}</style>
+  <style>
+  * { box-sizing: border-box; }
+  html, body { width: 1280px; height: 800px; margin: 0; overflow: hidden; }
+  body { font-family: var(--font-sans); font-size: var(--font-size-ui); color: var(--color-text); -webkit-font-smoothing: antialiased;
+         background: color-mix(in srgb, var(--color-surface) 70%, var(--color-text) 6%); }
+  button, input { font: inherit; color: inherit; }
+  .window { position: absolute; left: 50%; transform: translateX(-50%); background: var(--color-panel); border-radius: 12px; overflow: hidden;
+            box-shadow: 0 0 0 .5px color-mix(in srgb, var(--color-text) 25%, transparent), 0 22px 60px color-mix(in srgb, #000 28%, transparent);
+            display: flex; flex-direction: column; }
+  .titlebar { height: 38px; flex: none; display: flex; align-items: center; justify-content: center; position: relative; font-weight: 600;
+              background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+  .traffic { position: absolute; left: 14px; display: flex; gap: 8px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; background: color-mix(in srgb, var(--color-text) 22%, transparent); }
+  .hint { color: var(--color-muted); font-size: var(--font-size-ui-sm); line-height: 1.5; }
+  .example { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: var(--radius-inner); font-size: 11px; line-height: 16px;
+             color: var(--color-muted); border: 1px dashed var(--color-border); font-family: var(--font-sans); }
+
+  .window { top: 130px; width: 820px; height: 540px; }
+  .cards { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 18px; align-content: start; overflow: hidden; }
+  .shortcut-card { border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 14px 6px; background: var(--color-bg); }
+  .shortcut-card.is-review-target { outline: 2px dashed var(--color-accent); outline-offset: 3px; }
+  .shortcut-card h3 { margin: 4px 0 6px; font-size: var(--font-size-ui); display: flex; gap: 8px; align-items: baseline; }
+  .shortcut-card .when { color: var(--color-muted); font-weight: 400; font-size: 11px; }
+  .shortcut-card ul { margin: 0; padding: 0; list-style: none; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 34px; border-bottom: 1px solid var(--color-border-subtle); }
+  .row:last-child { border-bottom: 0; }
+  .keys { display: inline-flex; gap: 4px; align-items: center; flex: none; }
+  kbd { font-family: var(--font-sans); font-size: var(--font-size-ui-sm); min-width: 22px; height: 22px; padding: 0 6px; display: inline-flex; align-items: center;
+        justify-content: center; border-radius: var(--radius-inner); border: 1px solid var(--color-border); border-bottom-width: 2px; background: var(--color-bg); color: var(--color-text); }
+</style>
+</head>
+<body>
+<div class="window shortcut-window" role="dialog" aria-labelledby="shortcuts-title">
+  <div class="titlebar"><div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div><span id="shortcuts-title">键盘快捷键</span></div>
+  <div class="cards">
+    <section class="shortcut-card" id="card-files" data-card="files" aria-labelledby="card-files-title">
+      <h3 id="card-files-title"><span class="title">文件与窗口</span><span class="when">任何时候</span></h3>
+      <ul>
+        <li class="row" data-shortcut="command:open"><span class="name">打开…</span><span class="keys"><kbd>⌘</kbd><kbd>O</kbd></span></li>
+        <li class="row" data-shortcut="menu:Settings…"><span class="name">设置…</span><span class="keys"><kbd>⌘</kbd><kbd>,</kbd></span></li>
+        <li class="row" data-shortcut="menu:Close"><span class="name">关闭窗口</span><span class="keys"><kbd>⌘</kbd><kbd>W</kbd></span></li>
+        <li class="row" data-shortcut="menu:Minimize"><span class="name">最小化</span><span class="keys"><kbd>⌘</kbd><kbd>M</kbd></span></li>
+        <li class="row" data-shortcut="menu:Hide Picsee"><span class="name">隐藏 picsee</span><span class="keys"><kbd>⌘</kbd><kbd>H</kbd></span></li>
+        <li class="row" data-shortcut="menu:Hide Others"><span class="name">隐藏其他</span><span class="keys"><kbd>⌥</kbd><kbd>⌘</kbd><kbd>H</kbd></span></li>
+        <li class="row" data-shortcut="menu:Quit Picsee"><span class="name">退出 picsee</span><span class="keys"><kbd>⌘</kbd><kbd>Q</kbd></span></li>
+      </ul>
+    </section>
+    <section class="shortcut-card" id="card-grid" data-card="grid" aria-labelledby="card-grid-title">
+      <h3 id="card-grid-title"><span class="title">网格</span><span class="when">浏览文件夹时</span></h3>
+      <ul>
+        <li class="row" data-shortcut="key:grid-arrows"><span class="name">移动当前项</span><span class="keys"><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></span></li>
+        <li class="row" data-shortcut="command:preview"><span class="name">用大图查看当前项</span><span class="keys"><kbd>Space</kbd></span></li>
+        <li class="row" data-shortcut="command:enter"><span class="name">打开当前项</span><span class="keys"><kbd>Return</kbd></span></li>
+        <li class="row" data-shortcut="menu:Search current folder"><span class="name">搜索当前文件夹</span><span class="keys"><kbd>⌘</kbd><kbd>F</kbd></span></li>
+        <li class="row" data-shortcut="menu:Hide sidebar"><span class="name">显示 / 隐藏侧栏</span><span class="keys"><kbd>⌃</kbd><kbd>⌘</kbd><kbd>S</kbd></span></li>
+      </ul>
+    </section>
+    <section class="shortcut-card" id="card-viewer" data-card="viewer" aria-labelledby="card-viewer-title">
+      <h3 id="card-viewer-title"><span class="title">大图</span><span class="when">查看一张图片时</span></h3>
+      <ul>
+        <li class="row" data-shortcut="command:previous|command:next"><span class="name">上一张 / 下一张</span><span class="keys"><kbd>←</kbd><kbd>→</kbd></span></li>
+        <li class="row" data-shortcut="command:escape"><span class="name">回到网格</span><span class="keys"><kbd>Esc</kbd></span></li>
+        <li class="row" data-shortcut="command:fit"><span class="name">适应窗口</span><span class="keys"><kbd>0</kbd></span></li>
+        <li class="row" data-shortcut="command:actualPixels"><span class="name">实际像素</span><span class="keys"><kbd>1</kbd></span></li>
+        <li class="row" data-shortcut="command:zoomIn|command:zoomOut"><span class="name">放大 / 缩小</span><span class="keys"><kbd>+</kbd><kbd>−</kbd></span></li>
+        <li class="row" data-shortcut="key:viewer-tab"><span class="name">唤回工具</span><span class="keys"><kbd>Tab</kbd></span></li>
+        <li class="row" data-shortcut="command:inspector"><span class="name">图片信息</span><span class="keys"><kbd>⌘</kbd><kbd>I</kbd></span></li>
+        <li class="row" data-shortcut="menu:Enter Full Screen"><span class="name">进入 / 退出全屏</span><span class="keys"><kbd>⌃</kbd><kbd>⌘</kbd><kbd>F</kbd></span></li>
+      </ul>
+    </section>
+  </div>
+</div>
+<script>
+// Static state page. ?card= outlines one card for review, ?theme=dark switches tokens.
+(() => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('theme') === 'dark') document.documentElement.className = 'theme-dark';
+  const card = document.querySelector('.shortcut-card[data-card="' + q.get('card') + '"]');
+  if (card) card.classList.add('is-review-target');
+})();
+</script>
+</body></html>
