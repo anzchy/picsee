@@ -612,15 +612,19 @@ The mini has one desktop, and mdpro's device tester drives it too. Two drivers a
 wrong app and corrupt each other's screenshots. A picsee run once overlapped mdpro's batch B6b because picsee didn't
 know about the lock. Both projects use mdpro's ADR-0134 decision 6 lock:
 
-- **The lock:** the directory `~/.cache/desktop-gui.lock/` (`mkdir` acquires it) holds an `owner` file of key=value
-  lines, and that file is the one that counts. picsee writes `project=picsee`, `session`, `batch=<run-id>`, `start`,
-  `pid`, `expected_minutes` and `purpose`.
+- **The lock** (mdpro ADR-0141 WI-2; both sides run the same protocol): the directory `~/.cache/desktop-gui.lock/`
+  holds an `owner` file of exactly eight key=value lines, and that file is the one that counts. picsee writes
+  `project=picsee`, `session`, `batch=<run-id>`, `start`, `pid`, `expected_minutes`, `purpose` and
+  `acquisition_id=<uuid4>`. Every acquire and release runs under the permanent flock mutex
+  `~/.cache/desktop-gui.mutex`; never delete, rename or hand-edit either path.
 - **When to take it:** before the **first GUI-driving action** of a run: launching the app, panels, keystrokes,
   mouse, drags, `screencapture`, app activation. Keep it across relaunch sub-runs.
 - **When to release it:** only after the app has quit (after `cleanup.sh`), including aborted runs. Builds, log
   reads and shell work don't need it; builds use the heavy lock.
-- **Helper:** `.agents/skills/picsee-delegator/scripts/gui-lock.sh acquire|wait|release|status`. It exits 75 when the
-  lock is busy, and `release` refuses a lock that isn't picsee's with the same batch.
+- **Helper:** `.agents/skills/picsee-delegator/scripts/gui-lock.sh acquire|wait|release|status`. `acquire` and `wait`
+  print `ACQUIRED <run-id> acquisition_id=<uuid>`; keep the id for `release <run-id> --acquisition-id <uuid>`. It
+  exits 75 when the lock is busy (and when `wait` times out); `release` exits 1 (`REFUSED`) unless the owner is
+  well formed, `project=picsee`, and carries the same batch and acquisition id.
 - **If it's held:** no GUI at all. Poll every 60 s (`wait`). After the holder's `expected_minutes` + 15, stop and
   tell the user. Never remove another project's lock; report a stale-looking lock to the user instead.
 - **Courtesy:** message mdpro-delegator (`SendMessage` / cross-session) when a run starts and ends, and check with

@@ -116,8 +116,9 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    group of related pages becomes reachable together, and before v0.0.1 (#147). Each batch covers every `AUTO-PASS` state
    since the last batch; deviations become issues. Full feature validation and ledger promotion follow these runs. **First take the desktop GUI lock shared with mdpro**:
    `$SK/scripts/gui-lock.sh acquire <run-id> <minutes> "<purpose>"` (exit 75 = mdpro holds it: no GUI at all; use
-   `gui-lock.sh wait …` or tell the user), message mdpro-delegator at start/end, and `gui-lock.sh release <run-id>`
-   only after cleanup (aborted runs too). Then macos-device-test skill + guide §6 (`scripts/device/*`,
+   `gui-lock.sh wait …` or tell the user). Keep the `acquisition_id=<uuid>` from its `ACQUIRED` line, message
+   mdpro-delegator at start/end, and `gui-lock.sh release <run-id> --acquisition-id <uuid>` only after cleanup
+   (aborted runs too). Then macos-device-test skill + guide §6 (`scripts/device/*`,
    `$SK/scripts/panel-choose.sh`, `drag2.sh`, `menus.sh`). For UI work, capture and independently review the
    signed App and pinned HTML states under [the parity contract](../../../docs/agents/ui-parity-contract.md).
    Record in `docs/validation/P<n>.md` with `Validated-by: picsee-delegator run=<id>`;
