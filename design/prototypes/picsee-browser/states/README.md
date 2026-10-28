@@ -47,7 +47,7 @@ python3 -m http.server 4313 --bind 127.0.0.1 --directory design/prototypes/picse
 
 ## 维护
 
-每页的 `sha256` 固定当前 HTML 的原始字节。修改正式状态稿后，先确认设计变更，再对该 HTML 运行 `shasum -a 256 <文件>`，将结果写入 `manifest.json` 对应条目；不要为绕过测试而重新固定哈希。`npm run design:check`（先 `npm ci --ignore-scripts` 与 `npx playwright install chromium`；CI 也跑）用 `package-lock.json` 固定的 Playwright 在两个空闲端口上起预览服务，运行 `scripts/verify_design_catalog.js`：检查 20 页的资源与布局、每页 HTML 与 `sha256` 一致、22/26 的来源与子情况（含收起的子文件夹与 PENDING(P3-14) 标注），以及 `journeys.html` 的入口表、只播放主路径、每条支线结果播到正确的目的页、没有手写进度徽章、不引用原型文件和播放器焦点（含点过预览之后的 Esc 与 Tab）。端口可用 `PICSEE_DESIGN_PORT`、`PICSEE_STATES_PORT` 指定。
+每页的 `sha256` 固定当前 HTML 的原始字节。修改正式状态稿后，先确认设计变更，再对该 HTML 运行 `shasum -a 256 <文件>`，将结果写入 `manifest.json` 对应条目；不要为绕过测试而重新固定哈希。`npm run design:check`（先 `npm ci --ignore-scripts` 与 `npx playwright install chromium`；CI 也跑）用 `package-lock.json` 固定的 Playwright 在两个空闲端口上起预览服务，运行 `scripts/verify_design_catalog.js`：检查 20 页的资源与布局、每页 HTML 与 `sha256` 一致、22/26 的来源与子情况（含收起的子文件夹、PENDING(P3-14) 标注，以及说明文字没有只剩一两个字的行：字距在 −1…+1 px 之间逐档检查，结果不随机器字体变化），以及 `journeys.html` 的入口表、只播放主路径、每条支线结果播到正确的目的页、没有手写进度徽章、不引用原型文件和播放器焦点（含点过预览之后的 Esc 与 Tab）。端口可用 `PICSEE_DESIGN_PORT`、`PICSEE_STATES_PORT` 指定。
 
 以 [主设计规范](../../../DESIGN.md)、[组件与原生映射](../../../picsee-ui-system/native/README.md) 和 [实施计划](../../../../docs/PICSEE_DEVELOPMENT_PLAN.md) 为依据。浏览器交互仍在 [viewer-v2.html](../viewer-v2.html)，完整状态稿不等于原生实现。
 
