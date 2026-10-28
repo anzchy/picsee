@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// npm run design:check — serve design/ and states/ on two local ports, then run scripts/verify_design_catalog.js in
-// headless Chromium (Playwright pinned in package-lock.json). Exits 1 when the check fails, 2 when it cannot start.
+// npm run design:check — check shortcuts.html against the command model (scripts/design/shortcut-model.mjs), serve
+// design/ and states/ on two local ports, then run scripts/verify_design_catalog.js in headless Chromium (Playwright
+// pinned in package-lock.json). Exits 1 when the check fails, 2 when it cannot start.
 // Ports: PICSEE_DESIGN_PORT and PICSEE_STATES_PORT, default a free port chosen at listen time. PICSEE_DESIGN_SCREENSHOT
 // sets the preview screenshot path, default a temporary directory (never the repo).
 // The servers run in this process, not `python3 -m http.server`: that server resolves the bind address with
@@ -16,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const check = require('./verify_design_catalog.js');
+const { check: checkShortcuts } = await import('./design/shortcut-model.mjs');
 
 const portFrom = name => {
   const value = process.env[name];
@@ -75,6 +77,9 @@ try {
   browser = await chromium.launch();
   const page = await browser.newPage();
   try {
+    // shortcuts.html must list exactly the shortcuts the command model implements (#214).
+    const shortcutProblems = checkShortcuts();
+    if (shortcutProblems.length) throw Error('shortcuts.html and the command model disagree: ' + shortcutProblems.join(' | '));
     const result = await check(page, { design, states, screenshot });
     console.log(JSON.stringify({ ...result, results: undefined }, null, 1));
     console.log(`design:check PASS (${result.stateCount} states, ${result.hashesPinned} hashes, ${result.subcases} sub-cases, ${result.branchPlays} branch plays)`);

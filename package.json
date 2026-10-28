@@ -17,6 +17,6 @@
     "stitch": "node scripts/stitch.mjs",
     "preview:prototype": "python3 -m http.server 4311 --bind 127.0.0.1 --directory design",
     "preview:states": "python3 -m http.server 4313 --bind 127.0.0.1 --directory design/prototypes/picsee-browser/states",
-    "design:check": "node scripts/design-check.mjs"
+    "design:check": "node --test scripts/design/*.test.mjs && node scripts/design-check.mjs"
   }
 }
