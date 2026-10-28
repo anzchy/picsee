@@ -4,7 +4,7 @@
   (ADR-013); when the two disagree, §1.6 wins and this page is fixed. Every card is a live, scaled iframe of a state page
   in manifest.json; cards never point at prototype files. Implementation progress is not shown here: it lives in
   docs/feature-ledger.md. Main steps run left to right and are the success path; "▶ 播放主路径" plays only them. Branches
-  hang below a step, are played on their own, and each one declares where it returns (the dashed ↩ edge).
+  hang below a step; each outcome declares where it lands (the dashed ↩ edge) and plays on its own, to that destination.
   Works over HTTP (npm run preview:states); from file:// titles come from the fallback list.
 -->
 <html lang="zh-CN" class="theme-light">
@@ -115,7 +115,8 @@
   .player :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   .player .stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 18px 18px; }
   .player .frame { position: relative; flex: none; border-radius: var(--radius-popover); overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
-  .player .frame iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #fff; }
+  /* a preview, not a page to use: inert so a click never takes the player's keys or focus (use 新窗口打开 to interact) */
+  .player .frame iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #fff; pointer-events: none; }
   .player .dots { display: flex; gap: 6px; }
   .player .dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.3); }
   .player .dots i.on { background: #fff; }
@@ -182,18 +183,27 @@ const REPLACED = { 'first-launch': '外观以 B4 散落相纸为准（P3-16 #202
 
 const K = s => s.replace(/\[([^\]]+)\]/g, '<kbd>$1</kbd>');   // [Esc] → App shortcut
 // Entrances into J1/J2 (plan §1.6, ledger OPEN-*/ACCESS-01). The last column is where the user lands.
+// A single image (ADR-0010, OPEN-03/04, ACCESS-01): inside an access root the folder scan starts without a prompt;
+// outside every root only this image is usable until → asks for access.
+const IN_ROOT = '13 大图（<a href="#J2">J2</a>），这一张为当前项，不弹授权，同目录开始扫描；[Esc] → 24（尚未扫描完时）→ 11，当前项仍是这一张（ADR-0010）';
+const NOT_IN_ROOT = '13 大图，只有这一张可用；按 [→] 时请求目录授权（ACCESS-01），留在大图；[Esc] 无变化（OPEN-03）';
 const ENTRIES = [
   ['启动 App，还没有打开过文件夹', 'OPEN-01/08', '21 首次打开（<a href="#J1">J1</a>）'],
   ['在 21 点「选择文件夹…」，或用 [⌘O] 打开面板选文件夹', 'OPEN-02', '24 读取文件夹 → 11 网格（<a href="#J1">J1</a>）'],
   ['把文件夹拖到 21，或拖到已打开的网格上', 'OPEN-04', '24 读取文件夹 → 11 网格'],
-  ['在访达里用“打开方式”或双击一张图片', 'OPEN-03 · ACCESS-01', '13 大图，这一张先可用 → 按 [→] 时请求目录授权（ACCESS-01）→ 24 → 11'],
-  ['把一张图片拖进窗口', 'OPEN-04', '13 大图（<a href="#J2">J2</a>）；翻同目录的图片同样先请求目录授权'],
+  ['在访达里用“打开方式”或双击一张图片，所在文件夹在授权范围内', 'OPEN-03 · ACCESS-01', IN_ROOT],
+  ['在访达里用“打开方式”或双击一张图片，所在文件夹不在授权范围内', 'OPEN-03 · ACCESS-01', NOT_IN_ROOT],
+  ['把一张图片拖进窗口，所在文件夹在授权范围内', 'OPEN-04 · ACCESS-01', IN_ROOT],
+  ['把一张图片拖进窗口，所在文件夹不在授权范围内', 'OPEN-04 · ACCESS-01', NOT_IN_ROOT],
   ['文件菜单「打开最近使用」，或 22 的「最近打开」', 'OPEN-06', '24 → 11；授权已失效时 → 26（<a href="#J1">J1 支线</a>）'],
 ];
 // A journey: main steps left to right (`t` is the trigger on the arrow INTO the step). `end` is the closing step of the
-// success path. Branches hang below a step and are not part of the main path; each one declares `to` (where it returns,
-// shown as the ↩ edge) and, when that is a page, `toPage`. `loop` marks optional actions that return to the same step.
-// `variants` are sub-cases of the branch page, opened by query.
+// success path. Branches hang below a step and are not part of the main path. A branch with a state page lists its
+// outcomes in `outs`: `k` is what the user does and where it lands (shown as a ↩ edge), `to` is the destination page,
+// `from` the page before the step when it is not the step itself, `q` the branch page's query for that outcome. Each
+// outcome plays on its own: from → branch page (or the step, for a branch without a card) → to. A branch without a
+// state page only declares `to` as text. `loop` marks optional actions that return to the same step; `variants` are
+// sub-cases of the branch page, opened by query; `title` replaces the card title when the state is not the page's own.
 const JOURNEYS = [
   { id: 'J1', name: '打开与浏览', goal: '从空窗口到看见自己的照片', stages: ['发现', '授权', '读取', '浏览'],
     wps: 'P3-16 #202 · P3-17b #205 · P3-10 #113 · P3-17a #204 · P2-08b #137 · P2-08c #141 · P2-09 #142 · P0-04（ACCESS-01）· #185',
@@ -201,16 +211,25 @@ const JOURNEYS = [
       { p: 'first-launch', note: '没有文件夹：选择或拖入；不可用的操作明确禁用' },
       { p: 'folder-loading', t: '「选择文件夹…」<br>或拖入文件夹', note: '扫描完成前留在这里；未得总数不伪造百分比',
         branches: [
-          { id: 'J1-cancel', t: '取消读取', to: '上一个状态（21 或之前的网格），不回流旧内容（ADR-0010）', toPage: 'first-launch' },
-          { id: 'J1-scan-failed', ph: ['扫描失败', '还没有状态稿。FOLDER-01 提到读取失败可重试；页面与文案待定。'], t: '读取失败', to: '「重试」→ 24；或选择其他文件夹 → 24', toPage: 'folder-loading' },
-          { id: 'J1-empty', p: 'empty-folder', t: '文件夹里没有图片（22-BD）', to: '点子文件夹、「包含子文件夹浏览」、最近打开或拖入文件夹 → 24 重新读取', toPage: 'folder-loading',
+          { id: 'J1-cancel', t: '取消读取', at: '「选择文件夹…」或拖入文件夹', outs: [
+              { k: '首次打开时取消 → 回到 21', from: 'first-launch', to: 'first-launch' },
+              { k: '从已打开的网格取消 → 回到之前的网格 11，不回流旧内容（ADR-0010）', from: 'grid-light', to: 'grid-light' }] },
+          { id: 'J1-scan-failed', ph: ['扫描失败', '还没有状态稿。FOLDER-01 提到读取失败可重试；页面与文案待定。'], t: '读取失败', to: '「重试」→ 24；或选择其他文件夹 → 24' },
+          { id: 'J1-empty', p: 'empty-folder', t: '文件夹里没有图片（22-BD）', outs: [
+              { k: '点子文件夹、「包含子文件夹浏览」、最近打开或拖入文件夹 → 24 重新读取', to: 'folder-loading' }],
             variants: [['case=no-subfolders', '没有子文件夹：最近打开'], ['drag=over', '拖入文件夹时']] },
         ] },
       { p: 'grid-light', t: '扫描完成', note: '首张为当前项（ADR-0010）。侧栏「图库」区域 PENDING(P3-15)：v0.0.1 只有收藏与最近查看',
         branches: [
-          { id: 'J1-access', p: 'permission-denied', t: '重开、最近项或浏览中授权失效（ACCESS-03/04，26-BC）', to: '重新选择成功 → 11 回到先前位置；取消面板 → 留在 26，入口仍在', toPage: 'grid-light',
+          { id: 'J1-access', p: 'permission-denied', t: '重开、最近项或浏览中授权失效（ACCESS-03/04，26-BC）', outs: [
+              { k: '「重新选择文件夹…」成功 → 11，回到先前位置', to: 'grid-light' },
+              { k: '取消面板 → 留在 26，入口仍在', to: 'permission-denied' },
+              { k: '「选择其他文件夹…」→ 打开面板 → 24', to: 'folder-loading' },
+              { k: '磁盘未连接：连接磁盘、重新确认访问权限后自动恢复 → 11', q: 'cause=volume', to: 'grid-light' }],
             variants: [['cause=volume', '磁盘未连接'], ['cause=missing', '找不到'], ['cause=unknown', '原因分不清']] },
-          { id: 'J1-moved', p: 'permission-denied', q: 'case=moved', t: '同卷移动或改名（26M-C，ADR-0011 跟随）', to: '关闭提示条，继续浏览 11；「不是这个？」→ 打开面板 → 24', toPage: 'grid-light' },
+          { id: 'J1-moved', p: 'permission-denied', q: 'case=moved', title: '26M-C 已跟随到新位置', t: '同卷移动或改名（ADR-0011 跟随，不是权限失败）', outs: [
+              { k: '关闭提示条，继续浏览 11', to: 'grid-light' },
+              { k: '「不是这个？选择其他文件夹…」→ 打开面板 → 24', to: 'folder-loading' }] },
         ] },
     ] },
   { id: 'J2', name: '看图与返回', goal: '打开一张、翻看、看细节，再回到原处', stages: ['当前项', '沉浸查看', '可选：工具 / 1:1 / 胶片条', '返回'],
@@ -219,10 +238,12 @@ const JOURNEYS = [
       { p: 'grid-light', note: '当前项（无需选择，ADR-0010）' },
       { p: 'viewer-quiet', t: '[Space] / [Enter]<br>或双击', note: '工具与红绿灯一起隐藏；[←] [→] 翻图',
         branches: [
-          { id: 'J2-error', p: 'image-error', t: '翻到无法读取的图片', to: '重试成功或 [→] 下一张 → 13；[Esc] → 11，错误后不回流旧图', toPage: 'viewer-quiet' },
-          { id: 'J2-tools', loop: true, p: 'viewer-controls', t: '移到边缘 / [Tab]', to: '约 2.5 秒无操作后隐藏，回到 13', toPage: 'viewer-quiet' },
-          { id: 'J2-actual', loop: true, p: 'original-size', t: '[1] 原始尺寸', to: '[0] 适应窗口，回到 13', toPage: 'viewer-quiet' },
-          { id: 'J2-film', loop: true, p: 'viewer-filmstrip', t: '展开胶片条（J2 加厚）', to: '收起胶片条，回到 13', toPage: 'viewer-quiet' },
+          { id: 'J2-error', p: 'image-error', t: '翻到无法读取的图片', outs: [
+              { k: '重试成功或 [→] 下一张 → 13', to: 'viewer-quiet' },
+              { k: '[Esc] → 11，错误后不回流旧图', to: 'grid-light' }] },
+          { id: 'J2-tools', loop: true, p: 'viewer-controls', t: '移到边缘 / [Tab]', outs: [{ k: '约 2.5 秒无操作后隐藏，回到 13', to: 'viewer-quiet' }] },
+          { id: 'J2-actual', loop: true, p: 'original-size', t: '[1] 原始尺寸', outs: [{ k: '[0] 适应窗口，回到 13', to: 'viewer-quiet' }] },
+          { id: 'J2-film', loop: true, p: 'viewer-filmstrip', t: '展开胶片条（J2 加厚）', outs: [{ k: '收起胶片条，回到 13', to: 'viewer-quiet' }] },
         ] },
     ],
     end: { p: 'grid-light', t: '[Esc] 或 [Space] 回到网格<br>保留选择与滚动位置', note: '[Esc] 先关闭菜单、Inspector 等弹出层，再回网格（DESIGN.md §6）' } },
@@ -230,7 +251,7 @@ const JOURNEYS = [
     wps: 'P3-10 搜索部分 · P3-09 · P3-12 #144',
     steps: [
       { p: 'grid-light', note: '浏览当前文件夹',
-        branches: [{ id: 'J3-search', p: 'search-empty', t: '[⌘F] 搜索，没有结果', to: '清除搜索 → 11，恢复内容与合理当前项', toPage: 'grid-light' }] },
+        branches: [{ id: 'J3-search', p: 'search-empty', t: '[⌘F] 搜索，没有结果', outs: [{ k: '清除搜索 → 11，恢复内容与合理当前项', to: 'grid-light' }] }] },
       { p: 'grid-multiselect', t: '[⌘] 点击切换<br>[Shift] 范围选择', note: '选择集合、当前项、锚点是三种状态' },
       { p: 'grid-context-menu', t: '右键 / 菜单键', note: '五个基础动作；[Esc] 关闭并回到触发处',
         branches: [
@@ -246,12 +267,12 @@ const JOURNEYS = [
     steps: [
       { p: 'viewer-controls', note: '大图工具显示时' },
       { p: 'viewer-inspector', t: '图片信息按钮<br>或右键「图片信息」', note: '读不到的显示“未知”；[Esc] 先关闭 Inspector',
-        branches: [{ id: 'J4-light', p: 'viewer-inspector-light', t: '浅色外观下的同一面板', to: '随主题切换，不另有布局；回到 16', toPage: 'viewer-inspector' }] },
-      { p: 'grid-display', t: '[Esc] 关闭 Inspector，回网格<br>点底部「显示」', note: '主题、密度、文件名、裁剪；立即生效。深色网格见参考页 12' },
+        branches: [{ id: 'J4-light', p: 'viewer-inspector-light', t: '浅色外观下的同一面板', outs: [{ k: '随主题切换，不另有布局；回到 16', to: 'viewer-inspector' }] }] },
+      { p: 'grid-display', t: '① [Esc] 关闭 Inspector<br>② 再按 [Esc] 回网格<br>③ 点底部「显示」', note: '主题、密度、文件名、裁剪；立即生效。深色网格见参考页 12' },
     ],
     end: { p: 'grid-light', t: '[Esc] 或点面板外<br>关闭面板', note: '设置保留；侧栏可进入收藏与最近查看',
       branches: [{ id: 'J4-library', ph: ['个人收藏 / 最近查看', '还没有状态稿。点侧栏「个人收藏」或「最近查看」，网格只显示这些图片（GRID-12、GRID-17，P3-14 #115）。'],
-                   t: '点侧栏「个人收藏」/「最近查看」', to: '点侧栏里的文件夹 → 11；来自失效文件夹的图片 → 26', toPage: 'grid-light' }] } },
+                   t: '点侧栏「个人收藏」/「最近查看」', to: '点侧栏里的文件夹 → 11；来自失效文件夹的图片 → 26' }] } },
 ];
 const REF = { pages: ['grid-dark', 'keyboard-focus', 'compact-grid', 'components'],
   note: '这些页面不是某一步，而是每条旅程都要满足的约束：深色外观、键盘焦点、小窗口布局和组件状态（计划 §1.6）。' };
@@ -269,25 +290,25 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const plain = s => s.replace(/<[^>]+>/g, ' ').replace(/\[([^\]]+)\]/g, '$1').replace(/\s+/g, ' ').trim();
 const RET = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2" stroke-linecap="round" aria-hidden="true"><path d="M20 18v-6a4 4 0 0 0-4-4H5"/><path d="m9 4-4 4 4 4"/></svg>';
 
-function card(n, q, note, extra) {
-  const i = info(n), s = 256 / i.w, h = Math.round(i.h * s);
+function card(n, q, note, extra, title) {
+  const i = info(n), s = 256 / i.w, h = Math.round(i.h * s), name = title || i.title;
   const tags = (WP[n] ? `<span class="tag">${WP[n]}</span>` : '') + (LEDGER[n] ? `<span class="tag ledger">${LEDGER[n]}</span>` : '') + (extra || '');
   const replaced = REPLACED[n] && !q ? `<span class="replaced">替换稿：${esc(REPLACED[n])}</span>` : '';
-  return `<button class="card" data-page="${n}"${q ? ` data-query="${esc(q)}"` : ''} aria-label="${esc(i.title)}${q ? '（' + esc(q) + '）' : ''}，查看大图">
+  return `<button class="card" data-page="${n}"${q ? ` data-query="${esc(q)}"` : ''}${title ? ` data-title="${esc(title)}"` : ''} aria-label="${esc(name)}${q ? '（' + esc(q) + '）' : ''}，查看大图">
     <div class="thumb" style="height:${Math.min(h, 200)}px">${replaced}<iframe loading="lazy" tabindex="-1" aria-hidden="true" src="${srcOf(n, q)}" style="width:${i.w}px;height:${i.h}px;transform:scale(${s})"></iframe><div class="shield"></div></div>
-    <div class="cap"><b>${esc(i.title)}</b>${tags}</div>${note ? `<div class="note">${K(note)}</div>` : ''}</button>`;
+    <div class="cap"><b>${esc(name)}</b>${tags}</div>${note ? `<div class="note">${K(note)}</div>` : ''}</button>`;
 }
 function arrow(t) { return `<div class="arrow"><div class="lab">${K(t || '')}</div><div class="line"></div></div>`; }
 function branch(b, from) {
-  const body = b.p ? card(b.p, b.q, '', b.p === 'image-error' || (b.p === 'permission-denied' && !b.q) ? '<span class="tag err">异常</span>' : '')
+  const body = b.p ? card(b.p, b.q, '', b.p === 'image-error' || (b.p === 'permission-denied' && !b.q) ? '<span class="tag err">异常</span>' : '', b.title)
     : b.ph ? `<div class="edge placeholder"><b>${esc(b.ph[0])}</b><span>${esc(b.ph[1])}</span></div>` : '';
   const variants = (b.variants || []).map(([q, label]) => `<button data-page="${b.p}" data-query="${esc(q)}">${esc(label)}</button>`).join('');
-  const playable = b.p && b.toPage;
-  return `<div class="branch${b.loop ? ' loop' : ''}" data-branch="${b.id}" data-to="${esc(plain(b.to))}">
+  const rets = b.outs
+    ? b.outs.map((o, k) => `<div class="ret">${RET}<span>${K(o.k)}<br><button class="bplay" data-play-branch="${b.id}" data-out="${k}" data-from="${from}" aria-label="播放：${esc(plain(o.k))}">▶ 播放</button></span></div>`).join('')
+    : `<div class="ret">${RET}<span><b>回到</b> ${K(b.to)}</span></div>`;
+  return `<div class="branch${b.loop ? ' loop' : ''}" data-branch="${b.id}" data-to="${esc(b.outs ? b.outs.map(o => plain(o.k)).join('；') : plain(b.to))}">
     <div class="down"><span>${b.loop ? '可选 · ' : ''}${K(b.t)}</span></div>${body}
-    ${variants ? `<div class="variants">其他情况：${variants}</div>` : ''}
-    <div class="ret">${RET}<span><b>回到</b> ${K(b.to)}</span></div>
-    ${playable ? `<button class="bplay" data-play-branch="${b.id}" data-from="${from}">▶ 播放这条支线</button>` : ''}</div>`;
+    ${variants ? `<div class="variants">其他情况：${variants}</div>` : ''}${rets}</div>`;
 }
 function column(p, note, branches) {
   const loops = branches.filter(b => b.loop), rest = branches.filter(b => !b.loop);
@@ -324,14 +345,14 @@ function render() {
 let seq = [], at = 0, opener = null;
 const P = id => document.getElementById(id);
 function show() {
-  const { p, q, t } = seq[at], i = info(p);
-  P('player').dataset.page = p;
-  P('p-step').textContent = `${at + 1} / ${seq.length} · ${i.title}${q ? '（' + q + '）' : ''}`; P('p-trig').textContent = t ? '← ' + plain(t) : '';
+  const { p, q, t, title } = seq[at], i = info(p);
+  P('player').dataset.page = p; P('player').dataset.query = q || '';
+  P('p-step').textContent = `${at + 1} / ${seq.length} · ${title || i.title}${q ? '（' + q + '）' : ''}`; P('p-trig').textContent = t ? '← ' + plain(t) : '';
   P('p-dots').innerHTML = seq.map((_, k) => `<i class="${k === at ? 'on' : ''}"></i>`).join('');
   P('p-prev').disabled = at === 0; P('p-next').disabled = at === seq.length - 1; P('p-open').href = srcOf(p, q);
   const st = P('p-stage').getBoundingClientRect(), sc = Math.min((st.width - 36) / i.w, (st.height - 18) / i.h, 1);
   P('p-frame').style.width = i.w * sc + 'px'; P('p-frame').style.height = i.h * sc + 'px';
-  P('p-frame').innerHTML = `<iframe tabindex="-1" title="${esc(i.title)}" src="${srcOf(p, q)}" style="width:${i.w}px;height:${i.h}px;transform:scale(${sc})"></iframe>`;
+  P('p-frame').innerHTML = `<iframe inert tabindex="-1" title="${esc(i.title)}" src="${srcOf(p, q)}" style="width:${i.w}px;height:${i.h}px;transform:scale(${sc})"></iframe>`;
 }
 function open(list, title, from) {
   seq = list; at = 0; opener = from; P('p-title').textContent = title;
@@ -340,15 +361,18 @@ function open(list, title, from) {
 function close() { P('player').classList.remove('open'); P('player').hidden = true; P('p-frame').innerHTML = ''; if (opener) opener.focus(); }
 // Success path only: the main steps and the closing step. Branches are never inlined.
 const journeySeq = j => j.steps.map((s, k) => ({ p: s.p, t: k ? s.t : '起点' })).concat(j.end ? [{ p: j.end.p, t: j.end.t }] : []);
-const branchSeq = (b, from) => [{ p: from, t: '起点' }, { p: b.p, q: b.q, t: b.t }, { p: b.toPage, t: '↩ ' + b.to }];
+// One branch outcome: from → the branch page (or the step itself, for a branch without a card) → its destination.
+const branchSeq = (b, o, step) => [{ p: o.from || step, t: '起点' },
+  b.p ? { p: b.p, q: o.q || b.q || '', t: b.t, title: b.title } : { p: step, t: b.at },
+  { p: o.to, t: '↩ ' + (b.p ? '' : plain(b.t) + ' · ') + o.k }];
 document.addEventListener('click', e => {
   const pl = e.target.closest('[data-play]');
   if (pl) { const j = JOURNEYS.find(x => x.id === pl.dataset.play); return open(journeySeq(j), `${j.id} ${j.name} · 主路径`, pl); }
   const bp = e.target.closest('[data-play-branch]');
   if (bp) { const id = bp.dataset.playBranch, j = JOURNEYS.find(x => allBranches(x).some(b => b.id === id)), b = allBranches(j).find(x => x.id === id);
-            return open(branchSeq(b, bp.dataset.from), `${j.id} 支线 · ${plain(b.t)}`, bp); }
+            return open(branchSeq(b, b.outs[+bp.dataset.out], bp.dataset.from), `${j.id} 支线 · ${plain(b.t)}`, bp); }
   const c = e.target.closest('[data-page]');
-  if (c && !c.closest('#player')) open([{ p: c.dataset.page, q: c.dataset.query || '', t: '' }], info(c.dataset.page).title, c);
+  if (c && !c.closest('#player')) open([{ p: c.dataset.page, q: c.dataset.query || '', t: '', title: c.dataset.title }], c.dataset.title || info(c.dataset.page).title, c);
 });
 P('p-prev').onclick = () => { if (at > 0) { at--; show(); } };
 P('p-next').onclick = () => { if (at < seq.length - 1) { at++; show(); } };
