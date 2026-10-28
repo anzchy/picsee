@@ -17,6 +17,7 @@ private actor BlockedCounter: SidebarFolderEnumerating {
     init(child: URL) { self.child = child }
     func children(in folder: URL, root: URL) -> [URL] { [child] }
     func imageCount(in folder: URL, root: URL) async -> Int {
+        if folder == root { return 5 }
         if !permitted { await withCheckedContinuation { waiter = $0 } }
         return 1234
     }
@@ -49,7 +50,108 @@ private actor BlockedCounter: SidebarFolderEnumerating {
     await counter.release()
     var countIterator = countUpdates.makeAsyncIterator()
     _ = await countIterator.next()
+    _ = await countIterator.next()
+    #expect(counts[root] == 5)
     #expect(counts[child] == 1234)
     session.cancel()
     #expect(counts[child] == 1234)
+}
+
+private enum SidebarFailure: Error { case unavailable }
+
+private actor FailingSidebarEnumerator: SidebarFolderEnumerating {
+    enum Mode: Sendable { case listingCancelled, listingFailed, countCancelled, countFailed }
+    let mode: Mode
+    let child: URL
+    let onFailure: @Sendable () -> Void
+    init(mode: Mode, child: URL, onFailure: @escaping @Sendable () -> Void) {
+        self.mode = mode; self.child = child; self.onFailure = onFailure
+    }
+    func children(in folder: URL, root: URL) throws -> [URL] {
+        switch mode {
+        case .listingCancelled:
+            onFailure(); throw CancellationError()
+        case .listingFailed:
+            onFailure(); throw SidebarFailure.unavailable
+        case .countCancelled, .countFailed:
+            return [child]
+        }
+    }
+    func imageCount(in folder: URL, root: URL) throws -> Int {
+        if folder != root { return 3 }
+        switch mode {
+        case .countCancelled:
+            onFailure(); throw CancellationError()
+        case .countFailed:
+            onFailure(); throw SidebarFailure.unavailable
+        case .listingCancelled, .listingFailed:
+            return 0
+        }
+    }
+}
+
+@Test @MainActor func sidebarFailuresLeaveUnknownCountsBlankAndKeepOtherRows() async throws {
+    let root = URL(fileURLWithPath: "/tmp/sidebar-failure")
+    let child = root.appendingPathComponent("Child")
+    for mode in [FailingSidebarEnumerator.Mode.listingCancelled, .listingFailed,
+        .countCancelled, .countFailed] {
+        var streamContinuation: AsyncStream<Void>.Continuation!
+        let events = AsyncStream<Void> { streamContinuation = $0 }
+        let signal = streamContinuation!
+        let counter = FailingSidebarEnumerator(mode: mode, child: child, onFailure: { signal.yield() })
+        let session = SidebarFolderLoadSession(browser: SidebarFolderBrowser(
+            access: LoadLease(root: root), enumerator: counter))
+        var rows: [URL] = [], counts: [URL: Int] = [:]
+        session.start(folder: root, rootID: AccessRootID(), onRows: { urls, _ in rows = urls },
+            onCount: { counts[$0] = $1 })
+        var iterator = events.makeAsyncIterator()
+        _ = await iterator.next()
+        try await Task.sleep(for: .milliseconds(20))
+        switch mode {
+        case .listingCancelled, .listingFailed:
+            #expect(rows.isEmpty)
+            #expect(counts.isEmpty)
+        case .countCancelled:
+            #expect(rows == [child])
+            #expect(counts.isEmpty)
+        case .countFailed:
+            #expect(rows == [child])
+            #expect(counts[root] == nil)
+            #expect(counts[child] == 3)
+        }
+        session.cancel()
+    }
+}
+
+private actor FixedSidebarEnumerator: SidebarFolderEnumerating {
+    let child: URL
+    init(child: URL) { self.child = child }
+    func children(in folder: URL, root: URL) -> [URL] { [child] }
+    func imageCount(in folder: URL, root: URL) -> Int {
+        switch folder.lastPathComponent {
+        case "Root": return 7
+        case "Current": return 3
+        default: return 2
+        }
+    }
+}
+
+@Test @MainActor func sidebarParentCurrentAndChildAllUseDirectCounter() async throws {
+    let root = URL(fileURLWithPath: "/tmp/Root")
+    let current = root.appendingPathComponent("Current")
+    let child = current.appendingPathComponent("Child")
+    let session = SidebarFolderLoadSession(browser: SidebarFolderBrowser(
+        access: LoadLease(root: root), enumerator: FixedSidebarEnumerator(child: child)))
+    var parent: URL?, counts: [URL: Int] = [:]
+    var continuation: AsyncStream<Void>.Continuation!
+    let events = AsyncStream<Void> { continuation = $0 }
+    session.start(folder: current, rootID: AccessRootID(), onRows: { _, parentURL in parent = parentURL },
+        onCount: { counts[$0] = $1; continuation.yield() })
+    var iterator = events.makeAsyncIterator()
+    for _ in 0..<3 { _ = await iterator.next() }
+    #expect(parent?.pathComponents == root.pathComponents)
+    #expect(counts[current] == 3)
+    #expect(counts[child] == 2)
+    #expect(counts.first(where: { $0.key.pathComponents == root.pathComponents })?.value == 7)
+    session.cancel()
 }
