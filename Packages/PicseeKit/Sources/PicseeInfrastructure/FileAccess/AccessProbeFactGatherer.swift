@@ -179,6 +179,12 @@ private struct SystemAccessProbeBookmarkCoding: AccessProbeBookmarkCoding {
 private extension AccessProbeError {
     init(_ error: Error) {
         let nsError = error as NSError
-        self.init(domain: nsError.domain, code: nsError.code)
+        var underlyingErrors: [AccessProbeError] = []
+        var underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+        while let error = underlying {
+            underlyingErrors.append(AccessProbeError(domain: error.domain, code: error.code))
+            underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        self.init(domain: nsError.domain, code: nsError.code, underlyingErrors: underlyingErrors)
     }
 }

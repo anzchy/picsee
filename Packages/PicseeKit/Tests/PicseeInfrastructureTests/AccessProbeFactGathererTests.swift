@@ -62,6 +62,34 @@ private final class AccessProbeBookmarkRecorder: AccessProbeBookmarkCoding, @unc
     #expect(bookmarks.options == [.withSecurityScope, .withoutMounting, .withoutUI])
 }
 
+@Test func accessProbeGathererPreservesEveryUnderlyingError() throws {
+    let posix = NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))
+    let middle = NSError(domain: "ProbeMiddle", code: 42, userInfo: [NSUnderlyingErrorKey: posix])
+    let top = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError, userInfo: [
+        NSUnderlyingErrorKey: middle,
+    ])
+    let gatherer = AccessProbeFactGatherer(
+        bookmarks: AccessProbeBookmarkRecorder(),
+        scope: SystemSecurityScope(),
+        mountedVolumes: { [AccessProbeVolume(uuid: "volume-a", url: nil, name: "Photos")] },
+        lister: { _ in throw top },
+        isInTrash: { _ in false }
+    )
+
+    let report = gatherer.gather(bookmarkData: Data([1]))
+    let error = try #require(report.listing?.error)
+
+    #expect(error.domain == NSCocoaErrorDomain)
+    #expect(error.code == NSFileReadNoPermissionError)
+    #expect(error.underlyingErrors == [
+        AccessProbeError(domain: "ProbeMiddle", code: 42),
+        AccessProbeError(domain: NSPOSIXErrorDomain, code: Int(EACCES)),
+    ])
+    let json = try #require(String(data: JSONEncoder().encode(error), encoding: .utf8))
+    #expect(json.contains("ProbeMiddle"))
+    #expect(json.contains(NSPOSIXErrorDomain))
+}
+
 @Test func accessProbeGathererFollowsRenamedFolder() throws {
     let fileManager = FileManager.default
     let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
