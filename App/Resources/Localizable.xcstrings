@@ -462,6 +462,13 @@
         }
       }
     },
+    "Folders": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Folders" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "文件夹" } }
+      }
+    },
     "OK": {
       "extractionState": "manual",
       "localizations": {
