@@ -41,13 +41,13 @@ python3 -m http.server 4313 --bind 127.0.0.1 --directory design/prototypes/picse
 | 页面 | 不带参数 | 子情况 |
 | --- | --- | --- |
 | `empty-folder.html`（22-BD） | 这一层有子文件夹：子文件夹卡片、「包含子文件夹浏览」「选择其他文件夹…」，内容区可拖入 | `?case=no-subfolders` 最近打开的文件夹；`?drag=over` 拖入时的提示 |
-| `permission-denied.html`（26-BC） | 授权失效：侧栏该文件夹变灰带 ⚠、子文件夹收起；「重新选择文件夹…」「选择其他文件夹…」 | `?cause=volume` 外接磁盘未连接；`?cause=missing` 找不到；`?cause=unknown` 原因分不清时的「无法访问此文件夹」；`?case=moved` 26M-C 同卷移动或改名后跟随，网格上方的提示条 |
+| `permission-denied.html`（26-BC） | 授权失效：侧栏该文件夹变灰带 ⚠、子文件夹收起（› 与 `aria-expanded="false"`）；「重新选择文件夹…」「选择其他文件夹…」。侧栏「个人收藏」「最近查看」两行和「侧栏里的收藏和最近查看不受影响。」标为 **PENDING(P3-14)**：它们随 P3-14（J4）落地，P2-08c 验收不含（ADR-014） | `?cause=volume` 外接磁盘未连接；`?cause=missing` 找不到；`?cause=unknown` 原因分不清时的「无法访问此文件夹」；`?case=moved` 26M-C 同卷移动或改名后跟随，网格上方的提示条（不是权限失败）。各子情况同样带 PENDING(P3-14) 标注 |
 
 两页都接受 `?theme=dark`。
 
 ## 维护
 
-每页的 `sha256` 固定当前 HTML 的原始字节。修改正式状态稿后，先确认设计变更，再对该 HTML 运行 `shasum -a 256 <文件>`，将结果写入 `manifest.json` 对应条目；不要为绕过测试而重新固定哈希。`scripts/verify_design_catalog.js`（`playwright-cli run-code --filename=scripts/verify_design_catalog.js`，需先起 4311 与 4313 两个预览服务）检查 20 页的资源与布局、每页 HTML 与 `sha256` 一致、22/26 的子情况，以及 `journeys.html` 的入口表、只播放主路径、支线都有返回边、没有手写进度徽章、不引用原型文件和播放器焦点。
+每页的 `sha256` 固定当前 HTML 的原始字节。修改正式状态稿后，先确认设计变更，再对该 HTML 运行 `shasum -a 256 <文件>`，将结果写入 `manifest.json` 对应条目；不要为绕过测试而重新固定哈希。`npm run design:check`（先 `npm ci --ignore-scripts` 与 `npx playwright install chromium`；CI 也跑）用 `package-lock.json` 固定的 Playwright 在两个空闲端口上起预览服务，运行 `scripts/verify_design_catalog.js`：检查 20 页的资源与布局、每页 HTML 与 `sha256` 一致、22/26 的来源与子情况（含收起的子文件夹与 PENDING(P3-14) 标注），以及 `journeys.html` 的入口表、只播放主路径、每条支线结果播到正确的目的页、没有手写进度徽章、不引用原型文件和播放器焦点（含点过预览之后的 Esc 与 Tab）。端口可用 `PICSEE_DESIGN_PORT`、`PICSEE_STATES_PORT` 指定。
 
 以 [主设计规范](../../../DESIGN.md)、[组件与原生映射](../../../picsee-ui-system/native/README.md) 和 [实施计划](../../../../docs/PICSEE_DEVELOPMENT_PLAN.md) 为依据。浏览器交互仍在 [viewer-v2.html](../viewer-v2.html)，完整状态稿不等于原生实现。
 

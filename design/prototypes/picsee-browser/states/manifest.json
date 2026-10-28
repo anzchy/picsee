@@ -94,8 +94,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot",
-      "sha256": "eba0855d2892f5bac00d39ac4918b33701bf875f292637b8bb2cba2d22ca3c28"
+      "origin": "local-C-adaptation",
+      "sha256": "47ab7e795a964893e1a9a6fbfb1b6fa5e39645d446415fab9bdc7c398185f140"
     },
     {
       "name": "search-empty",
@@ -142,8 +142,8 @@
         "height": 800
       },
       "kind": "static-mockup",
-      "origin": "accepted-C-snapshot",
-      "sha256": "7bd022de4474334960b624dac6d668fcee1582d30ffc711795ebb88f070be2f8"
+      "origin": "local-C-adaptation",
+      "sha256": "392a4d3df48bdb2d866fe48370c0266e3f6c241b3c7d2f5a763bad51d33aca5d"
     },
     {
       "name": "original-size",
