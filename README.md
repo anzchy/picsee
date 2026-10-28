@@ -15,6 +15,10 @@
 
 picsee 不收集任何数据，不上传图片或元数据。沙盒保持开启，它只读取你通过系统面板授权的文件夹和文件。唯一的联网是检查更新：从 v0.0.1 起，Sparkle 会访问 GitHub 获取更新信息和更新包，不发送系统信息；第二次启动时会询问是否自动检查，之后可在“设置 → 更新”中修改（[ADR-015](docs/adr/0015-sparkle-updates-over-a-network-client-entitlement.md)）。
 
+## 发布签名（维护者）
+
+第一次配置或更换证书时，在仓库根目录运行 `scripts/release/setup-secrets-wizard.sh`。它会一步步引导你创建 Developer ID 证书和 App Store Connect API 密钥，生成 Sparkle 更新签名密钥，并写入 GitHub Secrets；密钥不进仓库（#217）。
+
 ## 问题反馈
 
 请在 [GitHub Issues](https://github.com/anzchy/picsee/issues/new/choose) 用问题报告模板提交。不要附上私人照片或个人文件路径。
