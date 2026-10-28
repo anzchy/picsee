@@ -166,3 +166,39 @@ class OwnerGatesRefusalTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ResolvePart3Tests(unittest.TestCase):
+    """Part 3 conflicts merge both sides; main's notes and dates are never dropped (2026-10-28 #243 near-miss)."""
+
+    def run_resolve(self, text):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('resolve_part3', Path(__file__).with_name('resolve_part3.py'))
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        return mod.resolve(text)
+
+    def test_keeps_main_note_and_date_and_appends_branch_sentence(self):
+        text = ('| 区域 | 最近审查 | 审查人 | 备注 |\n'
+                '<<<<<<< HEAD\n'
+                '| 网格 | 2026-10-28 | doc-gardener | 主线注一。主线注二。 |\n'
+                '=======\n'
+                '| 网格 | 2026-10-27 | doc-gardener | 主线注一。分支注。 |\n'
+                '>>>>>>> abc (garden)\n')
+        out, ok = self.run_resolve(text)
+        self.assertTrue(ok)
+        self.assertIn('| 网格 | 2026-10-28 | doc-gardener | 主线注一。主线注二。分支注。 |', out)
+        self.assertNotIn('2026-10-27', out)
+        self.assertNotIn('<<<<<<<', out)
+
+    def test_branch_only_row_is_kept(self):
+        text = ('<<<<<<< HEAD\n| 甲 | 2026-10-28 | g | 甲注。 |\n=======\n'
+                '| 甲 | 2026-10-28 | g | 甲注。 |\n| 乙 | 2026-10-28 | g | 乙注。 |\n>>>>>>> x\n')
+        out, ok = self.run_resolve(text)
+        self.assertTrue(ok)
+        self.assertIn('| 乙 | 2026-10-28 | g | 乙注。 |', out)
+
+    def test_non_row_conflict_is_left_unresolved(self):
+        text = '<<<<<<< HEAD\nprose A\n=======\nprose B\n>>>>>>> x\n'
+        out, ok = self.run_resolve(text)
+        self.assertFalse(ok)
+        self.assertIn('<<<<<<<', out)
