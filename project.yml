@@ -34,6 +34,8 @@ targets:
       base:
         PRODUCT_NAME: Picsee
         PRODUCT_BUNDLE_IDENTIFIER: io.github.anzchy.picsee
+        MARKETING_VERSION: 0.0.1
+        CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/Resources/Picsee.entitlements
