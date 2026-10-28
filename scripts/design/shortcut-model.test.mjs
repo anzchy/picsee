@@ -65,3 +65,53 @@ test('a key equivalent in a shape the parser does not read fails', () => {
     'let recentItem = NSMenuItem(title: String(localized: "Open Recent"), action: nil, keyEquivalent: "r")')),
   /found \d+ literal key equivalents .* but parsed \d+/);
 });
+
+// #214 fix round 1. Every row on the page is compared (gpt F1), every keyDown site is accounted for (opus M1), and a
+// modifier mask belongs to its own item's statements (opus L3).
+const CARD_END = '<li class="row" data-shortcut="menu:Hide sidebar">';
+test('a visible row without data-shortcut fails', () => {
+  fails(withChange(FILES.page, replaceOnce(CARD_END,
+    '<li class="row"><span class="name">旋转</span><span class="keys"><kbd>⌘</kbd><kbd>R</kbd></span></li>\n        ' + CARD_END)),
+  /row 旋转 .*has no data-shortcut/);
+});
+
+test('a keycap outside a row fails', () => {
+  fails(withChange(FILES.page, replaceOnce('</ul>\n    </section>\n    <section class="shortcut-card" id="card-viewer"',
+    '</ul><p class="hint">按 <kbd>⌘</kbd><kbd>R</kbd> 旋转</p>\n    </section>\n    <section class="shortcut-card" id="card-viewer"')),
+  /2 keycaps sit outside a row/);
+});
+
+test('a row without a name fails', () => {
+  fails(withChange(FILES.page, replaceOnce('<span class="name">退出 picsee</span>', '<span class="name"></span>')),
+    /menu:Quit Picsee has no name/);
+});
+
+test('a new keyDown case fails until it is declared', () => {
+  fails(withChange('Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridShellView.swift',
+    replaceOnce('case 124: onAdjust?(8)', 'case 124: onAdjust?(8)\n        case 51: onAdjust?(0)')),
+  /GridShellView\.swift handles key code 51, which KEY_SITES does not declare/);
+});
+
+test('a new keyCode comparison in another file fails until it is declared', () => {
+  fails(withChange('App/UI/CacheSettingsWindow.swift',
+    replaceOnce('override func cancelOperation(_ sender: Any?) { performClose(sender) }',
+      'override func cancelOperation(_ sender: Any?) { performClose(sender) }\n    override func keyDown(with event: NSEvent) { if event.keyCode == 51 { return } }')),
+  /CacheSettingsWindow\.swift handles key code 51, which KEY_SITES does not declare/);
+});
+
+test('a new SwiftUI key press fails until it is declared', () => {
+  fails(withChange('Packages/PicseeKit/Sources/PicseeMacUI/DesignSystem/Components/DesignComponents.swift',
+    replaceOnce('.onKeyPress(.space, action: activateFromKeyboard)', '.onKeyPress(.space, action: activateFromKeyboard).onKeyPress(.return, action: activateFromKeyboard)')),
+  /DesignComponents\.swift handles key code return, which KEY_SITES does not declare/);
+});
+
+test('a declared key site that is gone fails', () => {
+  fails(withChange('Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridShellView.swift', replaceOnce('case 124: onAdjust?(8)\n', '')),
+    /KEY_SITES declares key code 124 in .*GridShellView\.swift, which no longer handles it/);
+});
+
+test('a modifier mask set in a later function does not change an earlier item', () => {
+  const read = withChange(FILES.menu, s => replaceOnce('settings.keyEquivalentModifierMask = [.command]\n', '')(s)
+    .replace('@objc private func showDiagnostics(', 'func laterSettings() { let settings = NSMenuItem(); settings.keyEquivalentModifierMask = [.option] }\n    @objc private func showDiagnostics('));
+  assert.deepEqual(check(read), []);
+});
