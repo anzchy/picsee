@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # picsee release signing secrets wizard (#217). Run from the repository root: scripts/release/setup-secrets-wizard.sh
-# Puts the Developer ID certificate, notary API key and Sparkle EdDSA private key into GitHub Secrets for
+# Puts the Developer ID certificate, the notarisation Apple ID + app-specific password and the Sparkle EdDSA private key into GitHub Secrets for
 # anzchy/picsee. Secrets are never printed and never written into the repository or a .env file.
 #
 # A wizard walks a human through a manual procedure, step by step.
@@ -212,6 +212,7 @@ chmod 700 "$WORK"
 cleanup() { [[ -d "$WORK" ]] && { find "$WORK" -type f -exec rm -P {} + 2>/dev/null || true; rm -rf "$WORK"; }; return 0; }
 trap cleanup EXIT
 export GH_REPO="$REPO"
+has_secret() { gh secret list --json name -q '.[].name' 2>/dev/null | grep -qx "$1"; }
 
 banner "picsee release signing secrets → GitHub ($REPO)"
 
@@ -247,6 +248,9 @@ pause
 # ── 3 ────────────────────────────────────────────────────────────────────
 stage "Export the certificate as .p12 (you, in Keychain Access)"
 P12="$WORK/developer-id.p12"
+if has_secret DEVELOPER_ID_P12_BASE64 && has_secret DEVELOPER_ID_P12_PASSWORD && confirm "The certificate is already in GitHub Secrets. Keep it and skip this stage?"; then
+  note "Kept the existing DEVELOPER_ID_P12_* secrets."
+else
 say "Export the certificate together with its private key into a temporary folder this wizard deletes at the end."
 open -a "Keychain Access" >/dev/null 2>&1 || true
 step "Keychain Access → login keychain → My Certificates."
@@ -271,36 +275,42 @@ set_secret DEVELOPER_ID_P12_BASE64 "$(base64 -i "$P12")"
 set_secret DEVELOPER_ID_P12_PASSWORD "$P12_PASSWORD"
 set_secret KEYCHAIN_PASSWORD "$(openssl rand -base64 24)"
 unset P12_PASSWORD
+fi
 pause
 
 # ── 4 ────────────────────────────────────────────────────────────────────
-stage "App Store Connect API key for notarisation (you, in the browser)"
-open_url "https://appstoreconnect.apple.com/access/integrations/api"
-step "Users and Access → Integrations → App Store Connect API → Team Keys."
-step "Click + (Generate API Key). Name: picsee notarisation. Access: Developer. Generate."
-step "Download the key file AuthKey_XXXXXXXXXX.p8. Apple lets you download it only once."
-step "Copy the Key ID from that row and the Issuer ID shown above the table."
-ask ASC_P8_PATH "Path of the downloaded .p8 file (drag it into this window):"
-ASC_P8_PATH="${ASC_P8_PATH//\\ / }"; ASC_P8_PATH="${ASC_P8_PATH%"${ASC_P8_PATH##*[![:space:]]}"}"
-until [[ -s "$ASC_P8_PATH" ]] && grep -q "BEGIN PRIVATE KEY" "$ASC_P8_PATH"; do
-  warn "That isn't a readable .p8 key file."
-  ask ASC_P8_PATH "Path of the .p8 file:"
-done
-ask ASC_KEY_ID "Key ID (10 characters):"
-ask ASC_ISSUER_ID "Issuer ID (a UUID):"
-set_secret ASC_KEY_ID "$ASC_KEY_ID"
-set_secret ASC_ISSUER_ID "$ASC_ISSUER_ID"
-set_secret ASC_KEY_P8_BASE64 "$(base64 -i "$ASC_P8_PATH")"
-if confirm "Securely delete the downloaded .p8 now (it is stored in GitHub Secrets)?"; then
-  rm -P "$ASC_P8_PATH" && note "Deleted the .p8 file."
+stage "Apple ID app-specific password for notarisation (you, in the browser)"
+say "Notarisation signs in with your Apple ID and an app-specific password (user's choice, 2026-10-28: 「B，改成 app 专用密码」)."
+say "This replaces the App Store Connect API key, so no App Store Connect access is needed."
+if has_secret APPLE_ID && has_secret APPLE_APP_SPECIFIC_PASSWORD && confirm "Notarisation credentials are already in GitHub Secrets. Keep them and skip this stage?"; then
+  note "Kept the existing APPLE_ID and APPLE_APP_SPECIFIC_PASSWORD secrets."
 else
-  warn "Keep the .p8 somewhere safe and private; never commit it."
+  open_url "https://account.apple.com/account/manage"
+  step "Sign in with the Apple ID of team $TEAM (two-factor authentication)."
+  step "Sign-In and Security → App-Specific Passwords → + (Generate)."
+  step "Name it: picsee notarisation. Copy the password (format xxxx-xxxx-xxxx-xxxx). Apple shows it only once."
+  ask APPLE_ID "Apple ID email of team $TEAM:"
+  ask_secret APP_PW "Paste the app-specific password:"
+  say "Checking the credentials with notarytool (lists past submissions; nothing is uploaded)…"
+  until xcrun notarytool history --apple-id "$APPLE_ID" --password "$APP_PW" --team-id "$TEAM" >/dev/null 2>&1; do
+    warn "notarytool could not sign in with that Apple ID, password and team $TEAM."
+    note "Check the Apple ID, that the password is an app-specific one, and that the team's agreements are accepted."
+    ask APPLE_ID "Apple ID email:"
+    ask_secret APP_PW "App-specific password:"
+  done
+  note "notarytool accepted the credentials."
+  set_secret APPLE_ID "$APPLE_ID"
+  set_secret APPLE_APP_SPECIFIC_PASSWORD "$APP_PW"
+  unset APP_PW
 fi
 pause
 
 # ── 5 ────────────────────────────────────────────────────────────────────
 stage "Sparkle update-signing key (automatic)"
 say "Downloads the latest Sparkle release tools and creates an EdDSA key pair for update signing."
+if has_secret SPARKLE_ED_PRIVATE_KEY && [[ -s "$HOME/.picsee/release/sparkle-public-ed-key.txt" ]] && confirm "A Sparkle key is already in GitHub Secrets. Keep it and skip this stage?"; then
+  note "Kept the existing Sparkle key; public key: $(cat "$HOME/.picsee/release/sparkle-public-ed-key.txt")"
+else
 SPARKLE_TAG=$(gh release view --repo sparkle-project/Sparkle --json tagName -q .tagName)
 note "Sparkle $SPARKLE_TAG"
 gh release download "$SPARKLE_TAG" --repo sparkle-project/Sparkle --pattern "Sparkle-${SPARKLE_TAG}.tar.xz" --dir "$WORK" >/dev/null
@@ -315,6 +325,7 @@ mkdir -p "$HOME/.picsee/release"
 printf '%s\n' "$PUB" > "$HOME/.picsee/release/sparkle-public-ed-key.txt"
 note "Public key (not secret) saved to ~/.picsee/release/sparkle-public-ed-key.txt for #220 (Info.plist SUPublicEDKey):"
 say "$PUB"
+fi
 pause
 
 # ── 6 ────────────────────────────────────────────────────────────────────
