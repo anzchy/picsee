@@ -58,19 +58,7 @@ struct AccessProbeLaunchTests {
         try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
         var selectionCount = 0
 
-        let firstOutput = try AccessProbeRunner.run(containerURL: container) {
-            selectionCount += 1
-            return [folder]
-        }
-        let secondOutput = try AccessProbeRunner.run(containerURL: container) {
-            selectionCount += 1
-            return []
-        }
-
-        #expect(selectionCount == 1)
-        #expect(firstOutput == secondOutput)
-        #expect(fileManager.fileExists(atPath: container.appendingPathComponent("bookmarks.json").path))
-        for output in [firstOutput, secondOutput] {
+        func assertOutput(_ output: URL) throws {
             let lines = try String(contentsOf: output, encoding: .utf8)
                 .split(separator: "\n")
             #expect(lines.count == 2)
@@ -80,6 +68,22 @@ struct AccessProbeLaunchTests {
             #expect(Set(objects.compactMap { $0?["bookmarkKind"] as? String }) == Set(["plain", "enriched"]))
             #expect(objects.allSatisfy { $0?["report"] is [String: Any] })
         }
+
+        let firstOutput = try AccessProbeRunner.run(containerURL: container) {
+            selectionCount += 1
+            return [folder]
+        }
+        try assertOutput(firstOutput)
+
+        let secondOutput = try AccessProbeRunner.run(containerURL: container) {
+            selectionCount += 1
+            return []
+        }
+        try assertOutput(secondOutput)
+
+        #expect(selectionCount == 1)
+        #expect(firstOutput == secondOutput)
+        #expect(fileManager.fileExists(atPath: container.appendingPathComponent("bookmarks.json").path))
     }
 }
 #endif
