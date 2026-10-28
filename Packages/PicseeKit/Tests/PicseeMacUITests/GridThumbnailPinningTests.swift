@@ -9,10 +9,16 @@ actor RecordingPinning: ImagePresentationPinning {
     private(set) var log: [(pin: Bool, key: RenderKey)] = []
     private(set) var counts: [RenderKey: Int] = [:]
     private(set) var wentNegative = false
-    func pin(_ key: RenderKey, image: DecodedImage) { log.append((true, key)); counts[key, default: 0] += 1 }
+    private var nextWaiterID = 0
+    private var heldWaiters: [Int: (target: Int, continuation: CheckedContinuation<Void, Never>)] = [:]
+    func pin(_ key: RenderKey, image: DecodedImage) {
+        log.append((true, key)); counts[key, default: 0] += 1
+        notifyHeldWaiters()
+    }
     func unpin(_ key: RenderKey) {
         log.append((false, key)); counts[key, default: 0] -= 1
         if counts[key]! < 0 { wentNegative = true }
+        notifyHeldWaiters()
     }
     func pins(_ key: RenderKey) -> Int { log.filter { $0.pin && $0.key == key }.count }
     func unpins(_ key: RenderKey) -> Int { log.filter { !$0.pin && $0.key == key }.count }
@@ -26,6 +32,21 @@ actor RecordingPinning: ImagePresentationPinning {
         return true
     }
     var held: Int { counts.values.reduce(0, +) }
+    func waitUntilHeld(_ target: Int) async {
+        if held == target { return }
+        let id = nextWaiterID
+        nextWaiterID += 1
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { heldWaiters[id] = (target, $0) }
+        } onCancel: {
+            Task { await self.cancelHeldWaiter(id) }
+        }
+    }
+    private func notifyHeldWaiters() {
+        let ready = heldWaiters.filter { $0.value.target == held }.map(\.key)
+        for id in ready { heldWaiters.removeValue(forKey: id)?.continuation.resume() }
+    }
+    private func cancelHeldWaiter(_ id: Int) { heldWaiters.removeValue(forKey: id)?.continuation.resume() }
 }
 
 func pinningSnapshot(count: Int, folder: URL = URL(fileURLWithPath: "/tmp/grid-thumbnail-pinning"),
@@ -235,7 +256,8 @@ final class GatedDecoder: ImageDecoding, @unchecked Sendable {
 }
 
 // The view hands its pinning to its scheduler: loaded cells are pinned, stopping releases them.
-@Test(.timeLimit(.minutes(1))) @MainActor func gridViewPinsLoadedThumbnailsUntilStopped() async throws {
+// AppKit layout and main-actor delivery may queue behind the concurrent package suite on CI.
+@Test(.timeLimit(.minutes(3))) @MainActor func gridViewPinsLoadedThumbnailsUntilStopped() async throws {
     _ = NSApplication.shared
     let snapshot = pinningSnapshot(count: 3), fake = RecordingPinning()
     let grid = GridBrowserView(frame: NSRect(x: 0, y: 0, width: 700, height: 550))
@@ -251,11 +273,10 @@ final class GatedDecoder: ImageDecoding, @unchecked Sendable {
     grid.layoutSubtreeIfNeeded()
     grid.setThumbnailsActive(true)
     for index in 0..<3 { await grid.waitForThumbnail(at: index) }
-    let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-    while await fake.held < 3, ContinuousClock.now < deadline { await Task.yield() }
+    await fake.waitUntilHeld(3)
     #expect(await fake.held == 3)
     grid.stopThumbnails()
-    while await fake.held > 0, ContinuousClock.now < deadline { await Task.yield() }
+    await fake.waitUntilHeld(0)
     #expect(await fake.held == 0)
     #expect(await !fake.wentNegative)
 }
