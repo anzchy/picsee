@@ -190,12 +190,12 @@ public struct GridSidebarFolder: Sendable, Equatable {
             row.frame = NSRect(x: x, y: documentHeight - firstRowTop - CGFloat(index + 1) * rowHeight - CGFloat(index) * rowGap,
                 width: max(0, bounds.width - x - 12), height: rowHeight)
             row.layoutSubtreeIfNeeded()
-            row.nextKeyView = rows.indices.contains(index + 1) ? rows[index + 1] : nil
         }
         if let firstChild = rows.firstIndex(where: { $0.depth > (parent == nil ? 0 : 1) }) {
             guide.isHidden = false
-            guide.frame = NSRect(x: rows[firstChild].frame.minX - (compact ? 3 : 6), y: rows.last?.frame.minY ?? 0,
-                width: 1, height: max(0, rows[firstChild].frame.maxY - (rows.last?.frame.minY ?? 0)))
+            let lastRowY = rows[rows.count - 1].frame.minY
+            guide.frame = NSRect(x: rows[firstChild].frame.minX - (compact ? 3 : 6), y: lastRowY,
+                width: 1, height: max(0, rows[firstChild].frame.maxY - lastRowY))
         } else { guide.isHidden = true }
     }
 }
