@@ -24,7 +24,7 @@ enum AccessProbeRunner {
 
     @discardableResult
     static func runIfRequested(arguments: [String]) -> Bool {
-        runIfRequested(arguments: arguments) {
+        runIfRequested(arguments: arguments, runProbe: {
             do {
                 let container = try FileManager.default.url(
                     for: .applicationSupportDirectory,
@@ -37,13 +37,20 @@ enum AccessProbeRunner {
             } catch {
                 logger.error("AccessProbe failed: \(String(describing: error), privacy: .private)")
             }
-        }
+        }, terminate: {
+            NSApplication.shared.terminate(nil)
+        })
+    }
+
+    static func isRequested(arguments: [String]) -> Bool {
+        arguments.contains("-PicseeAccessProbe")
     }
 
     @discardableResult
-    static func runIfRequested(arguments: [String], runProbe: () -> Void) -> Bool {
-        guard arguments.contains("-PicseeAccessProbe") else { return false }
+    static func runIfRequested(arguments: [String], runProbe: () -> Void, terminate: () -> Void) -> Bool {
+        guard isRequested(arguments: arguments) else { return false }
         runProbe()
+        terminate()
         return true
     }
 
