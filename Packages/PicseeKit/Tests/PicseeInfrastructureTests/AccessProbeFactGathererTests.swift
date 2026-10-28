@@ -26,6 +26,11 @@ import Testing
     #expect(!report.isInTrash)
     #expect(report.classification.cause == .readable)
     #expect(report.latencyMilliseconds >= 0)
+    #expect(report.latencies.volumePropertiesMilliseconds > 0)
+    #expect(report.latencies.mountedVolumeScanMilliseconds > 0)
+    #expect(report.latencies.resolutionMilliseconds > 0)
+    #expect(report.latencies.scopeStartMilliseconds ?? 0 > 0)
+    #expect(report.latencies.listingMilliseconds ?? 0 > 0)
 }
 
 private final class AccessProbeBookmarkRecorder: AccessProbeBookmarkCoding, @unchecked Sendable {
