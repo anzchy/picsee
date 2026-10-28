@@ -254,7 +254,9 @@ private struct PartialFolderMetadataReader: FolderMetadataReading {
     #expect(coordinator.metadataProjectionCount <= 17)
 }
 
-@Test(.timeLimit(.minutes(1))) @MainActor
+// This stress case starts up to 32 coordinators and deliberately holds synchronous readers;
+// allow loaded CI hosts to schedule the setup while retaining the 400 ms executor probe below.
+@Test(.timeLimit(.minutes(3))) @MainActor
 func issue108HeldMetadataHeadersLeaveCooperativeExecutorResponsive() async throws {
     let reader = HeldFolderMetadataReader()
     let workerCount = ProcessInfo.processInfo.activeProcessorCount
