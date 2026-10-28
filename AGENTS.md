@@ -46,6 +46,7 @@ picsee 是一个 macOS 原生看图应用（Swift 6 + SwiftUI + AppKit，最低 
 | 功能做完后在真机验收、更新账簿、跑 gardener | [功能验收指南](docs/guide/feature-verification-guide.md) |
 | 性能与验证记录 | `docs/validation/P*.md`，从 P0 开始创建；指标定义见开发计划 §10 |
 | 架构决定 | `docs/adr/`，从 P0-07 开始创建 |
+| 为什么这样做、怎样运作（owner 问过的 why/how/what） | [`docs/knowledge/owner-questions.md`](docs/knowledge/owner-questions.md)；新的同类问答追加到这里，进度类问题不记 |
 
 ## 仓库结构
 
