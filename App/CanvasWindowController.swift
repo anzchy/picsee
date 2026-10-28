@@ -36,6 +36,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var gridShell: GridShellView!
     private var sidebarTreeTask: Task<Void, Never>?
     private var sidebarLoader: SidebarFolderLoadSession?
+    private var sidebarTreeGeneration = UUID()
+    private var sidebarWatchSubscription: (any FolderWatchSubscription)?
+    var sidebarBrowserOverride: SidebarFolderBrowser?
     private var sidebarKnownCounts: [URL: Int] = [:]
     func completeGridDisplay(_ snapshot: FolderSnapshot, currentItemID: ItemID?, offset: NSPoint?) {
         searchProjection.cancel()
@@ -269,6 +272,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             folderEntryRestore = nil
             gridFolderRoot = nil
             gridFolderURL = nil
+            cancelSidebarTree()
+            gridShell.showFolder(nil)
             presentation.showViewer()
             inspectorHost.isHidden = !inspectorVisible
             layoutInspector()
@@ -433,6 +438,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        cancelSidebarTree()
+        gridShell.showFolder(nil)
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel(); standaloneWatchTask = nil
         standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
@@ -545,30 +552,56 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func loadSidebarTree(_ folder: URL, rootID: AccessRootID, count: Int?) {
-        sidebarTreeTask?.cancel()
-        sidebarLoader?.cancel()
-        sidebarLoader = nil
+        cancelSidebarTree()
+        let generation = sidebarTreeGeneration
         gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: count), parent: nil, children: [])
         sidebarTreeTask = Task(priority: .utility) { [weak self, accessServices] in
             do {
                 let services = try await accessServices.value
                 try Task.checkCancellation()
-                guard let self, self.gridFolderURL == folder else { return }
-                let browser = SidebarFolderBrowser(access: services.files, enumerator: SystemSidebarFolderEnumerator())
+                guard let self, self.sidebarTreeGeneration == generation,
+                    self.gridFolderURL == folder else { return }
+                let browser = self.sidebarBrowserOverride ?? SidebarFolderBrowser(
+                    access: services.files, enumerator: SystemSidebarFolderEnumerator())
                 let loader = SidebarFolderLoadSession(browser: browser)
                 self.sidebarLoader = loader
                 loader.start(folder: folder, rootID: rootID, onRows: { [weak self] children, parentURL in
-                    guard let self, self.gridFolderURL == folder else { return }
+                    guard let self, self.sidebarTreeGeneration == generation,
+                        self.gridFolderURL == folder else { return }
                     self.gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: self.sidebarKnownCounts[folder] ?? count),
                         parent: parentURL.map { GridSidebarFolder(url: $0, count: self.sidebarKnownCounts[$0]) },
                         children: children.map { GridSidebarFolder(url: $0) })
                 }, onCount: { [weak self] child, imageCount in
-                    guard let self, self.gridFolderURL == folder else { return }
+                    guard let self, self.sidebarTreeGeneration == generation,
+                        self.gridFolderURL == folder else { return }
                     self.sidebarKnownCounts[child] = imageCount
                     self.gridShell.updateFolderCount(imageCount, for: child)
                 })
+                let watch = try await services.watch.subscribe(rootID: rootID, folder: folder,
+                    recursive: true, onChange: { [weak self] in
+                        Task { @MainActor [weak self] in
+                            guard let self, self.sidebarTreeGeneration == generation,
+                                self.gridFolderURL == folder else { return }
+                            self.loadSidebarTree(folder, rootID: rootID, count: nil)
+                        }
+                    })
+                guard !Task.isCancelled, self.sidebarTreeGeneration == generation else {
+                    await watch.cancel()
+                    return
+                }
+                self.sidebarWatchSubscription = watch
             } catch { /* Unknown children/counts stay absent rather than displaying invented values. */ }
         }
+    }
+    private func cancelSidebarTree() {
+        sidebarTreeGeneration = UUID()
+        sidebarTreeTask?.cancel()
+        sidebarTreeTask = nil
+        sidebarLoader?.cancel()
+        sidebarLoader = nil
+        if let watch = sidebarWatchSubscription { Task { await watch.cancel() } }
+        sidebarWatchSubscription = nil
+        sidebarKnownCounts.removeAll()
     }
 
     func navigate(_ direction: NavigationDirection) {
@@ -884,6 +917,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func cancelFolderEntry() {
+        navigationTask?.cancel()
+        _ = accessIntent.begin()
         pendingGridCurrentItemID = nil
         let restore = folderEntryRestore
         folderEntryRestore = nil
@@ -903,6 +938,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             guard let self else { return }
             gridFolderRoot = root
             gridFolderURL = folder
+            if let root, let folder { loadSidebarTree(folder, rootID: root, count: nil) }
+            else { cancelSidebarTree() }
             gridProjection = projection
             gridPreviewScrollOffset = previewOffset
             switch target {
@@ -924,6 +961,8 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func restoreEmptyFolderEntry() {
+        cancelSidebarTree()
+        gridShell.showFolder(nil)
         searchProjection.cancel()
         gridFolderRoot = nil
         gridFolderURL = nil
@@ -1201,16 +1240,13 @@ extension CanvasWindowController: FolderScanHost {
             }
             if gridFolderURL != snapshot.version.folder {
                 gridFolderURL = snapshot.version.folder
-                loadSidebarTree(snapshot.version.folder, rootID: snapshot.version.rootID,
-                    count: snapshot.isComplete ? snapshot.navigationEntries.count : nil)
+                loadSidebarTree(snapshot.version.folder, rootID: snapshot.version.rootID, count: nil)
                 if session.mode == .browsing, let window {
                     GridWindowIdentity.showFolder(snapshot.version.folder, in: window)
                 }
             }
-            if snapshot.isComplete {
-                let count = snapshot.navigationEntries.count
-                sidebarKnownCounts[snapshot.version.folder] = count
-                gridShell.updateFolderCount(count, for: snapshot.version.folder)
+            else if previous?.version != snapshot.version {
+                loadSidebarTree(snapshot.version.folder, rootID: snapshot.version.rootID, count: nil)
             }
             let anchor = gridView.firstVisibleItemID() ?? gridProjection.scrollAnchor
             gridProjection.setScrollAnchor(anchor)
