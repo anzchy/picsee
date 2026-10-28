@@ -39,6 +39,7 @@ public struct GridSidebarFolder: Sendable, Equatable {
         countLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         setCount(folder.count)
         setAccessibilityRole(.button)
+        if current { setAccessibilityValue("selected") }
         setAccessibilityIdentifier("grid.sidebar.folder.\(folder.url.lastPathComponent)")
         refreshAppearance()
     }
@@ -72,7 +73,7 @@ public struct GridSidebarFolder: Sendable, Equatable {
     public override var acceptsFirstResponder: Bool { !isHiddenOrHasHiddenAncestor && isEnabled }
     public override var canBecomeKeyView: Bool { acceptsFirstResponder }
     public override func keyDown(with event: NSEvent) {
-        if event.keyCode == 36 || event.keyCode == 49 { performClick(nil) }
+        if event.keyCode == 36 || event.keyCode == 49 || event.keyCode == 76 { performClick(nil) }
         else { super.keyDown(with: event) }
     }
     public func setCount(_ count: Int?) {
@@ -99,7 +100,8 @@ public struct GridSidebarFolder: Sendable, Equatable {
     public override func layout() {
         super.layout()
         let padding: CGFloat = compact ? (depth > 0 ? 9 : 7) : 10
-        glyph.frame = NSRect(x: padding, y: 7, width: 17, height: 17)
+        glyph.frame = NSRect(x: padding, y: depth > 0 && !current ? 8 : 7,
+            width: depth > 0 && !current ? 16 : 17, height: depth > 0 && !current ? 16 : 17)
         let countWidth: CGFloat = countLabel.isHidden ? 0 : max(13, countLabel.intrinsicContentSize.width)
         countLabel.frame = NSRect(x: bounds.width - padding - countWidth, y: 7, width: countWidth, height: 18)
         let labelX = glyph.frame.maxX + (compact ? 6 : 9)
@@ -127,8 +129,10 @@ public struct GridSidebarFolder: Sendable, Equatable {
         addSubview(scroll)
         document.addSubview(heading)
         document.addSubview(guide)
-        heading.stringValue = "文件夹"
+        heading.stringValue = String(localized: "Folders")
         heading.font = .systemFont(ofSize: 12, weight: .semibold)
+        heading.attributedStringValue = NSAttributedString(string: heading.stringValue,
+            attributes: [.font: heading.font!, .kern: 0.48])
         heading.textColor = DesignColor.textSecondary.nsColor
         guide.wantsLayer = true
         guide.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
@@ -156,6 +160,7 @@ public struct GridSidebarFolder: Sendable, Equatable {
     }
     private func append(_ folder: GridSidebarFolder, depth: Int, current: Bool) {
         let row = GridSidebarFolderButton(folder: folder, depth: depth, current: current)
+        if depth > 0 && !current { row.countLabel.alphaValue = 0.8 }
         row.target = self
         row.action = #selector(selectFolder(_:))
         document.addSubview(row)

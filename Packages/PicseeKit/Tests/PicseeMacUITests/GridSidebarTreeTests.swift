@@ -1,8 +1,21 @@
 import AppKit
+import Foundation
 import Testing
 import PicseeApplication
 import PicseeInfrastructure
 @testable import PicseeMacUI
+
+@Test func sidebarHeadingIsCataloguedWithoutChineseLiteralInSource() throws {
+    let tests = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let root = tests.deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+    let source = try String(contentsOf: root.appendingPathComponent(
+        "Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridSidebarTreeView.swift"), encoding: .utf8)
+    #expect(!source.contains("文件夹"))
+    let catalog = try String(contentsOf: root.appendingPathComponent("App/Resources/Localizable.xcstrings"), encoding: .utf8)
+    #expect(catalog.contains("\"Folders\""))
+    #expect(catalog.contains("\"文件夹\""))
+}
 
 @Test @MainActor func sidebarTreeRowsFollowPinnedOptionAGeometryAndCounts() throws {
     _ = NSApplication.shared
@@ -24,6 +37,10 @@ import PicseeInfrastructure
     #expect(current.nameLabel.maximumNumberOfLines == 1)
     #expect(current.nameLabel.lineBreakMode == .byTruncatingTail)
     #expect(tree.rows[1].countLabel.stringValue == "0")
+    #expect(tree.heading.stringValue == String(localized: "Folders"))
+    #expect(tree.rows[0].accessibilityValue() as? String == "selected")
+    #expect(tree.rows[1].glyph.frame.width == 16)
+    #expect(tree.rows[1].countLabel.alphaValue == 0.8)
     #expect(tree.rows[2].countLabel.stringValue == "1234")
     #expect(tree.rows[3].countLabel.stringValue.isEmpty)
     #expect(tree.rows[1].frame.minX > current.frame.minX)
@@ -59,6 +76,12 @@ import PicseeInfrastructure
         timestamp: 0, windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
         isARepeat: false, keyCode: 36))
     tree.rows[2].keyDown(with: returnKey)
+    #expect(chosen == child)
+    chosen = nil
+    let keypadEnter = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: 0, windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+        isARepeat: false, keyCode: 76))
+    tree.rows[2].keyDown(with: keypadEnter)
     #expect(chosen == child)
 }
 
@@ -98,5 +121,39 @@ import PicseeInfrastructure
         #expect(abs(Double(color.greenComponent) - pinned.green) < 0.01)
         #expect(abs(Double(color.blueComponent) - pinned.blue) < 0.01)
         #expect(abs(Double(color.alphaComponent) - pinned.alpha) < 0.01)
+        let root = URL(fileURLWithPath: "/tmp/Images")
+        tree.show(current: .init(url: root, count: 4), parent: nil,
+            children: [.init(url: root.appendingPathComponent("Child"), count: 2)])
+        tree.layoutSubtreeIfNeeded()
+        var resolvedHeadingColor: NSColor?
+        tree.effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolvedHeadingColor = tree.heading.textColor?.usingColorSpace(.sRGB)
+        }
+        let headingColor = try #require(resolvedHeadingColor)
+        let pinnedHeading = try design.color(".sidebar-heading", "color", viewport: 1280)
+        #expect(abs(Double(headingColor.redComponent) - pinnedHeading.red) < 0.01)
+        #expect(abs(Double(headingColor.greenComponent) - pinnedHeading.green) < 0.01)
+        #expect(abs(Double(headingColor.blueComponent) - pinnedHeading.blue) < 0.01)
+        let headerPadding = try design.edges(".sidebar-heading", "padding", viewport: 1280)
+        #expect(abs(Double(tree.heading.frame.minX) - (12 + headerPadding.left)) < 0.1)
+        let guideColor = try #require(tree.guide.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB))
+        let pinnedGuide = try design.color(".folder-children", "border-left", viewport: 1280)
+        #expect(abs(Double(guideColor.redComponent) - pinnedGuide.red) < 0.01)
+        #expect(abs(Double(guideColor.greenComponent) - pinnedGuide.green) < 0.01)
+        #expect(abs(Double(guideColor.blueComponent) - pinnedGuide.blue) < 0.01)
+        let count = tree.rows[1].countLabel
+        var resolvedCountColor: NSColor?
+        tree.effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolvedCountColor = count.textColor?.usingColorSpace(.sRGB)
+        }
+        let countColor = try #require(resolvedCountColor)
+        let pinnedCount = try design.color(".ds-nav-row .row-count", "color", viewport: 1280)
+        #expect(abs(Double(countColor.redComponent) - pinnedCount.red) < 0.01)
+        #expect(abs(Double(countColor.greenComponent) - pinnedCount.green) < 0.01)
+        #expect(abs(Double(countColor.blueComponent) - pinnedCount.blue) < 0.01)
+        #expect(count.font?.pointSize == 12)
+        #expect(count.font?.familyName?.contains("Mono") == true)
+        #expect(count.alphaValue == 0.8)
+        #expect(tree.heading.attributedStringValue.attribute(.kern, at: 0, effectiveRange: nil) as? Double == 0.48)
     }
 }
