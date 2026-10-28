@@ -24,11 +24,35 @@ public struct AccessProbeLatencies: Codable, Equatable, Sendable {
     }
 }
 
+public struct AccessProbeTrashCheckInputs: Codable, Equatable, Sendable {
+    public let resolvedPath: String
+    public let standardizedPath: String
+    public let userTrashPath: String?
+    public let volumePath: String?
+    public let perUserVolumeTrashPath: String?
+
+    public init(
+        resolvedPath: String,
+        standardizedPath: String,
+        userTrashPath: String?,
+        volumePath: String?,
+        perUserVolumeTrashPath: String?
+    ) {
+        self.resolvedPath = resolvedPath
+        self.standardizedPath = standardizedPath
+        self.userTrashPath = userTrashPath
+        self.volumePath = volumePath
+        self.perUserVolumeTrashPath = perUserVolumeTrashPath
+    }
+}
+
 public struct AccessProbeReport: Codable, Equatable, Sendable {
     public let volume: AccessProbeVolume
     public let volumePropertiesError: AccessProbeError?
     public let mountedVolumes: [AccessProbeVolume]
     public let resolution: AccessProbeResolution
+    public let resolvedPath: String?
+    public let trashCheckInputs: AccessProbeTrashCheckInputs?
     public let scopeStarted: Bool?
     public let listing: AccessProbeDirectoryListing?
     public let isInTrash: Bool
@@ -41,6 +65,8 @@ public struct AccessProbeReport: Codable, Equatable, Sendable {
         volumePropertiesError: AccessProbeError?,
         mountedVolumes: [AccessProbeVolume],
         resolution: AccessProbeResolution,
+        resolvedPath: String?,
+        trashCheckInputs: AccessProbeTrashCheckInputs?,
         scopeStarted: Bool?,
         listing: AccessProbeDirectoryListing?,
         isInTrash: Bool,
@@ -52,6 +78,8 @@ public struct AccessProbeReport: Codable, Equatable, Sendable {
         self.volumePropertiesError = volumePropertiesError
         self.mountedVolumes = mountedVolumes
         self.resolution = resolution
+        self.resolvedPath = resolvedPath
+        self.trashCheckInputs = trashCheckInputs
         self.scopeStarted = scopeStarted
         self.listing = listing
         self.isInTrash = isInTrash
@@ -134,6 +162,8 @@ public struct AccessProbeFactGatherer: Sendable {
         var listing: AccessProbeDirectoryListing?
         var listingMilliseconds: Double?
         var isInTrash = false
+        var resolvedPath: String?
+        var trashCheckInputs: AccessProbeTrashCheckInputs?
         do {
             let resolved = try bookmarks.resolve(
                 bookmarkData,
@@ -142,6 +172,8 @@ public struct AccessProbeFactGatherer: Sendable {
             resolution = resolved
             resolutionMilliseconds = milliseconds(since: resolutionStartedAt)
             if let url = resolved.url {
+                resolvedPath = url.path
+                trashCheckInputs = Self.trashCheckInputs(for: url)
                 isInTrash = trashCheck(url)
                 let scopeStartStartedAt = DispatchTime.now().uptimeNanoseconds
                 let started = scope.start(url)
@@ -176,6 +208,8 @@ public struct AccessProbeFactGatherer: Sendable {
             volumePropertiesError: volumePropertiesError,
             mountedVolumes: mountedVolumes,
             resolution: resolution,
+            resolvedPath: resolvedPath,
+            trashCheckInputs: trashCheckInputs,
             scopeStarted: scopeStarted,
             listing: listing,
             isInTrash: isInTrash,
@@ -188,6 +222,27 @@ public struct AccessProbeFactGatherer: Sendable {
                 listingMilliseconds: listingMilliseconds
             ),
             classification: AccessCauseClassifier.classify(facts)
+        )
+    }
+
+    private static func trashCheckInputs(for url: URL) -> AccessProbeTrashCheckInputs {
+        let standardized = url.standardizedFileURL
+        let userTrash = try? FileManager.default.url(
+            for: .trashDirectory,
+            in: .userDomainMask,
+            appropriateFor: standardized,
+            create: false
+        )
+        let volume = try? standardized.resourceValues(forKeys: [.volumeURLKey]).volume
+        let perUserVolumeTrash = volume.map {
+            $0.appendingPathComponent(".Trashes/\(getuid())", isDirectory: true).path
+        }
+        return AccessProbeTrashCheckInputs(
+            resolvedPath: url.path,
+            standardizedPath: standardized.path,
+            userTrashPath: userTrash?.path,
+            volumePath: volume?.path,
+            perUserVolumeTrashPath: perUserVolumeTrash
         )
     }
 
