@@ -52,6 +52,17 @@ class GuiLockBase(unittest.TestCase):
         self.assertEqual(match.group(1), run)
         return match.group(2)
 
+    def checkpoint_env(self, name):
+        return {**self.env, "PICSEE_GUI_LOCK_PRE_MUTEX_FILE": str(self.home / f"pre-mutex-{name}")}
+
+    def wait_for_checkpoint(self, name):
+        # The child has reached the flock call; give it time to return if the mutex were not held.
+        deadline = time.monotonic() + 20
+        while not (self.home / f"pre-mutex-{name}").exists():
+            self.assertLess(time.monotonic(), deadline, "child never reached the mutex")
+            time.sleep(0.02)
+        time.sleep(0.3)
+
     def plant(self, text):
         self.lock.mkdir(parents=True)
         self.owner.write_text(text)
@@ -222,14 +233,36 @@ class GuiLockTests(GuiLockBase):
         self.assertIn(f"batch={run}\n", self.owner.read_text())
         self.assertIn(f"acquisition_id={acquisition_id}\n", self.owner.read_text())
 
+    def test_release_restores_owner_bytes_when_rmdir_fails(self):
+        acquisition_id = self.acquire("run-1")
+        before = self.owner.read_bytes()
+        extra = self.lock / "extra"
+        extra.write_text("x")
+        result = self.run_lock("release", "run-1", "--acquisition-id", acquisition_id)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("owner restored", result.stderr)
+        self.assertEqual(self.owner.read_bytes(), before)
+        self.assertEqual(self.owner.stat().st_mode & 0o777, 0o600)
+        extra.unlink()
+        result = self.run_lock("release", "run-1", "--acquisition-id", acquisition_id)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.lock.exists())
+
+    def test_acquire_refuses_values_the_parser_would_split(self):
+        for bad in ["run\x0bx", "run\x0cx", "run\x1cx", "run\x85x", "run\u2028x", "run\u2029x"]:
+            with self.subTest(bad=repr(bad)):
+                result = self.run_lock("acquire", bad)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertFalse(self.lock.exists())
+
     def test_acquire_and_release_wait_for_the_mutex(self):
         self.cache.mkdir()
         fd = os.open(self.mutex, os.O_RDWR | os.O_CREAT, 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
             proc = subprocess.Popen(["zsh", str(SCRIPT), "acquire", "run-1"], stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, text=True, env=self.env)
-            time.sleep(0.5)
+                                    stderr=subprocess.PIPE, text=True, env=self.checkpoint_env("a"))
+            self.wait_for_checkpoint("a")
             self.assertIsNone(proc.poll())
             self.assertFalse(self.lock.exists())
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -238,8 +271,9 @@ class GuiLockTests(GuiLockBase):
             acquisition_id = ACQUIRED.fullmatch(out).group(2)
             fcntl.flock(fd, fcntl.LOCK_EX)
             proc = subprocess.Popen(["zsh", str(SCRIPT), "release", "run-1", "--acquisition-id", acquisition_id],
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=self.env)
-            time.sleep(0.5)
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                    env=self.checkpoint_env("r"))
+            self.wait_for_checkpoint("r")
             self.assertIsNone(proc.poll())
             self.assertTrue(self.owner.exists())
             fcntl.flock(fd, fcntl.LOCK_UN)
