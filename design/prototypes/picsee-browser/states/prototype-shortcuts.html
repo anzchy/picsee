@@ -1,0 +1,121 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Question: what should picsee's read-only keyboard shortcut list look like?
+  ?variant=A|B|C picks the answer, ?theme=dark. Opened from 帮助 → 键盘快捷键 (the page-15 panel no longer links to it:
+  user 2026-10-28 「做一个只读快捷键一览，先出原型给我看，Page 15 中去掉快捷键入口」).
+  The list holds only the shortcuts implemented on main 9e8ae83 (CommandID.isImplemented and App/Commands/CommandMenu.swift);
+  nothing unimplemented is shown. Buttons only show a toast.
+-->
+<html lang="zh-CN" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picsee · 键盘快捷键 · 备选设计</title>
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/globals.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/light.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/dark.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; font-family: var(--font-sans); font-size: var(--font-size-ui); color: var(--color-text);
+         background: color-mix(in srgb, var(--color-surface) 70%, var(--color-text) 6%); display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 0 90px; }
+  .cap { width: 1120px; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+  .cap b { color: var(--color-text); }
+  kbd { font-family: var(--font-sans); font-size: 12px; min-width: 22px; height: 22px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center;
+        border-radius: var(--radius-inner); border: 1px solid var(--color-border); border-bottom-width: 2px; background: var(--color-bg); color: var(--color-text); }
+  .keys { display: inline-flex; gap: 4px; align-items: center; color: var(--color-muted); font-size: 12px; }
+  .stage { width: 1120px; height: 700px; position: relative; border-radius: 12px; overflow: hidden; background: var(--color-bg);
+           box-shadow: 0 0 0 .5px rgba(0,0,0,.25), 0 22px 60px rgba(0,0,0,.28); display: grid; grid-template: 38px 1fr 40px / 196px 1fr; }
+  .tb { grid-column: 1 / -1; background: var(--color-surface); border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; font-weight: 500; position: relative; }
+  .tl { position: absolute; left: 14px; display: flex; gap: 8px; } .tl i { width: 12px; height: 12px; border-radius: 50%; background: color-mix(in srgb, var(--color-text) 22%, transparent); }
+  .sb { background: var(--color-surface); border-right: 1px solid var(--color-border); }
+  .gr { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding: 16px; align-content: start; }
+  .gr div { aspect-ratio: 4/3; border-radius: 8px; background: color-mix(in srgb, var(--color-text) 9%, transparent); }
+  .ft { grid-column: 1 / -1; background: var(--color-surface); border-top: 1px solid var(--color-border); }
+  .win { position: absolute; z-index: 5; background: var(--color-panel); border-radius: 12px; overflow: hidden;
+         box-shadow: 0 0 0 .5px var(--color-border), 0 24px 60px rgba(0,0,0,.30); display: flex; flex-direction: column; }
+  .win .wt { height: 38px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 600; border-bottom: 1px solid var(--color-border); position: relative; background: var(--color-surface); }
+  .win .body { overflow: auto; padding: 6px 22px 22px; }
+  .grp h3 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--color-muted); }
+  .row { display: flex; align-items: center; justify-content: space-between; height: 34px; border-bottom: 1px solid var(--color-border-subtle); }
+  .row:last-child { border-bottom: 0; }
+  .find { margin: 14px 0 2px; width: 100%; height: 28px; border-radius: var(--radius-control); border: 1px solid var(--color-control-border); background: var(--color-input-bg); padding: 0 10px; color: var(--color-text); font: inherit; }
+  .empty { color: var(--color-muted); padding: 24px 0; text-align: center; }
+  .scrim { position: absolute; inset: 38px 0 0 0; background: rgba(15,23,42,.35); z-index: 4; }
+  .hud { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 760px; max-height: 560px; overflow: auto;
+         background: color-mix(in srgb, var(--color-panel) 94%, transparent); backdrop-filter: blur(18px); border-radius: 14px; padding: 18px 24px 22px;
+         box-shadow: 0 0 0 .5px var(--color-border), 0 24px 60px rgba(0,0,0,.30); }
+  .hud .head { display: flex; justify-content: space-between; align-items: baseline; }
+  .hud h2 { margin: 0; font-size: 15px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 18px; overflow: auto; }
+  .card { border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 14px 6px; background: var(--color-bg); }
+  .card h3 { margin: 4px 0 6px; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .card h3 small { color: var(--color-muted); font-weight: 400; font-size: 11px; }
+  .x { position: absolute; right: 10px; top: 8px; border: 0; background: none; color: var(--color-muted); width: 22px; height: 22px; border-radius: 6px; cursor: pointer; }
+  .x:hover { background: var(--color-hover); }
+  .bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100; display: flex; gap: 6px; align-items: center; padding: 6px;
+         border-radius: 999px; background: rgba(20,20,22,.88); color: #fff; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+  .bar button { border: 0; background: transparent; color: #fff; height: 30px; padding: 0 12px; border-radius: 999px; cursor: pointer; }
+  .bar button.on { background: rgba(255,255,255,.24); } .bar button:hover { background: rgba(255,255,255,.14); }
+  .bar .sep { width: 1px; height: 18px; background: rgba(255,255,255,.25); }
+  .toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); padding: 8px 14px; border-radius: var(--radius-popover);
+           background: var(--color-panel); box-shadow: var(--shadow-soft); font-size: 12px; opacity: 0; transition: opacity var(--motion-duration-fast); }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="cap"><b id="ct"></b>　<span id="cd"></span></div>
+<div class="stage" id="stage"></div>
+<div class="bar" role="toolbar" aria-label="原型切换">
+  <button data-v="A">A 独立窗口</button><button data-v="B">B 窗内浮层</button><button data-v="C">C 分区卡片</button>
+  <span class="sep"></span><button id="theme">浅色 / 深色</button>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+// Source: main 9e8ae83 — CommandID (implemented: Space, Return, ←, →, Esc, 0, 1, +, −, ⌘F, ⌘O, ⌘I) and CommandMenu.swift.
+const GROUPS = [
+  ['文件与窗口', '任何时候', [
+    ['打开…', ['⌘', 'O']], ['设置…', ['⌘', ',']], ['关闭窗口', ['⌘', 'W']], ['最小化', ['⌘', 'M']],
+    ['隐藏 picsee', ['⌘', 'H']], ['隐藏其他', ['⌥', '⌘', 'H']], ['退出 picsee', ['⌘', 'Q']]]],
+  ['网格', '浏览文件夹时', [
+    ['移动当前项', ['←', '→', '↑', '↓']], ['用大图查看当前项', ['Space']], ['打开当前项', ['Return']],
+    ['搜索当前文件夹', ['⌘', 'F']], ['显示 / 隐藏侧栏', ['⌃', '⌘', 'S']]]],
+  ['大图', '查看一张图片时', [
+    ['上一张 / 下一张', ['←', '→']], ['回到网格', ['Esc']], ['适应窗口', ['0']], ['实际像素 1:1', ['1']],
+    ['放大 / 缩小', ['+', '−']], ['唤回工具', ['Tab']], ['图片信息', ['⌘', 'I']], ['进入 / 退出全屏', ['⌃', '⌘', 'F']]]],
+];
+const keys = ks => `<span class="keys">${ks.map(k => `<kbd>${k}</kbd>`).join('')}</span>`;
+const rows = (items, q = '') => items.filter(([n, ks]) => !q || n.includes(q) || ks.join('').toLowerCase().includes(q.toLowerCase()))
+  .map(([n, ks]) => `<div class="row"><span>${n}</span>${keys(ks)}</div>`).join('');
+const groupsHTML = q => { const h = GROUPS.map(([g, , items]) => { const r = rows(items, q); return r ? `<div class="grp"><h3>${g}</h3>${r}</div>` : ''; }).join('');
+  return h || `<div class="empty">没有匹配“${q}”的快捷键</div>`; };
+const backdrop = `<div class="tb"><div class="tl"><i></i><i></i><i></i></div>日本 · 山海之间</div><div class="sb"></div><div class="gr">${'<div></div>'.repeat(15)}</div><div class="ft"></div>`;
+const V = {
+  A: ['A · 独立窗口，分组列表', '帮助 → 键盘快捷键 打开一个独立的小窗口（420×560，可调高度），按 文件与窗口 / 网格 / 大图 分组，顶部可按名称或按键筛选。像 Finder、预览的帮助式列表，不遮挡正在看的图。⌘W 关闭。',
+    () => `${backdrop}<div class="win" style="right:60px;top:60px;width:420px;height:560px"><div class="wt">键盘快捷键<button class="x" aria-label="关闭" data-say="关闭窗口">×</button></div>
+      <div class="body"><input class="find" id="find" placeholder="搜索快捷键" aria-label="搜索快捷键"><div id="list">${groupsHTML('')}</div></div></div>`],
+  B: ['B · 窗内浮层（速查卡）', '在当前窗口上盖一层半透明速查卡，两栏铺开全部快捷键，一屏看完；Esc 或点外面关闭。适合边看边记，但会遮住内容。',
+    () => `${backdrop}<div class="scrim" data-say="点外面关闭"></div><div class="hud" role="dialog" aria-label="键盘快捷键"><div class="head"><h2>键盘快捷键</h2><span class="keys">按 <kbd>Esc</kbd> 关闭</span></div>
+      <div class="cols"><div>${['文件与窗口', '网格'].map(g => { const x = GROUPS.find(G => G[0] === g); return `<div class="grp"><h3>${g}</h3>${rows(x[2])}</div>`; }).join('')}</div>
+      <div><div class="grp"><h3>${GROUPS[2][0]}</h3>${rows(GROUPS[2][2])}</div></div></div></div>`],
+  C: ['C · 按场景分区卡片', '独立窗口（820×540），每个场景一张卡片，卡片标题写明“什么时候可用”。比 A 更直观地说明哪组键在网格里、哪组在大图里生效；不带搜索。',
+    () => `${backdrop}<div class="win" style="left:50%;top:70px;transform:translateX(-50%);width:820px;height:540px"><div class="wt">键盘快捷键<button class="x" aria-label="关闭" data-say="关闭窗口">×</button></div>
+      <div class="cards">${GROUPS.map(([g, when, items]) => `<div class="card"><h3>${g}<small>${when}</small></h3>${rows(items)}</div>`).join('')}</div></div>`],
+};
+const p = new URLSearchParams(location.search);
+let v = V[p.get('variant')] ? p.get('variant') : 'A', theme = p.get('theme') === 'dark' ? 'dark' : 'light';
+const $ = id => document.getElementById(id);
+function render() {
+  document.documentElement.className = 'theme-' + theme;
+  $('stage').innerHTML = V[v][2](); $('ct').textContent = V[v][0]; $('cd').textContent = V[v][1];
+  document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  const f = $('find'); if (f) f.oninput = () => { $('list').innerHTML = groupsHTML(f.value.trim()); };
+  const q = new URLSearchParams(location.search); q.set('variant', v); q.set('theme', theme); history.replaceState(null, '', '?' + q);
+}
+document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { v = b.dataset.v; render(); });
+$('theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; render(); };
+let t; document.addEventListener('click', e => { const s = e.target.closest('[data-say]'); if (!s) return; $('toast').textContent = '（原型）' + s.dataset.say; $('toast').classList.add('show'); clearTimeout(t); t = setTimeout(() => $('toast').classList.remove('show'), 1600); });
+render();
+</script>
+</body>
+</html>
