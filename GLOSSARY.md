@@ -14,6 +14,22 @@ _Avoid_: authorized directory, location, 授权目录 (as a noun for the stored 
 Access to one file, given by opening it from Finder or dragging it in, that lasts only for the current session.
 _Avoid_: calling it an Access Root, file bookmark
 
+**Lost Access**（无法访问）:
+The condition of an Access Root that picsee can no longer read, always shown with exactly one cause: Disk Not Connected, Not Found, Access Expired, or Unknown.
+_Avoid_: broken root, stale grant, "revoked" as the general term
+
+**Disk Not Connected**（外接磁盘未连接）:
+The cause of Lost Access when the disk the Access Root lives on is not mounted.
+_Avoid_: offline, unmounted root
+
+**Not Found**（找不到）:
+The cause of Lost Access when the disk is mounted but the Access Root's bookmark no longer resolves; picsee cannot tell deletion from a move to another disk.
+_Avoid_: moved, deleted
+
+**Access Expired**（授权失效）:
+The cause of Lost Access when the folder is still there but the system refuses to let picsee read it.
+_Avoid_: revoked permission, denied root
+
 ### Library
 
 **Library**（图库）:
@@ -62,6 +78,9 @@ _Avoid_: playlist, range, "all images" when only a selection was meant
 - The sort order is one app-wide preference shared by every window and folder and kept across relaunch; an extension filter belongs to one folder in one window, survives rescans of that folder and clears when another folder is opened or the app relaunches.
 - Cancelling the **Reading State** returns to whatever was shown before; it never shows a partly scanned folder.
 - Esc from an image opened on its own returns to its folder's **Grid** only when that folder lies inside an **Access Root**, through the **Reading State** if the folder has not been scanned, with that image as the **Current Item**.
+- While an **Access Root** has **Lost Access**, no image from inside it is shown, including cached thumbnails; the cache is kept and reused once access returns.
+- Choosing a folder at the new place for a **Not Found** root rebinds that same **Access Root** to it; it never adds a second one.
+- **Lost Access** with cause Unknown is shown as plain 「无法访问此文件夹」; picsee never guesses a cause.
 - A **Recent Item** confers no access; reopening one outside every **Access Root** asks the user to grant its folder.
 
 ## Example dialogue
