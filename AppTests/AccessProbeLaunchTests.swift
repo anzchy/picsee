@@ -43,6 +43,12 @@ struct AccessProbeLaunchTests {
         #expect(!constructsProductAccessServices)
     }
 
+    @Test func resultsLogUsesFixedMarkerInsteadOfContainerPath() {
+        let output = URL(fileURLWithPath: "/Users/example/Library/Containers/example/results.jsonl")
+
+        #expect(AccessProbeRunner.resultsLogMessage(for: output) == "AccessProbe results ready")
+    }
+
     @Test func storesBothBookmarkKindsAndWritesJSONLOnEveryRun() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
