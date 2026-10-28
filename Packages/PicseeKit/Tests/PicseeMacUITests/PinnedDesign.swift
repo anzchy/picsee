@@ -105,6 +105,23 @@ struct PinnedDesign {
         return (ring, hairline, y)
     }
 
+    func b4SizeRule() throws -> (width: Double, height: Double, printWidth: Double, printHeight: Double,
+                                 minScale: Double, maxScale: Double, maxPush: Double,
+                                 hideWidth: Double, hideHeight: Double) {
+        guard let ref = Self.matches(#"const REF = \{ w: (\d+), h: (\d+), pw: (\d+), ph: (\d+) \}"#, in: html).first,
+              ref.count == 4, let width = Double(ref[0]), let height = Double(ref[1]),
+              let printWidth = Double(ref[2]), let printHeight = Double(ref[3]),
+              let scales = Self.matches(#"clamp\(min\(W/\d+, H/\d+\), ([\d.]+), ([\d.]+)\)"#, in: html).first,
+              scales.count == 2, let minScale = Double(scales[0]), let maxScale = Double(scales[1]),
+              let pushText = Self.matches(#"最多 (\d+) pt"#, in: html).first?.first,
+              let maxPush = Double(pushText),
+              let hide = Self.matches(#"窗口小于 (\d+)×(\d+) 时全部隐藏"#, in: html).first,
+              hide.count == 2, let hideWidth = Double(hide[0]), let hideHeight = Double(hide[1]) else {
+            throw Error("B4 size rule missing from pinned script")
+        }
+        return (width, height, printWidth, printHeight, minScale, maxScale, maxPush, hideWidth, hideHeight)
+    }
+
     func b4FanDuration() throws -> Double {
         let value = try exactDeclaration(".stack .f", "transition")
         guard let seconds = Self.matches(#"transform ([\d.]+)s"#, in: value).first?.first,

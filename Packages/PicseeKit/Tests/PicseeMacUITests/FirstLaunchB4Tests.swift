@@ -39,30 +39,31 @@ import PicseeApplication
 }
 
 @Test @MainActor func p316B4PrintFramesFollowPinnedSizeRule() throws {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
+    let rule = try css.b4SizeRule()
     let scene = StatesScene()
     defer { scene.window.close() }
     let launch = try #require(scene.state.subviews.compactMap { $0 as? FirstLaunchView }.first)
-    for (size, expectedScale, hidden) in [
-        (NSSize(width: 960, height: 640), CGFloat(1), false),
-        (NSSize(width: 800, height: 600), CGFloat(5.0 / 6.0), false),
-        (NSSize(width: 1440, height: 900), CGFloat(1.25), false),
-        (NSSize(width: 720, height: 480), CGFloat(0.75), false),
-        (NSSize(width: 719, height: 479), CGFloat(0.75), true)
+    for size in [
+        NSSize(width: 960, height: 640), NSSize(width: 800, height: 600),
+        NSSize(width: 1440, height: 900), NSSize(width: 720, height: 480),
+        NSSize(width: 719, height: 479)
     ] {
+        let expectedScale = CGFloat(min(rule.maxScale, max(rule.minScale,
+            min(Double(size.width) / rule.width, Double(size.height) / rule.height))))
+        let hidden = Double(size.width) < rule.hideWidth || Double(size.height) < rule.hideHeight
         scene.window.setContentSize(size)
         scene.content.frame = NSRect(origin: .zero, size: size)
         scene.state.frame = scene.content.bounds
         launch.frame = scene.state.bounds
         launch.layoutSubtreeIfNeeded()
         let print = try #require(b4View("first-launch.print.alley", in: scene.state))
-        #expect(abs(print.frame.width - 150 * max(0.8, expectedScale)) < 0.5)
-        #expect(abs(print.frame.height - 110 * max(0.8, expectedScale)) < 0.5)
+        #expect(abs(print.frame.width - CGFloat(rule.printWidth) * expectedScale) < 0.5)
+        #expect(abs(print.frame.height - CGFloat(rule.printHeight) * expectedScale) < 0.5)
         #expect(print.isHidden == hidden)
         let centre = try #require(b4View("first-launch.stack", in: scene.state))
         #expect(centre.frame.size == NSSize(width: 220, height: 150))
-    }
-    for item in FirstLaunchLayout.prints(in: NSSize(width: 800, height: 600), centre: NSRect(x: 190, y: 130, width: 420, height: 308)) {
-        #expect(item.push <= 60)
     }
 }
 
@@ -125,7 +126,9 @@ import PicseeApplication
     let scene = StatesScene()
     defer { scene.window.close() }
     scene.state.layoutSubtreeIfNeeded()
-    let expected960: [(String, CGFloat, CGFloat, CGFloat)] = try css.b4PrintSpecs().map { spec in
+    let specs = try css.b4PrintSpecs()
+    let rule = try css.b4SizeRule()
+    let expected960: [(String, CGFloat, CGFloat, CGFloat)] = specs.map { spec in
         let a = CGFloat(spec.a), b = CGFloat(spec.b)
         let x: CGFloat, y: CGFloat
         switch spec.anchor {
@@ -161,6 +164,25 @@ import PicseeApplication
                             width: 452, height: stack.frame.maxY - chip.frame.minY + 32)
         for (name, _, _, angle) in expected960 {
             let print = try #require(b4View("first-launch.print.\(name)", in: scene.state))
+            let spec = try #require(specs.first { $0.name == name })
+            let scale = CGFloat(min(rule.maxScale, max(rule.minScale,
+                min(Double(size.width) / rule.width, Double(size.height) / rule.height))))
+            let a = CGFloat(spec.a) * scale, b = CGFloat(spec.b) * scale
+            let pw = CGFloat(rule.printWidth) * scale, ph = CGFloat(rule.printHeight) * scale
+            let base: NSPoint
+            switch spec.anchor {
+            case "TL": base = NSPoint(x: a, y: size.height - b - ph)
+            case "TR": base = NSPoint(x: size.width - a - pw, y: size.height - b - ph)
+            case "BL": base = NSPoint(x: a, y: b)
+            case "BR": base = NSPoint(x: size.width - a - pw, y: b)
+            case "L": base = NSPoint(x: a, y: size.height / 2 - b - ph / 2)
+            case "R": base = NSPoint(x: size.width - a - pw, y: size.height / 2 - b - ph / 2)
+            case "T": base = NSPoint(x: size.width / 2 + a - pw / 2, y: size.height - b - ph)
+            default: base = NSPoint(x: size.width / 2 + a - pw / 2, y: b)
+            }
+            let pushX = abs(print.frame.minX - base.x), pushY = abs(print.frame.minY - base.y)
+            #expect(max(pushX, pushY) <= CGFloat(rule.maxPush) + 0.5)
+            #expect(min(pushX, pushY) <= 0.5)
             let radians = abs(angle) * .pi / 180
             let halfW = ((print.frame.width + 12) * cos(radians) + (print.frame.height + 12) * sin(radians)) / 2
             let halfH = ((print.frame.width + 12) * sin(radians) + (print.frame.height + 12) * cos(radians)) / 2
