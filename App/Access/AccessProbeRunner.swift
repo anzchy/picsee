@@ -33,7 +33,7 @@ enum AccessProbeRunner {
                     create: true
                 ).appendingPathComponent("Picsee/AccessProbe", isDirectory: true)
                 let output = try run(containerURL: container, chooseFolders: chooseFoldersWithPanel)
-                logger.notice("AccessProbe results=\(output.path, privacy: .public)")
+                logger.notice("\(resultsLogMessage(for: output), privacy: .public)")
             } catch {
                 logger.error("AccessProbe failed: \(String(describing: error), privacy: .private)")
             }
@@ -44,6 +44,10 @@ enum AccessProbeRunner {
 
     static func isRequested(arguments: [String]) -> Bool {
         arguments.contains("-PicseeAccessProbe")
+    }
+
+    static func resultsLogMessage(for output: URL) -> String {
+        "AccessProbe results ready"
     }
 
     @discardableResult
