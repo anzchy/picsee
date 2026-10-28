@@ -76,12 +76,12 @@ private struct InputHintCatalog: Decodable {
         scene.content.layoutSubtreeIfNeeded(); scene.content.displayIfNeeded()
         let nodes = inputHintViews(scene.state)
         print("inputHint AX", width, nodes.map { ($0.accessibilityRole()?.rawValue, $0.accessibilityIdentifier(), $0.accessibilityLabel()) })
-        let hint = try #require(nodes.compactMap { $0 as? NSTextField }.first { $0.accessibilityIdentifier() == "state.drop-hint" })
+        let hint = try #require(nodes.compactMap { $0 as? NSTextField }.first { $0.accessibilityIdentifier() == "first-launch.shortcut" })
         let button = try #require(scene.state.buttons.first)
-        #expect(scene.state.textLines == ["Open a folder to start browsing", "Images stay on your Mac. Browse by folder.", "You can also drop images or folders here."])
+        #expect(scene.state.textLines == ["Drop a photo folder here", "or press ⌘O", "Folder", "One or more images", "Common image formats"])
         #expect(scene.state.buttons.map { $0.identifier?.rawValue } == ["state.open"])
         #expect(hint.accessibilityRole() == .staticText)
-        #expect(hint.accessibilityLabel() == "You can also drop images or folders here.")
+        #expect(hint.accessibilityLabel() == "or press ⌘O")
         #expect(hint.accessibilityPerformPress() == false)
         #expect(hint.isAccessibilityFocused() == false)
         #expect(!hint.acceptsFirstResponder && !hint.canBecomeKeyView)
@@ -89,10 +89,11 @@ private struct InputHintCatalog: Decodable {
         let hintFrame = hint.accessibilityFrame(), buttonFrame = button.accessibilityFrame()
         #expect(hintFrame.width > 0 && hintFrame.height > 0)
         if width == 960 {
-            #expect(abs(hintFrame.minX - buttonFrame.maxX - 16) <= 2)
+            #expect(abs(hintFrame.minX - buttonFrame.maxX - 12) <= 2)
             #expect(abs(hintFrame.midY - buttonFrame.midY) <= 2)
         } else {
-            #expect(abs(buttonFrame.minY - hintFrame.maxY - 9) <= 2)
+            #expect(abs(hintFrame.minX - buttonFrame.maxX - 12) <= 2)
+            #expect(abs(hintFrame.midY - buttonFrame.midY) <= 2)
         }
         let local = scene.content.convert(hint.bounds, from: hint)
         let screen = scene.window.convertToScreen(scene.content.convert(local, to: nil))
@@ -107,7 +108,7 @@ private struct InputHintCatalog: Decodable {
             #expect(scene.window.firstResponder === target)
         }
         #expect(scene.canvas.nextValidKeyView === button)
-        #expect(nodes.filter { $0.accessibilityIdentifier() == "state.drop-hint" }.count == 1)
+        #expect(nodes.filter { $0.accessibilityIdentifier() == "first-launch.shortcut" }.count == 1)
     }
 }
 
@@ -116,18 +117,18 @@ private struct InputHintCatalog: Decodable {
     defer { scene.session.closeImage(); scene.window.close() }
     scene.window.setFrameOrigin(NSPoint(x: -20000, y: -20000)); scene.window.orderFront(nil)
     let rows: [(ViewerImageStatus, [String], [String])] = [
-        (.empty, ["Open a folder to start browsing", "Images stay on your Mac. Browse by folder.", "You can also drop images or folders here."], ["state.open"]),
+        (.empty, ["Drop a photo folder here", "or press ⌘O", "Folder", "One or more images", "Common image formats"], ["state.open"]),
         (.loading("B.png"), ["Opening B.png…"], ["state.cancel"]),
         (.failed(.corruptImage, "B.png"), ["Unable to read this image", "B.png", "The file may be damaged or its format unreadable."], ["state.retry", "state.next"]),
         (.detailLimited, ["Showing reduced detail"], []), (.showing, [], []),
-        (.empty, ["Open a folder to start browsing", "Images stay on your Mac. Browse by folder.", "You can also drop images or folders here."], ["state.open"])
+        (.empty, ["Drop a photo folder here", "or press ⌘O", "Folder", "One or more images", "Common image formats"], ["state.open"])
     ]
     for (status, lines, buttons) in rows {
         scene.state.display(status, nextEnabled: true)
         scene.content.layoutSubtreeIfNeeded(); scene.content.displayIfNeeded()
         #expect(scene.state.textLines == lines)
         #expect(scene.state.buttons.compactMap { $0.identifier?.rawValue } == buttons)
-        let hints = inputHintViews(scene.state).filter { $0.accessibilityIdentifier() == "state.drop-hint" }
+        let hints = inputHintViews(scene.state).filter { $0.accessibilityIdentifier() == "first-launch.shortcut" }
         #expect(hints.count == (status == .empty ? 1 : 0))
         #expect(scene.state.isHidden == (status == .showing))
     }

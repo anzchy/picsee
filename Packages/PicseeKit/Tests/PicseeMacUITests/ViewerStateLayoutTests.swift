@@ -22,21 +22,19 @@ import PicseeApplication
     defer { scene.window.close() }
     scene.state.display(.empty)
     scene.state.layoutSubtreeIfNeeded()
-    let icon = try frame("state.icon", in: scene.state)
-    let heading = try frame("state.heading", in: scene.state)
-    let description = try frame("state.description", in: scene.state)
+    let stack = try frame("first-launch.stack", in: scene.state)
+    let heading = try frame("first-launch.heading", in: scene.state)
     let action = try frame("state.open", in: scene.state)
-    let hint = try frame("state.drop-hint", in: scene.state)
-    #expect(icon.size == NSSize(width: 32, height: 32))
-    #expect(stateView("state.icon", in: scene.state)?.isAccessibilityElement() == false)
-    #expect(!(scene.state.accessibilityChildren() ?? []).contains { ($0 as? NSView)?.accessibilityIdentifier() == "state.icon" })
-    #expect(icon.minY > heading.maxY)
-    #expect(heading.minY > description.maxY)
-    #expect(description.minY > action.maxY)
-    #expect(abs(icon.midX - scene.state.bounds.midX) < 1)
-    #expect(abs(hint.minX - action.maxX - 16) <= 0.5)
+    let hint = try frame("first-launch.shortcut", in: scene.state)
+    #expect(stack.size == NSSize(width: 220, height: 150))
+    #expect(stateView("first-launch.stack", in: scene.state)?.isAccessibilityElement() == false)
+    #expect(!(scene.state.accessibilityChildren() ?? []).contains { ($0 as? NSView)?.accessibilityIdentifier() == "first-launch.stack" })
+    #expect(stack.minY > heading.maxY)
+    #expect(heading.minY > action.maxY)
+    #expect(abs(stack.midX - scene.state.bounds.midX) < 1)
+    #expect(abs(hint.minX - action.maxX - 12) <= 0.5)
     #expect(abs(hint.midY - action.midY) <= 0.5)
-    #expect(stateView("state.heading", in: scene.state)?.accessibilityLabel() == scene.state.textLines[0])
+    #expect(stateView("first-launch.heading", in: scene.state)?.accessibilityLabel() == scene.state.textLines[0])
 }
 
 @Test @MainActor func issue92FailureStateWrapsAtCompactSizeAndTracksNext() throws {
@@ -111,13 +109,14 @@ import PicseeApplication
         #expect(abs(next.minX - retry.maxX - 16) <= 0.5)
         #expect(try frame("state.filename", in: scene.state).height > 30)
         scene.state.display(.empty)
-        try assertVisibleComposition(scene.state,
-            ids: ["state.icon", "state.heading", "state.description", "state.open", "state.drop-hint"],
-            expectedGaps: [("state.icon", "state.heading", 18), ("state.heading", "state.description", 9),
-                           ("state.description", "state.open", 18)])
+        scene.state.layoutSubtreeIfNeeded()
+        let stack = try frame("first-launch.stack", in: scene.state)
+        let heading = try frame("first-launch.heading", in: scene.state)
         let open = try frame("state.open", in: scene.state)
-        let hint = try frame("state.drop-hint", in: scene.state)
-        #expect(abs(hint.minX - open.maxX - 16) <= 0.5)
+        let hint = try frame("first-launch.shortcut", in: scene.state)
+        #expect(stack.size == NSSize(width: 220, height: 150))
+        #expect(stack.minY > heading.maxY && heading.minY > open.maxY)
+        #expect(abs(hint.minX - open.maxX - 12) <= 0.5)
     }
 }
 
@@ -171,18 +170,17 @@ private func appTranslation(_ key: String, language: String) throws -> String {
     scene.content.frame = NSRect(origin: .zero, size: size)
     scene.state.frame = scene.content.bounds
     scene.state.display(.empty)
-    let heading = try #require(stateView("state.heading", in: scene.state) as? NSTextField)
-    let description = try #require(stateView("state.description", in: scene.state) as? NSTextField)
-    let hint = try #require(stateView("state.drop-hint", in: scene.state) as? NSTextField)
-    heading.stringValue = try appTranslation("Open a folder to start browsing", language: "zh-Hans")
-    description.stringValue = try appTranslation("Images stay on your Mac. Browse by folder.", language: "zh-Hans")
-    hint.stringValue = String(repeating: try appTranslation("You can also drop images or folders here.", language: "zh-Hans"), count: 6)
+    let heading = try #require(stateView("first-launch.heading", in: scene.state) as? NSTextField)
+    let hint = try #require(stateView("first-launch.shortcut", in: scene.state) as? NSTextField)
+    let chip = try #require(stateView("first-launch.chip.images", in: scene.state) as? NSTextField)
+    heading.stringValue = try appTranslation("Drop a photo folder here", language: "zh-Hans")
+    hint.stringValue = try appTranslation("or press ⌘O", language: "zh-Hans")
+    chip.stringValue = try appTranslation("One or more images", language: "zh-Hans")
     scene.state.needsLayout = true
-    try assertVisibleComposition(scene.state,
-        ids: ["state.icon", "state.heading", "state.description", "state.open", "state.drop-hint"],
-        expectedGaps: [("state.icon", "state.heading", 18), ("state.heading", "state.description", 9),
-                       ("state.description", "state.open", 18), ("state.open", "state.drop-hint", 9)])
-    #expect(try frame("state.drop-hint", in: scene.state).height > 30)
+    scene.state.layoutSubtreeIfNeeded()
+    #expect(scene.state.bounds.contains(try frame("first-launch.heading", in: scene.state)))
+    #expect(scene.state.bounds.contains(try frame("first-launch.chip.images", in: scene.state)))
+    #expect(try frame("first-launch.chip.images", in: scene.state).width >= 70)
 
     scene.state.display(.failed(.corruptImage, String(repeating: "旅行照片-", count: 25) + ".jpg"), nextEnabled: true)
     let reason = try #require(stateView("state.reason", in: scene.state) as? NSTextField)

@@ -35,6 +35,8 @@ public final class ViewerStateHost: NSView {
     private var composedState: ViewerImageStatus?
     private var stateIcon: NSImageView?
     private var stateLabels: [NSTextField] = []
+    private var firstLaunch: FirstLaunchView?
+    public func setFirstLaunchDragActive(_ active: Bool) { firstLaunch?.setDragActive(active) }
     public func linkKeyViews(to canvas: NSView, chrome: ViewerChromeOverlay) {
         keyCanvas = canvas; keyChrome = chrome
         ViewerStateFocus.link(canvas: canvas, state: self, chrome: chrome)
@@ -93,21 +95,29 @@ public final class ViewerStateHost: NSView {
         }
         setAccessibilityChildren([])
         applyVisibility()
+        // B4's open button sits inside FirstLaunchView, out of reach of the subview sweep below. The empty-folder
+        // page keeps its own controls between visits, so only the outgoing first-launch button is retired here.
+        if firstLaunch != nil {
+            buttons.forEach {
+                $0.isHidden = true; $0.setAccessibilityHidden(true)
+                $0.isEnabled = false; $0.setAccessibilityEnabled(false); $0.nextKeyView = nil
+            }
+        }
         subviews.forEach {
             $0.isHidden = true; $0.setAccessibilityHidden(true); $0.nextKeyView = nil
             if let button = $0 as? NSButton { button.isEnabled = false; button.setAccessibilityEnabled(false) }
             $0.removeFromSuperview()
         }
         buttons = []; textLines = []; showsProgress = false
-        composedState = nil; stateIcon = nil; stateLabels = []
+        composedState = nil; stateIcon = nil; stateLabels = []; firstLaunch = nil
         var actions: [(String, String)] = []
         var failure = false
         let notice = status == .detailLimited
         switch status {
         case .empty:
-            textLines = [String(localized: "Open a folder to start browsing"),
-                         String(localized: "Images stay on your Mac. Browse by folder."),
-                         String(localized: "You can also drop images or folders here.")]
+            textLines = [String(localized: "Drop a photo folder here"),
+                         String(localized: "or press ⌘O"), String(localized: "Folder"),
+                         String(localized: "One or more images"), String(localized: "Common image formats")]
             actions = [(String(localized: "Choose Folder…"), "state.open")]
         case .loading(let name):
             showsProgress = true
@@ -174,7 +184,15 @@ public final class ViewerStateHost: NSView {
         case .showing: return
         }
         if case .empty = status {
-            composeState(status, actions: actions)
+            let button = ViewerStateButton(title: actions[0].0, target: self, action: #selector(activate(_:)))
+            button.session = session
+            button.bezelStyle = .rounded; button.focusRingType = .exterior
+            button.identifier = NSUserInterfaceItemIdentifier("state.open")
+            button.setAccessibilityIdentifier("state.open")
+            let launch = FirstLaunchView(frame: bounds, openButton: button)
+            addSubview(launch)
+            firstLaunch = launch; buttons = [button]
+            setAccessibilityChildren(launch.semanticViews)
             return
         }
         if failure {
@@ -247,11 +265,7 @@ public final class ViewerStateHost: NSView {
             button.setAccessibilityIdentifier(action.1)
             addSubview(button); buttons.append(button)
         }
-        if failure {
-            setAccessibilityChildren([image] + stateLabels + buttons)
-        } else {
-            setAccessibilityChildren([stateLabels[0], stateLabels[1], buttons[0], stateLabels[2]])
-        }
+        setAccessibilityChildren([image] + stateLabels + buttons)
         needsLayout = true
         layoutSubtreeIfNeeded()
     }
@@ -270,9 +284,7 @@ public final class ViewerStateHost: NSView {
 
     public override func layout() {
         super.layout()
-        guard let status = composedState, let icon = stateIcon else { return }
-        let failure: Bool
-        if case .failed = status { failure = true } else { failure = false }
+        guard composedState != nil, let icon = stateIcon else { return }
         let available = max(0, bounds.width - 32)
         let textWidth = min(640, available)
         func measure(_ field: NSTextField, width: CGFloat) -> CGFloat {
@@ -285,22 +297,10 @@ public final class ViewerStateHost: NSView {
         let heading = stateLabels[0], description = stateLabels[1]
         let headingHeight = measure(heading, width: textWidth)
         let descriptionHeight = measure(description, width: textWidth)
-        let filenameHeight = failure ? descriptionHeight : 0
-        let reasonHeight = failure ? measure(stateLabels[2], width: textWidth) : 0
-        let hint = failure ? nil : stateLabels[2]
-        let buttonWidth: CGFloat = failure ? 80 : max(180, ceil(buttons[0].intrinsicContentSize.width))
+        let reasonHeight = measure(stateLabels[2], width: textWidth)
+        let buttonWidth: CGFloat = 80
         let buttonHeight: CGFloat = 32
-        let naturalHintWidth = hint.map { ceil($0.cell!.cellSize.width) } ?? 0
-        let rowWidth = buttonWidth + 16 + naturalHintWidth
-        let inlineHint = !failure && rowWidth <= textWidth
-        let hintWidth = inlineHint ? naturalHintWidth : textWidth
-        let hintHeight = hint.map {
-            ceil($0.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: hintWidth,
-                                                   height: .greatestFiniteMagnitude)).height)
-        } ?? 0
-        let actionHeight = inlineHint ? max(buttonHeight, hintHeight) : buttonHeight + (failure ? 0 : 9 + hintHeight)
-        let contentHeight: CGFloat = 32 + 18 + headingHeight + 9 +
-            (failure ? filenameHeight + 9 + reasonHeight : descriptionHeight) + 18 + actionHeight
+        let contentHeight: CGFloat = 32 + 18 + headingHeight + 9 + descriptionHeight + 9 + reasonHeight + 18 + buttonHeight
         var top = bounds.midY + contentHeight / 2
         icon.frame = NSRect(x: bounds.midX - 16, y: top - 32, width: 32, height: 32)
         top -= 32 + 18
@@ -310,35 +310,16 @@ public final class ViewerStateHost: NSView {
         description.frame = NSRect(x: bounds.midX - textWidth / 2, y: top - descriptionHeight,
                                    width: textWidth, height: descriptionHeight)
         top -= descriptionHeight
-        if failure {
-            top -= 9
-            stateLabels[2].frame = NSRect(x: bounds.midX - textWidth / 2, y: top - reasonHeight,
-                                          width: textWidth, height: reasonHeight)
-            top -= reasonHeight
-        }
+        top -= 9
+        stateLabels[2].frame = NSRect(x: bounds.midX - textWidth / 2, y: top - reasonHeight,
+                                      width: textWidth, height: reasonHeight)
+        top -= reasonHeight
         top -= 18
-        if failure {
-            let gap: CGFloat = 16
-            let total = CGFloat(buttons.count) * buttonWidth + CGFloat(max(0, buttons.count - 1)) * gap
-            for (index, button) in buttons.enumerated() {
-                button.frame = NSRect(x: bounds.midX - total / 2 + CGFloat(index) * (buttonWidth + gap),
-                                      y: top - buttonHeight, width: buttonWidth, height: buttonHeight)
-            }
-        } else if let button = buttons.first, let hint {
-            if inlineHint {
-                button.frame = NSRect(x: bounds.midX - rowWidth / 2,
-                                      y: top - (actionHeight + buttonHeight) / 2,
-                                      width: buttonWidth, height: buttonHeight)
-                hint.frame = NSRect(x: button.frame.maxX + 16,
-                                    y: top - (actionHeight + hintHeight) / 2,
-                                    width: hintWidth, height: hintHeight)
-            } else {
-                button.frame = NSRect(x: bounds.midX - buttonWidth / 2, y: top - buttonHeight,
-                                      width: buttonWidth, height: buttonHeight)
-                hint.frame = NSRect(x: bounds.midX - textWidth / 2,
-                                    y: top - buttonHeight - 9 - hintHeight,
-                                    width: textWidth, height: hintHeight)
-            }
+        let gap: CGFloat = 16
+        let total = CGFloat(buttons.count) * buttonWidth + CGFloat(max(0, buttons.count - 1)) * gap
+        for (index, button) in buttons.enumerated() {
+            button.frame = NSRect(x: bounds.midX - total / 2 + CGFloat(index) * (buttonWidth + gap),
+                                  y: top - buttonHeight, width: buttonWidth, height: buttonHeight)
         }
     }
     @objc private func activate(_ sender: NSButton) {
@@ -365,6 +346,9 @@ public final class ViewerStateHost: NSView {
         guard !isHiddenOrHasHiddenAncestor else { return nil }
         let local = convert(point, from: superview)
         if emptyFolderView.superview === self { return emptyFolderView.hitTest(local) }
-        return buttons.first { !$0.isHidden && $0.frame.contains(local) }
+        return buttons.first { button in
+            guard !button.isHidden, let parent = button.superview else { return false }
+            return button.frame.contains(parent.convert(local, from: self))
+        }
     }
 }

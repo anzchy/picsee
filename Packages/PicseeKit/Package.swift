@@ -14,9 +14,13 @@ let package = Package(
         .target(name: "PicseeCore"),
         .target(name: "PicseeApplication", dependencies: ["PicseeCore"]),
         .target(name: "PicseeInfrastructure", dependencies: ["PicseeCore"], linkerSettings: [.linkedLibrary("sqlite3")]),
-        .target(name: "PicseeMacUI", dependencies: ["PicseeCore", "PicseeApplication"]),
+        .target(name: "PicseeMacUI", dependencies: ["PicseeCore", "PicseeApplication"], exclude: ["B4Samples/PROVENANCE.md"], resources: [
+            .copy("B4Samples/alley.jpg"), .copy("B4Samples/lakeside.jpg"),
+            .copy("B4Samples/temple.jpg"), .copy("B4Samples/hillside.jpg"),
+            .copy("B4Samples/lakehouse.jpg"), .copy("B4Samples/gate.jpg")
+        ]),
         .testTarget(name: "PicseeApplicationTests", dependencies: ["PicseeCore", "PicseeApplication"]),
-        .testTarget(name: "PicseeMacUITests", dependencies: ["PicseeMacUI", "PicseeInfrastructure"]),
+        .testTarget(name: "PicseeMacUITests", dependencies: ["PicseeMacUI", "PicseeInfrastructure"], exclude: ["B4PinnedDesign"]),
         .testTarget(name: "PicseeCoreTests", dependencies: ["PicseeCore"]),
         .testTarget(name: "PicseeInfrastructureTests", dependencies: ["PicseeCore", "PicseeInfrastructure"]),
     ],

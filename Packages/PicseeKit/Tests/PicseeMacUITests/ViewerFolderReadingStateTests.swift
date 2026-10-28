@@ -127,7 +127,7 @@ private actor GenericFailureThenSuccessScanner: FolderScanning {
     scene.state.buttons.first?.performClick(nil)
     scene.state.display(.empty)
     #expect(scene.state.buttons.map { $0.identifier?.rawValue } == ["state.open"])
-    #expect(scene.state.textLines.first == "Open a folder to start browsing")
+    #expect(scene.state.textLines.first == "Drop a photo folder here")
 }
 
 private struct FolderNoMatchesScanner: FolderScanning {
