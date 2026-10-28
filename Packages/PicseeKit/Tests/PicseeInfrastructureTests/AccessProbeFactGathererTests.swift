@@ -67,6 +67,17 @@ private final class AccessProbeBookmarkRecorder: AccessProbeBookmarkCoding, @unc
     #expect(bookmarks.options == [.withSecurityScope, .withoutMounting, .withoutUI])
 }
 
+@Test func accessProbeMountedVolumeScanHandlesMissingListAndProperties() {
+    #expect(AccessProbeFactGatherer.mountedVolumes(at: nil) == [])
+
+    let missing = URL(fileURLWithPath: "/Volumes/Missing-\(UUID().uuidString)", isDirectory: true)
+    let volumes = AccessProbeFactGatherer.mountedVolumes(at: [missing])
+    #expect(volumes.count == 1)
+    #expect(volumes.first?.uuid == nil)
+    #expect(volumes.first?.url == missing)
+    #expect(volumes.first?.name == nil)
+}
+
 @Test func accessProbeGathererPreservesEveryUnderlyingError() throws {
     let posix = NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))
     let middle = NSError(domain: "ProbeMiddle", code: 42, userInfo: [NSUnderlyingErrorKey: posix])
