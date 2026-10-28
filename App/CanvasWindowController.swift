@@ -34,6 +34,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let searchProjection = GridSearchProjectionScheduler()
     private var gridView: GridBrowserView!
     private var gridShell: GridShellView!
+    private var sidebarTreeTask: Task<Void, Never>?
+    private var sidebarLoader: SidebarFolderLoadSession?
+    private var sidebarKnownCounts: [URL: Int] = [:]
     func completeGridDisplay(_ snapshot: FolderSnapshot, currentItemID: ItemID?, offset: NSPoint?) {
         searchProjection.cancel()
         let filtered = gridSearch.project(snapshot)
@@ -145,6 +148,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridShell.autoresizingMask = [.width, .height]
         gridShell.isHidden = true
         gridShell.onSearchChange = { [weak self] term in self?.updateGridSearch(term) }
+        gridShell.onSelectFolder = { [weak self] folder in
+            guard let self, let rootID = self.gridFolderRoot else { return }
+            self.openFolder(folder, rootID: rootID)
+        }
         gridShell.onSort = { [weak self] action in self?.applyGridSort(action) }
         gridShell.onOpenSortMenu = { button, menu in
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
@@ -511,7 +518,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         inspector.select(itemID: nil, url: nil, access: nil)
         gridFolderRoot = rootID
         gridFolderURL = folder
-        gridShell.showFolder(folder.lastPathComponent)
+        sidebarKnownCounts.removeAll()
+        loadSidebarTree(folder, rootID: rootID, count: nil)
         gridProjection = FolderGridProjection()
         let pending = FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: 0),
             entries: [], isComplete: false)
@@ -533,6 +541,33 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     else { promptForFolder(folder, currentImage: nil, direction: .next) }
                 }
             }
+        }
+    }
+
+    private func loadSidebarTree(_ folder: URL, rootID: AccessRootID, count: Int?) {
+        sidebarTreeTask?.cancel()
+        sidebarLoader?.cancel()
+        sidebarLoader = nil
+        gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: count), parent: nil, children: [])
+        sidebarTreeTask = Task(priority: .utility) { [weak self, accessServices] in
+            do {
+                let services = try await accessServices.value
+                try Task.checkCancellation()
+                guard let self, self.gridFolderURL == folder else { return }
+                let browser = SidebarFolderBrowser(access: services.files, enumerator: SystemSidebarFolderEnumerator())
+                let loader = SidebarFolderLoadSession(browser: browser)
+                self.sidebarLoader = loader
+                loader.start(folder: folder, rootID: rootID, onRows: { [weak self] children, parentURL in
+                    guard let self, self.gridFolderURL == folder else { return }
+                    self.gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: self.sidebarKnownCounts[folder] ?? count),
+                        parent: parentURL.map { GridSidebarFolder(url: $0, count: self.sidebarKnownCounts[$0]) },
+                        children: children.map { GridSidebarFolder(url: $0) })
+                }, onCount: { [weak self] child, imageCount in
+                    guard let self, self.gridFolderURL == folder else { return }
+                    self.sidebarKnownCounts[child] = imageCount
+                    self.gridShell.updateFolderCount(imageCount, for: child)
+                })
+            } catch { /* Unknown children/counts stay absent rather than displaying invented values. */ }
         }
     }
 
@@ -1166,10 +1201,16 @@ extension CanvasWindowController: FolderScanHost {
             }
             if gridFolderURL != snapshot.version.folder {
                 gridFolderURL = snapshot.version.folder
-                gridShell.showFolder(snapshot.version.folder.lastPathComponent)
+                loadSidebarTree(snapshot.version.folder, rootID: snapshot.version.rootID,
+                    count: snapshot.isComplete ? snapshot.navigationEntries.count : nil)
                 if session.mode == .browsing, let window {
                     GridWindowIdentity.showFolder(snapshot.version.folder, in: window)
                 }
+            }
+            if snapshot.isComplete {
+                let count = snapshot.navigationEntries.count
+                sidebarKnownCounts[snapshot.version.folder] = count
+                gridShell.updateFolderCount(count, for: snapshot.version.folder)
             }
             let anchor = gridView.firstVisibleItemID() ?? gridProjection.scrollAnchor
             gridProjection.setScrollAnchor(anchor)

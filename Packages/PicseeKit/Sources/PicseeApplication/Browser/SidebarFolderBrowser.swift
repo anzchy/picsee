@@ -24,4 +24,11 @@ public struct SidebarFolderBrowser: Sendable {
             return try await enumerator.imageCount(in: folder, root: lease.url)
         }
     }
+    public func parent(in folder: URL, rootID: AccessRootID) async throws -> URL? {
+        try await access.withLease(.root(rootID, file: folder)) { lease in
+            guard AccessBoundary.contains(folder, in: lease.url) else { throw FileAccessError.outsideRoot }
+            let parent = folder.deletingLastPathComponent().standardizedFileURL
+            return AccessBoundary.contains(parent, in: lease.url) ? parent : nil
+        }
+    }
 }
