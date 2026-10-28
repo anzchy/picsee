@@ -119,7 +119,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "80d4e86a7f83fb8724a5856b5c0df7b227730f82fedc34756dc75b8b8081dbb0"
+      "sha256": "dba0b7c87c363906dc1f64ea3eee6f8e5d2d50907023595bfd6c2494d21aa895"
     },
     {
       "name": "image-error",
