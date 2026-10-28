@@ -6,6 +6,29 @@ Newest entries first. Each entry quotes the question, gives the answer in three 
 
 ---
 
+## 2026-10-28 · What's the difference between the Backlog and a milestone on GitHub?
+
+**Question.** 「github 中backlog和milestone有什么区别」 and 「backlog记录在哪里，一个单独的md，还是GitHub issues中？」
+
+**What.**
+- **A milestone** is a GitHub feature. It groups issues under one name, with an optional due date, a progress bar (closed / total) and its own page, and an issue can be in at most one milestone.
+- **GitHub has no built-in "backlog".** In agile, a backlog is the list of unscheduled work. On GitHub it's usually a status column on a Projects board, or a label.
+- **In picsee, `Backlog` is simply a milestone with that name.** It lives in GitHub Issues, with each item a normal issue (search `milestone:Backlog`), not in a separate md file.
+
+| | `v0.0.1` / `v0.0.2` | `Backlog` |
+|---|---|---|
+| Means | must be done before this release ships | real work no release has committed to |
+| Ends | closes when the release ships; the progress bar shows readiness | never; a long-lived holding area |
+| Due date | may have one | none |
+| In "ready now" | yes (`milestone:v0.0.1`) | no |
+| Leaves by | being done and closed | promotion to a release milestone when it blocks release work (e.g. #249 on 2026-10-28), or closing |
+
+**Why a milestone, not a label or a Projects column.** The rule is that every open issue has exactly one milestone. Because Backlog is a milestone, each issue is in exactly one bucket, and GitHub itself enforces it: an issue can't be both "v0.0.1" and "backlog". A label can't guarantee that, and a Projects column would be a second source of truth for the same fact. A separate md list would drift from the issues.
+
+**How.** File process, tooling and flaky-test issues in `Backlog`. When one starts failing release PRs or blocks release work, move it to the current release milestone and dispatch it.
+
+---
+
 ## 2026-10-28 · How does the build order map to the issues, and what is the Backlog?
 
 **Question.** 「目前在开发的顺序和issue 是如何一一对应的，当前issues有60+个，你如何知道哪些先开发，哪些后开发」. Follow-up: 「解释一下backlog 是做什么的，和我之前的疑问有什么关系」.
