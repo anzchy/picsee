@@ -73,7 +73,8 @@
       ],
       "sourceHtmlSha256": "6d443c69fbf48c2b7f7f1abf4a8ed08f40c872afc7ad2863ff239ce7fa93b829",
       "packagedHtmlSha256": "178ae2a2c01bf6c7f719d5351d05bd06dbf8dd20a7855aa9001dbe9256f216f3",
-      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource.",
+      "localReplacement": "Replaced locally per ADR-014 with 22-BD (commit 13a1130); the hashes above describe the earlier Stitch export and packaging, not the current page."
     },
     {
       "name": "search-empty",
@@ -109,7 +110,8 @@
       ],
       "sourceHtmlSha256": "8abe8212187f198cdda5af265a56ff33173e838858d5040377a73a991ef67443",
       "packagedHtmlSha256": "0bfb6a85412a97229ed4840f275466064d5afd0554d3980ede9c3ddd7c1b344b",
-      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource."
+      "note": "Cloud IDs refer to the prior exported design. Packaging changed local asset references, not the cloud resource.",
+      "localReplacement": "Replaced locally per ADR-014 with 26-BC (commit 13a1130); the hashes above describe the earlier Stitch export and packaging, not the current page."
     },
     {
       "name": "original-size",
