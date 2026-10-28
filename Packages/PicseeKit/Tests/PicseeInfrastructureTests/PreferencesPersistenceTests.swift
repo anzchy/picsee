@@ -30,8 +30,8 @@ import PicseeInfrastructure
         store.observe(second)
         let dark = DisplayPreferences(alwaysShowTools: true, filmstripExpanded: false, appearance: .dark)
         let light = DisplayPreferences(alwaysShowTools: false, filmstripExpanded: true, appearance: .light)
-        let darkJSON = Data(#"{"schemaVersion":1,"value":{"alwaysShowTools":true,"appearance":"dark","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}}"#.utf8)
-        let lightJSON = Data(#"{"schemaVersion":1,"value":{"alwaysShowTools":false,"appearance":"light","filmstripExpanded":true,"gridSidebarVisible":true,"gridSidebarWidth":196}}"#.utf8)
+        let darkJSON = Data(#"{"alwaysShowTools":true,"appearance":"dark","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196,"schemaVersion":1}"#.utf8)
+        let lightJSON = Data(#"{"alwaysShowTools":false,"appearance":"light","filmstripExpanded":true,"gridSidebarVisible":true,"gridSidebarWidth":196,"schemaVersion":1}"#.utf8)
         store.value = dark
         #expect(store.value == dark)
         #expect(UserDefaultsDisplayPreferencesStore(defaults: defaults).value == dark)
@@ -60,7 +60,7 @@ import PicseeInfrastructure
         store.value = DisplayPreferences(appearance: .dark)
         #expect(observer.values == [DisplayPreferences(appearance: .dark)])
         #expect(defaults.data(forKey: "displayPreferences.v1") ==
-            Data(#"{"schemaVersion":1,"value":{"alwaysShowTools":false,"appearance":"dark","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}}"#.utf8))
+            Data(#"{"alwaysShowTools":false,"appearance":"dark","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196,"schemaVersion":1}"#.utf8))
     }
 }
 
@@ -76,7 +76,7 @@ import PicseeInfrastructure
             store.value = changed
             #expect(UserDefaultsDisplayPreferencesStore(defaults: defaults).value == changed)
             #expect(defaults.data(forKey: "displayPreferences.v1") ==
-                Data(#"{"schemaVersion":1,"value":{"alwaysShowTools":true,"appearance":"dark","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196}}"#.utf8))
+                Data(#"{"alwaysShowTools":true,"appearance":"dark","filmstripExpanded":false,"gridSidebarVisible":true,"gridSidebarWidth":196,"schemaVersion":1}"#.utf8))
         }
     }
 }
