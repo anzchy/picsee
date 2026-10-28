@@ -13,21 +13,26 @@ private actor LoadLease: AccessLeasing {
 private actor BlockedCounter: SidebarFolderEnumerating {
     let child: URL
     private var permitted = false
-    private var waiter: CheckedContinuation<Void, Never>?
+    private var waiters: [CheckedContinuation<Void, Never>] = []
     init(child: URL) { self.child = child }
     func children(in folder: URL, root: URL) -> [URL] { [child] }
     func imageCount(in folder: URL, root: URL) async -> Int {
-        if folder == root { return 5 }
-        if !permitted { await withCheckedContinuation { waiter = $0 } }
-        return 1234
+        if !permitted { await withCheckedContinuation { waiters.append($0) } }
+        return folder == root ? 5 : 1234
     }
-    func release() { permitted = true; waiter?.resume(); waiter = nil }
+    func release() {
+        permitted = true
+        for waiter in waiters { waiter.resume() }
+        waiters.removeAll()
+    }
 }
 
-@Test @MainActor func sidebarSlowCounterDoesNotDelayRows() async throws {
+// The outer limit only guards a missing callback; the assertions follow actual row and count events.
+@Test(.timeLimit(.minutes(3))) @MainActor func sidebarSlowCounterDoesNotDelayRows() async throws {
     let root = URL(fileURLWithPath: "/tmp/picsee-sidebar-root")
     let child = root.appendingPathComponent("Trip")
     let counter = BlockedCounter(child: child)
+    defer { Task { await counter.release() } }
     let browser = SidebarFolderBrowser(access: LoadLease(root: root), enumerator: counter)
     let session = SidebarFolderLoadSession(browser: browser)
     var rowURLs: [URL] = []
@@ -49,8 +54,9 @@ private actor BlockedCounter: SidebarFolderEnumerating {
     #expect(counts.isEmpty)
     await counter.release()
     var countIterator = countUpdates.makeAsyncIterator()
-    _ = await countIterator.next()
-    _ = await countIterator.next()
+    while counts[root] != 5 || counts[child] != 1234 {
+        guard await countIterator.next() != nil else { break }
+    }
     #expect(counts[root] == 5)
     #expect(counts[child] == 1234)
     session.cancel()
