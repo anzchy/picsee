@@ -59,7 +59,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "0e8b78959b625396a7888600a05a1776b9d8901c29b7ec3a895c189298b11693"
+      "sha256": "6b36c865acae7f6603b713306abd80640765840566d402afe5bacb8fdceb9e86"
     },
     {
       "name": "viewer-inspector",
@@ -251,7 +251,7 @@
       },
       "kind": "static-mockup",
       "origin": "local-C-adaptation",
-      "sha256": "69134f262c36325fe701b071c9de58f50ae236b7b6c387fe30bb8bc2429bf2e2"
+      "sha256": "5ce9d9fddbe109cf36e0c7670a417dc88f6d56e695af50c99f9b92ace57c6b82"
     },
     {
       "name": "shortcuts",
@@ -263,7 +263,7 @@
       },
       "kind": "static-mockup",
       "origin": "local-C-adaptation",
-      "sha256": "b005a24b6b93946f5ea8cc408ba500bcabba0aa2576f4c97af0b1d42d1d97419"
+      "sha256": "0d9a2e2cb44a4c4a2fd7c465409309162cdc849d281843545d92916f8ce8d006"
     }
   ]
 }
