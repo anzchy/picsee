@@ -13,7 +13,7 @@
 
 ## 隐私
 
-picsee 不收集任何数据，不上传图片或元数据。沙盒保持开启，它只读取你通过系统面板授权的文件夹和文件。唯一的联网是检查更新：从 v0.0.1 起，Sparkle 会访问 GitHub 获取更新信息和更新包，不发送系统信息；第二次启动时会询问是否自动检查，之后可在“设置 → 更新”中修改（[ADR-015](docs/adr/0015-sparkle-updates-over-a-network-client-entitlement.md)）。
+picsee 不收集任何数据，不上传图片或元数据。沙盒保持开启，它只读取你通过系统面板授权的文件夹和文件。目前的 App 不联网。计划中（v0.0.1，#220，尚未实现）唯一的联网是检查更新：Sparkle 访问 GitHub 获取更新信息和更新包，不发送系统信息；第二次启动时询问是否自动检查，之后可在“设置 → 更新”中修改（[ADR-015](docs/adr/0015-sparkle-updates-over-a-network-client-entitlement.md)）。
 
 ## 发布签名（维护者）
 
