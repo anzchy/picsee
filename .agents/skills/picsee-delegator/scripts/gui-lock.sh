@@ -1,10 +1,13 @@
 #!/bin/zsh
-# gui-lock.sh acquire|release|status|wait — the machine-wide desktop GUI lock shared with mdpro
-# (mdpro ADR-0134 decision 6; agreed with mdpro-delegator 2026-10-24).
+# gui-lock.sh acquire|wait|release|status — the machine-wide desktop GUI lock shared with mdpro
+# (mdpro ADR-0141 WI-2 and docs/reference/20261027-desktop-gui-lock-agreement-with-picsee.md; port of mdpro's
+# .agents/skills/mdpro-delegator/scripts/gui-lock.sh, which is the reference — keep the two in step).
 #
-#   lock dir : $HOME/.cache/desktop-gui.lock/   (mkdir = acquire; atomic)
-#   owner    : key=value lines; `owner` is the file that counts. picsee writes
-#              project=picsee session=<name> batch=<run-id> start=<ISO> pid=<pid> expected_minutes=<n> purpose=<text>
+#   mutex    : $HOME/.cache/desktop-gui.mutex — a permanent BSD flock(2) file, never deleted. Every acquire and
+#              release does its read-check-mutate while holding it.
+#   lock dir : $HOME/.cache/desktop-gui.lock/ — created by acquire, removed only by its own release, never renamed.
+#   owner    : exactly eight key=value lines, published 0600 with O_EXCL|O_NOFOLLOW:
+#              project=picsee session batch=<run-id> start pid expected_minutes purpose acquisition_id=<uuid4>
 #
 # Take it before the FIRST GUI-driving action of a device run (launch, panels, keys, mouse, drags, screencapture,
 # app activation) and hold it across relaunch sub-runs; release only after the app has quit (after cleanup), also on
@@ -12,38 +15,187 @@
 # Never remove another project's lock. A lock that looks stale is reported to the user, never removed.
 #
 # usage:
-#   gui-lock.sh acquire <run-id> [expected_minutes=30] [purpose] [session=picsee-delegator]   → exit 0 held, 75 busy
-#   gui-lock.sh wait <run-id> [expected_minutes] [purpose] [session] [max_wait_min=60]       → poll 60 s, then acquire
-#   gui-lock.sh release <run-id>                                                             → only our own lock
+#   gui-lock.sh acquire <run-id> [expected_minutes=30] [purpose] [session=picsee-delegator]
+#       → exit 0 and `ACQUIRED <run-id> acquisition_id=<uuid>` on stdout; 75 busy
+#   gui-lock.sh wait <run-id> [expected_minutes] [purpose] [session] [max_wait_min=60]   → poll 60 s; 75 on timeout
+#   gui-lock.sh release <run-id> --acquisition-id <uuid>   → only the acquisition that printed this id
 #   gui-lock.sh status
-set -u
-L=$HOME/.cache/desktop-gui.lock
-cmd=${1:-status}
-show() { [[ -d $L ]] && { echo "HELD:"; sed 's/^/  /' "$L/owner" 2>/dev/null || echo "  (no owner file)"; } || echo "FREE"; }
-case $cmd in
-  status) show ;;
-  acquire)
-    run=${2:?run-id}; exp=${3:-30}; purpose=${4:-device run}; sess=${5:-picsee-delegator}
-    mkdir -p "$HOME/.cache"
-    if mkdir "$L" 2>/dev/null; then
-      printf 'project=picsee\nsession=%s\nbatch=%s\nstart=%s\npid=%s\nexpected_minutes=%s\npurpose=%s\n' \
-        "$sess" "$run" "$(date +%Y-%m-%dT%H:%M:%S%z)" "$$" "$exp" "$purpose" > "$L/owner"
-      echo "ACQUIRED $run"; exit 0
-    fi
-    echo "BUSY"; show; exit 75 ;;
-  wait)
-    run=${2:?run-id}; exp=${3:-30}; purpose=${4:-device run}; sess=${5:-picsee-delegator}; maxw=${6:-60}
-    for i in $(seq 1 $maxw); do
-      "$0" acquire "$run" "$exp" "$purpose" "$sess" >/dev/null && { echo "ACQUIRED $run after ${i} poll(s)"; exit 0; }
-      sleep 60
-    done
-    echo "TIMEOUT after $maxw min — lock still held; report to the user, do not remove it"; show; exit 75 ;;
-  release)
-    run=${2:?run-id}
-    [[ -d $L ]] || { echo "FREE (nothing to release)"; exit 0; }
-    if grep -qx 'project=picsee' "$L/owner" 2>/dev/null && grep -qx "batch=$run" "$L/owner" 2>/dev/null; then
-      rm "$L/owner" && rmdir "$L" && echo "RELEASED $run"; exit $?
-    fi
-    echo "REFUSED: lock is not ours ($run)"; show; exit 1 ;;
-  *) echo "usage: gui-lock.sh acquire|wait|release|status …"; exit 2 ;;
-esac
+# Refusals and usage errors exit 1 with `REFUSED: …` on stderr (mdpro's codes).
+exec /usr/bin/python3 - "$@" <<'PY'
+import datetime
+import fcntl
+import os
+import pathlib
+import re
+import stat
+import sys
+import time
+import uuid
+
+cache = pathlib.Path.home() / ".cache"
+lockdir = cache / "desktop-gui.lock"
+mutex = cache / "desktop-gui.mutex"
+required = {"project", "session", "batch", "start", "pid", "expected_minutes", "purpose", "acquisition_id"}
+uuid4 = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z")
+
+class Refused(Exception):
+    pass
+
+def valid_text(value):
+    if not value or "\n" in value or "\r" in value or "\0" in value:
+        raise Refused("invalid owner field value")
+    return value
+
+def with_mutex(operation):
+    cache.mkdir(parents=True, exist_ok=True)
+    fd = os.open(mutex, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return operation()
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+def read_owner():
+    if lockdir.is_symlink() or not lockdir.is_dir():
+        raise Refused("lock directory is absent or symlinked")
+    fd = os.open(lockdir / "owner", os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise Refused("owner is not a regular file")
+        raw = os.read(fd, 8193)
+        if len(raw) > 8192:
+            raise Refused("owner is too large")
+    finally:
+        os.close(fd)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise Refused("owner is not UTF-8") from error
+    values = {}
+    for line in text.splitlines():
+        if "=" not in line:
+            raise Refused("malformed owner line")
+        key, value = line.split("=", 1)
+        if key not in required or key in values:
+            raise Refused("unknown or duplicate owner field")
+        values[key] = valid_text(value)
+    if set(values) != required or not uuid4.fullmatch(values["acquisition_id"]):
+        raise Refused("missing or malformed owner field")
+    return raw, values
+
+def publish_owner(owner):
+    fd = os.open(lockdir / "owner", os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    # An incomplete owner keeps the directory occupied and later operations fail closed.
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(owner)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+def acquire(batch, expected, purpose, session):
+    batch, purpose, session = map(valid_text, (batch, purpose, session))
+    if not expected.isdecimal() or int(expected) <= 0:
+        raise Refused("invalid expected minutes")
+    def transaction():
+        try:
+            os.mkdir(lockdir, 0o700)
+        except FileExistsError:
+            return None
+        acquisition_id = str(uuid.uuid4())
+        owner = (
+            f"project=picsee\nsession={session}\nbatch={batch}\n"
+            f"start={datetime.datetime.now().astimezone().strftime('%Y-%m-%dT%H:%M:%S%z')}\n"
+            f"pid={os.getpid()}\nexpected_minutes={expected}\npurpose={purpose}\n"
+            f"acquisition_id={acquisition_id}\n"
+        )
+        publish_owner(owner.encode("utf-8"))
+        return acquisition_id
+    return with_mutex(transaction)
+
+def release(batch, acquisition_id):
+    valid_text(batch)
+    if not uuid4.fullmatch(acquisition_id):
+        raise Refused("invalid acquisition id")
+    def transaction():
+        try:
+            raw, values = read_owner()
+        except (FileNotFoundError, NotADirectoryError, OSError) as error:
+            raise Refused("owner is absent or unreadable") from error
+        if values["project"] != "picsee" or values["batch"] != batch or values["acquisition_id"] != acquisition_id:
+            raise Refused("not this acquisition")
+        os.unlink(lockdir / "owner")
+        try:
+            os.rmdir(lockdir)
+        except OSError as error:
+            try:
+                publish_owner(raw)
+            except OSError as restore_error:
+                raise Refused(f"ALERT: release failed and owner restoration failed: {restore_error}") from error
+            raise Refused(f"release failed; owner restored: {error}") from error
+    with_mutex(transaction)
+
+def show(stream=sys.stdout):
+    if not lockdir.exists() and not lockdir.is_symlink():
+        print("FREE", file=stream)
+        return
+    print("HELD:", file=stream)
+    if lockdir.is_symlink() or not lockdir.is_dir():
+        print("  (invalid lock path; do not start GUI work)", file=stream)
+        return
+    try:
+        fd = os.open(lockdir / "owner", os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, "rb") as owner:
+            text = owner.read(8192).decode("utf-8", "replace")
+        for line in text.splitlines():
+            print(f"  {line}", file=stream)
+    except OSError:
+        print("  (no readable owner file; do not start GUI work)", file=stream)
+
+def main(args):
+    command = args[0] if args else "status"
+    if command == "status" and len(args) <= 1:
+        show()
+        return 0
+    if command in ("acquire", "wait"):
+        if len(args) < 2 or len(args) > (6 if command == "wait" else 5):
+            raise Refused("usage: acquire|wait <run-id> [expected] [purpose] [session] [max_wait_min]")
+        batch = args[1]
+        expected = args[2] if len(args) > 2 else "30"
+        purpose = args[3] if len(args) > 3 else "device run"
+        session = args[4] if len(args) > 4 else "picsee-delegator"
+        attempts = 1 if command == "acquire" else int(args[5]) if len(args) > 5 else 60
+        if attempts <= 0:
+            raise Refused("invalid wait limit")
+        interval = 60.0
+        if os.environ.get("PICSEE_GUI_LOCK_TEST") == "1":
+            interval = float(os.environ.get("PICSEE_GUI_LOCK_WAIT_SECONDS", "60"))
+            if not 0 <= interval <= 60:
+                raise Refused("invalid test wait interval")
+        for attempt in range(attempts):
+            acquisition_id = acquire(batch, expected, purpose, session)
+            if acquisition_id is not None:
+                print(f"ACQUIRED {batch} acquisition_id={acquisition_id}")
+                return 0
+            if attempt + 1 < attempts:
+                time.sleep(interval)
+        print("BUSY" if command == "acquire" else "TIMEOUT: still held; report to the user, do not remove it",
+              file=sys.stderr)
+        show(sys.stderr)
+        return 75
+    if command == "release":
+        if len(args) != 4 or args[2] != "--acquisition-id":
+            raise Refused("usage: release <run-id> --acquisition-id <uuid>")
+        release(args[1], args[3])
+        print(f"RELEASED {args[1]}")
+        return 0
+    raise Refused("usage: gui-lock.sh acquire|wait|release|status")
+
+try:
+    sys.exit(main(sys.argv[1:]))
+except (Refused, ValueError) as error:
+    print(f"REFUSED: {error}", file=sys.stderr)
+    sys.exit(1)
+except OSError as error:
+    print(f"FAIL: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
