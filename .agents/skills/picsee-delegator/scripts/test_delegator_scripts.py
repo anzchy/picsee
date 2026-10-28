@@ -164,10 +164,6 @@ class OwnerGatesRefusalTests(unittest.TestCase):
         self.assertIn("no worktree", summary)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ResolvePart3Tests(unittest.TestCase):
     """Part 3 conflicts merge both sides; main's notes and dates are never dropped (2026-10-28 #243 near-miss)."""
 
@@ -202,3 +198,7 @@ class ResolvePart3Tests(unittest.TestCase):
         out, ok = self.run_resolve(text)
         self.assertFalse(ok)
         self.assertIn('<<<<<<<', out)
+
+
+if __name__ == "__main__":
+    unittest.main()
