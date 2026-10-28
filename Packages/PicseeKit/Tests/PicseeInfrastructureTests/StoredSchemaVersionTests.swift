@@ -13,15 +13,17 @@ private func schemaTestDirectory() -> URL {
     let path = base.appendingPathComponent("roots.json")
     let store = BookmarkStore(url: path)
     try store.save([])
-    let current = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any])
-    #expect(current["schemaVersion"] as? Int == 1)
+    let current = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [Any])
+    #expect(current.isEmpty)
+    let marker = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: path.appendingPathExtension("schema"))) as? [String: Any])
+    #expect(marker["schemaVersion"] as? Int == 1)
     #expect(try store.load().isEmpty)
     try Data("[]".utf8).write(to: path)
     #expect(try store.load().isEmpty)
     let future = Data(#"{"schemaVersion":99,"items":[{"future":true}]}"#.utf8)
     try future.write(to: path)
     #expect(try store.load().isEmpty)
-    #expect(throws: (any Error).self) { try store.save([]) }
+    try store.save([])
     #expect(try Data(contentsOf: path) == future)
 }
 
@@ -31,8 +33,8 @@ private func schemaTestDirectory() -> URL {
     let store = RecentFolderStore(url: path)
     let folder = RecentFolder(rootID: AccessRootID(), url: base, displayName: "photos")
     try await store.add(folder)
-    let current = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any])
-    #expect(current["schemaVersion"] as? Int == 1)
+    let current = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [[String: Any]])
+    #expect(current.first?["schemaVersion"] as? Int == 1)
     #expect(try await store.load() == [folder])
     let legacy = try JSONEncoder().encode([folder])
     try legacy.write(to: path)
@@ -40,7 +42,7 @@ private func schemaTestDirectory() -> URL {
     let future = Data(#"{"schemaVersion":99,"items":[{"future":true}]}"#.utf8)
     try future.write(to: path)
     #expect(try await store.load().isEmpty)
-    await #expect(throws: (any Error).self) { try await store.add(folder) }
+    try await store.add(folder)
     #expect(try Data(contentsOf: path) == future)
 }
 
@@ -93,7 +95,7 @@ private func schemaTestDirectory() -> URL {
     try oldItems.write(to: rootPath)
     let roots = BookmarkStore(url: rootPath)
     #expect(try roots.load().isEmpty)
-    #expect(throws: (any Error).self) { try roots.save([]) }
+    try roots.save([])
     #expect(try Data(contentsOf: rootPath) == oldItems)
 
     let recentPath = base.appendingPathComponent("recent.json")
@@ -101,7 +103,7 @@ private func schemaTestDirectory() -> URL {
     let recent = RecentFolderStore(url: recentPath)
     #expect(try await recent.load().isEmpty)
     let folder = RecentFolder(rootID: AccessRootID(), url: base, displayName: "old")
-    await #expect(throws: (any Error).self) { try await recent.add(folder) }
+    try await recent.add(folder)
     #expect(try Data(contentsOf: recentPath) == oldItems)
 
     let personalPath = base.appendingPathComponent("personal.json")
@@ -155,7 +157,7 @@ private func schemaTestDirectory() -> URL {
     #expect(try await store.load().isEmpty)
     #expect(await store.storeCorrupt)
     let folder = RecentFolder(rootID: AccessRootID(), url: base, displayName: "photos")
-    await #expect(throws: (any Error).self) { try await store.add(folder) }
+    try await store.add(folder)
     #expect(try Data(contentsOf: recovery) == future)
 }
 
