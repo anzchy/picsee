@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -26,21 +27,33 @@ struct AccessProbeLaunchTests {
         #expect(runCount == 1)
     }
 
-    @Test func probeLaunchTerminatesWithoutConstructingProductAccessServices() {
-        var terminated = false
-        let constructsProductAccessServices: Bool
-        if AccessProbeRunner.runIfRequested(
+    @Test func probeAppLifecycleNeverTouchesProductState() {
+        var probeRunCount = 0
+        var terminationCount = 0
+        var accessServicesConstructionCount = 0
+        var events: [AppDelegateProbeHooks.ProductEvent] = []
+        let delegate = AppDelegate(probeHooks: AppDelegateProbeHooks(
             arguments: ["Picsee", "-PicseeAccessProbe"],
-            runProbe: {},
-            terminate: { terminated = true }
-        ) {
-            constructsProductAccessServices = false
-        } else {
-            constructsProductAccessServices = true
-        }
+            runProbe: { probeRunCount += 1 },
+            terminate: { terminationCount += 1 },
+            makeAccessServices: {
+                accessServicesConstructionCount += 1
+                return Task { throw CancellationError() }
+            },
+            record: { events.append($0) }
+        ))
 
-        #expect(terminated)
-        #expect(!constructsProductAccessServices)
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        delegate.applicationDidBecomeActive(Notification(name: NSApplication.didBecomeActiveNotification))
+        delegate.application(NSApplication.shared, open: [URL(fileURLWithPath: "/tmp/probe.jpg")])
+
+        #expect(probeRunCount == 1)
+        #expect(terminationCount == 1)
+        #expect(accessServicesConstructionCount == 0)
+        #expect(!events.contains(.windowOpened))
+        #expect(!events.contains(.sessionRestored))
+        #expect(!events.contains(.recentItemsTouched))
+        #expect(!events.contains(.openURL))
     }
 
     @Test func resultsLogUsesFixedMarkerInsteadOfContainerPath() {
