@@ -60,6 +60,18 @@ func accessCausePermissionRefusalIsAccessExpired(error: AccessProbeError) {
     #expect(result.cause == .accessExpired)
 }
 
+@Test(arguments: [Int(EPERM), Int(EACCES)])
+func accessCauseUnderlyingPermissionRefusalIsAccessExpired(code: Int) {
+    let error = AccessProbeError(
+        domain: NSCocoaErrorDomain,
+        code: NSFileReadUnknownError,
+        underlyingErrors: [AccessProbeError(domain: NSPOSIXErrorDomain, code: code)]
+    )
+    let result = AccessCauseClassifier.classify(probeFacts(listing: .failed(error)))
+
+    #expect(result.cause == .accessExpired)
+}
+
 @Test func accessCauseOtherListingFailureIsUnknown() {
     let result = AccessCauseClassifier.classify(probeFacts(
         listing: .failed(AccessProbeError(domain: NSPOSIXErrorDomain, code: Int(EIO)))

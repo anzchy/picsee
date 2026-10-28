@@ -15,10 +15,12 @@ public struct AccessProbeVolume: Codable, Equatable, Sendable {
 public struct AccessProbeError: Codable, Equatable, Sendable {
     public let domain: String
     public let code: Int
+    public let underlyingErrors: [AccessProbeError]
 
-    public init(domain: String, code: Int) {
+    public init(domain: String, code: Int, underlyingErrors: [AccessProbeError] = []) {
         self.domain = domain
         self.code = code
+        self.underlyingErrors = underlyingErrors
     }
 }
 
@@ -117,9 +119,11 @@ public enum AccessCauseClassifier {
     }
 
     private static func isPermissionRefusal(_ error: AccessProbeError) -> Bool {
-        if error.domain == NSPOSIXErrorDomain {
-            return error.code == Int(EPERM) || error.code == Int(EACCES)
+        if error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoPermissionError {
+            return true
         }
-        return error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoPermissionError
+        return ([error] + error.underlyingErrors).contains {
+            $0.domain == NSPOSIXErrorDomain && ($0.code == Int(EPERM) || $0.code == Int(EACCES))
+        }
     }
 }
