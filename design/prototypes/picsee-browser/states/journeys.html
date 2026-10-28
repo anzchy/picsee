@@ -214,7 +214,9 @@ const JOURNEYS = [
           { id: 'J1-cancel', t: '取消读取', at: '「选择文件夹…」或拖入文件夹', outs: [
               { k: '首次打开时取消 → 回到 21', from: 'first-launch', to: 'first-launch' },
               { k: '从已打开的网格取消 → 回到之前的网格 11，不回流旧内容（ADR-0010）', from: 'grid-light', to: 'grid-light' }] },
-          { id: 'J1-scan-failed', ph: ['扫描失败', '还没有状态稿。FOLDER-01 提到读取失败可重试；页面与文案待定。'], t: '读取失败', to: '「重试」→ 24；或选择其他文件夹 → 24' },
+          { id: 'J1-scan-failed', p: 'folder-loading', q: 'case=failed', title: '24 读取失败', t: '读取中途停止，授权根仍可读（24F-A；根不可读是 26）', outs: [
+              { k: '「重试」→ 24 重新读取', to: 'folder-loading' },
+              { k: '「选择其他文件夹…」→ 打开面板 → 24', to: 'folder-loading' }] },
           { id: 'J1-empty', p: 'empty-folder', t: '文件夹里没有图片（22-BD）', outs: [
               { k: '点子文件夹、「包含子文件夹浏览」、最近打开或拖入文件夹 → 24 重新读取', to: 'folder-loading' }],
             variants: [['case=no-subfolders', '没有子文件夹：最近打开'], ['drag=over', '拖入文件夹时']] },
@@ -300,7 +302,7 @@ function card(n, q, note, extra, title) {
 }
 function arrow(t) { return `<div class="arrow"><div class="lab">${K(t || '')}</div><div class="line"></div></div>`; }
 function branch(b, from) {
-  const body = b.p ? card(b.p, b.q, '', b.p === 'image-error' || (b.p === 'permission-denied' && !b.q) ? '<span class="tag err">异常</span>' : '', b.title)
+  const body = b.p ? card(b.p, b.q, '', b.p === 'image-error' || (b.p === 'permission-denied' && !b.q) || b.q === 'case=failed' ? '<span class="tag err">异常</span>' : '', b.title)
     : b.ph ? `<div class="edge placeholder"><b>${esc(b.ph[0])}</b><span>${esc(b.ph[1])}</span></div>` : '';
   const variants = (b.variants || []).map(([q, label]) => `<button data-page="${b.p}" data-query="${esc(q)}">${esc(label)}</button>`).join('');
   const rets = b.outs
