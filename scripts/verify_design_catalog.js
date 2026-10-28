@@ -19,6 +19,16 @@ const BRANCH_PLAYS={
 };
 // Settings window, layout B (#214, spec #212): sidebar sections in order, each reachable by ?section=.
 const SETTINGS_SECTIONS=[['general','通用'],['display','显示'],['cache','缓存'],['update','更新'],['about','关于']];
+// Every control in each Settings pane, in order: ready when the app has it, soon when it is greyed 「即将推出」
+// (user: 「显示但置灰」). A control left out of this list fails. Not built: PREF-03 display settings, DIST-05 updates,
+// the About links (no ledger row). Built: PREF-01 appearance, CHROME-04 always-show tools, CACHE-03 clearing the cache.
+const SETTINGS_CONTROLS={
+ general:[['跟随系统','ready'],['浅色','ready'],['深色','ready'],['始终显示大图工具','ready']],
+ display:[['缩略图大小','soon'],['显示文件名','soon'],['填充裁剪','soon'],['完整显示','soon']],
+ cache:[['清理缓存…','ready']],
+ update:[['自动检查更新','soon'],['立即检查','soon']],
+ about:[['报告问题…','soon'],['隐私说明','soon'],['源代码','soon']],
+};
 // Shortcut list, layout C: one card per context, in order, each reachable by ?card=.
 const SHORTCUT_CARDS=[['files','文件与窗口','任何时候'],['grid','网格','浏览文件夹时'],['viewer','大图','查看一张图片时']];
 module.exports=async(page,{design,states,screenshot})=>{
@@ -85,19 +95,25 @@ module.exports=async(page,{design,states,screenshot})=>{
   const got=await page.evaluate(()=>{const visible=e=>!!e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden';const win=document.querySelector('.window');const r=win&&win.getBoundingClientRect();
    // A sample number (size, build, time) must sit inside a [data-example] element that says 示例.
    const unlabelled=[];const walk=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);for(let n;(n=walk.nextNode());){if(!visible(n.parentElement)||!/\d+(\.\d+)?\s?(KB|MB|GB)|构建\s?\d+|\d{1,2}:\d{2}|\d+\.\d+\.\d+/.test(n.textContent))continue;const ex=n.parentElement.closest('[data-example]');if(!ex||!ex.innerText.includes('示例'))unlabelled.push(n.textContent.trim())}
-   const soon=[...document.querySelectorAll('[data-coming-soon]')].filter(e=>!(e.getAttribute('aria-disabled')==='true'||e.disabled)||e.tabIndex!==-1||!e.innerText.includes('即将推出')||/<kbd/.test(e.innerHTML)).map(e=>e.innerText.trim());
+   // A [data-coming-soon] group says 即将推出 and every control in it is disabled and out of the tab order.
+   const controlsOf=e=>e.matches('button,input')?[e]:[...e.querySelectorAll('button,input')];
+   const soon=[...document.querySelectorAll('[data-coming-soon]')].filter(e=>{const c=controlsOf(e);return!c.length||c.some(b=>!(b.disabled||b.getAttribute('aria-disabled')==='true')||b.tabIndex!==-1)||!e.innerText.includes('即将推出')||/<kbd/.test(e.innerHTML)}).map(e=>e.innerText.trim());
+   const pane=[...document.querySelectorAll('.settings-pane')].find(visible);
+   const controls=pane?[...pane.querySelectorAll('button,input')].map(b=>[b.getAttribute('aria-label')||b.innerText.trim(),b.closest('[data-coming-soon]')?'soon':'ready']):[];
+   const rows=[...document.querySelectorAll('.shortcut-card li')].filter(visible);
    return{dark:document.documentElement.classList.contains('theme-dark'),window:!!win&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,
     sections:[...document.querySelectorAll('.settings-sidebar [data-section]')].map(b=>[b.dataset.section,b.innerText.trim()]),current:[...document.querySelectorAll('.settings-sidebar [aria-current="page"]')].map(b=>b.dataset.section),
     panes:[...document.querySelectorAll('.settings-pane')].filter(visible).map(p=>[p.dataset.section,(p.querySelector('h2')||{}).innerText]),
     cards:[...document.querySelectorAll('.shortcut-card')].filter(visible).map(c=>[c.dataset.card,c.querySelector('h3 .title').innerText,c.querySelector('h3 .when').innerText,c.querySelectorAll('[data-shortcut]').length]),
     targets:[...document.querySelectorAll('.shortcut-card.is-review-target')].map(c=>c.dataset.card),inputs:document.querySelectorAll('.shortcut-card input, .shortcut-window input').length,
-    unlabelled,soon,broken:[...document.images].some(i=>!i.complete||!i.naturalWidth),overflow:document.documentElement.scrollWidth>innerWidth}});
+    unlabelled,soon,controls,untagged:rows.filter(r=>!r.dataset.shortcut).map(r=>r.innerText.trim()),broken:[...document.images].some(i=>!i.complete||!i.naturalWidth),overflow:document.documentElement.scrollWidth>innerWidth}});
   const bad=[];if(!got.window)bad.push('window missing or outside the viewport');if(got.broken||got.overflow)bad.push('resource/layout');if(!!want.dark!==got.dark)bad.push('dark='+got.dark);
   if(got.unlabelled.length)bad.push('sample values not labelled 示例: '+got.unlabelled.join(' / '));if(got.soon.length)bad.push('coming-soon entries not greyed/unfocusable/「即将推出」: '+got.soon.join(' / '));
   if(url.startsWith('settings')){const label=SETTINGS_SECTIONS.find(([id])=>id===want.section)[1];
    if(JSON.stringify(got.sections)!==JSON.stringify(SETTINGS_SECTIONS))bad.push('sidebar '+JSON.stringify(got.sections));if(JSON.stringify(got.current)!==JSON.stringify([want.section]))bad.push('current '+got.current.join(','));
-   if(JSON.stringify(got.panes)!==JSON.stringify([[want.section,label]]))bad.push('panes '+JSON.stringify(got.panes))}
-  else{if(JSON.stringify(got.cards.map(c=>c.slice(0,3)))!==JSON.stringify(SHORTCUT_CARDS))bad.push('cards '+JSON.stringify(got.cards));if(got.cards.some(c=>!c[3]))bad.push('empty card');
+   if(JSON.stringify(got.panes)!==JSON.stringify([[want.section,label]]))bad.push('panes '+JSON.stringify(got.panes));
+   if(JSON.stringify(got.controls)!==JSON.stringify(SETTINGS_CONTROLS[want.section]))bad.push('controls '+JSON.stringify(got.controls)+', want '+JSON.stringify(SETTINGS_CONTROLS[want.section]))}
+  else{if(JSON.stringify(got.cards.map(c=>c.slice(0,3)))!==JSON.stringify(SHORTCUT_CARDS))bad.push('cards '+JSON.stringify(got.cards));if(got.cards.some(c=>!c[3]))bad.push('empty card');if(got.untagged.length)bad.push('rows without data-shortcut: '+got.untagged.join(' / '));
    if(JSON.stringify(got.targets)!==JSON.stringify(want.card?[want.card]:[]))bad.push('review target '+got.targets.join(','));if(got.inputs)bad.push('read-only list has inputs')}
   if(bad.length)windowFailures.push(url+': '+bad.join(', '));
  }
