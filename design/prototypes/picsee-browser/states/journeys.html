@@ -162,6 +162,7 @@ const FALLBACK = {
   'original-size': ['27 原始尺寸与平移', 1280, 800], 'keyboard-focus': ['28 键盘焦点', 1280, 800], 'compact-grid': ['29 紧凑窗口', 800, 680],
   'components': ['30 组件与状态', 1280, 800], 'grid-context-menu': ['31 图片右键菜单 · C', 1280, 800], 'grid-multiselect': ['32 基础多选 · C', 1280, 800],
   'viewer-filmstrip': ['33 胶片条展开 · C', 1280, 800], 'viewer-inspector-light': ['34 图片信息 · 浅色 · C', 1280, 800],
+  'settings': ['35 设置 · B', 1280, 800], 'shortcuts': ['36 键盘快捷键 · C', 1280, 800],
 };
 // Work packages / issues and ledger IDs per page, from plan §1.3 and §1.6. No implementation status: that is the ledger's.
 const WP = {
@@ -170,13 +171,14 @@ const WP = {
   'image-error': 'P1-07 · P2-03', 'viewer-filmstrip': 'P2-06 #106', 'search-empty': 'P3-10', 'grid-multiselect': 'P3-09', 'grid-context-menu': 'P3-12 #144',
   'viewer-inspector': 'P3-13 · P5-01', 'viewer-inspector-light': 'P3-13', 'grid-display': 'P3-11 #114', 'grid-dark': 'P1-09 · P3-10',
   'keyboard-focus': 'P0-09 · P1-08 · P6-04', 'compact-grid': 'P3-10 · P6-04', 'components': 'P0-08',
+  'settings': '#218 · #114 · #220 · #221', 'shortcuts': '#215 · #219',
 };
 const LEDGER = {
   'first-launch': 'OPEN-01/08', 'folder-loading': 'FOLDER-01/05', 'grid-light': 'GRID-01/02', 'empty-folder': 'FOLDER-08',
   'permission-denied': 'ACCESS-03/04 · FOLDER-09', 'viewer-quiet': 'CHROME-01', 'viewer-controls': 'CHROME-02', 'original-size': 'VIEW-02/04',
   'image-error': 'OPEN-05', 'viewer-filmstrip': 'FILM-01', 'search-empty': 'GRID-07', 'grid-multiselect': 'GRID-04/05', 'grid-context-menu': 'GRID-09/10/11',
   'viewer-inspector': 'INFO-01/02', 'viewer-inspector-light': 'INFO-01', 'grid-display': 'PREF-03', 'grid-dark': 'PREF-01', 'keyboard-focus': 'A11Y-02',
-  'compact-grid': 'GRID-08',
+  'compact-grid': 'GRID-08', 'settings': 'PREF-01/03 · CACHE-03', 'shortcuts': 'CMD-01',
 };
 // A page that a later design replaces. The card stays the state page; the overlay names the replacement (not a branch).
 const REPLACED = { 'first-launch': '外观以 B4 散落相纸为准（P3-16 #202；原型在分支 prototype/first-launch-b4-final 9234b14）' };
@@ -265,15 +267,19 @@ const JOURNEYS = [
         ] },
     ] },
   { id: 'J4', name: '信息与偏好', goal: '看真实元数据，按喜好改外观，回到收藏与最近查看', stages: ['查看信息', '调整显示', '收藏与最近'],
-    wps: 'P3-13 · #193 · P3-11 #114 · P3-14 #115',
+    wps: 'P3-13 · #193 · P3-11 #114 · P3-14 #115 · #218 · #219',
     steps: [
       { p: 'viewer-controls', note: '大图工具显示时' },
       { p: 'viewer-inspector', t: '图片信息按钮<br>或右键「图片信息」', note: '读不到的显示“未知”；[Esc] 先关闭 Inspector',
         branches: [{ id: 'J4-light', p: 'viewer-inspector-light', t: '浅色外观下的同一面板', outs: [{ k: '随主题切换，不另有布局；回到 16', to: 'viewer-inspector' }] }] },
-      { p: 'grid-display', t: '① [Esc] 关闭 Inspector<br>② 再按 [Esc] 回网格<br>③ 点底部「显示」', note: '主题、密度、文件名、裁剪；立即生效。深色网格见参考页 12' },
+      { p: 'grid-display', t: '① [Esc] 关闭 Inspector<br>② 再按 [Esc] 回网格<br>③ 点底部「显示」', note: '主题、密度、文件名、裁剪；立即生效。深色网格见参考页 12',
+        branches: [{ id: 'J4-settings', p: 'settings', q: 'section=display', t: '[⌘,] 设置 → 显示（与 15 同一组偏好）', outs: [
+            { k: '关闭设置窗口 → 回到 15，两处已同步', to: 'grid-display' }],
+          variants: [['section=general', '通用'], ['section=cache', '缓存'], ['section=update', '更新'], ['section=about', '关于']] }] },
     ],
     end: { p: 'grid-light', t: '[Esc] 或点面板外<br>关闭面板', note: '设置保留；侧栏可进入收藏与最近查看',
-      branches: [{ id: 'J4-library', ph: ['个人收藏 / 最近查看', '还没有状态稿。点侧栏「个人收藏」或「最近查看」，网格只显示这些图片（GRID-12、GRID-17，P3-14 #115）。'],
+      branches: [{ id: 'J4-shortcuts', p: 'shortcuts', t: '帮助 →「键盘快捷键」（任何时候）', outs: [{ k: '[⌘W] 关闭窗口 → 回到 11', to: 'grid-light' }] },
+                 { id: 'J4-library', ph: ['个人收藏 / 最近查看', '还没有状态稿。点侧栏「个人收藏」或「最近查看」，网格只显示这些图片（GRID-12、GRID-17，P3-14 #115）。'],
                    t: '点侧栏「个人收藏」/「最近查看」', to: '点侧栏里的文件夹 → 11；来自失效文件夹的图片 → 26' }] } },
 ];
 const REF = { pages: ['grid-dark', 'keyboard-focus', 'compact-grid', 'components'],
