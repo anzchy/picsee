@@ -42,7 +42,8 @@ class Refused(Exception):
     pass
 
 def valid_text(value):
-    if not value or "\n" in value or "\r" in value or "\0" in value:
+    # splitlines() also breaks on \v \f \x1c-\x1e \x85 U+2028 U+2029, so refuse anything read_owner would split.
+    if not value or "\0" in value or len(value.splitlines()) != 1 or value.splitlines()[0] != value:
         raise Refused("invalid owner field value")
     return value
 
@@ -50,6 +51,9 @@ def with_mutex(operation):
     cache.mkdir(parents=True, exist_ok=True)
     fd = os.open(mutex, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
+        checkpoint = os.environ.get("PICSEE_GUI_LOCK_PRE_MUTEX_FILE")
+        if checkpoint and os.environ.get("PICSEE_GUI_LOCK_TEST") == "1":
+            pathlib.Path(checkpoint).touch()
         fcntl.flock(fd, fcntl.LOCK_EX)
         return operation()
     finally:

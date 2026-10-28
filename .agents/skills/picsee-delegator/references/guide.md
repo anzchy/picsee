@@ -610,7 +610,7 @@ The validation role belongs to someone other than the implementer; the delegator
 
 The mini has one desktop, and mdpro's device tester drives it too. Two drivers at once steal focus, send keys to the
 wrong app and corrupt each other's screenshots. A picsee run once overlapped mdpro's batch B6b because picsee didn't
-know about the lock. Both projects use mdpro's ADR-0134 decision 6 lock:
+know about the lock. Both projects use the shared lock (mdpro ADR-0134 decision 6, protocol from ADR-0141 WI-2):
 
 - **The lock** (mdpro ADR-0141 WI-2; both sides run the same protocol): the directory `~/.cache/desktop-gui.lock/`
   holds an `owner` file of exactly eight key=value lines, and that file is the one that counts. picsee writes
