@@ -79,7 +79,8 @@ _Avoid_: playlist, range, "all images" when only a selection was meant
 - Cancelling the **Reading State** returns to whatever was shown before; it never shows a partly scanned folder.
 - Esc from an image opened on its own returns to its folder's **Grid** only when that folder lies inside an **Access Root**, through the **Reading State** if the folder has not been scanned, with that image as the **Current Item**.
 - While an **Access Root** has **Lost Access**, no image from inside it is shown, including cached thumbnails; the cache is kept and reused once access returns.
-- Choosing a folder at the new place for a **Not Found** root rebinds that same **Access Root** to it; it never adds a second one.
+- Choosing a folder at the new place for a **Not Found** root rebinds that same **Access Root** to it; it never adds a second one. If the chosen folder is already an **Access Root**, the lost one is merged into it.
+- **Lost Access** belongs to the **Access Root** as a whole; one unreadable subfolder or image inside it is not Lost Access.
 - **Lost Access** with cause Unknown is shown as plain 「无法访问此文件夹」; picsee never guesses a cause.
 - A **Recent Item** confers no access; reopening one outside every **Access Root** asks the user to grant its folder.
 
