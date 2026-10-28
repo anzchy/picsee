@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# picsee release signing secrets wizard (#217). Run from the repository root: scripts/release/setup-secrets-wizard.sh
+# picsee release signing secrets wizard (#217). Run from the repository root: .agents/skills/apple-developer-setup/scripts/setup-secrets-wizard.sh
 # Puts the Developer ID certificate, the notarisation Apple ID + app-specific password and the Sparkle EdDSA private key into GitHub Secrets for
 # anzchy/picsee. Secrets are never printed and never written into the repository or a .env file.
 #

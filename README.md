@@ -17,7 +17,7 @@ picsee 不收集任何数据，不上传图片或元数据。沙盒保持开启�
 
 ## 发布签名（维护者）
 
-第一次配置或更换证书时，在仓库根目录运行 `scripts/release/setup-secrets-wizard.sh`。它会一步步引导你创建 Developer ID 证书和用于公证的 Apple ID App 专用密码，生成 Sparkle 更新签名密钥，并写入 GitHub Secrets；密钥不进仓库（#217）。
+第一次配置或更换证书时，在仓库根目录运行 `.agents/skills/apple-developer-setup/scripts/setup-secrets-wizard.sh`（说明见 skill `apple-developer-setup`）。它会一步步引导你创建 Developer ID 证书和用于公证的 Apple ID App 专用密码，生成 Sparkle 更新签名密钥，并写入 GitHub Secrets；密钥不进仓库（#217）。
 
 ## 问题反馈
 
