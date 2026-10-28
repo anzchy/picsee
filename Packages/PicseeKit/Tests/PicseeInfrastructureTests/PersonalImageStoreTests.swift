@@ -129,7 +129,7 @@ private func at(_ seconds: Double) -> Date { Date(timeIntervalSince1970: 1_700_0
 
 @Test func personalImageStoreCorruptRecoversToSidecar() async throws {
     let fm = FileManager.default
-    for bytes in [Data("{nope".utf8), Data(#"{"version":99,"favorites":[],"recents":[]}"#.utf8)] {
+    for bytes in [Data("{nope".utf8)] {
         let base = personalStoreDirectory()
         defer { try? fm.removeItem(at: base) }
         try fm.createDirectory(at: base, withIntermediateDirectories: true)

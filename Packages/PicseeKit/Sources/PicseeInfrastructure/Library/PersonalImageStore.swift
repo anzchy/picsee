@@ -20,7 +20,17 @@ public actor PersonalImageStore {
         /// Only in the recovery file: favorites removed during recovery, so the merge cannot bring
         /// them back from the repaired primary. A later add clears the marker.
         var removedFavorites: [PersonalImageRef]?
+        enum CodingKeys: String, CodingKey { case version, favorites, recents, removedFavorites }
+        init() {}
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            version = try values.decodeIfPresent(Int.self, forKey: .version) ?? 1
+            favorites = try values.decode([PersonalImageRef].self, forKey: .favorites)
+            recents = try values.decode([PersonalImageVisit].self, forKey: .recents)
+            removedFavorites = try values.decodeIfPresent([PersonalImageRef].self, forKey: .removedFavorites)
+        }
     }
+    private struct VersionHeader: Decodable { let version: Int? }
     private let fileLock: NSLock
     public init(url: URL) {
         self.url = url
@@ -72,7 +82,10 @@ public actor PersonalImageStore {
     /// reads again, the recovery file's writes are merged in and the next write retires it.
     private func load() throws -> Contents {
         let primary: Contents?
-        do { primary = try read(url) } catch is Damaged {
+        do { primary = try read(url) } catch is StoredSchema.UnsupportedVersion {
+            storeCorrupt = false
+            return Contents()
+        } catch is Damaged {
             storeCorrupt = true
             Logger(subsystem: "io.github.anzchy.picsee", category: "library").error("PersonalImageStore kind=storeCorrupt")
             return try readRecovery() ?? Contents()
@@ -83,13 +96,26 @@ public actor PersonalImageStore {
     }
     /// A damaged recovery file holds nothing usable and is replaced by the next write.
     private func readRecovery() throws -> Contents? {
-        do { return try read(recovery) } catch is Damaged { return nil }
+        do { return try read(recovery) }
+        catch is Damaged { return nil }
+        catch is StoredSchema.UnsupportedVersion { return nil }
     }
     private func read(_ path: URL) throws -> Contents? {
         guard FileManager.default.fileExists(atPath: path.path) else { return nil }
         let data = try Data(contentsOf: path)
+        if let header = try? JSONDecoder().decode(VersionHeader.self, from: data),
+           let version = header.version, version != 1 {
+            StoredSchema.logUnsupportedOnce(at: path, category: "library")
+            throw StoredSchema.UnsupportedVersion()
+        }
         guard let contents = try? JSONDecoder().decode(Contents.self, from: data), contents.version == 1 else { throw Damaged() }
         return contents
+    }
+    private func refuseUnsupportedWrite(at path: URL) throws {
+        guard FileManager.default.fileExists(atPath: path.path) else { return }
+        let data = try Data(contentsOf: path)
+        if let header = try? JSONDecoder().decode(VersionHeader.self, from: data),
+           let version = header.version, version != 1 { throw StoredSchema.UnsupportedVersion() }
     }
     /// Recovery favorites first, then the primary's others; each image keeps its newest visit
     /// (recovery first on a tie), ordered by visit time and bounded.
@@ -111,6 +137,8 @@ public actor PersonalImageStore {
     }
     private func save(_ contents: Contents) throws {
         let fm = FileManager.default
+        try refuseUnsupportedWrite(at: url)
+        try refuseUnsupportedWrite(at: recovery)
         let destination = storeCorrupt ? recovery : url
         try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(contents).write(to: destination, options: .atomic)
