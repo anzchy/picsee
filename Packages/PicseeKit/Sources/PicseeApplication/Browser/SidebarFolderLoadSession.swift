@@ -1,9 +1,11 @@
 import Foundation
 import PicseeCore
+import os
 
 @MainActor public final class SidebarFolderLoadSession {
     private let browser: SidebarFolderBrowser
     private var task: Task<Void, Never>?
+    private let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "sidebar")
     public init(browser: SidebarFolderBrowser) { self.browser = browser }
     public func start(folder: URL, rootID: AccessRootID,
         onRows: @escaping @MainActor ([URL], URL?) -> Void,
@@ -16,14 +18,24 @@ import PicseeCore
                 let parent = try? await browser.parent(in: folder, rootID: rootID)
                 try Task.checkCancellation()
                 onRows(children, parent ?? nil)
-                for child in children {
+                let countFolders = [folder] + children + ((parent ?? nil).map { [$0] } ?? [])
+                for child in countFolders {
                     try Task.checkCancellation()
-                    if let count = try? await browser.imageCount(in: child, rootID: rootID) {
+                    do {
+                        let count = try await browser.imageCount(in: child, rootID: rootID)
                         try Task.checkCancellation()
                         onCount(child, count)
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        logger.error("Sidebar image count failed")
                     }
                 }
-            } catch { /* Failed listing or counting leaves unknown data blank. */ }
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.error("Sidebar folder listing failed")
+            }
         }
     }
     public func cancel() { task?.cancel(); task = nil }
