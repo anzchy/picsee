@@ -171,6 +171,8 @@ private final class AccessProbeBookmarkRecorder: AccessProbeBookmarkCoding, @unc
     let report = AccessProbeFactGatherer().gather(bookmarkData: Data("corrupt".utf8))
 
     #expect(report.volume.uuid == nil)
+    #expect(report.volumePropertiesError?.domain == NSCocoaErrorDomain)
+    #expect(report.volumePropertiesError?.code == NSFileReadCorruptFileError)
     #expect(report.resolution.error != nil)
     #expect(report.scopeStarted == nil)
     #expect(report.listing == nil)
