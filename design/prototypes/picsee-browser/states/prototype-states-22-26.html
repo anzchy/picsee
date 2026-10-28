@@ -3,7 +3,8 @@
   PROTOTYPE — throwaway. Questions:
     22 "How should an opened folder with no images look?"
     26 "How should a folder whose access has failed look?"
-  ?page=22|26 picks the question, ?variant= picks the answer, ?theme=dark, ?embed=1 hides prototype chrome.
+    26m "When the folder was moved or renamed: follow it automatically, or ask the user to pick it at the new location?"
+  ?page=22|26|26m picks the question, ?variant= picks the answer, ?theme=dark, ?embed=1 hides prototype chrome.
   The sidebar follows v0.0.1 (plan P3-15 deferred): current folder and its subfolders, plus Favourites / Recently Viewed.
   Not the native app; buttons only show a toast.
 -->
@@ -119,6 +120,19 @@
   .step .t { font-weight: 600; margin: 4px 0; } .step .d { font-size: 12px; color: var(--color-muted); line-height: 1.5; }
   .crumb { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 3px 8px; border-radius: 6px; background: var(--color-surface); margin-top: 6px; }
 
+  /* 26m moved/renamed */
+  .gridv { position: absolute; inset: 0; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 12px; align-content: start; overflow: hidden; }
+  .gridv.banner-on { top: 44px; }
+  .gridv .cell { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--color-muted); }
+  .gridv .th { aspect-ratio: 4 / 3; border-radius: 8px; }
+  .gridv .cell span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .quiet { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 12px;
+           border-radius: var(--radius-popover); background: var(--color-panel); box-shadow: var(--shadow-soft); font-size: 12px; white-space: nowrap; }
+  .banner { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 6; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 14px;
+            background: var(--color-accent-soft); border-bottom: 1px solid var(--color-border); font-size: 12.5px; }
+  .banner .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .x { border: 0; background: none; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; color: var(--color-muted); }
+  .x:hover { background: var(--color-hover); }
   .toast { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 20; padding: 8px 14px; border-radius: var(--radius-popover);
            background: var(--color-panel); box-shadow: var(--shadow-soft); font-size: 12px; opacity: 0; transition: opacity var(--motion-duration-fast); pointer-events: none; }
   .toast.show { opacity: 1; }
@@ -134,7 +148,7 @@
   <div class="toast" id="toast" role="status"></div>
 </div>
 <div class="proto-bar" role="toolbar" aria-label="原型切换">
-  <button id="p22">22 空文件夹</button><button id="p26">26 权限失效</button><span class="sep"></span>
+  <button id="p22">22 空文件夹</button><button id="p26">26 权限失效</button><button id="p26m">26 移走或改名</button><span class="sep"></span>
   <button id="prev" aria-label="上一个方案">←</button><span class="label" id="label"></span><button id="next" aria-label="下一个方案">→</button>
   <span class="sep"></span><button id="theme">浅色 / 深色</button>
 </div>
@@ -191,7 +205,27 @@ const PAGES = {
         <div class="step"><div class="k">3</div><div class="t">点“授权”</div><div class="d">picsee 回到你刚才浏览的位置。</div></div></div>
         <div class="actions"><button class="btn" data-say="弹出“打开”面板，定位到上次的位置">重新选择文件夹…</button><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button></div></div>` }],
   } },
+  '26m': { name: '文件夹被移走或改名', variants: {
+    '26M-A': ['自动跟随（账簿现有验收）', 'ACCESS-03 现在的验收：「目录被移动或改名时，最近项直接在新位置浏览」。书签能解析到新位置时直接打开它，标题、侧栏改用新名字，底部给一条不打断的说明，几秒后消失。解析不到（删除、换磁盘）或新位置在废纸篓时，才进入 26 页的“找不到”状态。', '上方分段控件只用于切换三种情况。同一磁盘上的移动和改名，macOS 书签通常能解析到新位置（会标记为需要刷新），这是系统行为，不是 picsee 额外功能', { dyn: () => where === 'moved' ? FOLLOWED : BROKEN, main: () => where === 'moved'
+        ? `${GRIDV(false)}<div class="quiet">${I.info}<span>“待整理”已移动或改名，现在在：${NEWPATH}</span><button class="x" aria-label="关闭" data-say="关闭说明">×</button></div><div style="position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:7">${whereSeg()}</div>`
+        : LOSTVIEW() }],
+    '26M-B': ['先问再打开（26-BC 定稿原样）', '26-BC 定稿里“被移走或改名”的做法：不自动打开，主区说明文件夹不在原位，按钮“在新位置选择…”弹出“打开”面板，由用户自己找到并确认。选这一版需要单独提交，改写 ACCESS-03 的验收。', '用户每次移动或改名都要多一步；面板能否直接停在新位置要实现前确认', { dyn: () => BROKEN, main: () => where === 'trash' ? LOSTVIEW()
+        : `<div class="es">${whereSeg()}<div class="icon">${I.movedBig}</div><h2>“待整理”不在原来的位置</h2><p>它可能被移动、改名或移到了废纸篓。在新位置重新选择它即可继续。<br>侧栏里的收藏和最近查看不受影响。</p><div class="actions"><button class="btn" data-say="弹出“打开”面板">在新位置选择…</button><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button></div></div>` }],
+    '26M-C': ['自动跟随 + 提示条', '和 A 一样直接在新位置浏览，但在网格上方留一条提示条，写明旧名字和新位置，并给出“不是这个？选择其他文件夹…”，用户关掉之前一直在。废纸篓和找不到的情况同 A。', '仍满足 ACCESS-03 现有验收（直接在新位置浏览），只多一条可关闭的提示', { dyn: () => where === 'moved' ? FOLLOWED : BROKEN, main: () => where === 'moved'
+        ? `<div class="banner">${I.info}<span class="grow">“待整理”已移动或改名，picsee 跟随到了新位置：<b>${NEWPATH}</b></span><button class="link" data-say="弹出“打开”面板">不是这个？选择其他文件夹…</button><button class="x" aria-label="关闭" data-say="关闭提示条">×</button></div>${GRIDV(true)}<div style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:7">${whereSeg()}</div>`
+        : LOSTVIEW() }],
+  } },
 };
+
+const NEWNAME = '2024 已整理', NEWPATH = `图片 › 归档 › ${NEWNAME}`;
+let where = 'moved';
+const GRIDV = (banner) => `<div class="gridv${banner ? ' banner-on' : ''}">${Array.from({ length: 15 }, (_, i) => `<div class="cell"><div class="th" style="background:linear-gradient(135deg,hsl(${(i * 47) % 360} 35% 62%),hsl(${(i * 47 + 40) % 360} 30% 42%))"></div><span>IMG_${4021 + i}.HEIC</span></div>`).join('')}</div>`;
+const LOSTVIEW = () => where === 'trash'
+  ? `<div class="es">${whereSeg()}<div class="icon">${I.movedBig}</div><h2>“待整理”在废纸篓里</h2><p>它被移到了废纸篓。picsee 不会自动打开废纸篓里的文件夹。<br>侧栏里的收藏和最近查看不受影响。</p><div class="actions"><button class="btn2" data-say="弹出“打开”面板">选择其他文件夹…</button></div></div>`
+  : `<div class="es">${whereSeg()}<div class="icon">${I.movedBig}</div><h2>找不到“待整理”</h2><p>它可能已被删除，或复制到了另一个磁盘。在新位置重新选择它即可继续。<br>侧栏里的收藏和最近查看不受影响。</p><div class="actions"><button class="btn" data-say="弹出“打开”面板">在新位置选择…</button><button class="link" data-say="弹出“打开”面板">选择其他文件夹…</button></div></div>`;
+function whereSeg() { return seg('where', [['moved', '同一磁盘上移动或改名'], ['trash', '移到废纸篓'], ['lost', '删除或换了磁盘']], where); }
+const FOLLOWED = { title: NEWNAME, fname: NEWNAME, count: '86', status: '86 张图片', subs: true };
+const BROKEN = { broken: true, mark: true };
 
 let cause = 'grant';
 function causeView(final) {
@@ -211,27 +245,29 @@ function seg(name, opts, on) {
 const params = new URLSearchParams(location.search);
 let hasSubs = params.get('subs') !== '0';
 if (['grant', 'volume', 'moved'].includes(params.get('cause'))) cause = params.get('cause');
-let page = params.get('page') === '26' ? '26' : '22';
+let page = ['26', '26m'].includes(params.get('page')) ? params.get('page') : '22';
+if (['moved', 'trash', 'lost'].includes(params.get('where'))) where = params.get('where');
 let cur = params.get('variant');
-if (!cur || !PAGES[page].variants[cur]) cur = page === '22' ? '22-BD' : '26-BC';
+if (!cur || !PAGES[page].variants[cur]) cur = { '22': '22-BD', '26': '26-BC', '26m': '26M-A' }[page];
 let theme = params.get('theme') === 'dark' ? 'dark' : 'light';
 const $ = id => document.getElementById(id);
 
 function sidebar(opt) {
+  const fname = opt.fname || '待整理';
   const folderRow = opt.blank ? '' : `<div class="sb-h">文件夹</div>
-    <div class="sb-row ${opt.mark ? 'dim' : 'sel'}">${I.folder}<span>待整理</span>${opt.mark ? `<span class="warn" title="无法访问">${I.warn}</span>` : `<span class="n">${opt.broken ? '—' : '0'}</span>`}</div>
+    <div class="sb-row ${opt.mark ? 'dim' : 'sel'}">${I.folder}<span>${fname}</span>${opt.mark ? `<span class="warn" title="无法访问">${I.warn}</span>` : `<span class="n">${opt.broken ? '—' : (opt.count || '0')}</span>`}</div>
     ${!opt.broken && (typeof opt.subs === 'function' ? opt.subs() : opt.subs) ? SUBS.map(([n]) => `<div class="sb-row sub">${I.folder}<span>${n}</span></div>`).join('') : ''}`;
   return `<div class="sb-h" style="margin-top:0">图库</div><div class="sb-row">${I.heart}<span>个人收藏</span><span class="n">3</span></div><div class="sb-row">${I.clock}<span>最近查看</span><span class="n">1</span></div>${folderRow}`;
 }
 function footer(opt) {
-  const status = opt.blank ? '' : (opt.broken ? '无法访问' : '0 张图片');
+  const status = opt.blank ? '' : (opt.broken ? '无法访问' : (opt.status || '0 张图片'));
   return `<span class="ic">${I.side}</span><span class="vsep"></span><span>${status}</span><span class="right">${[I.search, I.sort, I.info, I.grid].map(i => `<span class="ic dis">${i}</span>`).join('')}</span>`;
 }
 function render() {
   document.documentElement.className = `theme-${theme}` + (params.has('embed') ? ' embed' : '');
-  const v = PAGES[page].variants[cur], opt = v[3];
+  const v = PAGES[page].variants[cur], base = v[3], opt = base.dyn ? { ...base, ...base.dyn() } : base;
   $('ticon').innerHTML = opt.sheet === 'empty' ? '' : I.folder;
-  $('ttext').textContent = opt.sheet === 'empty' ? 'Picsee' : '待整理';
+  $('ttext').textContent = opt.sheet === 'empty' ? 'Picsee' : (opt.title || '待整理');
   $('sidebar').innerHTML = sidebar(opt);
   $('footer').innerHTML = footer(opt);
   $('win').style.gridTemplateColumns = opt.blank ? '0 1fr' : '';
@@ -252,19 +288,20 @@ function render() {
   $('cap-title').textContent = `${PAGES[page].name} · ${cur} ${v[0]}`;
   $('cap-desc').textContent = v[1];
   $('cap-note').textContent = v[2] ? '⚠ ' + v[2] : '';
-  $('p22').classList.toggle('on', page === '22'); $('p26').classList.toggle('on', page === '26');
-  const p = new URLSearchParams(location.search); p.set('page', page); p.set('variant', cur); p.set('theme', theme); if (page === '22') { p.set('subs', hasSubs ? '1' : '0'); p.delete('cause'); } else { p.set('cause', cause); p.delete('subs'); } history.replaceState(null, '', '?' + p);
+  $('p22').classList.toggle('on', page === '22'); $('p26').classList.toggle('on', page === '26'); $('p26m').classList.toggle('on', page === '26m');
+  const p = new URLSearchParams(location.search); p.set('page', page); p.set('variant', cur); p.set('theme', theme); p.delete('subs'); p.delete('cause'); p.delete('where'); if (page === '22') p.set('subs', hasSubs ? '1' : '0'); else if (page === '26') p.set('cause', cause); else p.set('where', where); history.replaceState(null, '', '?' + p);
 }
 const keys = () => Object.keys(PAGES[page].variants);
 const step = k => { const ks = keys(); cur = ks[(ks.indexOf(cur) + k + ks.length) % ks.length]; render(); };
 $('prev').onclick = () => step(-1); $('next').onclick = () => step(1);
 $('p22').onclick = () => { page = '22'; cur = '22-BD'; render(); };
 $('p26').onclick = () => { page = '26'; cur = '26-BC'; render(); };
+$('p26m').onclick = () => { page = '26m'; cur = '26M-A'; render(); };
 $('theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; render(); };
 document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('.causes')) return; if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); });
 let tt; const say = m => { $('toast').textContent = '（原型）' + m; $('toast').classList.add('show'); clearTimeout(tt); tt = setTimeout(() => $('toast').classList.remove('show'), 1800); };
 document.addEventListener('click', e => {
-  const c = e.target.closest('[data-seg]'); if (c) { if (c.dataset.seg === 'cause') cause = c.dataset.k; else hasSubs = c.dataset.k === '1'; render(); return; }
+  const c = e.target.closest('[data-seg]'); if (c) { if (c.dataset.seg === 'cause') cause = c.dataset.k; else if (c.dataset.seg === 'where') where = c.dataset.k; else hasSubs = c.dataset.k === '1'; render(); return; }
   const s = e.target.closest('[data-say]'); if (s) say(s.dataset.say);
 });
 const main = $('main');
