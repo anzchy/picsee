@@ -1,0 +1,44 @@
+name: Bug report / 问题报告
+description: Something in picsee doesn't work as expected. / picsee 某处与预期不符。
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please don't attach private photos or paste personal file paths. Describe the folder instead, for example "a folder with 5,000 HEIC files on an external disk".
+        请不要附上私人照片，也不要粘贴个人文件路径；用描述代替，例如“外接磁盘上一个有 5000 张 HEIC 的文件夹”。
+  - type: input
+    id: picsee-version
+    attributes:
+      label: picsee version and build / picsee 版本与构建号
+      description: Settings → 关于 (About), e.g. 0.0.1 (1234)
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version / macOS 版本
+      description: e.g. macOS 15.2 on an Apple silicon Mac
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      placeholder: |
+        1. Open a folder with …
+        2. Press …
+        3. See …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected and what happened / 预期与实际
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics (optional) / 诊断信息（可选）
+      description: Help → 诊断信息 shows local numbers only (no paths). Paste them here if they seem relevant.

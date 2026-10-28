@@ -11,6 +11,18 @@
 - [交互原型说明](design/prototypes/picsee-browser/README.md)
 - [设计交接与Stitch来源](docs/design/STITCH_HANDOFF.md)
 
+## 隐私
+
+picsee 不收集任何数据，不上传图片或元数据。沙盒保持开启，它只读取你通过系统面板授权的文件夹和文件。唯一的联网是检查更新：从 v0.0.1 起，Sparkle 会访问 GitHub 获取更新信息和更新包，不发送系统信息；第二次启动时会询问是否自动检查，之后可在“设置 → 更新”中修改（[ADR-015](docs/adr/0015-sparkle-updates-over-a-network-client-entitlement.md)）。
+
+## 问题反馈
+
+请在 [GitHub Issues](https://github.com/anzchy/picsee/issues/new/choose) 用问题报告模板提交。不要附上私人照片或个人文件路径。
+
+## 许可
+
+picsee 以 [MIT License](LICENSE) 发布。第三方组件与首次打开页样图的许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ## 本地预览
 
 ```sh
