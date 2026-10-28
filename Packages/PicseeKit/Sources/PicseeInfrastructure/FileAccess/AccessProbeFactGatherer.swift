@@ -106,7 +106,12 @@ public struct AccessProbeFactGatherer: Sendable {
     public init() {
         bookmarks = SystemAccessProbeBookmarkCoding()
         scope = SystemSecurityScope()
-        mountedVolumesProvider = { Self.mountedVolumes() }
+        mountedVolumesProvider = {
+            Self.mountedVolumes(at: FileManager.default.mountedVolumeURLs(
+                includingResourceValuesForKeys: Self.volumeKeys,
+                options: []
+            ))
+        }
         lister = { try FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil).count }
         trashCheck = { FileAccess.isTrashed($0) }
     }
@@ -246,12 +251,8 @@ public struct AccessProbeFactGatherer: Sendable {
         )
     }
 
-    private static func mountedVolumes() -> [AccessProbeVolume] {
-        let urls = FileManager.default.mountedVolumeURLs(
-            includingResourceValuesForKeys: volumeKeys,
-            options: []
-        ) ?? []
-        return urls.map { url in
+    static func mountedVolumes(at urls: [URL]?) -> [AccessProbeVolume] {
+        (urls ?? []).map { url in
             let values = try? url.resourceValues(forKeys: Set(volumeKeys))
             return AccessProbeVolume(
                 uuid: values?.volumeUUIDString,
