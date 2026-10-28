@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // npm run design:check — serve design/ and states/ on two local ports, then run scripts/verify_design_catalog.js in
 // headless Chromium (Playwright pinned in package-lock.json). Exits 1 when the check fails, 2 when it cannot start.
-// Ports: PICSEE_DESIGN_PORT and PICSEE_STATES_PORT, default free ports. PICSEE_DESIGN_SCREENSHOT sets the preview
-// screenshot path, default a temporary directory (never the repo).
-import { spawn } from 'node:child_process';
+// Ports: PICSEE_DESIGN_PORT and PICSEE_STATES_PORT, default a free port chosen at listen time. PICSEE_DESIGN_SCREENSHOT
+// sets the preview screenshot path, default a temporary directory (never the repo).
+// The servers run in this process, not `python3 -m http.server`: that server resolves the bind address with
+// socket.getfqdn() between bind() and listen(), a reverse-DNS lookup that left the port closed for 15 s on a macOS
+// GitHub runner (run 40630233760). Listening here has no DNS step, no child process and no probe-then-bind port race.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
-import net from 'node:net';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,38 +17,59 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const check = require('./verify_design_catalog.js');
 
-const freePort = () => new Promise((resolve, reject) => {
-  const server = net.createServer().once('error', reject);
-  server.listen(0, '127.0.0.1', () => { const { port } = server.address(); server.close(() => resolve(port)); });
-});
-const portFrom = async name => {
+const portFrom = name => {
   const value = process.env[name];
-  if (!value) return freePort();
+  if (!value) return 0;
   if (!/^\d+$/.test(value) || +value < 1 || +value > 65535) throw Error(`${name} must be a port number, got ${value}`);
   return +value;
 };
 
+const types = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
+  '.json': 'application/json', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.svg': 'image/svg+xml', '.md': 'text/markdown', '.txt': 'text/plain',
+};
+
+// Static files like http.server: a directory URL without its slash redirects, with it serves index.html.
+function respond(base, request, response) {
+  const send = (code, headers = {}) => { response.writeHead(code, headers); response.end(); };
+  if (request.method !== 'GET' && request.method !== 'HEAD') return send(405);
+  const { pathname } = new URL(request.url, 'http://127.0.0.1');
+  let urlPath;
+  try { urlPath = decodeURIComponent(pathname); } catch { return send(400); }
+  let file = path.join(base, urlPath);
+  if (file !== base && !file.startsWith(base + path.sep)) return send(404);
+  fs.stat(file, function sendFile(error, stat) {
+    if (error) return send(404);
+    if (stat.isDirectory()) {
+      if (!urlPath.endsWith('/')) return send(301, { Location: pathname + '/' });
+      if (file.endsWith('index.html')) return send(404);
+      file = path.join(file, 'index.html');
+      return fs.stat(file, sendFile);
+    }
+    response.writeHead(200, { 'Content-Type': types[path.extname(file).toLowerCase()] || 'application/octet-stream',
+      'Content-Length': stat.size });
+    if (request.method === 'HEAD') return response.end();
+    fs.createReadStream(file).on('error', () => response.destroy()).pipe(response);
+  });
+}
+
 const servers = [];
-async function serve(directory, port) {
-  const child = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', directory],
-    { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] });
-  servers.push(child);
-  let stderr = '';
-  child.stderr.on('data', d => { stderr += d; });
-  const origin = `http://127.0.0.1:${port}`;
-  for (const deadline = Date.now() + 15000; Date.now() < deadline;) {
-    if (child.exitCode !== null) throw Error(`http.server for ${directory} exited ${child.exitCode}: ${stderr.trim()}`);
-    try { if ((await fetch(origin + '/')).ok) return origin; } catch {}
-    await new Promise(r => setTimeout(r, 100));
-  }
-  throw Error(`http.server for ${directory} did not answer on ${origin}`);
+function serve(directory, port) {
+  const base = path.join(root, directory);
+  const server = http.createServer((request, response) => respond(base, request, response));
+  servers.push(server);
+  return new Promise((resolve, reject) => {
+    server.once('error', error => reject(Error(`server for ${directory} could not listen on port ${port}: ${error.message}`)));
+    server.listen(port, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`));
+  });
 }
 
 let status = 0, browser;
 try {
   const { chromium } = await import('playwright');
-  const design = await serve('design', await portFrom('PICSEE_DESIGN_PORT'));
-  const states = await serve('design/prototypes/picsee-browser/states', await portFrom('PICSEE_STATES_PORT'));
+  const design = await serve('design', portFrom('PICSEE_DESIGN_PORT'));
+  const states = await serve('design/prototypes/picsee-browser/states', portFrom('PICSEE_STATES_PORT'));
   const screenshot = process.env.PICSEE_DESIGN_SCREENSHOT
     || path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'picsee-design-check-')), 'design-material-preview.png');
   browser = await chromium.launch();
@@ -64,6 +87,6 @@ try {
   status = 2;
 } finally {
   if (browser) await browser.close();
-  for (const child of servers) child.kill();
+  for (const server of servers) server.close();
 }
 process.exit(status);
