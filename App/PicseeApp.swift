@@ -88,6 +88,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Returning to the foreground reconciles every watched folder (events may have been coalesced or lost),
     /// and a window whose watch failed rescans and subscribes again.
     func applicationDidBecomeActive(_ notification: Notification) {
+        #if DEBUG
+        if AccessProbeRunner.isRequested(arguments: ProcessInfo.processInfo.arguments) { return }
+        #endif
         let services = accessServices
         Task { try? await services.value.watch.reconcileAll() }
         windowController?.session.folderScan?.reconcileUnwatched()
@@ -95,6 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        #if DEBUG
+        if AccessProbeRunner.isRequested(arguments: ProcessInfo.processInfo.arguments) { return }
+        #endif
         viewer().openInput(urls)
         application.activate(ignoringOtherApps: true)
     }

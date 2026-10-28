@@ -6,18 +6,41 @@ import Testing
 struct AccessProbeLaunchTests {
     @Test func runsOnlyWithExplicitLaunchArgument() {
         var runCount = 0
-        let normal = AccessProbeRunner.runIfRequested(arguments: ["Picsee"]) { runCount += 1 }
-        let similar = AccessProbeRunner.runIfRequested(arguments: ["Picsee", "-PicseeAccessProbeExtra"]) {
+        let normal = AccessProbeRunner.runIfRequested(arguments: ["Picsee"], runProbe: {
             runCount += 1
-        }
-        let requested = AccessProbeRunner.runIfRequested(arguments: ["Picsee", "-PicseeAccessProbe"]) {
-            runCount += 1
-        }
+        }, terminate: {})
+        let similar = AccessProbeRunner.runIfRequested(
+            arguments: ["Picsee", "-PicseeAccessProbeExtra"],
+            runProbe: { runCount += 1 },
+            terminate: {}
+        )
+        let requested = AccessProbeRunner.runIfRequested(
+            arguments: ["Picsee", "-PicseeAccessProbe"],
+            runProbe: { runCount += 1 },
+            terminate: {}
+        )
 
         #expect(!normal)
         #expect(!similar)
         #expect(requested)
         #expect(runCount == 1)
+    }
+
+    @Test func probeLaunchTerminatesWithoutConstructingProductAccessServices() {
+        var terminated = false
+        let constructsProductAccessServices: Bool
+        if AccessProbeRunner.runIfRequested(
+            arguments: ["Picsee", "-PicseeAccessProbe"],
+            runProbe: {},
+            terminate: { terminated = true }
+        ) {
+            constructsProductAccessServices = false
+        } else {
+            constructsProductAccessServices = true
+        }
+
+        #expect(terminated)
+        #expect(!constructsProductAccessServices)
     }
 
     @Test func storesBothBookmarkKindsAndWritesJSONLOnEveryRun() throws {
