@@ -15,6 +15,13 @@ import PicseeInfrastructure
     let catalog = try String(contentsOf: root.appendingPathComponent("App/Resources/Localizable.xcstrings"), encoding: .utf8)
     #expect(catalog.contains("\"Folders\""))
     #expect(catalog.contains("\"文件夹\""))
+    for file in ["GridSidebarTreeView.swift", "GridShellView.swift"] {
+        let sidebar = try String(contentsOf: root.appendingPathComponent(
+            "Packages/PicseeKit/Sources/PicseeMacUI/Grid/\(file)"), encoding: .utf8)
+        let rawAccessibilityText = #"setAccessibility(?:Label|Value|Help|Title|Description)\s*\(\s*"[^"\\]*""#
+        #expect(sidebar.range(of: rawAccessibilityText, options: .regularExpression) == nil,
+                "\(file) passes a literal to a user-visible accessibility setter")
+    }
 }
 
 @Test @MainActor func sidebarTreeRowsFollowPinnedOptionAGeometryAndCounts() throws {
@@ -38,7 +45,7 @@ import PicseeInfrastructure
     #expect(current.nameLabel.lineBreakMode == .byTruncatingTail)
     #expect(tree.rows[1].countLabel.stringValue == "0")
     #expect(tree.heading.stringValue == String(localized: "Folders"))
-    #expect(tree.rows[0].accessibilityValue() as? String == "selected")
+    #expect(tree.rows[0].accessibilityValue() as? String == String(localized: "Selected"))
     #expect(tree.rows[1].glyph.frame.width == 16)
     #expect(tree.rows[1].countLabel.alphaValue == 0.8)
     #expect(tree.rows[2].countLabel.stringValue == "1234")
