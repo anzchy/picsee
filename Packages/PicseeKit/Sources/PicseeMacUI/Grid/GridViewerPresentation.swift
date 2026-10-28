@@ -54,8 +54,7 @@ import PicseeCore
         grid.setAccessibilityHidden(true)
         canvas.isHidden = false
         chrome.isHidden = false
-        state.isHidden = false
-        state.setAccessibilityHidden(false)
+        setStateSurface(.viewer)
     }
     public func showGrid(reading: Bool) {
         shell?.isHidden = false
@@ -72,8 +71,12 @@ import PicseeCore
         grid.isHidden = reading
         (grid as? GridBrowserView)?.setThumbnailsActive(!reading)
         grid.setAccessibilityHidden(reading)
-        state.isHidden = !reading
-        state.setAccessibilityHidden(!reading)
+        setStateSurface(reading ? .gridReading : .grid)
+    }
+    private func setStateSurface(_ surface: ViewerStateHost.Surface) {
+        if let host = state as? ViewerStateHost { host.surface = surface; return }
+        state.isHidden = surface == .grid
+        state.setAccessibilityHidden(state.isHidden)
     }
     /// A folder read that starts while the grid is shown (an Include Subfolders rescan) covers it with the Reading State.
     public func showReadingOverGrid(_ reading: Bool) -> Bool {

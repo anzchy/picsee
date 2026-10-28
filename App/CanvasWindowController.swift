@@ -1031,10 +1031,6 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     func windowDidUpdate(_ notification: Notification) {
         stateHost.refresh()
-        if !gridView.isHidden {
-            stateHost.isHidden = true
-            stateHost.setAccessibilityHidden(true)
-        }
         if inspectorVisible { syncInspector() }
         if chromeGeneration != generation || chromeHasImage != canvas.hasImage {
             let opened = chromeGeneration != generation

@@ -41,6 +41,13 @@ public final class ViewerStateHost: NSView {
     }
     private var session: ViewerSession?
     private var tracking = false
+    /// Which window surface this host sits on; GridViewerPresentation owns it. The grid surface never shows a state.
+    public enum Surface: Sendable { case viewer, gridReading, grid }
+    public var surface: Surface = .viewer { didSet { applyVisibility() } }
+    private func applyVisibility() {
+        isHidden = surface == .grid || displayedStatus == .showing
+        setAccessibilityHidden(isHidden)
+    }
 
     public convenience init(frame: NSRect, session: ViewerSession) {
         self.init(frame: frame)
@@ -70,8 +77,7 @@ public final class ViewerStateHost: NSView {
             if let keyCanvas, let keyChrome { ViewerStateFocus.link(canvas: keyCanvas, state: self, chrome: keyChrome) }
         }
         setAccessibilityChildren([])
-        isHidden = status == .showing
-        setAccessibilityHidden(isHidden)
+        applyVisibility()
         subviews.forEach {
             $0.isHidden = true; $0.setAccessibilityHidden(true); $0.nextKeyView = nil
             if let button = $0 as? NSButton { button.isEnabled = false; button.setAccessibilityEnabled(false) }
