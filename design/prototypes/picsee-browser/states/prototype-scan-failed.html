@@ -1,0 +1,229 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway (#236, spec #235). Question:
+    24F "What should 「读取失败」 look like?" — a folder scan stops while the Access Root is still readable
+    (an I/O error, an unreadable subfolder, the folder vanishing mid-scan). Root unreadable = page 26, out of scope.
+  Four variants on the page-24 grid shell, switched by ?variant=24F-A|24F-B|24F-C|24F-D (24F-0 = what the code does now),
+  ?theme=dark, ?sub=0 when the failing subfolder isn't known, ?embed=1 hides prototype chrome.
+  Rules every variant keeps: copy states only what picsee observed (the scan stopped; which folder it couldn't read),
+  never a guessed cause; no partial grid is shown; 「重试」 holds key focus on render.
+  Not the native app; buttons only show a toast.
+-->
+<html lang="zh-CN" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picsee · 24 读取失败 · 备选设计</title>
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/globals.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/light.css">
+<link rel="stylesheet" href="_ds/picsee-ui-system/tokens/dark.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: var(--font-sans); font-size: var(--font-size-ui); color: var(--color-text);
+         background: color-mix(in srgb, var(--color-surface) 70%, var(--color-text) 6%);
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--font-size-ui-lg); padding-bottom: 64px; -webkit-font-smoothing: antialiased; }
+  .embed body { padding: 0; gap: 0; background: var(--color-bg); }
+  .embed .proto-caption, .embed .proto-bar { display: none; }
+  .embed .window { border-radius: 0; box-shadow: none; width: 100vw; height: 100vh; }
+  button { font: inherit; color: inherit; }
+
+  .proto-caption { width: 1120px; display: flex; justify-content: space-between; align-items: baseline; gap: var(--editor-font-size); color: var(--color-muted); font-size: var(--font-size-ui-sm); }
+  .proto-caption b { color: var(--color-text); font-size: var(--font-size-ui-lg); }
+  .proto-caption .warn { color: var(--color-error-text); text-align: right; max-width: 420px; }
+  /* prototype chrome: inverted text/bg so it never reads as part of the design */
+  .proto-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: var(--radius-control); padding: var(--radius-control);
+               border-radius: 999px; background: var(--color-text); color: var(--color-bg); box-shadow: var(--shadow-soft); font-size: var(--font-size-ui); white-space: nowrap; }
+  .proto-bar button { border: 0; background: transparent; color: var(--color-bg); height: 30px; min-width: 30px; border-radius: 999px; cursor: pointer; padding: 0 var(--radius-popover); }
+  .proto-bar button:hover { background: color-mix(in srgb, var(--color-bg) 14%, transparent); }
+  .proto-bar button.on { background: color-mix(in srgb, var(--color-bg) 24%, transparent); }
+  .proto-bar .label { min-width: 230px; text-align: center; font-weight: 600; }
+  .proto-bar .sep { width: 1px; height: 18px; background: color-mix(in srgb, var(--color-bg) 25%, transparent); }
+
+  /* window shell, as prototype-states-22-26.html */
+  .window { width: 1120px; height: 700px; border-radius: var(--font-size-ui-sm); overflow: hidden; position: relative; background: var(--color-bg);
+            box-shadow: var(--shadow-soft); display: grid; grid-template: var(--title-bar-height) 1fr var(--content-padding) / 196px 1fr; }
+  .titlebar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; position: relative; background: var(--color-surface);
+              border-bottom: 1px solid var(--color-border); font-weight: 500; gap: var(--radius-control); }
+  .traffic { position: absolute; left: var(--font-size-ui-lg); top: var(--font-size-ui); display: flex; gap: 8px; }
+  .traffic i { width: var(--font-size-ui-sm); height: var(--font-size-ui-sm); border-radius: 50%; background: color-mix(in srgb, var(--color-text) 22%, transparent); }
+  .sidebar { background: var(--color-surface); border-right: 1px solid var(--color-border); padding: var(--font-size-ui-lg) var(--radius-popover); overflow: hidden; }
+  .sb-h { font-size: var(--font-size-ui-sm); color: var(--color-muted); font-weight: 600; padding: var(--radius-control) var(--radius-popover); margin-top: var(--radius-control); }
+  .sb-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 var(--radius-popover); border-radius: var(--radius-control); font-size: var(--font-size-ui); cursor: default; }
+  .sb-row:hover { background: var(--color-hover); }
+  .sb-row .n { margin-left: auto; font-family: var(--font-mono); font-size: var(--font-size-ui-sm); color: var(--color-muted); }
+  .sb-row.sel { background: var(--color-accent-soft); color: var(--color-accent-text); }
+  .sb-row.sub { padding-left: 28px; }
+  .sb-row .warn { color: var(--color-banner-unsaved); margin-left: auto; display: inline-flex; }
+  .sb-row svg { flex: none; }
+  .main { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .footer { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--radius-popover); padding: 0 var(--font-size-ui-sm); background: var(--color-surface); border-top: 1px solid var(--color-border); color: var(--color-muted); font-size: var(--font-size-ui-sm); }
+  .footer .ic { width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-control); }
+  .footer .ic.dis { opacity: .35; }
+  .footer .right { margin-left: auto; display: flex; gap: var(--radius-control); }
+  .footer .vsep { width: 1px; height: var(--editor-font-size); background: var(--color-border); }
+
+  /* shared state pieces */
+  .es { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--radius-popover); max-width: 520px; }
+  .es .icon { color: var(--color-muted); }
+  .es h2 { margin: var(--radius-control) 0 0; font-size: var(--font-size-title); font-weight: 600; }
+  .es p { margin: 0; color: var(--color-muted); line-height: 1.55; }
+  .actions { display: flex; gap: var(--font-size-ui-sm); align-items: center; margin-top: 8px; }
+  .btn { height: 30px; padding: 0 var(--font-size-ui-lg); border-radius: var(--radius-control); border: 0; cursor: pointer; background: var(--color-accent-fill); color: var(--color-on-accent); font-weight: 600; }
+  .btn:hover { background: var(--color-accent-fill-hover); }
+  .btn2 { height: 30px; padding: 0 var(--font-size-ui-sm); border-radius: var(--radius-control); border: 1px solid var(--color-border); background: var(--color-bg); cursor: pointer; }
+  .btn2:hover { background: var(--color-hover); }
+  .btn.sm, .btn2.sm { height: 26px; padding: 0 var(--radius-popover); font-size: var(--font-size-ui-sm); }
+  .link { border: 0; background: none; color: var(--color-accent-text); cursor: pointer; padding: 0 var(--radius-inner); }
+  :is(.btn, .btn2, .link):focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+  /* 「重试」 takes key focus when the state appears; its ring shows in the default render */
+  .retry:focus { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+  .crumb { display: inline-flex; gap: var(--radius-inner); align-items: center; font-size: var(--font-size-ui-sm); padding: 3px 8px; border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); }
+  .crumb .sep { color: var(--color-muted); }
+
+  /* in-content segmented control: prototype-only switch, as 22/26 */
+  .causes { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--color-surface); border: 1px solid var(--color-border); margin-bottom: var(--font-size-ui-lg); }
+  .causes button { border: 0; background: none; height: 26px; padding: 0 var(--font-size-ui-sm); border-radius: var(--radius-control); cursor: pointer; font-size: var(--font-size-ui-sm); color: var(--color-muted); }
+  .causes button.on { background: var(--color-bg); color: var(--color-text); box-shadow: var(--shadow-soft); }
+  .seg-float { position: absolute; top: var(--font-size-ui-sm); left: 50%; transform: translateX(-50%); z-index: 7; }
+  .seg-float .causes { margin: 0; }
+
+  /* 24F-C keep the reading layout */
+  .reading { width: 440px; display: flex; flex-direction: column; gap: var(--font-size-ui-sm); }
+  .reading .hd { display: flex; align-items: center; gap: var(--radius-popover); }
+  .reading .hd b { font-size: var(--font-size-ui-lg); }
+  .reading .hd .warn { color: var(--color-banner-unsaved); display: inline-flex; }
+  .bar { height: var(--radius-inner); border-radius: 2px; background: var(--color-border); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 100%; background: var(--color-muted); opacity: .35; }
+  .rows { border: 1px solid var(--color-border); border-radius: var(--radius-popover); overflow: hidden; }
+  .rrow { display: flex; align-items: center; gap: var(--radius-popover); padding: 9px var(--font-size-ui-sm); background: var(--color-bg); }
+  .rrow + .rrow { border-top: 1px solid var(--color-border-subtle); }
+  .rrow .st { margin-left: auto; font-size: var(--font-size-ui-sm); color: var(--color-muted); display: inline-flex; }
+  .rrow.fail { background: color-mix(in srgb, var(--color-banner-unsaved) 9%, var(--color-bg)); }
+  .rrow.fail .st { color: var(--color-text); }
+  .reading .note { color: var(--color-muted); font-size: var(--font-size-ui-sm); line-height: 1.5; }
+
+  /* 24F-D compact banner */
+  .banner { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 6; display: flex; align-items: center; gap: var(--radius-popover); padding: 0 var(--font-size-ui-sm) 0 var(--font-size-ui-lg);
+            background: color-mix(in srgb, var(--color-banner-unsaved) 12%, var(--color-bg)); border-bottom: 1px solid var(--color-border); font-size: var(--font-size-ui); }
+  .banner .warn { color: var(--color-banner-unsaved); display: inline-flex; }
+  .banner .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .banner .grow span { color: var(--color-muted); }
+  .void { color: var(--color-muted); font-size: var(--font-size-ui-sm); text-align: center; line-height: 1.6; }
+
+  /* 24F-0 current: centred text lines on a blank canvas */
+  .cur { display: flex; flex-direction: column; align-items: center; gap: var(--radius-control); text-align: center; color: var(--color-muted); }
+  .cur b { color: var(--color-text); font-weight: 600; }
+
+  .toast { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 20; padding: 8px var(--font-size-ui-lg); border-radius: var(--radius-popover);
+           background: var(--color-panel); box-shadow: var(--shadow-soft); font-size: var(--font-size-ui-sm); opacity: 0; transition: opacity var(--motion-duration-fast); pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="proto-caption"><span><b id="cap-title"></b>&nbsp; <span id="cap-desc"></span></span><span id="cap-note" class="warn"></span></div>
+<div class="window" id="win">
+  <div class="titlebar"><div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div><span id="ticon"></span><span id="ttext">待整理</span></div>
+  <aside class="sidebar" id="sidebar" aria-label="侧栏"></aside>
+  <div class="main" id="main"></div>
+  <div class="footer" id="footer"></div>
+  <div class="toast" id="toast" role="status"></div>
+</div>
+<div class="proto-bar" role="toolbar" aria-label="原型切换">
+  <button id="prev" aria-label="上一个方案">←</button><span class="label" id="label"></span><button id="next" aria-label="下一个方案">→</button>
+  <span class="sep"></span><button id="theme">浅色 / 深色</button>
+</div>
+<script>
+const I = {
+  folder: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  failBig: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v3.2M12 16.2h.01"/></svg>',
+  heart: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
+  clock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
+  warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>',
+  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l4 4 10-10"/></svg>',
+  side: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>',
+  search: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>',
+  sort: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 4v16M3 16l4 4 4-4M14 6h7M14 11h5M14 16h3"/></svg>',
+  info: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>',
+  grid: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg>',
+};
+const ROOT = '待整理', SUBS = ['2024 冲绳', '手机备份', '扫描件'], BAD = '扫描件';
+const params = new URLSearchParams(location.search);
+let subKnown = params.get('sub') !== '0';
+const $ = id => document.getElementById(id);
+
+const RETRY = (cls = 'btn') => `<button class="${cls} retry" data-say="重新读取“${ROOT}”，回到 24 正在读取">重试</button>`;
+const OTHER = (cls = 'link') => `<button class="${cls}" data-say="弹出系统“打开”面板，选择其他文件夹">选择其他文件夹…</button>`;
+const CRUMB = `<span class="crumb">${I.folder}${ROOT}<span class="sep">›</span>${BAD}</span>`;
+const subSeg = () => `<div class="causes" role="tablist" aria-label="原型切换">${[['1', '知道是哪个子文件夹'], ['0', '不知道']].map(([k, n]) =>
+  `<button role="tab" aria-selected="${(k === '1') === subKnown}" class="${(k === '1') === subKnown ? 'on' : ''}" data-seg="sub" data-k="${k}">${n}</button>`).join('')}</div>`;
+
+const VARIANTS = {
+  '24F-A': ['居中说明', '最安静的一版：与 22、26 同一族的居中图标、标题、一句说明，「重试」为主按钮，「选择其他文件夹…」为次要链接。不展示任何部分结果，也不提子文件夹。',
+    '', { main: () => `<div class="es"><div class="icon">${I.failBig}</div><h2>没能读完“${ROOT}”</h2><p>读取在中途停止了。为避免显示不完整的列表，已经找到的图片暂不显示。</p><div class="actions">${RETRY()}${OTHER()}</div></div>` }],
+  '24F-B': ['说明 + 出问题的子文件夹', '在 A 的基础上，知道是哪个子文件夹读不了时，写出它的路径，并在侧栏给它带 ⚠；不知道时退回 A 的文案。只说“无法读取”这一观察到的事实，不推测原因。',
+    '原型上方的分段控件只用于切换“知道 / 不知道”两种情况；扫描器要把失败的子路径带出来，现在的失败结果只有原因字符串', { mark: () => subKnown, main: () => `<div class="es">${subSeg()}<div class="icon">${I.failBig}</div>` + (subKnown
+      ? `<h2>没能读完“${ROOT}”</h2><p>picsee 无法读取其中的这个子文件夹：</p>${CRUMB}<p>为避免显示不完整的列表，已经找到的图片暂不显示。</p>`
+      : `<h2>没能读完“${ROOT}”</h2><p>读取在中途停止了。为避免显示不完整的列表，已经找到的图片暂不显示。</p>`)
+      + `<div class="actions">${RETRY()}${OTHER()}</div></div>` }],
+  '24F-C': ['保留读取画面 + 失败行', '页 24 的读取画面原地停住：标题从“正在读取”变成“读取已停止”，进度条停在灰色，下面一行一行列出这一层的子文件夹，读不了的那一行标出“无法读取”。从 24 过来几乎不跳，用户看得出停在了哪里。',
+    '只列这一层子文件夹各自读完/读不了，不列已找到的图片数，避免像一个完整结果；不知道是哪个子文件夹时，失败行写整个文件夹', { mark: () => subKnown, footer: '读取已停止', main: () => `<div class="seg-float">${subSeg()}</div><div class="reading">
+      <div class="hd"><span class="warn">${I.warn}</span><b>读取已停止</b></div>
+      <div class="bar" aria-hidden="true"><i></i></div>
+      <div class="rows">${subKnown
+        ? SUBS.map(n => n === BAD
+            ? `<div class="rrow fail">${I.folder}<span>${ROOT} › ${n}</span><span class="st">无法读取</span></div>`
+            : `<div class="rrow">${I.folder}<span>${ROOT} › ${n}</span><span class="st" aria-label="已读完">${I.check}</span></div>`).join('')
+        : `<div class="rrow fail">${I.folder}<span>${ROOT}</span><span class="st">没能读完</span></div>`}</div>
+      <div class="note">已经找到的图片暂不显示，以免列表不完整。</div>
+      <div class="actions" style="margin-top:2px">${RETRY()}${OTHER()}</div></div>` }],
+  '24F-D': ['紧凑提示条', '内容区顶部一条提示条：一句话 +「重试」+「选择其他文件夹…」，下面留空（只有一行淡字说明为什么空）。最不打扰，与 26M-C 的提示条同一形式；侧栏和底栏照常。',
+    '内容区留白面积大，第一眼可能以为“文件夹是空的”，全靠提示条区分；提示条不能关闭，否则就没有出路', { mark: () => subKnown, footer: '读取已停止', main: () => `<div class="banner" role="alert"><span class="warn">${I.warn}</span><span class="grow">没能读完“${ROOT}”${subKnown ? `<span>（无法读取子文件夹“${BAD}”）</span>` : '<span>，读取在中途停止</span>'}</span>${RETRY('btn sm')}${OTHER('btn2 sm')}</div>
+      <div class="void">已经找到的图片暂不显示，以免列表不完整。</div><div class="seg-float" style="top:auto;bottom:var(--font-size-ui-lg)">${subSeg()}</div>` }],
+  '24F-0': ['现状：画布上的文字', '代码现在的做法（ViewerStateHost .folderScanFailed）：画布中央三行字——“无法完成文件夹读取”、原因字符串、“停止前找到的图片：N”，只有「重试」，没有「选择其他文件夹…」。',
+    '对照，不作为候选：显示了部分结果的计数；外壳是否在场以真机为准', { blank: true, footer: '', main: () => `<div class="cur"><b>无法完成文件夹读取</b><span>文件夹读取失败</span><span>停止前找到的图片：37</span><div class="actions">${RETRY('btn2')}</div></div>` }],
+};
+let cur = VARIANTS[params.get('variant')] ? params.get('variant') : '24F-A';
+let theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+
+function sidebar(opt) {
+  const mark = opt.mark ? opt.mark() : false;
+  return `<div class="sb-h" style="margin-top:0">图库</div><div class="sb-row">${I.heart}<span>个人收藏</span><span class="n">3</span></div><div class="sb-row">${I.clock}<span>最近查看</span><span class="n">1</span></div>
+    <div class="sb-h">文件夹</div><div class="sb-row sel">${I.folder}<span>${ROOT}</span><span class="n">—</span></div>
+    ${SUBS.map(n => `<div class="sb-row sub">${I.folder}<span>${n}</span>${mark && n === BAD ? `<span class="warn" title="无法读取">${I.warn}</span>` : ''}</div>`).join('')}`;
+}
+function footer(opt) {
+  const status = opt.footer ?? '读取未完成';
+  return `<span class="ic">${I.side}</span><span class="vsep"></span><span>${status}</span><span class="right">${[I.search, I.sort, I.info, I.grid].map(i => `<span class="ic dis">${i}</span>`).join('')}</span>`;
+}
+function render() {
+  document.documentElement.className = `theme-${theme}` + (params.has('embed') ? ' embed' : '');
+  const v = VARIANTS[cur], opt = v[3];
+  $('ticon').innerHTML = I.folder;
+  $('sidebar').innerHTML = sidebar(opt);
+  $('footer').innerHTML = footer(opt);
+  $('win').style.gridTemplateColumns = opt.blank ? '0 1fr' : '';
+  $('sidebar').style.visibility = opt.blank ? 'hidden' : '';
+  $('sidebar').style.padding = opt.blank ? '0' : '';
+  $('main').innerHTML = opt.main();
+  $('label').textContent = `${cur} · ${v[0]}`;
+  $('cap-title').textContent = `读取失败 · ${cur} ${v[0]}`;
+  $('cap-desc').textContent = v[1];
+  $('cap-note').textContent = v[2] ? '⚠ ' + v[2] : '';
+  const p = new URLSearchParams(location.search); p.set('variant', cur); p.set('theme', theme); p.delete('sub'); if (opt.mark) p.set('sub', subKnown ? '1' : '0'); history.replaceState(null, '', '?' + p);
+  const r = document.querySelector('.retry'); if (r) r.focus({ preventScroll: true });
+}
+const keys = Object.keys(VARIANTS);
+const step = k => { cur = keys[(keys.indexOf(cur) + k + keys.length) % keys.length]; render(); };
+$('prev').onclick = () => step(-1); $('next').onclick = () => step(1);
+$('theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; render(); };
+document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('.causes, input, textarea, [contenteditable]')) return; if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); });
+let tt; const say = m => { $('toast').textContent = '（原型）' + m; $('toast').classList.add('show'); clearTimeout(tt); tt = setTimeout(() => $('toast').classList.remove('show'), 1800); };
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-seg]'); if (c) { subKnown = c.dataset.k === '1'; render(); return; }
+  const s = e.target.closest('[data-say]'); if (s) say(s.dataset.say);
+});
+render();
+</script>
+</body>
+</html>
