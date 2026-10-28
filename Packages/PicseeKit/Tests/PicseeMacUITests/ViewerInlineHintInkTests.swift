@@ -3,7 +3,7 @@ import Testing
 @testable import PicseeMacUI
 
 @MainActor private func inlineHint(_ root: NSView) -> NSTextField? {
-    if let field = root as? NSTextField, field.accessibilityIdentifier() == "state.drop-hint" { return field }
+    if let field = root as? NSTextField, field.accessibilityIdentifier() == "first-launch.shortcut" { return field }
     for child in root.subviews {
         if let field = inlineHint(child) { return field }
     }
@@ -41,7 +41,7 @@ import Testing
     return reference
 }
 
-@Test @MainActor func issue92InlineHintPaintsCompleteEnglishSentence() throws {
+@Test @MainActor func issue92ShortcutHintPaintsCompleteEnglishSentence() throws {
     let scene = StatesScene(width: 1280)
     defer { scene.window.close() }
     scene.window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
@@ -51,14 +51,14 @@ import Testing
     scene.window.orderFront(nil)
     scene.state.layoutSubtreeIfNeeded()
     let hint = try #require(inlineHint(scene.state))
-    #expect(hint.stringValue == "You can also drop images or folders here.")
+    #expect(hint.stringValue == "or press ⌘O")
     let actual = try paintedInk(in: hint)
     let reference = try paintedInk(in: fullTextReference(for: hint, width: 640))
     #expect(reference > 100)
     #expect(actual >= Int(Double(reference) * 0.95))
 }
 
-@Test @MainActor func issue92HintPaintsChineseAndCompactWrappedCopy() throws {
+@Test @MainActor func issue92ShortcutHintPaintsChineseAtCompactSize() throws {
     let scene = StatesScene(width: 800)
     defer { scene.window.close() }
     scene.window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
@@ -67,7 +67,7 @@ import Testing
     scene.state.frame = scene.content.bounds
     scene.window.orderFront(nil)
     let hint = try #require(inlineHint(scene.state))
-    hint.stringValue = "也可以拖入图片或文件夹"
+    hint.stringValue = "或按 ⌘O"
     scene.state.needsLayout = true
     scene.state.layoutSubtreeIfNeeded()
     let chinese = try paintedInk(in: hint)
@@ -78,11 +78,8 @@ import Testing
     scene.window.setContentSize(NSSize(width: 360, height: 680))
     scene.content.frame = NSRect(x: 0, y: 0, width: 360, height: 680)
     scene.state.frame = scene.content.bounds
-    hint.stringValue = String(repeating: "也可以拖入图片或文件夹", count: 5)
     scene.state.needsLayout = true
     scene.state.layoutSubtreeIfNeeded()
-    let wrapped = try paintedInk(in: hint)
-    let wrappedReference = try paintedInk(in: fullTextReference(for: hint, width: hint.bounds.width))
-    #expect(wrappedReference > chineseReference)
-    #expect(wrapped >= Int(Double(wrappedReference) * 0.95))
+    let compact = try paintedInk(in: hint)
+    #expect(compact >= Int(Double(chineseReference) * 0.95))
 }

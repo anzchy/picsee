@@ -20,7 +20,7 @@ import PicseeApplication
     let existing = RecentFolder(rootID: AccessRootID(), url: URL(fileURLWithPath: "/Existing"), displayName: "Existing Folder")
     for _ in [[], [existing]] {
         state.refresh()
-        #expect(state.textLines == ["Open a folder to start browsing", "Images stay on your Mac. Browse by folder.", "You can also drop images or folders here."])
+        #expect(state.textLines == ["Drop a photo folder here", "or press ⌘O", "Folder", "One or more images", "Common image formats"])
         #expect(state.buttons.count == 1)
         let button = try #require(state.buttons.first)
         #expect(button.title == "Choose Folder…")
