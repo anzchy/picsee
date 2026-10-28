@@ -14,16 +14,22 @@ const BRANCH_PLAYS={
  'J2-film':[['viewer-quiet','viewer-filmstrip','viewer-quiet']],
  'J3-search':[['grid-light','search-empty','grid-light']],
  'J4-light':[['viewer-inspector','viewer-inspector-light','viewer-inspector']],
+ 'J4-settings':[['grid-display','settings?section=display','grid-display']],
+ 'J4-shortcuts':[['grid-light','shortcuts','grid-light']],
 };
+// Settings window, layout B (#214, spec #212): sidebar sections in order, each reachable by ?section=.
+const SETTINGS_SECTIONS=[['general','通用'],['display','显示'],['cache','缓存'],['update','更新'],['about','关于']];
+// Shortcut list, layout C: one card per context, in order, each reachable by ?card=.
+const SHORTCUT_CARDS=[['files','文件与窗口','任何时候'],['grid','网格','浏览文件夹时'],['viewer','大图','查看一张图片时']];
 module.exports=async(page,{design,states,screenshot})=>{
  const base=design+'/prototypes/picsee-browser/states/';
  const errors=[],failures=[],results=[];page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400&&r.url().startsWith('http://127.0.0.1:'))failures.push({url:r.url(),status:r.status()})});
  await page.goto(base+'index.html');await page.getByRole('navigation',{name:'设计页面'}).waitFor();
  const catalog=await page.evaluate(async()=>{const r=await fetch('manifest.json');return r.json()});
- if(catalog.states.length!==20||await page.locator('nav button').count()!==20)throw Error('Expected 20 catalog states');
+ if(catalog.states.length!==22||await page.locator('nav button').count()!==22)throw Error('Expected 22 catalog states');
 
  // 22 and 26 are local replacements of the accepted Stitch pages (ADR-014), like 31–34.
- for(const name of ['empty-folder','permission-denied'])if(catalog.states.find(s=>s.name===name).origin!=='local-C-adaptation')throw Error(name+' origin is not local-C-adaptation');
+ for(const name of ['empty-folder','permission-denied','settings','shortcuts'])if(catalog.states.find(s=>s.name===name).origin!=='local-C-adaptation')throw Error(name+' origin is not local-C-adaptation');
  for(const state of catalog.states){
   await page.setViewportSize(state.viewport);await page.goto(base+state.file);await page.evaluate(async()=>Promise.all([...document.images].map(i=>i.decode().catch(()=>{}))));
   const check=await page.evaluate(()=>({broken:[...document.images].some(i=>!i.complete||!i.naturalWidth),overflow:document.documentElement.scrollWidth>innerWidth,inlineImages:[...document.images].some(i=>i.src.startsWith('data:')),externalImages:[...document.images].some(i=>!i.src.startsWith(location.origin))}));
@@ -31,6 +37,8 @@ module.exports=async(page,{design,states,screenshot})=>{
   if(state.name==='viewer-quiet'&&await page.locator('.zoom-pod').isVisible())throw Error('Quiet controls regression');
   if(state.name==='viewer-controls'&&!await page.locator('.zoom-pod').isVisible())throw Error('Visible controls regression');
   if(state.name==='grid-multiselect'&&await page.locator('.photo-cell[aria-selected="true"]').count()!==3)throw Error('Selection count regression');
+  // Page 15 has no shortcut entry; the list lives under 帮助 → 键盘快捷键 (user: 「Page 15 中去掉快捷键入口」).
+  if(state.name==='grid-display'&&await page.evaluate(()=>document.body.innerText.includes('键盘快捷键')||!!document.querySelector('.setting-help')))throw Error('Page 15 still shows 键盘快捷键');
   if(state.name==='viewer-filmstrip'&&(await page.locator('.c-filmstrip-images button').count()!==12||await page.locator('.navigation-pod').count()))throw Error('Filmstrip regression');
   results.push({name:state.name,passed:true});
  }
@@ -68,11 +76,37 @@ module.exports=async(page,{design,states,screenshot})=>{
   if(bad.length)subcaseFailures.push(url+': '+bad.join(', '));
  }
  if(subcaseFailures.length)throw Error('22/24/26 sub-cases: '+subcaseFailures.join(' | '));
+ // Settings (B) and the shortcut list (C): every section and card by query, light and dark, examples labelled.
+ const windowCases=[['settings.html',{section:'general'}],...SETTINGS_SECTIONS.map(([id])=>['settings.html?section='+id,{section:id}]),['settings.html?theme=dark',{section:'general',dark:true}],['settings.html?section=about&theme=dark',{section:'about',dark:true}],
+  ['shortcuts.html',{card:null}],...SHORTCUT_CARDS.map(([id])=>['shortcuts.html?card='+id,{card:id}]),['shortcuts.html?theme=dark',{card:null,dark:true}]];
+ const windowFailures=[];
+ for(const [url,want] of windowCases){
+  await page.setViewportSize({width:1280,height:800});await page.goto(base+url);
+  const got=await page.evaluate(()=>{const visible=e=>!!e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden';const win=document.querySelector('.window');const r=win&&win.getBoundingClientRect();
+   // A sample number (size, build, time) must sit inside a [data-example] element that says 示例.
+   const unlabelled=[];const walk=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);for(let n;(n=walk.nextNode());){if(!visible(n.parentElement)||!/\d+(\.\d+)?\s?(KB|MB|GB)|构建\s?\d+|\d{1,2}:\d{2}|\d+\.\d+\.\d+/.test(n.textContent))continue;const ex=n.parentElement.closest('[data-example]');if(!ex||!ex.innerText.includes('示例'))unlabelled.push(n.textContent.trim())}
+   const soon=[...document.querySelectorAll('[data-coming-soon]')].filter(e=>!(e.getAttribute('aria-disabled')==='true'||e.disabled)||e.tabIndex!==-1||!e.innerText.includes('即将推出')||/<kbd/.test(e.innerHTML)).map(e=>e.innerText.trim());
+   return{dark:document.documentElement.classList.contains('theme-dark'),window:!!win&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,
+    sections:[...document.querySelectorAll('.settings-sidebar [data-section]')].map(b=>[b.dataset.section,b.innerText.trim()]),current:[...document.querySelectorAll('.settings-sidebar [aria-current="page"]')].map(b=>b.dataset.section),
+    panes:[...document.querySelectorAll('.settings-pane')].filter(visible).map(p=>[p.dataset.section,(p.querySelector('h2')||{}).innerText]),
+    cards:[...document.querySelectorAll('.shortcut-card')].filter(visible).map(c=>[c.dataset.card,c.querySelector('h3 .title').innerText,c.querySelector('h3 .when').innerText,c.querySelectorAll('[data-shortcut]').length]),
+    targets:[...document.querySelectorAll('.shortcut-card.is-review-target')].map(c=>c.dataset.card),inputs:document.querySelectorAll('.shortcut-card input, .shortcut-window input').length,
+    unlabelled,soon,broken:[...document.images].some(i=>!i.complete||!i.naturalWidth),overflow:document.documentElement.scrollWidth>innerWidth}});
+  const bad=[];if(!got.window)bad.push('window missing or outside the viewport');if(got.broken||got.overflow)bad.push('resource/layout');if(!!want.dark!==got.dark)bad.push('dark='+got.dark);
+  if(got.unlabelled.length)bad.push('sample values not labelled 示例: '+got.unlabelled.join(' / '));if(got.soon.length)bad.push('coming-soon entries not greyed/unfocusable/「即将推出」: '+got.soon.join(' / '));
+  if(url.startsWith('settings')){const label=SETTINGS_SECTIONS.find(([id])=>id===want.section)[1];
+   if(JSON.stringify(got.sections)!==JSON.stringify(SETTINGS_SECTIONS))bad.push('sidebar '+JSON.stringify(got.sections));if(JSON.stringify(got.current)!==JSON.stringify([want.section]))bad.push('current '+got.current.join(','));
+   if(JSON.stringify(got.panes)!==JSON.stringify([[want.section,label]]))bad.push('panes '+JSON.stringify(got.panes))}
+  else{if(JSON.stringify(got.cards.map(c=>c.slice(0,3)))!==JSON.stringify(SHORTCUT_CARDS))bad.push('cards '+JSON.stringify(got.cards));if(got.cards.some(c=>!c[3]))bad.push('empty card');
+   if(JSON.stringify(got.targets)!==JSON.stringify(want.card?[want.card]:[]))bad.push('review target '+got.targets.join(','));if(got.inputs)bad.push('read-only list has inputs')}
+  if(bad.length)windowFailures.push(url+': '+bad.join(', '));
+ }
+ if(windowFailures.length)throw Error('settings/shortcuts: '+windowFailures.join(' | '));
  // journeys.html: linked from the index, success-path playback, branches return, no hand-typed status, no prototype files.
  await page.setViewportSize({width:1440,height:900});await page.goto(base+'index.html');await page.getByRole('navigation',{name:'设计页面'}).waitFor();
  if(!await page.locator('a[href="journeys.html"]').count())throw Error('index.html does not link journeys.html');
  const jr=await page.goto(base+'journeys.html');if(!jr||!jr.ok())throw Error('journeys.html missing');await page.locator('section.journey#J1').waitFor();
- const journeyIssues=await page.evaluate(()=>{const issues=[];const html=document.documentElement.outerHTML;
+ const journeyIssues=await page.evaluate(SETTINGS_SECTIONS=>{const issues=[];const html=document.documentElement.outerHTML;
   if(/prototype-[\w-]*\.html/.test(html))issues.push('references a prototype file');if(document.querySelector('.st')||/部分真机|仅单元|未开始/.test(document.body.innerText))issues.push('hand-typed status badges');
   for(const id of ['ENTRY','J1','J2','J3','J4','REF'])if(!document.getElementById(id))issues.push('missing section '+id);
   const rows=[...document.querySelectorAll('#ENTRY tbody tr')].map(r=>r.innerText.replace(/\s+/g,' '));if(rows.length<8)issues.push('entry table has fewer than 8 entrances');
@@ -86,9 +120,14 @@ module.exports=async(page,{design,states,screenshot})=>{
   const j4=[...document.querySelectorAll('#J4 .arrow .lab')].map(l=>l.innerHTML);if(!j4.some(l=>(l.match(/<kbd>Esc<\/kbd>/g)||[]).length>=2&&/Inspector/.test(l)))issues.push('J4: Esc order is not two steps');
   const failed=document.querySelector('[data-branch="J1-scan-failed"]');if(!failed||!failed.querySelector('.card[data-page="folder-loading"][data-query="case=failed"]')||failed.querySelector('.placeholder'))issues.push('J1-scan-failed does not link folder-loading.html?case=failed');
   const access=document.querySelector('[data-branch="J1-access"]');if(!access||!/选择其他文件夹/.test(access.innerText)||!/自动恢复/.test(access.innerText))issues.push('J1-access lacks 选择其他文件夹… and auto-recovery after mount');
+  // Settings and Help → 键盘快捷键 are linked where they appear (#214): J4's display step and its return to the grid.
+  if(!document.querySelector('[data-branch="J4-settings"] .card[data-page="settings"]'))issues.push('J4 does not link settings.html from 15');
+  if(!document.querySelector('[data-branch="J4-shortcuts"] .card[data-page="shortcuts"]'))issues.push('J4 does not link shortcuts.html');
+  for(const [id] of SETTINGS_SECTIONS.filter(([id])=>id!=='display'))if(!document.querySelector('[data-branch="J4-settings"] [data-page="settings"][data-query="section='+id+'"]'))issues.push('J4-settings lacks section '+id);
+  if(/⚠ 还没挂到任何旅程/.test(document.body.innerText))issues.push('a state page is not on any journey');
   const branches=[...document.querySelectorAll('[data-branch]')];if(!branches.length)issues.push('no branches');
   for(const b of branches){if(!b.dataset.to)issues.push('branch without to: '+b.dataset.branch);else if(!b.querySelector('.ret'))issues.push('branch without return edge: '+b.dataset.branch)}
-  return issues});
+  return issues},SETTINGS_SECTIONS);
  const journeyIds=await page.locator('section.journey[data-main]').evaluateAll(s=>s.map(e=>e.id));
  for(const id of journeyIds){
   const main=JSON.parse(await page.locator('#'+id).getAttribute('data-main'));const play=page.locator('#'+id+' button.play');await play.click();
@@ -119,5 +158,5 @@ module.exports=async(page,{design,states,screenshot})=>{
  await page.getByRole('button',{name:'33 胶片条展开 · C',exact:true}).click();await page.frameLocator('iframe').locator('.c-filmstrip').waitFor();
  if(screenshot)await page.screenshot({path:screenshot});
  await page.goto(design+'/prototypes/picsee-browser/viewer-v2.html');await page.getByTestId('large-viewer').waitFor();await page.keyboard.press('Escape');if(await page.locator('.photo-cell').count()!==12)throw Error('Interactive prototype regression');
- if(errors.length||failures.length)throw Error(JSON.stringify({errors,failures}));return{passed:true,stateCount:results.length,hashesPinned:catalog.states.length,subcases:subcases.length,journeys:journeyIds,branchPlays,canonicalPreview:true,legacy4313Preview:true,interactivePrototype:true,results,errors,failures};
+ if(errors.length||failures.length)throw Error(JSON.stringify({errors,failures}));return{passed:true,stateCount:results.length,hashesPinned:catalog.states.length,subcases:subcases.length+windowCases.length,journeys:journeyIds,branchPlays,canonicalPreview:true,legacy4313Preview:true,interactivePrototype:true,results,errors,failures};
 };
