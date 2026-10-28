@@ -10,6 +10,14 @@ import Testing
     return nil
 }
 
+@MainActor private func shortcutKey(_ root: NSView) -> NSTextField? {
+    if let field = root as? NSTextField, field.accessibilityIdentifier() == "first-launch.shortcut-key" { return field }
+    for child in root.subviews {
+        if let field = shortcutKey(child) { return field }
+    }
+    return nil
+}
+
 @MainActor private func paintedInk(in field: NSTextField) throws -> Int {
     let width = Int(ceil(field.bounds.width))
     let height = Int(ceil(field.bounds.height))
@@ -30,7 +38,8 @@ import Testing
 }
 
 @MainActor private func fullTextReference(for hint: NSTextField, width: CGFloat) -> NSTextField {
-    let reference = NSTextField(labelWithString: hint.stringValue)
+    let prefix = hint.stringValue.replacingOccurrences(of: "⌘O", with: "").trimmingCharacters(in: .whitespaces)
+    let reference = NSTextField(labelWithString: prefix)
     reference.font = hint.font
     reference.textColor = hint.textColor
     reference.alignment = hint.alignment
@@ -51,11 +60,15 @@ import Testing
     scene.window.orderFront(nil)
     scene.state.layoutSubtreeIfNeeded()
     let hint = try #require(inlineHint(scene.state))
+    let key = try #require(shortcutKey(scene.state))
     #expect(hint.stringValue == "or press ⌘O")
     let actual = try paintedInk(in: hint)
     let reference = try paintedInk(in: fullTextReference(for: hint, width: 640))
     #expect(reference > 100)
+    #expect(actual > 100)
+    let keyInk = try paintedInk(in: key)
     #expect(actual >= Int(Double(reference) * 0.95))
+    #expect(keyInk > 40)
 }
 
 @Test @MainActor func issue92ShortcutHintPaintsChineseAtCompactSize() throws {
@@ -67,13 +80,17 @@ import Testing
     scene.state.frame = scene.content.bounds
     scene.window.orderFront(nil)
     let hint = try #require(inlineHint(scene.state))
+    let key = try #require(shortcutKey(scene.state))
     hint.stringValue = "或按 ⌘O"
     scene.state.needsLayout = true
     scene.state.layoutSubtreeIfNeeded()
     let chinese = try paintedInk(in: hint)
     let chineseReference = try paintedInk(in: fullTextReference(for: hint, width: 640))
     #expect(chineseReference > 100)
+    #expect(chinese > 100)
+    let keyInk = try paintedInk(in: key)
     #expect(chinese >= Int(Double(chineseReference) * 0.95))
+    #expect(keyInk > 40)
 
     scene.window.setContentSize(NSSize(width: 360, height: 680))
     scene.content.frame = NSRect(x: 0, y: 0, width: 360, height: 680)

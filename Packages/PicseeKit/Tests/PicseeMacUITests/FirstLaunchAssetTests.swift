@@ -22,6 +22,23 @@ import Testing
     #expect(total == 353_257)
 }
 
+@Test @MainActor func p316B4DecodeFailureLeavesNoEmptyPhotoFrame() async throws {
+    _ = NSApplication.shared
+    let invalid = URL(fileURLWithPath: "/picsee-b4-missing-photo.jpg")
+    let view = FirstLaunchView(frame: NSRect(x: 0, y: 0, width: 960, height: 640),
+                               openButton: ViewerStateButton(frame: .zero), sampleURLs: ["alley": invalid])
+    view.layoutSubtreeIfNeeded()
+    let alley = try #require(view.subviews.first { $0.accessibilityIdentifier() == "first-launch.print.alley" })
+    #expect(alley.layer?.sublayers?.allSatisfy(\.isHidden) == true)
+    for _ in 0..<100 where !view.sampleLoadCompleted {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    view.layoutSubtreeIfNeeded()
+    #expect(view.sampleLoadCompleted)
+    #expect(alley.isHidden)
+    #expect((alley as? NSImageView)?.image == nil)
+}
+
 
 @Test func p316B4CatalogContainsApprovedEnglishAndChineseCopy() throws {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

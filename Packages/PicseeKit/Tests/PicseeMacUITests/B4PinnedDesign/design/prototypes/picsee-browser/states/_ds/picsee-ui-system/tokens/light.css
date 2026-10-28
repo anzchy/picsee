@@ -1,0 +1,48 @@
+.theme-light {
+  color-scheme: light;
+  --color-bg: #ffffff; /* @kind color */
+  --color-surface: #f6f7fb; /* @kind color */
+  --color-panel: #ffffff; /* @kind color */
+  --color-text: #1a1a1a; /* @kind color */
+  --color-muted: #6b7280; /* @kind color */
+  --color-border: color-mix(in srgb, var(--color-text) 10%, transparent); /* @kind color */
+  --color-border-subtle: color-mix(in srgb, var(--color-text) 6%, transparent); /* @kind color */
+  --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent); /* @kind color */
+  --shadow-soft: 0 0 0 0.5px color-mix(in srgb, var(--color-text) 12%, transparent),
+                 0 8px 24px color-mix(in srgb, var(--color-text) 8%, transparent);
+  --color-accent: #2563eb; /* @kind color */
+  --color-accent-soft: color-mix(in srgb, var(--color-accent) 14%, transparent); /* @kind color */
+
+  --color-accent-text: color-mix(in srgb, var(--color-accent) 80%, var(--color-text)); /* @kind color */
+  --color-accent-fill: var(--color-accent); /* @kind color */
+  --color-accent-fill-hover: color-mix(in srgb, var(--color-accent) 88%, var(--color-text)); /* @kind color */
+
+  --color-tab-active-fill: color-mix(in srgb, var(--color-text) 16%, var(--color-surface)); /* @kind color */
+  --color-tab-active-accent: var(--color-accent); /* @kind color */
+  --tab-active-close-opacity: 0.5; /* @kind other */
+  --color-danger: #dc2626; /* @kind color */
+  --color-danger-soft: color-mix(in srgb, var(--color-danger) 12%, transparent); /* @kind color */
+
+  --color-error-text: #b91c1c; /* @kind color */
+
+  --color-highlight: rgba(255, 85, 130, 0.65); /* @kind color */
+
+  --color-control-border: color-mix(in srgb, var(--color-text) 50%, transparent); /* @kind color */
+  --color-editor-bg: #ffffff; /* @kind color */
+
+  --color-code-bg: color-mix(in srgb, var(--color-editor-bg) 94%, var(--color-text)); /* @kind color */
+
+
+  --color-toggle-track-off: #cccccc; /* @kind color */
+  --color-running-fill: #dcfce7; /* @kind color */
+  --color-running-text: #16a34a; /* @kind color */
+  --color-banner-unsaved: #f59e0b; /* @kind color */
+
+  --color-group-bg: color-mix(in srgb, var(--color-surface) 80%, transparent); /* @kind color */
+  --color-input-bg: color-mix(in srgb, var(--color-panel) 90%, transparent); /* @kind color */
+
+
+  --color-text-secondary: var(--color-muted); /* @kind color */
+  --color-bg-secondary: var(--color-surface); /* @kind color */
+  --color-bg-tertiary: #eeeff3; /* @kind color */
+}
