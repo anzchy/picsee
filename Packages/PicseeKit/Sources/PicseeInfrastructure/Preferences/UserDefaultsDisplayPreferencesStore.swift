@@ -21,12 +21,10 @@ import PicseeApplication
             normalized.gridSidebarWidth = DisplayPreferences.normalizedSidebarWidth(normalized.gridSidebarWidth)
             guard normalized != storedValue else { return }
             storedValue = normalized
-            if let existing = defaults.data(forKey: Self.key), Self.isUnsupported(existing) {
-                StoredSchema.logUnsupportedOnce(at: Self.logURL, category: "preferences")
+            if let existing = defaults.data(forKey: Self.key), let version = Self.unsupportedVersion(existing) {
+                StoredSchema.logUnsupportedOnce(at: Self.logURL, category: "preferences", store: "display-preferences", version: version)
             } else {
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = .sortedKeys
-                if let data = try? encoder.encode(Envelope(schemaVersion: StoredSchema.current, value: normalized)) {
+                if let data = try? Self.encode(normalized) {
                     defaults.set(data, forKey: Self.key)
                 }
             }
@@ -37,24 +35,34 @@ import PicseeApplication
 
     public init(defaults: UserDefaults) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: Self.key), Self.isUnsupported(data) {
-            StoredSchema.logUnsupportedOnce(at: Self.logURL, category: "preferences")
+        if let data = defaults.data(forKey: Self.key), let version = Self.unsupportedVersion(data) {
+            StoredSchema.logUnsupportedOnce(at: Self.logURL, category: "preferences", store: "display-preferences", version: version)
             storedValue = DisplayPreferences()
         } else {
             storedValue = defaults.data(forKey: Self.key).flatMap { data in
                 let decoder = JSONDecoder()
                 if let header = try? decoder.decode(Header.self, from: data), header.schemaVersion == StoredSchema.current {
-                    return try? decoder.decode(Envelope.self, from: data).value
+                    if let envelope = try? decoder.decode(Envelope.self, from: data) { return envelope.value }
                 }
                 return try? decoder.decode(DisplayPreferences.self, from: data)
             } ?? DisplayPreferences()
         }
     }
 
-    private static func isUnsupported(_ data: Data) -> Bool {
+    private static func unsupportedVersion(_ data: Data) -> Int? {
         guard let header = try? JSONDecoder().decode(Header.self, from: data),
-              let version = header.schemaVersion else { return false }
-        return version != StoredSchema.current
+              let version = header.schemaVersion, version != StoredSchema.current else { return nil }
+        return version
+    }
+
+    private static func encode(_ value: DisplayPreferences) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(value)
+        // DisplayPreferences encodes as a keyed object.
+        var fields = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        fields["schemaVersion"] = StoredSchema.current
+        return try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
     }
 
     public func observe(_ observer: any DisplayPreferencesObserver) {
