@@ -24,7 +24,7 @@ public actor PersonalImageStore {
         init() {}
         init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
-            version = try values.decodeIfPresent(Int.self, forKey: .version) ?? 1
+            version = values.contains(.version) ? try values.decode(Int.self, forKey: .version) : 1
             favorites = try values.decode([PersonalImageRef].self, forKey: .favorites)
             recents = try values.decode([PersonalImageVisit].self, forKey: .recents)
             removedFavorites = try values.decodeIfPresent([PersonalImageRef].self, forKey: .removedFavorites)
@@ -105,8 +105,8 @@ public actor PersonalImageStore {
         let data = try Data(contentsOf: path)
         if let header = try? JSONDecoder().decode(VersionHeader.self, from: data),
            let version = header.version, version != 1 {
-            StoredSchema.logUnsupportedOnce(at: path, category: "library")
-            throw StoredSchema.UnsupportedVersion()
+            StoredSchema.logUnsupportedOnce(at: path, category: "library", store: "personal-images", version: version)
+            throw StoredSchema.UnsupportedVersion(version: version)
         }
         guard let contents = try? JSONDecoder().decode(Contents.self, from: data), contents.version == 1 else { throw Damaged() }
         return contents
@@ -115,7 +115,7 @@ public actor PersonalImageStore {
         guard FileManager.default.fileExists(atPath: path.path) else { return }
         let data = try Data(contentsOf: path)
         if let header = try? JSONDecoder().decode(VersionHeader.self, from: data),
-           let version = header.version, version != 1 { throw StoredSchema.UnsupportedVersion() }
+           let version = header.version, version != 1 { throw StoredSchema.UnsupportedVersion(version: version) }
     }
     /// Recovery favorites first, then the primary's others; each image keeps its newest visit
     /// (recovery first on a tie), ordered by visit time and bounded.
