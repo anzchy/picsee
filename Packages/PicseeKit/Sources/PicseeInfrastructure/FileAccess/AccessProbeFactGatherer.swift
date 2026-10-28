@@ -2,6 +2,28 @@ import Dispatch
 import Foundation
 import PicseeCore
 
+public struct AccessProbeLatencies: Codable, Equatable, Sendable {
+    public let volumePropertiesMilliseconds: Double
+    public let mountedVolumeScanMilliseconds: Double
+    public let resolutionMilliseconds: Double
+    public let scopeStartMilliseconds: Double?
+    public let listingMilliseconds: Double?
+
+    public init(
+        volumePropertiesMilliseconds: Double,
+        mountedVolumeScanMilliseconds: Double,
+        resolutionMilliseconds: Double,
+        scopeStartMilliseconds: Double?,
+        listingMilliseconds: Double?
+    ) {
+        self.volumePropertiesMilliseconds = volumePropertiesMilliseconds
+        self.mountedVolumeScanMilliseconds = mountedVolumeScanMilliseconds
+        self.resolutionMilliseconds = resolutionMilliseconds
+        self.scopeStartMilliseconds = scopeStartMilliseconds
+        self.listingMilliseconds = listingMilliseconds
+    }
+}
+
 public struct AccessProbeReport: Codable, Equatable, Sendable {
     public let volume: AccessProbeVolume
     public let volumePropertiesError: AccessProbeError?
@@ -11,6 +33,7 @@ public struct AccessProbeReport: Codable, Equatable, Sendable {
     public let listing: AccessProbeDirectoryListing?
     public let isInTrash: Bool
     public let latencyMilliseconds: Double
+    public let latencies: AccessProbeLatencies
     public let classification: AccessProbeClassification
 
     public init(
@@ -22,6 +45,7 @@ public struct AccessProbeReport: Codable, Equatable, Sendable {
         listing: AccessProbeDirectoryListing?,
         isInTrash: Bool,
         latencyMilliseconds: Double,
+        latencies: AccessProbeLatencies,
         classification: AccessProbeClassification
     ) {
         self.volume = volume
@@ -32,6 +56,7 @@ public struct AccessProbeReport: Codable, Equatable, Sendable {
         self.listing = listing
         self.isInTrash = isInTrash
         self.latencyMilliseconds = latencyMilliseconds
+        self.latencies = latencies
         self.classification = classification
     }
 }
@@ -80,7 +105,12 @@ public struct AccessProbeFactGatherer: Sendable {
     }
 
     public func gather(bookmarkData: Data) -> AccessProbeReport {
+        func milliseconds(since started: UInt64) -> Double {
+            Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+        }
+
         let startedAt = DispatchTime.now().uptimeNanoseconds
+        let volumeStartedAt = DispatchTime.now().uptimeNanoseconds
         let volume: AccessProbeVolume
         let volumePropertiesError: AccessProbeError?
         do {
@@ -90,10 +120,19 @@ public struct AccessProbeFactGatherer: Sendable {
             volume = AccessProbeVolume(uuid: nil, url: nil, name: nil)
             volumePropertiesError = AccessProbeError(error)
         }
+        let volumePropertiesMilliseconds = milliseconds(since: volumeStartedAt)
+
+        let mountedVolumeScanStartedAt = DispatchTime.now().uptimeNanoseconds
         let mountedVolumes = mountedVolumesProvider()
+        let mountedVolumeScanMilliseconds = milliseconds(since: mountedVolumeScanStartedAt)
+
+        let resolutionStartedAt = DispatchTime.now().uptimeNanoseconds
         let resolution: AccessProbeResolution
+        let resolutionMilliseconds: Double
         var scopeStarted: Bool?
+        var scopeStartMilliseconds: Double?
         var listing: AccessProbeDirectoryListing?
+        var listingMilliseconds: Double?
         var isInTrash = false
         do {
             let resolved = try bookmarks.resolve(
@@ -101,21 +140,27 @@ public struct AccessProbeFactGatherer: Sendable {
                 options: [.withSecurityScope, .withoutMounting, .withoutUI]
             )
             resolution = resolved
+            resolutionMilliseconds = milliseconds(since: resolutionStartedAt)
             if let url = resolved.url {
                 isInTrash = trashCheck(url)
+                let scopeStartStartedAt = DispatchTime.now().uptimeNanoseconds
                 let started = scope.start(url)
+                scopeStartMilliseconds = milliseconds(since: scopeStartStartedAt)
                 scopeStarted = started
                 do {
                     defer { if started { scope.stop(url) } }
+                    let listingStartedAt = DispatchTime.now().uptimeNanoseconds
                     do {
                         listing = .succeeded(entryCount: try lister(url))
                     } catch {
                         listing = .failed(AccessProbeError(error))
                     }
+                    listingMilliseconds = milliseconds(since: listingStartedAt)
                 }
             }
         } catch {
             resolution = .failed(AccessProbeError(error))
+            resolutionMilliseconds = milliseconds(since: resolutionStartedAt)
         }
 
         let facts = AccessProbeFacts(
@@ -126,7 +171,6 @@ public struct AccessProbeFactGatherer: Sendable {
             listing: listing,
             isInTrash: isInTrash
         )
-        let elapsed = DispatchTime.now().uptimeNanoseconds - startedAt
         return AccessProbeReport(
             volume: volume,
             volumePropertiesError: volumePropertiesError,
@@ -135,7 +179,14 @@ public struct AccessProbeFactGatherer: Sendable {
             scopeStarted: scopeStarted,
             listing: listing,
             isInTrash: isInTrash,
-            latencyMilliseconds: Double(elapsed) / 1_000_000,
+            latencyMilliseconds: milliseconds(since: startedAt),
+            latencies: AccessProbeLatencies(
+                volumePropertiesMilliseconds: volumePropertiesMilliseconds,
+                mountedVolumeScanMilliseconds: mountedVolumeScanMilliseconds,
+                resolutionMilliseconds: resolutionMilliseconds,
+                scopeStartMilliseconds: scopeStartMilliseconds,
+                listingMilliseconds: listingMilliseconds
+            ),
             classification: AccessCauseClassifier.classify(facts)
         )
     }
