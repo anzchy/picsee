@@ -44,6 +44,8 @@ export const KEY_SITES = {
     48: { excluded: FOCUSED_CONTROL }, 49: { excluded: FOCUSED_CONTROL } },
   'Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridShellView.swift': {
     123: { excluded: 'arrows resize the focused sidebar divider' }, 124: { excluded: 'arrows resize the focused sidebar divider' } },
+  'Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridSidebarTreeView.swift': {
+    36: { excluded: FOCUSED_CONTROL }, 49: { excluded: FOCUSED_CONTROL }, 76: { excluded: FOCUSED_CONTROL } },
   'Packages/PicseeKit/Sources/PicseeMacUI/DesignSystem/Components/DesignComponents.swift': { space: { excluded: FOCUSED_CONTROL } },
 };
 // The one file that maps typed characters to commands; it does so through CommandID.matching, read above.
