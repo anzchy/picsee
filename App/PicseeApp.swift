@@ -52,6 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let sha = Bundle.main.object(forInfoDictionaryKey: "PicseeGitSHA") as? String ?? "unknown"
         logger.notice("Picsee launch git=\(sha, privacy: .public)")
+        #if DEBUG
+        if AccessProbeRunner.runIfRequested(arguments: ProcessInfo.processInfo.arguments) { return }
+        #endif
         _ = memoryPressure
         #if DEBUG && PICSEE_UI_TEST_FIXTURE
         do {
