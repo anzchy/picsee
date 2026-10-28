@@ -164,6 +164,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         content.addSubview(canvas)
         stateHost = ViewerStateHost(frame: content.bounds, session: session)
         stateHost.autoresizingMask = [.width, .height]
+        content.onDragActive = { [weak self] active in self?.stateHost?.setFirstLaunchDragActive(active) }
         stateHost.onRetry = { [weak self] in
             self?.retryIntent?.reopen { url, request in
                 guard let self else { return }
