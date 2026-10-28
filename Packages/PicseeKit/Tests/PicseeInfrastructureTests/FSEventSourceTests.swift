@@ -98,14 +98,17 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     let startMilliseconds = scheduler.nowMilliseconds
     let start = ContinuousClock.now
     _ = scheduler.schedule(afterMilliseconds: 200, x.action)
-    #expect(await poll(deadline: .seconds(30)) { x.count >= 1 })
+    // This 120 s deadline guards a missing callback; CI has delayed a 200 ms item by over 20 s.
+    #expect(await poll(deadline: .seconds(120)) { x.count >= 1 })
     let elapsed = (x.first ?? start) - start
-    // Never early; the upper bound only catches a scheduler that ignores its delay, so a loaded runner cannot flake it.
-    #expect(elapsed >= .milliseconds(150) && elapsed < .seconds(10))
-    #expect(scheduler.nowMilliseconds - startMilliseconds >= 150)
+    // Dispatch is allowed to run late under load; only an early callback violates the delay.
+    #expect(elapsed >= .milliseconds(200))
+    #expect(scheduler.nowMilliseconds - startMilliseconds >= 200)
     scheduler.schedule(afterMilliseconds: 100, y.action).cancel()
+    let zStart = ContinuousClock.now
     _ = scheduler.schedule(afterMilliseconds: 300, z.action)
-    #expect(await poll(deadline: .seconds(30)) { z.count == 1 })
+    #expect(await poll(deadline: .seconds(120)) { z.count == 1 })
+    #expect((z.first ?? zStart) - zStart >= .milliseconds(300))
     #expect(y.count == 0)
     #expect(x.count == 1)
 }
