@@ -48,12 +48,14 @@ import PicseeCore
     public var onSearchChange: ((String) -> Void)?
     public var onClearSearch: (() -> Void)?
     public var onSort: ((FolderMenuAction) -> Void)?
+    public var onSelectFolder: ((URL) -> Void)?
     public var onOpenSortMenu: ((NSButton, NSMenu) -> Void)?
     public var sortConditions: (() -> FolderViewConditions)?
     public var onMainFrameChange: ((NSRect) -> Void)?
     private let preferencesStore: any DisplayPreferencesStore
     private let divider = GridSidebarDivider()
     private let folderName = NSTextField(labelWithString: "")
+    public let folderTree = GridSidebarTreeView(frame: .zero)
     private let footerRule = NSView()
     private let emptyState = NSView()
     private let emptyIcon = NSImageView()
@@ -128,6 +130,7 @@ import PicseeCore
         sortButton.setAccessibilityLabel(String(localized: "Sort images"))
         sortButton.setAccessibilityIdentifier("grid.sort.button")
         sidebar.addSubview(folderName)
+        sidebar.addSubview(folderTree)
         sidebar.addSubview(divider)
         sidebar.setAccessibilityIdentifier("grid.sidebar")
         footer.setAccessibilityIdentifier("grid.footer")
@@ -154,6 +157,8 @@ import PicseeCore
         folderName.isHidden = true
         folderName.font = .systemFont(ofSize: 12, weight: .medium)
         folderName.setAccessibilityIdentifier("grid.sidebar.folder")
+        folderTree.isHidden = true
+        folderTree.onSelectFolder = { [weak self] url in self?.onSelectFolder?(url) }
         toggleButton.bezelStyle = .texturedRounded
         toggleButton.isBordered = false
         toggleButton.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil)
@@ -182,9 +187,20 @@ import PicseeCore
         }
     }
     public func showFolder(_ name: String?) {
+        folderTree.isHidden = true
         folderName.stringValue = name ?? ""
         folderName.isHidden = name == nil
         folderName.setAccessibilityLabel(name ?? "")
+        updateKeyViewLoop()
+    }
+    public func showFolderTree(current: GridSidebarFolder, parent: GridSidebarFolder?, children: [GridSidebarFolder]) {
+        folderName.isHidden = true
+        folderTree.isHidden = false
+        folderTree.show(current: current, parent: parent, children: children)
+        updateKeyViewLoop()
+    }
+    public func updateFolderCount(_ count: Int?, for url: URL) {
+        folderTree.updateCount(count, for: url)
     }
     public var mainFrame: NSRect {
         let visible = preferencesStore.value.gridSidebarVisible
@@ -239,6 +255,8 @@ import PicseeCore
                                          width: 130, height: clearHeight)
         folderName.frame = NSRect(x: 14, y: max(0, sidebar.bounds.height - 53),
                                   width: max(0, sidebar.bounds.width - 28), height: 20)
+        folderTree.frame = sidebar.bounds
+        folderTree.viewportWidth = bounds.width
         divider.frame = NSRect(x: max(0, sidebar.bounds.width - 5), y: 0, width: 5,
                                height: sidebar.bounds.height)
         divider.setAccessibilityValue(NSNumber(value: Double(main.minX)))
@@ -282,7 +300,10 @@ import PicseeCore
     }
     private var footerKeyViews: [NSView] {
         var views: [NSView] = [toggleButton]
-        if preferencesStore.value.gridSidebarVisible { views.append(divider) }
+        if preferencesStore.value.gridSidebarVisible {
+            views.append(divider)
+            if !folderTree.isHidden { views.append(contentsOf: folderTree.rows) }
+        }
         if footerActionsEnabled {
             views.append(searchField.isHidden ? searchButton : searchField)
             views.append(sortButton)
@@ -302,8 +323,12 @@ import PicseeCore
         guard let focusAnchor else { return }
         focusAnchor.nextKeyView = toggleButton
         let nextAction: NSView = footerActionsEnabled ? (searchField.isHidden ? searchButton : searchField) : focusAnchor
+        let treeRows: [NSView] = preferencesStore.value.gridSidebarVisible && !folderTree.isHidden ? folderTree.rows : []
         toggleButton.nextKeyView = preferencesStore.value.gridSidebarVisible ? divider : nextAction
-        divider.nextKeyView = nextAction
+        divider.nextKeyView = treeRows.first ?? nextAction
+        for (index, row) in treeRows.enumerated() {
+            row.nextKeyView = treeRows.indices.contains(index + 1) ? treeRows[index + 1] : nextAction
+        }
         searchButton.nextKeyView = sortButton
         searchField.nextKeyView = sortButton
         sortButton.nextKeyView = emptyState.isHidden ? focusAnchor : clearSearchButton

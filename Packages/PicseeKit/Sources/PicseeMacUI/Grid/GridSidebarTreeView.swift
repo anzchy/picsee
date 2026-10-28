@@ -1,0 +1,201 @@
+import AppKit
+
+public struct GridSidebarFolder: Sendable, Equatable {
+    public let url: URL
+    public let count: Int?
+    public init(url: URL, count: Int? = nil) { self.url = url; self.count = count }
+}
+
+@MainActor public final class GridSidebarFolderButton: NSButton {
+    public let folderURL: URL
+    public let nameLabel = NSTextField(labelWithString: "")
+    public let countLabel = NSTextField(labelWithString: "")
+    public let glyph = NSImageView()
+    public let depth: Int
+    public let current: Bool
+    public var compact = false {
+        didSet {
+            nameLabel.font = .systemFont(ofSize: compact ? 12 : 13)
+            needsLayout = true
+        }
+    }
+    public init(folder: GridSidebarFolder, depth: Int, current: Bool) {
+        self.folderURL = folder.url; self.depth = depth; self.current = current
+        super.init(frame: .zero)
+        isBordered = false
+        title = ""
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        addSubview(glyph)
+        addSubview(nameLabel)
+        addSubview(countLabel)
+        nameLabel.stringValue = folder.url.lastPathComponent
+        nameLabel.font = .systemFont(ofSize: 13)
+        nameLabel.lineBreakMode = .byTruncatingTail
+        nameLabel.maximumNumberOfLines = 1
+        glyph.image = current ? Self.openFolderImage() : NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        glyph.imageScaling = .scaleProportionallyDown
+        glyph.contentTintColor = current ? DesignColor.selectionText.nsColor : DesignColor.textSecondary.nsColor
+        countLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        setCount(folder.count)
+        setAccessibilityRole(.button)
+        setAccessibilityIdentifier("grid.sidebar.folder.\(folder.url.lastPathComponent)")
+        refreshAppearance()
+    }
+    public required init?(coder: NSCoder) { nil }
+    private static func openFolderImage() -> NSImage {
+        let image = NSImage(size: NSSize(width: 17, height: 17), flipped: false) { _ in
+            let back = NSBezierPath()
+            back.move(to: NSPoint(x: 2, y: 4))
+            back.line(to: NSPoint(x: 2, y: 12))
+            back.line(to: NSPoint(x: 6, y: 12))
+            back.line(to: NSPoint(x: 7.5, y: 10.5))
+            back.line(to: NSPoint(x: 15, y: 10.5))
+            back.line(to: NSPoint(x: 15, y: 4))
+            back.lineWidth = 1.5
+            back.lineJoinStyle = .round
+            back.stroke()
+            let flap = NSBezierPath()
+            flap.move(to: NSPoint(x: 2, y: 4))
+            flap.line(to: NSPoint(x: 4, y: 9))
+            flap.line(to: NSPoint(x: 16, y: 9))
+            flap.line(to: NSPoint(x: 14, y: 3))
+            flap.close()
+            flap.lineWidth = 1.5
+            flap.lineJoinStyle = .round
+            flap.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+    public override var acceptsFirstResponder: Bool { !isHiddenOrHasHiddenAncestor && isEnabled }
+    public override var canBecomeKeyView: Bool { acceptsFirstResponder }
+    public override func keyDown(with event: NSEvent) {
+        if event.keyCode == 36 || event.keyCode == 49 { performClick(nil) }
+        else { super.keyDown(with: event) }
+    }
+    public func setCount(_ count: Int?) {
+        countLabel.stringValue = count.map(String.init) ?? ""
+        countLabel.isHidden = count == nil
+        let name = folderURL.lastPathComponent
+        if let count {
+            let images = String(format: String(localized: "%lld images"), Int64(count))
+            setAccessibilityLabel("\(name), \(images)")
+        } else { setAccessibilityLabel(name) }
+        needsLayout = true
+    }
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshAppearance()
+    }
+    private func refreshAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = current ? DesignColor.selectionFill.nsColor.cgColor : NSColor.clear.cgColor
+            nameLabel.textColor = current ? DesignColor.selectionText.nsColor : DesignColor.textPrimary.nsColor
+            countLabel.textColor = DesignColor.textSecondary.nsColor
+        }
+    }
+    public override func layout() {
+        super.layout()
+        let padding: CGFloat = compact ? (depth > 0 ? 9 : 7) : 10
+        glyph.frame = NSRect(x: padding, y: 7, width: 17, height: 17)
+        let countWidth: CGFloat = countLabel.isHidden ? 0 : max(13, countLabel.intrinsicContentSize.width)
+        countLabel.frame = NSRect(x: bounds.width - padding - countWidth, y: 7, width: countWidth, height: 18)
+        let labelX = glyph.frame.maxX + (compact ? 6 : 9)
+        nameLabel.frame = NSRect(x: labelX, y: 6, width: max(0, countLabel.frame.minX - labelX - (countLabel.isHidden ? 0 : 8)), height: 20)
+    }
+}
+
+@MainActor public final class GridSidebarTreeView: NSView {
+    public let heading = NSTextField(labelWithString: "")
+    public let guide = NSView()
+    public var viewportWidth: CGFloat = 1280 { didSet { if oldValue != viewportWidth { needsLayout = true } } }
+    public private(set) var rows: [GridSidebarFolderButton] = []
+    public var onSelectFolder: ((URL) -> Void)?
+    private let scroll = NSScrollView()
+    private let document = NSView()
+    private var parent: GridSidebarFolder?
+    private var currentFolder: GridSidebarFolder?
+    private var children: [GridSidebarFolder] = []
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .noBorder
+        scroll.documentView = document
+        addSubview(scroll)
+        document.addSubview(heading)
+        document.addSubview(guide)
+        heading.stringValue = "文件夹"
+        heading.font = .systemFont(ofSize: 12, weight: .semibold)
+        heading.textColor = DesignColor.textSecondary.nsColor
+        guide.wantsLayer = true
+        guide.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
+        guide.isHidden = true
+    }
+    public required init?(coder: NSCoder) { nil }
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            heading.textColor = DesignColor.textSecondary.nsColor
+            guide.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
+        }
+    }
+    public func show(current: GridSidebarFolder, parent: GridSidebarFolder?, children: [GridSidebarFolder]) {
+        self.parent = parent; currentFolder = current; self.children = children
+        for row in rows { row.removeFromSuperview() }
+        rows = []
+        if let parent { append(parent, depth: 0, current: false) }
+        let depth = parent == nil ? 0 : 1
+        append(current, depth: depth, current: true)
+        for child in children { append(child, depth: depth + 1, current: false) }
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
+    }
+    private func append(_ folder: GridSidebarFolder, depth: Int, current: Bool) {
+        let row = GridSidebarFolderButton(folder: folder, depth: depth, current: current)
+        row.target = self
+        row.action = #selector(selectFolder(_:))
+        document.addSubview(row)
+        rows.append(row)
+    }
+    @objc private func selectFolder(_ sender: GridSidebarFolderButton) {
+        guard !sender.current else { return }
+        onSelectFolder?(sender.folderURL)
+    }
+    public func updateCount(_ count: Int?, for url: URL) {
+        if currentFolder?.url == url { currentFolder = GridSidebarFolder(url: url, count: count) }
+        if parent?.url == url { parent = GridSidebarFolder(url: url, count: count) }
+        if let index = children.firstIndex(where: { $0.url == url }) { children[index] = GridSidebarFolder(url: url, count: count) }
+        rows.first(where: { $0.folderURL == url })?.setCount(count)
+    }
+    public override func layout() {
+        super.layout()
+        scroll.frame = bounds
+        let rowHeight: CGFloat = 32
+        let rowGap: CGFloat = 3
+        let compact = viewportWidth <= 900
+        let headerTop: CGFloat = compact ? 44 : 50 // sidebar padding + folder heading 28pt margin
+        let headerHeight: CGFloat = 14
+        let firstRowTop = headerTop + headerHeight + 8
+        let documentHeight = max(bounds.height, firstRowTop + CGFloat(rows.count) * (rowHeight + rowGap) + 16)
+        document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: documentHeight)
+        heading.frame = NSRect(x: compact ? 20 : 22, y: documentHeight - headerTop - headerHeight,
+            width: max(0, bounds.width - 44), height: headerHeight)
+        for (index, row) in rows.enumerated() {
+            row.compact = compact
+            let x: CGFloat = 12 + CGFloat(row.depth) * (compact ? 8 : 19)
+            row.frame = NSRect(x: x, y: documentHeight - firstRowTop - CGFloat(index + 1) * rowHeight - CGFloat(index) * rowGap,
+                width: max(0, bounds.width - x - 12), height: rowHeight)
+            row.layoutSubtreeIfNeeded()
+            row.nextKeyView = rows.indices.contains(index + 1) ? rows[index + 1] : nil
+        }
+        if let firstChild = rows.firstIndex(where: { $0.depth > (parent == nil ? 0 : 1) }) {
+            guide.isHidden = false
+            guide.frame = NSRect(x: rows[firstChild].frame.minX - (compact ? 3 : 6), y: rows.last?.frame.minY ?? 0,
+                width: 1, height: max(0, rows[firstChild].frame.maxY - (rows.last?.frame.minY ?? 0)))
+        } else { guide.isHidden = true }
+    }
+}
