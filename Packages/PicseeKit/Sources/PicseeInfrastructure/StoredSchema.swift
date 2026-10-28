@@ -86,10 +86,6 @@ enum StoredSchema {
     }
 
     private static let logState = LogState()
-    // Kept only while splitting the migration into compileable commits; removed with the callers.
-    static func logUnsupportedOnce(at url: URL, category: String) {
-        logUnsupportedOnce(at: url, category: category, store: "unknown", version: -1)
-    }
     static func logUnsupportedOnce(at url: URL, category: String, store: String, version: Int) {
         let key = category + ":" + store + ":" + url.standardizedFileURL.path
         let first = logState.lock.withLock { logState.paths.insert(key).inserted }
