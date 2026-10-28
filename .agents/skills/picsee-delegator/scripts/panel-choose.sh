@@ -1,70 +1,34 @@
 #!/bin/zsh
-# panel-choose.sh RUN_DIR PATH — in an open NSOpenPanel/powerbox: ⌘⇧G, paste PATH (⌘A ⌘V), Return (go), Return (Open/Grant).
-# PATH goes through the general pasteboard, never a System Events keystroke, so an input method cannot convert it (#119).
-# Only a plain-text pasteboard is touched; it is restored and compared byte for byte on every exit, including INT/TERM/HUP
-# (not SIGKILL). If someone else copies while the path is on it, their copy is kept, not restored over, and the run fails.
-# Prints the active input source (read-only) for the run record. Synthetic input: disclose it in the validation record.
+# panel-choose.sh RUN_DIR PATH — in an open NSOpenPanel/powerbox of the run's Picsee: ⌘⇧G, write PATH into the
+# Go-to field through accessibility, read it back, Return (go), check the sheet closed, Return (Open/Grant).
+# 2026-10-28: the old ⌘A ⌘V paste never reached the Go-to field (run probe-228), so Return confirmed whatever folder
+# the panel remembered and every pick landed in the wrong place while the script reported success. Writing the
+# AX value bypasses the pasteboard and the input method (#119), and every step is verified; any mismatch fails
+# before Open is pressed. Synthetic input: disclose it in the validation record.
 [[ $# -eq 2 && -n $2 ]] || { print -u2 'usage: panel-choose.sh RUN_DIR PATH'; exit 2 }
 cd "$(git -C "${0:A:h}" rev-parse --show-toplevel)" || exit 1
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-umask 077
-run=$1 target=$2 changed=0 restored=0 dir= mine=
+run=$1 target=$2
+[[ -r $run/picsee.pid ]] || { print -u2 "FAIL panel-choose — no $run/picsee.pid; launch through scripts/device/launch.sh or record the identity first"; exit 1 }
+pid=$(<$run/picsee.pid); pid=${pid//[^0-9]/}
 
-restore() {
-  (( changed && !restored )) || return 0
-  restored=1
-  if [[ -n $mine ]]; then
-    local now
-    now=$(pbcount) || { print -u2 'FAIL pasteboard restore — cannot read changeCount; not restored, it may still hold the path'; return 1 }
-    [[ $now == $mine ]] || { print -u2 'FAIL pasteboard changed by someone else during the run; not restored, it keeps their copy'; return 1 }
-  fi
-  pbcopy < $dir/saved || { print -u2 'FAIL pasteboard restore — pbcopy failed; the pasteboard may still hold the path'; return 1 }
-  pbpaste > $dir/after && cmp -s $dir/saved $dir/after ||
-    { print -u2 'FAIL pasteboard restore — read-back contents differ from the saved copy'; return 1 }
-}
-
-finish() {
-  trap '' INT TERM HUP
-  local rc=$1
-  restore || (( rc )) || rc=1
-  [[ -n $dir ]] && rm -f -- $dir/*(N) && rmdir -- $dir
-  exit $rc
-}
-trap 'finish 130' INT
-trap 'finish 143' TERM
-trap 'finish 129' HUP
-
-pbcount() { osascript -l JavaScript -e 'ObjC.import("AppKit"); $.NSPasteboard.generalPasteboard.changeCount' }
 key() { scripts/device/kc.sh $run "$@" >/dev/null || { print -u2 -r -- "FAIL panel-choose — key $* failed"; return 1 } }
+# AX on the dialog of this run's process (the sandbox powerbox panel is a window of the app process).
+ax() { osascript -e "tell application \"System Events\" to tell (first process whose unix id is $pid) to tell (first window whose subrole is \"AXDialog\") to $1" 2>/dev/null }
+wait_sheets() { local want=$1 t; for t in {1..20}; do [[ $(ax 'return count of sheets') == $want ]] && return 0; sleep 0.25; done; return 1 }
 
 source_id=$(osascript -l JavaScript -e 'ObjC.import("Carbon"); ObjC.castRefToObject($.TISGetInputSourceProperty($.TISCopyCurrentKeyboardInputSource(), $.kTISPropertyInputSourceID)).js' 2>&1) &&
   print -r -- "input-source: $source_id" || print -r -- "input-source: unknown (${source_id%%$'\n'*})"
 
-# First line: changeCount; then one type per line. The count is read again after the save to catch a copy in between.
-types=$(osascript -l JavaScript -e 'ObjC.import("AppKit"); var b = $.NSPasteboard.generalPasteboard;
-  [b.changeCount].concat(ObjC.deepUnwrap(b.types) || []).join("\n")') ||
-  { print -u2 'FAIL pasteboard — cannot read its types; nothing changed'; finish 1 }
-count=${types%%$'\n'*} types=${types#$count}
-for type in ${(f)types}; do
-  case $type in
-    public.utf8-plain-text|public.utf16-plain-text|public.utf16-external-plain-text|public.plain-text|NSStringPboardType) ;;
-    *) print -u2 -r -- "FAIL pasteboard — holds $type, which a text restore would lose; nothing changed"; finish 1 ;;
-  esac
-done
-
-dir=$(mktemp -d "${TMPDIR:-/tmp}/panel-choose.XXXXXX") || { print -u2 'FAIL panel-choose — mktemp failed'; finish 1 }
-pbpaste > $dir/saved || { print -u2 'FAIL pasteboard — cannot read it; nothing changed'; finish 1 }
-[[ $(pbcount) == $count ]] ||
-  { print -u2 'FAIL pasteboard changed while it was being saved; nothing changed, rerun'; finish 1 }
-changed=1
-# The path goes through a file, not a pipe, so no forked subshell can run the INT trap.
-print -rn -- $target > $dir/path && pbcopy < $dir/path && pbpaste > $dir/set && cmp -s $dir/path $dir/set ||
-  { print -u2 'FAIL pasteboard — the path did not read back intact; nothing pasted'; finish 1 }
-# Our own count: restore() only writes back if nobody has copied since.
-mine=$(pbcount) || { mine=; print -u2 'FAIL pasteboard — cannot read changeCount after setting the path; nothing pasted'; finish 1 }
-
-key 5 command shift && sleep 1.2 &&
-  key 0 command && key 9 command && sleep 1.2 &&
-  key 36 && sleep 1.5 &&
-  key 36 && sleep 2.5
-finish $?
+[[ -n $(ax 'return name') ]] || { print -u2 'FAIL panel-choose — no open panel (AXDialog) on the run process'; exit 1 }
+key 5 command shift || exit 1
+wait_sheets 1 || { print -u2 'FAIL panel-choose — Go-to sheet did not open'; exit 1 }
+quoted=${target//\\/\\\\}; quoted=${quoted//\"/\\\"}
+ax "set value of text field 1 of sheet 1 to \"$quoted\"" >/dev/null
+got=$(ax 'return value of text field 1 of sheet 1')
+[[ $got == $target ]] || { print -u2 -r -- "FAIL panel-choose — Go-to field holds '$got', not the target; nothing chosen"; key 53; exit 1 }
+key 36 || exit 1
+wait_sheets 0 || { print -u2 -r -- "FAIL panel-choose — Go-to sheet still open after Return (path not found?); nothing chosen"; key 53; exit 1 }
+key 36 || exit 1
+sleep 1.5
+print -r -- "chose: $target"
