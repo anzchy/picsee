@@ -50,4 +50,6 @@ private actor BlockedCounter: SidebarFolderEnumerating {
     var countIterator = countUpdates.makeAsyncIterator()
     _ = await countIterator.next()
     #expect(counts[child] == 1234)
+    session.cancel()
+    #expect(counts[child] == 1234)
 }
