@@ -39,7 +39,7 @@ public struct GridSidebarFolder: Sendable, Equatable {
         countLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         setCount(folder.count)
         setAccessibilityRole(.button)
-        if current { setAccessibilityValue("selected") }
+        if current { setAccessibilityValue(String(localized: "Selected")) }
         setAccessibilityIdentifier("grid.sidebar.folder.\(folder.url.lastPathComponent)")
         refreshAppearance()
     }
