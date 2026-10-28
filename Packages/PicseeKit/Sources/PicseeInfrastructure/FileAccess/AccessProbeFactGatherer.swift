@@ -38,7 +38,7 @@ public struct AccessProbeReport: Codable, Equatable, Sendable {
 
 public protocol AccessProbeBookmarkCoding: Sendable {
     func makeBookmark(for url: URL, includingResourceValuesForKeys keys: Set<URLResourceKey>?) throws -> Data
-    func volumeProperties(in data: Data) -> AccessProbeVolume
+    func volumeProperties(in data: Data) throws -> AccessProbeVolume
     func resolve(_ data: Data, options: URL.BookmarkResolutionOptions) throws -> AccessProbeResolution
 }
 
@@ -81,8 +81,15 @@ public struct AccessProbeFactGatherer: Sendable {
 
     public func gather(bookmarkData: Data) -> AccessProbeReport {
         let startedAt = DispatchTime.now().uptimeNanoseconds
-        let volume = bookmarks.volumeProperties(in: bookmarkData)
-        let volumePropertiesError: AccessProbeError? = nil
+        let volume: AccessProbeVolume
+        let volumePropertiesError: AccessProbeError?
+        do {
+            volume = try bookmarks.volumeProperties(in: bookmarkData)
+            volumePropertiesError = nil
+        } catch {
+            volume = AccessProbeVolume(uuid: nil, url: nil, name: nil)
+            volumePropertiesError = AccessProbeError(error)
+        }
         let mountedVolumes = mountedVolumesProvider()
         let resolution: AccessProbeResolution
         var scopeStarted: Bool?
@@ -154,13 +161,15 @@ private struct SystemAccessProbeBookmarkCoding: AccessProbeBookmarkCoding {
         try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: keys, relativeTo: nil)
     }
 
-    func volumeProperties(in data: Data) -> AccessProbeVolume {
+    func volumeProperties(in data: Data) throws -> AccessProbeVolume {
         let keys: Set<URLResourceKey> = [.volumeUUIDStringKey, .volumeURLKey, .volumeNameKey]
-        let values = URL.resourceValues(forKeys: keys, fromBookmarkData: data)
+        guard let values = URL.resourceValues(forKeys: keys, fromBookmarkData: data) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
         return AccessProbeVolume(
-            uuid: values?.volumeUUIDString,
-            url: values?.volume,
-            name: values?.volumeName
+            uuid: values.volumeUUIDString,
+            url: values.volume,
+            name: values.volumeName
         )
     }
 
