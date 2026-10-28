@@ -107,12 +107,22 @@ enum AccessProbeRunner {
         return try JSONDecoder().decode([StoredBookmark].self, from: Data(contentsOf: url))
     }
 
+    static func collectFolders(chooseOne: () -> URL?) -> [URL] {
+        var folders: [URL] = []
+        while let folder = chooseOne() {
+            folders.append(folder)
+        }
+        return folders
+    }
+
     private static func chooseFoldersWithPanel() -> [URL] {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = true
-        return panel.runModal() == .OK ? panel.urls : []
+        collectFolders {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            return panel.runModal() == .OK ? panel.url : nil
+        }
     }
 }
 #endif
