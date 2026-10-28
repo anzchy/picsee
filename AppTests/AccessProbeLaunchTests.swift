@@ -62,6 +62,21 @@ struct AccessProbeLaunchTests {
         #expect(AccessProbeRunner.resultsLogMessage(for: output) == "AccessProbe results ready")
     }
 
+    @Test func collectsSequentialFolderPicksUntilCancel() {
+        let first = URL(fileURLWithPath: "/Volumes/A/One", isDirectory: true)
+        let second = URL(fileURLWithPath: "/Volumes/B/Two", isDirectory: true)
+        var picks: [URL?] = [first, second, nil]
+        var pickCount = 0
+
+        let collected = AccessProbeRunner.collectFolders {
+            pickCount += 1
+            return picks.isEmpty ? nil : picks.removeFirst()
+        }
+
+        #expect(collected == [first, second])
+        #expect(pickCount == 3)
+    }
+
     @Test func storesBothBookmarkKindsAndWritesJSONLOnEveryRun() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
