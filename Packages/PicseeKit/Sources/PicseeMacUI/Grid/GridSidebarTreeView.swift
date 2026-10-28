@@ -176,7 +176,7 @@ public struct GridSidebarFolder: Sendable, Equatable {
         scroll.frame = bounds
         let rowHeight: CGFloat = 32
         let rowGap: CGFloat = 3
-        let compact = viewportWidth <= 900
+        let compact = viewportWidth <= 720
         let headerTop: CGFloat = compact ? 44 : 50 // sidebar padding + folder heading 28pt margin
         let headerHeight: CGFloat = 14
         let firstRowTop = headerTop + headerHeight + 8
