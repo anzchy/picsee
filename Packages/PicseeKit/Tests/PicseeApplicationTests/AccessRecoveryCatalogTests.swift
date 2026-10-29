@@ -49,3 +49,28 @@ func p201RecoveryCatalogFormatsFolderNameWithoutInterpretingItsPercent(language:
         : "访问权限可能已失效，请重新选择“\(name)”。"
     #expect(String(format: format, name) == expected)
 }
+
+@Test func t229Page26CatalogUsesOnlyObservedCauseAndPinnedChineseCopy() throws {
+    let catalog = try recoveryCatalog()
+    let copy = [
+        ("Unable to Access This Folder", "无法访问此文件夹"),
+        ("External Disk Is Not Connected", "外接磁盘未连接"),
+        ("External Disk “%@” Is Not Connected", "外接磁盘“%@”未连接"),
+        ("“%@” is on an external disk.\nConnect the disk and picsee will verify access before restoring your place.",
+         "“%@”在外接磁盘上。\n连接磁盘后，picsee 会重新确认访问权限，然后自动恢复。"),
+        ("picsee can’t read “%@” right now. Choose this folder again, or choose another folder to continue.",
+         "picsee 现在读不到“%@”。重新选择这个文件夹，或换一个文件夹继续。"),
+        ("Waiting for the disk…", "等待磁盘连接…"),
+        ("Folder Access Restored", "文件夹访问已恢复")
+    ]
+    for (english, chinese) in copy {
+        let actualEnglish = catalog.value(english, language: "en")
+        let actualChinese = catalog.value(english, language: "zh-Hans")
+        #expect(actualEnglish == english)
+        #expect(actualChinese == chinese)
+        if english.contains("%@") {
+            let format = try #require(catalog.value(english, language: "zh-Hans"))
+            #expect(String(format: format, "100% Photos").contains("100% Photos"))
+        }
+    }
+}

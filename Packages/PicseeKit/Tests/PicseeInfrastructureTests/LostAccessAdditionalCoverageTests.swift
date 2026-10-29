@@ -186,3 +186,25 @@ private actor T229CoverageMounts: DiskMountPort {
         #expect(await cache.writeDiagnostics().lastFailure == nil)
     }
 }
+
+@Test func t229MountedLegacyNormalReadKeepsObservedIdentityAndOriginalBookmark() async throws {
+    let f = try T229CoverageFixture(); defer { f.remove() }
+    let file = f.root.appendingPathComponent("readable.txt")
+    let expected = Data("legacy session remains readable".utf8)
+    try expected.write(to: file)
+    let id = AccessRootID(), scope = CountingScope()
+    let legacy = try f.root.bookmarkData(options: [.withSecurityScope],
+        includingResourceValuesForKeys: nil, relativeTo: nil)
+    try f.save(legacy, id: id)
+    let volume = AccessProbeFactGatherer.bookmarkVolume(in: legacy)
+    let files = try FileAccess(scope: scope, bookmarks: SystemSecurityScope(), store: f.store,
+        buildSHA: "T229-legacy-normal", mountedVolumesProvider: { [volume] })
+    #expect(await files.rootURL(id) != nil)
+    let observed = try await files.withLease(.root(id, file: file)) { lease in
+        #expect(lease.rootID == id)
+        return try Data(contentsOf: file)
+    }
+    #expect(observed == expected)
+    #expect(try f.store.load().first?.bookmark == legacy)
+    #expect(scope.counts == [2, 2])
+}

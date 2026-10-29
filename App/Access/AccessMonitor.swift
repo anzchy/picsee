@@ -32,6 +32,18 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     private var latestMountEvents: [String: (revision: UInt64, mounted: Bool)] = [:]
     private var recoveryObservers: [UUID: @MainActor (AccessRecoveryAttempt) -> Void] = [:]
     private var reauthorizationRequests: [AccessRootID: UUID] = [:]
+    private var volumeNames: [String: String] = [:]
+    private var announcementPhase: [AccessRootID: Bool] = [:]
+    func volumeName(for rootID: AccessRootID) -> String? {
+        state.snapshot(for: rootID)?.volumeUUID.flatMap { volumeNames[$0] }
+    }
+    /// One notification per root and waiting episode, even with several windows.
+    func claimAnnouncement(for rootID: AccessRootID, recovered: Bool) -> Bool {
+        guard announcementPhase[rootID] != recovered else { return false }
+        if recovered && announcementPhase[rootID] == nil { return false }
+        announcementPhase[rootID] = recovered
+        return true
+    }
 
     nonisolated init(files: FileAccess, mounts: (any DiskMountPort)? = nil) {
         self.files = files
@@ -74,11 +86,13 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         switch event {
         case .unmounted(let volume):
             guard let uuid = volume.uuid else { return }
+            if let name = volume.name { volumeNames[uuid] = name }
             mountEventRevision &+= 1
             latestMountEvents[uuid] = (mountEventRevision, false)
             state.diskUnmounted(volumeUUID: uuid)
         case .mounted(let volume):
             guard let uuid = volume.uuid else { return }
+            if let name = volume.name { volumeNames[uuid] = name }
             mountEventRevision &+= 1
             latestMountEvents[uuid] = (mountEventRevision, true)
             for attempt in state.diskMounted(volumeUUID: uuid) { publishRecovery(attempt) }
@@ -91,6 +105,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     private func registerEntry(_ id: AccessRootID) async {
         guard state.snapshot(for: id) == nil else { return }
         let volume = await files.savedVolume(id)
+        if let uuid = volume?.uuid, let name = volume?.name { volumeNames[uuid] = name }
         let root = await files.rootURL(id)
         let mounted: Bool
         if let uuid = volume?.uuid { mounted = await isMounted(uuid) }

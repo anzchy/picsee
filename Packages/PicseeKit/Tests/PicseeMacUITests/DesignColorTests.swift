@@ -53,7 +53,7 @@ func channels(_ c: NSColor) -> [Double] {
 @MainActor @Test func designColorsFollowCSSAndAppearance() throws {
     let colors = try registry()["colors"] as! [String: [String: Any]]
     #expect(Set(colors.keys) == Set(DesignColor.allCases.map(\.rawValue)))
-    #expect(DesignColor.allCases.count == 21)
+    #expect(DesignColor.allCases.count == 22) // Includes the page-26 waiting indicator role.
     for theme in DesignTheme.allCases {
         let vars = try cssVariables(theme)
         let appearance = NSAppearance(named: theme == .light ? .aqua : .darkAqua)!

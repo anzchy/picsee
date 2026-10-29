@@ -78,6 +78,7 @@ import PicseeCore
     private var dragStartWidth: CGFloat?
     private var liveSidebarWidth: CGFloat?
     private weak var focusAnchor: NSView?
+    private weak var focusTail: NSView?
     private var footerActionsEnabled = true
     private var preserveRestoredSearchEditor = false
     private var comingSoonEntries: [ObjectIdentifier: EntryPoint] = [:]
@@ -393,6 +394,12 @@ import PicseeCore
     }
     public func linkKeyViews(from anchor: NSView) {
         focusAnchor = anchor
+        focusTail = nil
+        updateKeyViewLoop()
+    }
+    public func linkKeyViews(from first: NSView, through last: NSView) {
+        focusAnchor = first
+        focusTail = last
         updateKeyViewLoop()
     }
     private var footerKeyViews: [NSView] {
@@ -420,7 +427,7 @@ import PicseeCore
     private var pageKeyViews: [NSView] { emptyFolderView.isHidden ? [] : emptyFolderView.keyViews }
     private func updateKeyViewLoop() {
         guard let focusAnchor else { return }
-        focusAnchor.nextKeyView = toggleButton
+        (focusTail ?? focusAnchor).nextKeyView = toggleButton
         let page = pageKeyViews
         let nextAction: NSView = footerActionsEnabled ? (searchField.isHidden ? searchButton : searchField)
             : page.first ?? focusAnchor
@@ -491,7 +498,10 @@ import PicseeCore
     public func setSearchTerm(_ term: String) {
         searchField.stringValue = term
         searchButton.state = term.isEmpty ? .off : .on
-        if term.isEmpty { searchStatus.isHidden = true }
+        if term.isEmpty {
+            searchStatus.stringValue = ""
+            searchStatus.isHidden = true
+        }
     }
     public func setSearchStatus(resultCount: Int, term: String) {
         searchStatus.stringValue = term.isEmpty
@@ -515,6 +525,7 @@ import PicseeCore
     public func showSearchEmpty(_ visible: Bool, term: String = "") {
         if visible { mainContent.addSubview(emptyState, positioned: .above, relativeTo: nil) }
         if visible { setEmptyDetailText(String(format: String(localized: "No images with “%@” in their filename."), term)) }
+        else { setEmptyDetailText(String(localized: "Try another filename or clear the search.")) }
         searchEmptyRequested = visible
         applyFooterState()
     }
