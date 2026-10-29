@@ -95,27 +95,58 @@ import PicseeMacUI
     let windowContent = try #require(panel.window.contentView)
     let sidebar = try #require(settingsControl("settings.sidebar", in: windowContent))
     let general = try #require(settingsControl("settings.section.general", in: windowContent))
-    for (appearance, expected, selection) in [(NSAppearance.Name.aqua, [246, 247, 251], [217, 226, 249]),
-                                               (.darkAqua, [22, 26, 34], [38, 57, 82])] {
+    for (appearance, expected, selection) in [(NSAppearance.Name.aqua, [246, 247, 251], [37, 99, 235]),
+                                               (.darkAqua, [22, 26, 34], [96, 165, 250])] {
         panel.window.appearance = NSAppearance(named: appearance)
         sidebar.needsDisplay = true
-        let bitmap = try #require(sidebar.bitmapImageRepForCachingDisplay(in: sidebar.bounds))
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil,
+            pixelsWide: Int(sidebar.bounds.width * 2), pixelsHigh: Int(sidebar.bounds.height * 2),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        bitmap.size = sidebar.bounds.size // 2 backing pixels per point in the destination context.
         sidebar.cacheDisplay(in: sidebar.bounds, to: bitmap)
         #expect(bitmap.colorSpaceName == .calibratedRGB)
-        let color = try #require(bitmap.colorAt(x: 4, y: 4))
+        let backingScale = CGFloat(bitmap.pixelsWide) / sidebar.bounds.width
+        #expect(backingScale == 2)
+        let outputSpace = NSColorSpace.genericRGB
+        func convertedCSS(_ bytes: [Int]) throws -> [CGFloat] {
+            let color = NSColor(srgbRed: CGFloat(bytes[0]) / 255, green: CGFloat(bytes[1]) / 255,
+                                blue: CGFloat(bytes[2]) / 255, alpha: 1)
+            let output = try #require(color.usingColorSpace(outputSpace))
+            return [output.redComponent, output.greenComponent, output.blueComponent]
+        }
+        let color = try #require(bitmap.colorAt(x: Int(4 * backingScale), y: Int(4 * backingScale)))
         let channels = [color.redComponent, color.greenComponent, color.blueComponent]
-        for (actual, value) in zip(channels, expected) {
-            #expect(abs(actual - CGFloat(value) / 255) < 0.02,
+        for (actual, value) in zip(channels, try convertedCSS(expected)) {
+            #expect(abs(actual - value) < 0.02,
                     "appearance=\(appearance.rawValue) sampled=\(channels) expected=\(expected)")
         }
         // settings.html: selected row is --color-accent at 14%/22% over --color-surface.
         // NSBitmapImageRep rows start at the top; NSView frames use the bottom-left origin.
-        let selectedRow = Int(sidebar.bounds.height - general.frame.midY)
-        let selected = try #require(bitmap.colorAt(x: 156, y: selectedRow))
-        for (actual, value) in zip([selected.redComponent, selected.greenComponent, selected.blueComponent], selection) {
-            #expect(abs(actual - CGFloat(value) / 255) < 0.04,
+        let selectedRow = Int((sidebar.bounds.height - general.frame.midY) * backingScale)
+        let selected = try #require(bitmap.colorAt(x: Int(156 * backingScale), y: selectedRow))
+        // AppKit composites in the bitmap working space: convert each CSS color before blending.
+        let alpha: CGFloat = appearance == .darkAqua ? 0.22 : 0.14
+        let foreground = try convertedCSS(selection)
+        let background = try convertedCSS(expected)
+        let composited = zip(foreground, background).map { $0 * alpha + $1 * (1 - alpha) }
+        for (actual, value) in zip([selected.redComponent, selected.greenComponent, selected.blueComponent], composited) {
+            #expect(abs(actual - value) < 0.04,
                     "appearance=\(appearance.rawValue) selected row does not match pinned accent soft")
         }
+        // Pinned selected-row text/icon is accent blue; background alone cannot satisfy this.
+        var accentForegroundPixels = 0
+        let top = Int((sidebar.bounds.height - general.frame.maxY + 4) * backingScale)
+        let bottom = Int((sidebar.bounds.height - general.frame.minY - 4) * backingScale)
+        for y in top..<bottom {
+            for x in Int(16 * backingScale)..<Int(140 * backingScale) {
+                if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+                   color.blueComponent - color.redComponent > 0.35 {
+                    accentForegroundPixels += 1
+                }
+            }
+        }
+        #expect(accentForegroundPixels > 4, "Selected sidebar foreground must use pinned accent text in \(appearance.rawValue)")
     }
 }
 
