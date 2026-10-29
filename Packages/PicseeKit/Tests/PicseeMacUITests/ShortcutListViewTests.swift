@@ -184,16 +184,20 @@ private struct Issue219PaintedText {
     return Issue219PaintedText(inkCount: inkCount, inkBounds: inkBounds)
 }
 
-@MainActor private func issue219UnclippedTextReference(_ field: NSTextField) throws -> NSTextField {
+@MainActor private func issue219UnclippedTextReference(_ field: NSTextField,
+    width: CGFloat? = nil, height: CGFloat? = nil, wraps: Bool = false) throws -> NSTextField {
     let font = try #require(field.font)
     let textSize = (field.stringValue as NSString).size(withAttributes: [.font: font])
     let reference = NSTextField(labelWithString: field.stringValue)
     reference.font = font
     reference.textColor = field.textColor
     reference.alignment = field.alignment
-    reference.lineBreakMode = .byClipping
+    reference.lineBreakMode = wraps ? .byWordWrapping : .byClipping
+    reference.maximumNumberOfLines = wraps ? 2 : 1
+    reference.cell?.wraps = wraps
     reference.appearance = field.effectiveAppearance
-    reference.frame = NSRect(x: 0, y: 0, width: ceil(textSize.width) + 16, height: field.bounds.height)
+    reference.frame = NSRect(x: 0, y: 0, width: width ?? ceil(textSize.width) + 16,
+        height: height ?? field.bounds.height)
     reference.layoutSubtreeIfNeeded()
     return reference
 }
@@ -210,9 +214,15 @@ private struct Issue219PaintedText {
             for card in view.cardViews {
                 for row in card.rowViews {
                     #expect(abs(row.nameLabel.frame.midY - row.bounds.midY) <= 0.5)
+                    let namePaint = try issue219PaintedText(row.nameLabel)
+                    let nameInk = try #require(namePaint.inkBounds,
+                        "\(language) \(appearance.rawValue) \(row.nameLabel.stringValue) is blank")
+                        .offsetBy(dx: row.nameLabel.frame.minX, dy: row.nameLabel.frame.minY)
                     for key in row.keycapViews {
                         let glyph = key.label.stringValue
                         renderedGlyphs.insert(glyph)
+                        #expect(abs(nameInk.midY - key.frame.midY) <= 1,
+                            "\(language) \(appearance.rawValue) \(row.nameLabel.stringValue): name ink centre \(nameInk.midY), \(glyph) border centre \(key.frame.midY)")
                         let font = try #require(key.label.font)
                         let requiredSize = (glyph as NSString).size(withAttributes: [.font: font])
                         let contentWidth = key.bounds.width - padding.left - padding.right - 2 * border
@@ -242,23 +252,38 @@ private struct Issue219PaintedText {
 
 @Test @MainActor func issue219ShortcutRenderedCardHeadersPaintCompleteSubtitles() throws {
     for language in [EntryPointLanguage.english, .simplifiedChinese] {
-        for (appearance, _) in issue219Appearances {
+        for (appearance, theme) in issue219Appearances {
+            let design = try PinnedDesign.page("shortcuts", appearance: theme)
+            let padding = try design.edges(".shortcut-card", "padding", viewport: issue219Viewport)
+            let border = try issue219Length(design, ".shortcut-card", "border")
             let view = try issue219View(language, appearance)
             for card in view.cardViews {
                 #expect(card.titleLabel.frame.maxX + 8 <= card.whenLabel.frame.minX + 0.5)
-                #expect(card.whenLabel.frame.maxX <= card.bounds.width - 1,
-                    "\(language) \(appearance.rawValue) \(card.whenLabel.stringValue): header escapes its card")
+                #expect(card.whenLabel.frame.maxX <= card.bounds.width - border - padding.right,
+                    "\(language) \(appearance.rawValue) \(card.whenLabel.stringValue): header escapes its content box")
                 for label in [card.titleLabel, card.whenLabel] {
+                    let wraps = label === card.whenLabel
                     let actual = try issue219PaintedText(label)
-                    let reference = try issue219UnclippedTextReference(label)
+                    let reference = try issue219UnclippedTextReference(label,
+                        width: wraps ? label.bounds.width : nil, height: wraps ? 64 : nil, wraps: wraps)
                     let expected = try issue219PaintedText(reference)
                     #expect(expected.inkCount > 0)
                     #expect(Double(actual.inkCount) >= Double(expected.inkCount) * 0.75,
                         "\(language) \(appearance.rawValue) \(label.stringValue): painted \(actual.inkCount) of \(expected.inkCount) reference pixels")
                     let actualBounds = try #require(actual.inkBounds)
+                        .offsetBy(dx: label.frame.minX, dy: label.frame.minY)
                     let expectedBounds = try #require(expected.inkBounds)
-                    #expect(actualBounds.width + 1 >= expectedBounds.width,
-                        "\(language) \(appearance.rawValue) \(label.stringValue): drawn width \(actualBounds.width), expected \(expectedBounds.width)")
+                    #expect(actualBounds.minX >= border + padding.left - 0.5,
+                        "\(language) \(appearance.rawValue) \(label.stringValue): ink minX \(actualBounds.minX) precedes content minX \(border + padding.left)")
+                    #expect(actualBounds.maxX <= card.bounds.width - border - padding.right + 0.5,
+                        "\(language) \(appearance.rawValue) \(label.stringValue): ink maxX \(actualBounds.maxX) exceeds content maxX \(card.bounds.width - border - padding.right)")
+                    if wraps {
+                        #expect(actualBounds.height + 1 >= expectedBounds.height,
+                            "\(language) \(appearance.rawValue) \(label.stringValue): drawn height \(actualBounds.height), expected \(expectedBounds.height)")
+                    } else {
+                        #expect(actualBounds.width + 1 >= expectedBounds.width,
+                            "\(language) \(appearance.rawValue) \(label.stringValue): drawn width \(actualBounds.width), expected \(expectedBounds.width)")
+                    }
                 }
             }
         }
