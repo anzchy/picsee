@@ -106,7 +106,8 @@ import PicseeCore
         whenLabel.font = .systemFont(ofSize: 12); whenLabel.textColor = DesignColor.textSecondary.nsColor
         separator.wantsLayer = true; separator.isHidden = first
         [icon, nameLabel, whenLabel, separator].forEach { addSubview($0); $0.setAccessibilityElement(false) }
-        setAccessibilityLabel("\(row.folder.displayName), \(row.relativeTime)")
+        setAccessibilityLabel(String(format: String(localized: "%1$@, %2$@", comment: "Recent folder row: name, opened time"),
+                                     row.folder.displayName, row.relativeTime))
     }
     required init?(coder: NSCoder) { nil }
     /// .recent-folder: padding 9/12, gap 10; .recent-folder+.recent-folder border-top 1.
@@ -351,7 +352,8 @@ public struct EmptyFolderPage: Equatable, Sendable {
     private func droppedURLs(_ sender: any NSDraggingInfo) -> [URL] {
         guard !isHiddenOrHasHiddenAncestor, let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self],
             options: [.urlReadingFileURLsOnly: true]) as? [URL] else { return [] }
-        return urls
+        // The drop target says "drop a folder": files are refused.
+        return urls.filter { $0.hasDirectoryPath || (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
     }
     private func setDragOver(_ value: Bool) { isDragOver = value; dropOutline.isHidden = !value }
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {

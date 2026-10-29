@@ -338,7 +338,7 @@ private func recentFolders(_ count: Int) -> [RecentFolder] {
     scene.recents = recentFolders(12)
     scene.tree([])
     try await scene.open([])
-    guard case .recents(let expected)? = EmptyFolderContent.make(isEmptyFolder: true, subfolders: [],
+    guard case .recents(let expected) = EmptyFolderContent.make(subfolders: [],
         recents: scene.recents, now: page22Now, locale: .current, calendar: .current) else {
         Issue.record("model did not produce the recents case"); await scene.close(); return
     }
@@ -437,13 +437,17 @@ private func recentFolders(_ count: Int) -> [RecentFolder] {
     scene.tree([])
     try await scene.open([])
     let page = scene.page
-    let folder = URL(fileURLWithPath: "/photos/Trip")
+    let folder = URL(fileURLWithPath: "/photos/Trip", isDirectory: true)
     let folderBoard = NSPasteboard.withUniqueName(), textBoard = NSPasteboard.withUniqueName()
-    defer { folderBoard.releaseGlobally(); textBoard.releaseGlobally() }
+    let imageBoard = NSPasteboard.withUniqueName()
+    defer { folderBoard.releaseGlobally(); textBoard.releaseGlobally(); imageBoard.releaseGlobally() }
     #expect(folderBoard.writeObjects([folder as NSURL]))
     #expect(textBoard.writeObjects(["just text" as NSString]))
+    #expect(imageBoard.writeObjects([URL(fileURLWithPath: "/photos/a.jpg") as NSURL]))
     let folderInfo = Page22DropInfo(folderBoard), textInfo = Page22DropInfo(textBoard)
     #expect(page.registeredDraggedTypes.contains(.fileURL))
+    #expect(page.draggingEntered(Page22DropInfo(imageBoard)) == [], "the label says folder: a file is refused")
+    #expect(!page.performDragOperation(Page22DropInfo(imageBoard)) && scene.dropped.isEmpty)
     #expect(page.draggingEntered(textInfo) == [])
     #expect(!page.isDragOver && page.dropOutline.isHidden)
     #expect(page.draggingEntered(folderInfo) == .copy)
@@ -615,6 +619,7 @@ private func recentFolders(_ count: Int) -> [RecentFolder] {
         ("Browse Including Subfolders", "包含子文件夹浏览"), ("Choose Another Folder…", "选择其他文件夹…"),
         ("Recently Opened", "最近打开"), ("Subfolder", "子文件夹"), ("%@, Subfolder", "%@，子文件夹"),
         ("Content area: drop a folder to open it", "内容区：可拖入文件夹打开"),
+        ("%1$@, %2$@", "%1$@，%2$@"),
     ] {
         #expect(unit(key, "en") == key, "\(key) en")
         #expect(unit(key, "zh-Hans") == chinese, "\(key) zh-Hans")
@@ -675,12 +680,52 @@ private func recentFolders(_ count: Int) -> [RecentFolder] {
     scene.tree(["sub"])
     try await scene.open([])
     let shell = scene.shell
-    #expect(shell.emptyFolderVisible)
+    #expect(shell.emptyFolderVisible && !shell.searchAvailable)
     shell.focusSearch()
     #expect(shell.searchField.isHidden && !shell.searchButton.isHidden)
     #expect(scene.window.firstResponder !== shell.searchField && scene.window.firstResponder !== shell.searchField.currentEditor())
     try await scene.refresh(["a.png"])
+    #expect(shell.searchAvailable)
     shell.focusSearch()
     #expect(!shell.searchField.isHidden)
+    await scene.close()
+}
+
+/// L1: a real folder URL without a trailing slash is still a folder; a mixed drop forwards only its folders.
+@Test @MainActor func page22DropForwardsOnlyFolders() async throws {
+    let scene = Page22Scene()
+    scene.tree([])
+    try await scene.open([])
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let real = URL(fileURLWithPath: base.path, isDirectory: false), file = URL(fileURLWithPath: "/photos/a.jpg")
+    #expect(!real.hasDirectoryPath)
+    let board = NSPasteboard.withUniqueName()
+    defer { board.releaseGlobally() }
+    #expect(board.writeObjects([file as NSURL, real as NSURL]))
+    #expect(scene.page.performDragOperation(Page22DropInfo(board)))
+    #expect(scene.dropped.map { $0.map(\.standardizedFileURL.path) } == [[real.standardizedFileURL.path]])
+    await scene.close()
+}
+
+/// opus L3: page 22 replacing the Reading State moves focus to its first control, not the hidden collection view.
+@Test @MainActor func page22ReplacingReadingStateFocusesAPageControl() async throws {
+    for children in [["sub"], []] {
+        let scene = Page22Scene()
+        scene.recents = recentFolders(2)
+        scene.tree(children)
+        try await scene.open([])
+        let first = try #require(scene.page.keyViews.first)
+        #expect(scene.window.firstResponder === first, "children \(children)")
+        #expect(!first.isHiddenOrHasHiddenAncestor)
+        await scene.close()
+    }
+    let scene = Page22Scene()
+    scene.tree(["sub"])
+    try await scene.open([])
+    #expect(scene.window.makeFirstResponder(scene.shell.toggleButton))
+    scene.shell.setEmptyFolderState(true, recents: [], now: page22Now)
+    #expect(scene.window.firstResponder === scene.shell.toggleButton, "focus outside the content area stays put")
     await scene.close()
 }

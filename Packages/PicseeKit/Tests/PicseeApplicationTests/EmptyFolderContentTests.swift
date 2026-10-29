@@ -41,7 +41,7 @@ private func before(_ a: RecentFolder, _ b: RecentFolder) -> Bool {
     let dates = (0..<6).map { contentNow.addingTimeInterval(-Double($0) * 86_400) }
     let paths = (0..<50).map { "/recent/folder-\($0)" }
     func make(_ input: [RecentFolder]) -> [EmptyFolderRecentRow]? {
-        recents(EmptyFolderContent.make(isEmptyFolder: true, subfolders: [], recents: input, now: contentNow,
+        recents(EmptyFolderContent.make(subfolders: [], recents: input, now: contentNow,
             locale: Locale(identifier: "en_US"), calendar: utcGregorian))
     }
     for sample in 0..<200 {
@@ -74,18 +74,17 @@ private func before(_ a: RecentFolder, _ b: RecentFolder) -> Bool {
 @Test func emptyFolderContentChoosesSubfoldersOverRecents() throws {
     let recent = RecentFolder(rootID: AccessRootID(), url: URL(fileURLWithPath: "/recent/Trip"), displayName: "Trip",
         openedAt: contentNow.addingTimeInterval(-86_400))
-    func make(_ empty: Bool, _ subfolders: [URL], _ recents: [RecentFolder]) -> EmptyFolderContent? {
-        EmptyFolderContent.make(isEmptyFolder: empty, subfolders: subfolders, recents: recents, now: contentNow,
+    func make(_ subfolders: [URL], _ recents: [RecentFolder]) -> EmptyFolderContent {
+        EmptyFolderContent.make(subfolders: subfolders, recents: recents, now: contentNow,
             locale: Locale(identifier: "en_US"), calendar: utcGregorian)
     }
     let folder = URL(fileURLWithPath: "/A")
-    #expect(make(false, [folder.appendingPathComponent("x")], [recent]) == nil)
-    #expect(make(true, [], []) == .recents([]))
-    let row = try #require(recents(make(true, [], [recent]))?.first)
-    #expect(make(true, [], [recent]) == .recents([row]) && row.folder == recent)
-    #expect(make(true, [folder.appendingPathComponent("2024 冲绳")], [recent]) == .subfolders(["2024 冲绳"]))
+    #expect(make([], []) == .recents([]))
+    let row = try #require(recents(make([], [recent]))?.first)
+    #expect(make([], [recent]) == .recents([row]) && row.folder == recent)
+    #expect(make([folder.appendingPathComponent("2024 冲绳")], [recent]) == .subfolders(["2024 冲绳"]))
     let three = ["手机备份", "2024 冲绳", "扫描件"].map { folder.appendingPathComponent($0) }
-    #expect(make(true, three, []) == .subfolders(["手机备份", "2024 冲绳", "扫描件"]))
+    #expect(make(three, []) == .subfolders(["手机备份", "2024 冲绳", "扫描件"]))
 }
 
 @Test func recentRelativeTimeUsesInjectedClockAndLocale() throws {
@@ -98,7 +97,7 @@ private func before(_ a: RecentFolder, _ b: RecentFolder) -> Bool {
             let opened = contentNow.addingTimeInterval(-Double(days) * 86_400)
             let folder = RecentFolder(rootID: AccessRootID(), url: URL(fileURLWithPath: "/r/\(days)"),
                 displayName: "\(days)", openedAt: opened)
-            let row = try #require(recents(EmptyFolderContent.make(isEmptyFolder: true, subfolders: [], recents: [folder],
+            let row = try #require(recents(EmptyFolderContent.make(subfolders: [], recents: [folder],
                 now: contentNow, locale: locale, calendar: calendar))?.first)
             #expect(row.relativeTime == formatter.localizedString(for: opened, relativeTo: contentNow),
                 "\(identifier) −\(days) days")

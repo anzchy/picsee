@@ -38,6 +38,8 @@ private let genericHeading = "Open a folder to start browsing"
     #expect(!host.textLines.contains(genericHeading))
     #expect(!host.buttons.contains { $0.identifier?.rawValue == "state.open" })
     #expect(sameViews(host.buttons, page.keyViews), "the viewer's Tab loop reaches page 22's controls")
+    let refusing = host.buttons.filter { !$0.acceptsFirstResponder }
+    #expect(refusing.isEmpty)
 }
 
 @Test @MainActor func viewerEmptyFolderRendersPage22RecentsAndBarePage() {
