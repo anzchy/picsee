@@ -21,6 +21,7 @@ struct FolderScanRestorePoint {
 @MainActor @Observable public final class FolderScanCoordinator {
     public private(set) var snapshot: FolderSnapshot?
     public private(set) var sourceSnapshot: FolderSnapshot?
+    @ObservationIgnored public var onReadFailure: (@MainActor (AccessRootID, URL) -> Void)?
     public private(set) var conditions = FolderViewConditions()
     // Keep the filter's folder identity across end() during single-image admission.
     private var conditionsFolder: URL?
@@ -631,6 +632,13 @@ struct FolderScanRestorePoint {
                 guard currentSource.navigationIndex(for: entry.itemID) != nil else {
                     pendingMetadataIDs.remove(entry.itemID)
                     continue
+                }
+                if result == nil {
+                    onReadFailure?(version.rootID, entry.url)
+                    // The host may synchronously revoke access, end this scan,
+                    // or change its conditions while handling the failure.
+                    guard !Task.isCancelled, token == metadataRevision,
+                          self.sourceSnapshot?.version == version else { break }
                 }
                 metadata[entry.itemID] = result ?? .init()
                 metadataEntries[entry.itemID] = entry

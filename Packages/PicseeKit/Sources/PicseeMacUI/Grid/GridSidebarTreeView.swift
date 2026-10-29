@@ -158,6 +158,13 @@ public struct GridSidebarFolder: Sendable, Equatable {
         layoutSubtreeIfNeeded()
         scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
     }
+    public func clear() {
+        parent = nil; currentFolder = nil; children = []
+        for row in rows { row.removeFromSuperview() }
+        rows = []
+        guide.isHidden = true
+        needsLayout = true
+    }
     private func append(_ folder: GridSidebarFolder, depth: Int, current: Bool) {
         let row = GridSidebarFolderButton(folder: folder, depth: depth, current: current)
         if depth > 0 && !current { row.countLabel.alphaValue = 0.8 }

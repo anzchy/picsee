@@ -396,6 +396,19 @@ private struct GridGeometry: Equatable {
     }
 
     public func stopThumbnails() { setThumbnailsActive(false) }
+    /// Revoke visible content as well as scheduled work; a hidden collection must
+    /// not retain an accessible filename or thumbnail from a lost root.
+    public func clearPresentation() {
+        stopThumbnails()
+        thumbnailGeneration &+= 1
+        entries = []; indices = [:]; currentItemID = nil
+        selection = BrowserSelection()
+        updating = true
+        collectionView.reloadData()
+        collectionView.deselectAll(nil)
+        updating = false
+        setMetadataSortState(.idle)
+    }
     /// Drops prefetched thumbnails under memory pressure and requests them again once it ends.
     public func setMemoryPressure(_ active: Bool) {
         thumbnailScheduler.setMemoryPressure(active)

@@ -155,11 +155,13 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
         return ImageDecodeRequest(fileURL: fileURL, maximumPixelSize: edge, renderKey: key, identityRoot: identityRoot)
     }
     public func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
-        try await cache.withObservation(itemID: request.renderKey?.itemID) { observation in
+        try request.accessPermit?.check()
+        return try await cache.withObservation(itemID: request.renderKey?.itemID) { observation in
             try await self.image(for: request, observation: observation)
         }
     }
     package func imageFresh(for request: ImageDecodeRequest) async throws -> DecodedImage {
+        try request.accessPermit?.check()
         if Task.isCancelled {
             throw ImageLoadError(.cancelled, itemID: request.renderKey?.itemID, revision: request.renderKey?.revision)
         }
@@ -177,7 +179,7 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
             budget: configuration.budget)
         let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
             renderKey: key, priority: request.priority, sourceByteBudget: cost,
-            isPreview: request.isPreview, identityRoot: request.identityRoot)
+            isPreview: request.isPreview, identityRoot: request.identityRoot, accessPermit: request.accessPermit)
         do {
             let image = try await admission.image(admittedRequest, key: key, cost: cost,
                 heavy: DecodeBudget.isHeavy(width: header.width, height: header.height),
@@ -186,6 +188,7 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
             guard image.itemID == key.itemID, image.revision == key.revision else {
                 throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: image.revision)
             }
+            try request.accessPermit?.check()
             return image
         } catch {
             throw loadFailure(error, request: admittedRequest, revision: header.revision,
@@ -248,17 +251,19 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
         if cached.sourceChanged { throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: key.revision) }
         if let image = cached.image {
             if Task.isCancelled { throw ImageLoadError(.cancelled, itemID: key.itemID, revision: key.revision) }
+            try request.accessPermit?.check()
             return image
         }
         let cost = try DecodeBudget.outputCost(width: header.width, height: header.height, maximumPixelSize: request.maximumPixelSize, bytesPerPixel: header.bytesPerPixel, budget: configuration.budget)
         let admittedRequest = ImageDecodeRequest(fileURL: request.fileURL, maximumPixelSize: request.maximumPixelSize,
-            renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview, identityRoot: request.identityRoot)
+            renderKey: key, priority: request.priority, sourceByteBudget: cost, isPreview: request.isPreview, identityRoot: request.identityRoot, accessPermit: request.accessPermit)
         do {
             let image = try await admission.image(admittedRequest, key: key, cost: cost,
                 heavy: DecodeBudget.isHeavy(width: header.width, height: header.height), priority: request.priority)
             let context = await snapshotContext()
-            let retained = await cache.finish(cached, image: image, context: context)
+            let retained = await cache.finish(cached, image: image, context: context, accessPermit: request.accessPermit)
             try Task.checkCancellation()
+            try request.accessPermit?.check()
             if retained == nil, image.itemID == key.itemID, image.revision == key.revision {
                 throw ImageLoadError(.sourceChanged, itemID: key.itemID, revision: image.revision)
             }
@@ -275,10 +280,12 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
 private struct RevisionReportingDecoder: ImageDecoding {
     let decoder: any ImageDecoding
     func decode(_ request: ImageDecodeRequest) throws -> DecodedImage {
+        try request.accessPermit?.check()
         let decoded = try decoder.decode(request)
+        try request.accessPermit?.check()
         return DecodedImage(image: decoded.image, sourcePixelSize: decoded.sourcePixelSize,
             formatIdentifier: decoded.formatIdentifier, revision: try FileRevisionReader.read(request.fileURL),
-            itemID: request.renderKey?.itemID)
+            itemID: request.renderKey?.itemID, accessPermit: request.accessPermit ?? decoded.accessPermit)
     }
 }
 

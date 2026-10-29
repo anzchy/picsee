@@ -15,6 +15,28 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let filesystemLogger = Logger(subsystem: "io.github.anzchy.picsee", category: "filesystem")
     private let pipeline: any ImagePipeline
     private var fileURL: URL?
+    struct WaitingAccessPosition {
+        let rootID: AccessRootID
+        let folderURL: URL
+        let currentItemID: ItemID?
+        let currentImageURL: URL?
+        let wasViewing: Bool
+        let conditions: FolderViewConditions
+        let recursive: Bool
+        let loop: Bool
+        let searchTerm: String
+        let scrollOffset: NSPoint
+        var counter: UInt64
+    }
+    private(set) var waitingAccessPosition: WaitingAccessPosition?
+    private(set) var accessLossCause: AccessLossCause?
+    private var presentationRootID: AccessRootID?
+    private var accessMonitor: AccessMonitor?
+    private var accessObserver: UUID?
+    private var accessAttachmentTask: Task<Void, Never>?
+    private var accessAttachmentGeneration = UUID()
+    private var scanReadContext: AccessMonitor.ReadContext?
+    private var presentationReadContext: AccessMonitor.ReadContext?
     private var generation: UUID { session.imageLoader.generation }
     private let accessIntent = AccessIntent()
     private let inputIntent = AccessIntent()
@@ -41,6 +63,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     var sidebarBrowserOverride: SidebarFolderBrowser?
     private var sidebarKnownCounts: [URL: Int] = [:]
     func completeGridDisplay(_ snapshot: FolderSnapshot, currentItemID: ItemID?, offset: NSPoint?) {
+        guard waitingAccessPosition == nil, scanReadContext?.permit.isCurrent != false else { return }
         searchProjection.cancel()
         let filtered = gridSearch.project(snapshot)
         let current = currentItemID ?? gridSearch.currentItemID(in: filtered, currentItemID: gridView.currentItemID)
@@ -86,6 +109,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     var appearanceAdapter: WindowAppearanceAdapter?
 
     override func showWindow(_ sender: Any?) {
+        attachAccessMonitor()
         if let window { appearanceAdapter?.register(window) }
         super.showWindow(sender)
     }
@@ -172,15 +196,19 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridView = GridBrowserView(frame: NSRect(origin: .zero, size: gridShell.mainFrame.size))
         gridView.thumbnailLoader = { [accessServices, pipeline] entry, rootID, coverage, priority in
             let services = try await accessServices.value
-            let source = try await AccessImageSource.open(.root(rootID, file: entry.url),
-                access: services.files, pipeline: pipeline)
+            let context = try await services.monitor.readContext(for: rootID)
             do {
-                let result = try await source.image(covering: coverage, priority: priority)
-                await source.close()
-                try Task.checkCancellation()
-                return result
+                let source = try await AccessImageSource.open(.root(rootID, file: entry.url),
+                    access: services.files, pipeline: pipeline, accessPermit: context.permit)
+                do {
+                    let result = try await source.image(covering: coverage, priority: priority)
+                    await source.close()
+                    try Task.checkCancellation()
+                    try context.permit.check()
+                    return result
+                } catch { await source.close(); throw error }
             } catch {
-                await source.close()
+                if !Task.isCancelled, !(error is CancellationError) { await services.monitor.reportReadFailure(rootID, from: context.stamp) }
                 throw error
             }
         }
@@ -254,6 +282,110 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         canvas.onResolutionNeeded = { [weak self] maximum in
             self?.session.requireImageResolution(maximum)
         }
+        attachAccessMonitor()
+    }
+
+    private func attachAccessMonitor() {
+        guard accessObserver == nil, accessAttachmentTask == nil else { return }
+        let attachment = accessAttachmentGeneration
+        accessAttachmentTask = Task { @MainActor [weak self, accessServices] in
+            guard let services = try? await accessServices.value, let self,
+                  !Task.isCancelled, self.accessAttachmentGeneration == attachment else { return }
+            let monitor = services.monitor
+            self.bindAccessMonitor(monitor)
+            await monitor.start()
+            guard !Task.isCancelled, self.accessAttachmentGeneration == attachment else { return }
+            self.accessAttachmentTask = nil
+            self.applyCurrentAccessState()
+        }
+    }
+    private func bindAccessMonitor(_ monitor: AccessMonitor) {
+        guard accessObserver == nil else { return }
+        accessMonitor = monitor
+        accessObserver = monitor.state.observe { [weak self] change in
+            guard let self else { return }
+            if case .lost(let id, let counter) = change { self.handleAccessLoss(id, counter: counter) }
+        }
+    }
+    private func applyCurrentAccessState() {
+        guard let root = gridFolderRoot ?? presentationRootID,
+              let snapshot = accessMonitor?.state.snapshot(for: root),
+              case .lost = snapshot.availability else { return }
+        handleAccessLoss(root, counter: snapshot.counter)
+    }
+    private func leaveWaitingAccess() {
+        waitingAccessPosition = nil
+        accessLossCause = nil
+    }
+    private func handleAccessLoss(_ rootID: AccessRootID, counter: UInt64) {
+        guard gridFolderRoot == rootID || presentationRootID == rootID || waitingAccessPosition?.rootID == rootID else { return }
+        let cause: AccessLossCause
+        if case .lost(let known)? = accessMonitor?.state.snapshot(for: rootID)?.availability { cause = known }
+        else { cause = .unknown }
+        if waitingAccessPosition?.rootID == rootID {
+            // A cause refinement or another eject during recovery belongs to the
+            // same waiting episode; retain the original private position.
+            waitingAccessPosition?.counter = counter
+            accessLossCause = cause
+            showWaitingAccessState()
+            return
+        }
+        let folder = gridFolderURL ?? session.folderScan?.sourceSnapshot?.version.folder
+            ?? fileURL?.deletingLastPathComponent()
+        guard let folder else { return }
+        waitingAccessPosition = WaitingAccessPosition(rootID: rootID, folderURL: folder,
+            currentItemID: session.currentItemID ?? session.folderScan?.currentItemID,
+            currentImageURL: fileURL, wasViewing: session.mode == .viewing,
+            conditions: session.folderConditions, recursive: session.folderRecursiveEnabled,
+            loop: session.folderLoopEnabled, searchTerm: gridSearch.term,
+            scrollOffset: gridView.contentOffset, counter: counter)
+        accessLossCause = cause
+
+        // Revoke every visible/AX value synchronously. Cancellation below only
+        // retires I/O; it does not provide the presentation boundary.
+        canvas.showFailure()
+        inspector.select(itemID: nil, url: nil, access: nil)
+        inspectorHost.isHidden = true
+        gridView.clearPresentation()
+        gridShell.folderTree.clear()
+        gridShell.showFolder(nil)
+        gridShell.setSearchTerm("")
+        gridShell.showSearchEmpty(false)
+        WindowImageTitle.apply(to: window, imageURL: nil)
+        retryIntent = nil; retryFromFolderScan = false
+        fileURL = nil
+        gridProjection = FolderGridProjection()
+        viewedRefreshVersion = nil
+        pendingGridCurrentItemID = nil
+        gridPreviewScrollOffset = nil
+        gridFolderRoot = nil; gridFolderURL = nil
+        folderEntryRestore = nil
+        session.completeFolderEntry()
+        accessIntent.invalidate()
+        endInput()
+        searchProjection.cancel()
+        cancelSidebarTree()
+        standaloneWatch?.cancel(); standaloneWatch = nil
+        standaloneWatchTask?.cancel(); standaloneWatchTask = nil
+        standaloneReconcileTask?.cancel(); standaloneReconcileTask = nil
+        standaloneGrantURL = nil; standaloneReconcilePending = false; standaloneRecheckAfterOpen = false
+        navigationTask?.cancel(); navigationTask = nil
+        session.endFolderScan()
+        session.enterFolderGrid(items: [], sourceVersion: .init(0))
+        scanReadContext = nil; presentationReadContext = nil
+        chromeOverlay.refresh(session: session)
+        stateHost.refresh()
+        showWaitingAccessState()
+    }
+    // Page 26 replaces this shell in WI-4; keep the existing state host detached
+    // from Lost Access presentation without changing the page-22 component.
+    func showWaitingAccessState() {
+        guard waitingAccessPosition != nil else { return }
+        presentation.showGrid(reading: true)
+        stateHost.isHidden = true
+        stateHost.setAccessibilityHidden(true)
+        inspectorHost.isHidden = true
+        layoutInspector()
     }
 
     required init?(coder: NSCoder) { nil }
@@ -267,7 +399,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func windowDidExitFullScreen(_ notification: Notification) { canvas.synchronizeViewport(); session.activity() }
 
     func open(_ url: URL, accessRequest: AccessRequest? = nil, fromFolderScan: Bool = false) {
+        if fromFolderScan, waitingAccessPosition != nil { return }
         if !fromFolderScan {
+            leaveWaitingAccess()
+            if case .root(let id, _)? = accessRequest { presentationRootID = id }
+            else { presentationRootID = nil }
+            scanReadContext = nil
+            presentationReadContext = nil
             searchProjection.cancel()
             standaloneWatch?.cancel(); standaloneWatch = nil
             standaloneWatchTask?.cancel(); standaloneWatchTask = nil
@@ -297,7 +435,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         if !fromFolderScan { navigationTask?.cancel() }
         let scale = window?.backingScaleFactor ?? 1
         let maximum = max(1, Int(ceil(max(canvas.bounds.width, canvas.bounds.height) * scale)))
-        session.openImage(url, maximumPixelSize: maximum, opener: ViewerImageLoader.accessOpener(intent: accessIntent) { [accessServices, pipeline] operation in
+        session.openImage(url, maximumPixelSize: maximum, opener: ViewerImageLoader.accessOpener(intent: accessIntent) { [weak self, accessServices, pipeline] operation in
             let services = try await operation.wait { try await accessServices.value }
             let request: AccessRequest
             if let accessRequest { request = accessRequest }
@@ -306,7 +444,26 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 request = root.map { .root($0, file: url) } ?? .fileGrant(url)
             }
             try operation.check()
-            return try await AccessImageSource.open(request, access: services.files, pipeline: pipeline)
+            let context: AccessMonitor.ReadContext?
+            if case .root(let id, _) = request {
+                guard let self else { throw CancellationError() }
+                self.bindAccessMonitor(services.monitor)
+                self.presentationRootID = id
+                self.applyCurrentAccessState()
+                context = try await operation.wait { try await services.monitor.readContext(for: id) }
+                self.presentationReadContext = context
+                self.applyCurrentAccessState()
+            } else { context = nil }
+            try operation.check()
+            do {
+                return try await AccessImageSource.open(request, access: services.files, pipeline: pipeline,
+                    accessPermit: context?.permit)
+            } catch {
+                if let context, !Task.isCancelled, case .root(let id, _) = request, !(error is CancellationError) {
+                    await services.monitor.reportReadFailure(id, from: context.stamp)
+                }
+                throw error
+            }
         })
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
@@ -322,11 +479,16 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 else { root = await services.files.rootCovering(url) }
                 guard operation.isCurrent, self.fileURL == url else { return }
                 if let root {
-                    guard self.rootScanAdmission.claim(scanGeneration) else { return }
+                    self.bindAccessMonitor(services.monitor)
+                    self.presentationRootID = root
+                    self.applyCurrentAccessState()
+                    guard operation.isCurrent, self.rootScanAdmission.claim(scanGeneration) else { return }
                     let scan = self.folderScanner(services)
                     do {
+                        let context = try await operation.wait { try await services.monitor.readContext(for: root) }
+                        self.scanReadContext = context
                         try await scan.begin(folder: url.deletingLastPathComponent(), rootID: root,
-                            input: url, canPresent: { operation.isCurrent && inputOperation.isCurrent }).value
+                            input: url, canPresent: { operation.isCurrent && inputOperation.isCurrent && context.permit.isCurrent }).value
                     } catch {
                         self.filesystemLogger.error("Background folder scan outcome=failed error=\(String(describing: error), privacy: .private)")
                     }
@@ -465,6 +627,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        accessAttachmentGeneration = UUID()
+        accessAttachmentTask?.cancel(); accessAttachmentTask = nil
+        if let accessObserver { accessMonitor?.state.removeObserver(accessObserver) }
+        accessObserver = nil; accessMonitor = nil
+        leaveWaitingAccess(); presentationRootID = nil; scanReadContext = nil; presentationReadContext = nil
         cancelSidebarTree()
         gridShell.showFolder(nil)
         standaloneWatch?.cancel(); standaloneWatch = nil
@@ -472,7 +639,18 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
         standaloneReconcilePending = false
         standaloneRecheckAfterOpen = false
-        gridView.stopThumbnails()
+        gridView.clearPresentation()
+        gridShell.folderTree.clear()
+        gridShell.setSearchTerm("")
+        gridShell.showSearchEmpty(false)
+        gridSearch.reset()
+        gridProjection = FolderGridProjection()
+        viewedRefreshVersion = nil
+        pendingGridCurrentItemID = nil
+        gridPreviewScrollOffset = nil
+        folderEntryRestore = nil
+        session.completeFolderEntry()
+        session.enterFolderGrid(items: [], sourceVersion: .init(0))
         inspector.select(itemID: nil, url: nil, access: nil)
         gridFolderRoot = nil
         gridFolderURL = nil
@@ -544,6 +722,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         standaloneReconcilePending = false
         standaloneRecheckAfterOpen = false
         if folderEntryRestore == nil { folderEntryRestore = makeFolderEntryRestore() }
+        leaveWaitingAccess()
+        presentationRootID = rootID
+        scanReadContext = nil; presentationReadContext = nil
         searchProjection.cancel()
         gridSearch.reset()
         gridShell.setSearchTerm("")
@@ -558,6 +739,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         inspector.select(itemID: nil, url: nil, access: nil)
         gridFolderRoot = rootID
         gridFolderURL = folder
+        applyCurrentAccessState()
+        if waitingAccessPosition != nil { return }
         sidebarKnownCounts.removeAll()
         loadSidebarTree(folder, rootID: rootID, count: nil)
         gridProjection = FolderGridProjection()
@@ -573,8 +756,15 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             do {
                 let authority = FolderScanPresentationAuthority(access: operation, input: inputIntent.current, originatingTask: navigationTask)
                 let services = try await operation.wait { try await accessServices.value }
+                self.bindAccessMonitor(services.monitor)
+                self.applyCurrentAccessState()
+                try operation.check()
+                let context = try await operation.wait { try await services.monitor.readContext(for: rootID) }
+                self.scanReadContext = context
+                self.applyCurrentAccessState()
+                try operation.check()
                 try await folderScanner(services).begin(folder: folder, rootID: rootID,
-                    canPresent: { authority.isCurrent }).value
+                    canPresent: { authority.isCurrent && context.permit.isCurrent }).value
             } catch {
                 if operation.isCurrent, generation == current {
                     if error as? FileAccessError == .corruptStore { showAccessError(error) }
@@ -589,9 +779,15 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let generation = sidebarTreeGeneration
         gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: count), parent: nil, children: [])
         sidebarTreeTask = Task(priority: .utility) { [weak self, accessServices] in
+            var failureContext: AccessMonitor.ReadContext?
+            var monitor: AccessMonitor?
             do {
                 let services = try await accessServices.value
+                monitor = services.monitor
+                let context = try await services.monitor.readContext(for: rootID)
+                failureContext = context
                 try Task.checkCancellation()
+                try context.permit.check()
                 guard let self, self.sidebarTreeGeneration == generation,
                     self.gridFolderURL == folder else { return }
                 let browser = self.sidebarBrowserOverride ?? SidebarFolderBrowser(
@@ -600,15 +796,19 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 self.sidebarLoader = loader
                 loader.start(folder: folder, rootID: rootID, onRows: { [weak self] children, parentURL in
                     guard let self, self.sidebarTreeGeneration == generation,
-                        self.gridFolderURL == folder else { return }
+                        self.gridFolderURL == folder, context.permit.isCurrent else { return }
                     self.gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: self.sidebarKnownCounts[folder] ?? count),
                         parent: parentURL.map { GridSidebarFolder(url: $0, count: self.sidebarKnownCounts[$0]) },
                         children: children.map { GridSidebarFolder(url: $0) })
                 }, onCount: { [weak self] child, imageCount in
                     guard let self, self.sidebarTreeGeneration == generation,
-                        self.gridFolderURL == folder else { return }
+                        self.gridFolderURL == folder, context.permit.isCurrent else { return }
                     self.sidebarKnownCounts[child] = imageCount
                     self.gridShell.updateFolderCount(imageCount, for: child)
+                }, onFailure: { [weak self] _ in
+                    guard let self, self.sidebarTreeGeneration == generation,
+                          self.gridFolderURL == folder, context.permit.isCurrent else { return }
+                    Task { await services.monitor.reportReadFailure(rootID, from: context.stamp) }
                 })
                 let watch = try await services.watch.subscribe(rootID: rootID, folder: folder,
                     recursive: true, onChange: { [weak self] in
@@ -618,12 +818,16 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                             self.loadSidebarTree(folder, rootID: rootID, count: nil)
                         }
                     })
-                guard !Task.isCancelled, self.sidebarTreeGeneration == generation else {
+                guard !Task.isCancelled, self.sidebarTreeGeneration == generation, context.permit.isCurrent else {
                     await watch.cancel()
                     return
                 }
                 self.sidebarWatchSubscription = watch
-            } catch { /* Unknown children/counts stay absent rather than displaying invented values. */ }
+            } catch {
+                if let failureContext, !Task.isCancelled, !(error is CancellationError) {
+                    await monitor?.reportReadFailure(rootID, from: failureContext.stamp)
+                }
+            }
         }
     }
     private func cancelSidebarTree() {
@@ -651,8 +855,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 try operation.check()
                 guard generation == current else { return }
                 if let root {
+                    bindAccessMonitor(services.monitor)
+                    presentationRootID = root
+                    applyCurrentAccessState()
+                    try operation.check()
+                    let context = try await operation.wait { try await services.monitor.readContext(for: root) }
+                    scanReadContext = context
                     try await folderScanner(services).begin(folder: file.deletingLastPathComponent(), rootID: root,
-                        input: file, pending: direction, canPresent: { authority.isCurrent }).value
+                        input: file, pending: direction, canPresent: { authority.isCurrent && context.permit.isCurrent }).value
                 } else { promptForFolder(file.deletingLastPathComponent(), currentImage: file, direction: direction) }
             } catch {
                 if operation.isCurrent, generation == current {
@@ -682,8 +892,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                             contains = try await operation.wait { try await services.files.withLease(.root(id, file: currentImage)) { _ in true } }
                         } catch FileAccessError.outsideRoot { contains = false }
                         if contains {
+                            bindAccessMonitor(services.monitor)
+                            presentationRootID = id
+                            applyCurrentAccessState()
+                            try operation.check()
+                            let context = try await operation.wait { try await services.monitor.readContext(for: id) }
+                            scanReadContext = context
                             try await folderScanner(services).begin(folder: currentImage.deletingLastPathComponent(), rootID: id,
-                                input: currentImage, pending: direction, canPresent: { authority.isCurrent }).value
+                                input: currentImage, pending: direction, canPresent: { authority.isCurrent && context.permit.isCurrent }).value
                         } else {
                             promptForFolder(folder, currentImage: currentImage, direction: direction, mismatch: true)
                         }
@@ -848,7 +1064,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func syncInspector(refresh: Bool = false) {
-        guard session.inspectorFocus.isVisible else {
+        guard waitingAccessPosition == nil, session.inspectorFocus.isVisible else {
             inspector.select(itemID: nil, url: nil, access: nil); return
         }
         if !gridView.isHidden {
@@ -898,6 +1114,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         if let window { GridWindowIdentity.showFolder(folder, in: window) }
     }
     func showGrid(reading: Bool = false) {
+        if waitingAccessPosition != nil { showWaitingAccessState(); return }
         presentation.showGrid(reading: reading)
         inspectorHost.isHidden = reading || !inspectorVisible
         layoutInspector()
@@ -966,11 +1183,18 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         let offset = gridView.contentOffset, previewOffset = completeGrid ? gridPreviewScrollOffset : nil
         let request = retryIntent?.accessRequest, fromFolder = retryFromFolderScan
         let priorSearchTerm = gridSearch.term, priorCurrent = gridView.currentItemID
+        let priorPresentationRoot = presentationRootID
+        let priorScanContext = scanReadContext, priorImageContext = presentationReadContext
         session.beginFolderEntry(shownImage: fileURL, hasCompleteGrid: completeGrid)
         return { [weak self] target in
             guard let self else { return }
             gridFolderRoot = root
             gridFolderURL = folder
+            presentationRootID = priorPresentationRoot
+            scanReadContext = priorScanContext
+            presentationReadContext = priorImageContext
+            applyCurrentAccessState()
+            guard waitingAccessPosition == nil else { return }
             if let root, let folder { loadSidebarTree(folder, rootID: root, count: nil) }
             else { cancelSidebarTree() }
             gridProjection = projection
@@ -994,6 +1218,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         }
     }
     private func restoreEmptyFolderEntry() {
+        presentationRootID = nil; scanReadContext = nil; presentationReadContext = nil
         cancelSidebarTree()
         gridShell.showFolder(nil)
         searchProjection.cancel()
@@ -1064,6 +1289,10 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     func windowDidUpdate(_ notification: Notification) {
         stateHost.refresh()
+        if waitingAccessPosition != nil {
+            stateHost.isHidden = true
+            stateHost.setAccessibilityHidden(true)
+        }
         if inspectorVisible { syncInspector() }
         if chromeGeneration != generation || chromeHasImage != canvas.hasImage {
             let opened = chromeGeneration != generation
@@ -1108,6 +1337,7 @@ extension CanvasWindowController: ViewerImageHost {
         stateHost.refresh()
     }
     func installImage(_ image: DecodedImage, fileURL: URL) {
+        guard waitingAccessPosition == nil else { return }
         canvas.install(image)
         WindowImageTitle.apply(to: window, imageURL: fileURL)
         stateHost.refresh()
@@ -1126,6 +1356,15 @@ extension CanvasWindowController: ViewerImageHost {
             reconcileStandaloneImage()
         }
         if cancelled { return }
+        if let root = presentationRootID, let context = presentationReadContext, let monitor = accessMonitor {
+            let operation = accessIntent.current
+            Task { @MainActor [weak self] in
+                await monitor.reportReadFailure(root, from: context.stamp)
+                guard operation.isCurrent, let self else { return }
+                if error is FileAccessError { self.showAccessError(error) }
+            }
+            return
+        }
         if let accessError = error as? FileAccessError,
            case .needsFileReconnection(let original) = accessError {
             requestFileReconnection(original)
@@ -1219,13 +1458,24 @@ extension CanvasWindowController: ViewerInputHost {
 // Untested native scan effects; snapshot navigation policy is covered in PicseeApplication.
 extension CanvasWindowController: FolderScanHost {
     private func folderScanner(_ services: AccessServices) -> FolderScanCoordinator {
-        if let scan = session.folderScan { return scan }
+        if let scan = session.folderScan {
+            configureReadFailureReporting(scan, monitor: services.monitor)
+            return scan
+        }
         let scan = FolderScanCoordinator(access: services.files, scanner: services.browser,
             trace: NativeFolderScanTrace(), metadataReader: ImageFolderMetadataReader(), watcher: services.watch)
         scan.host = self
+        configureReadFailureReporting(scan, monitor: services.monitor)
         session.folderScan = scan
         observeGridSnapshot(scan)
         return scan
+    }
+    private func configureReadFailureReporting(_ scan: FolderScanCoordinator, monitor: AccessMonitor) {
+        scan.onReadFailure = { [weak self] rootID, _ in
+            guard let self, self.presentationRootID == rootID,
+                  let context = self.scanReadContext, context.permit.isCurrent else { return }
+            Task { await monitor.reportReadFailure(rootID, from: context.stamp) }
+        }
     }
     private func observeGridSnapshot(_ scan: FolderScanCoordinator) {
         withObservationTracking {
@@ -1261,6 +1511,7 @@ extension CanvasWindowController: FolderScanHost {
         }
     }
     func applyObservedGridSnapshot(_ snapshot: FolderSnapshot) {
+        guard waitingAccessPosition == nil, scanReadContext?.permit.isCurrent != false else { return }
         let previous = gridProjection.snapshot
         let movedFolder = previous?.version.rootID == snapshot.version.rootID &&
             previous?.version.folder != snapshot.version.folder
@@ -1306,6 +1557,7 @@ extension CanvasWindowController: FolderScanHost {
         }
     }
     func openFolderImage(_ url: URL, rootID: AccessRootID) {
+        guard waitingAccessPosition == nil, scanReadContext?.permit.isCurrent != false else { return }
         if gridFolderRoot == rootID && session.mode == .browsing { return }
         if !session.allowsFolderScanPresentation { return }
         // A scan-owned move must not revoke the authority that admits its later batches.
@@ -1369,6 +1621,10 @@ extension CanvasWindowController: FolderScanHost {
     }
     func folderScanDidEnd() {
         chromeOverlay.refresh(session: session)
+        if let context = scanReadContext, let root = presentationRootID,
+           session.folderScan?.failure != nil, let monitor = accessMonitor {
+            Task { await monitor.reportReadFailure(root, from: context.stamp) }
+        }
         guard let scan = session.folderScan, scan.failure != nil, scan.sourceSnapshot?.isComplete == true,
               let source = scan.sourceSnapshot else { return }
         let folder = gridFolderURL ?? source.version.folder

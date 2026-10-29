@@ -50,16 +50,51 @@ public enum AccessStateChange: Equatable, Sendable {
 @MainActor public final class AccessState {
     private struct Entry {
         var volumeUUID: String?
-        var counter: UInt64 = 0
-        var availability: AccessAvailability = .readable
-        var mounted = true
+        var counter: UInt64
+        var availability: AccessAvailability
+        var mounted: Bool
+        let authority: AccessWorkAuthority
+        init(volumeUUID: String?) {
+            self.volumeUUID = volumeUUID
+            counter = 0
+            availability = .readable
+            mounted = true
+            authority = AccessWorkAuthority()
+        }
     }
 
     private var entries: [AccessRootID: Entry] = [:]
     private var retiredCounters: [AccessRootID: UInt64] = [:]
     private var observers: [UUID: @MainActor (AccessStateChange) -> Void] = [:]
 
-    public init() {}
+    nonisolated public init() {}
+    public func permit(for rootID: AccessRootID) -> AccessWorkPermit? {
+        guard let entry = entries[rootID], entry.availability == .readable else { return nil }
+        return entry.authority.permit(counter: entry.counter)
+    }
+    public func reauthorize(_ rootID: AccessRootID, volumeUUID: String?,
+                            admitting admission: (_ update: () -> Void) throws -> Void) rethrows {
+        var change: AccessStateChange?
+        try admission { change = reauthorizeEntry(rootID, volumeUUID: volumeUUID) }
+        // Observation may invalidate the saved-grant proof or start another read.
+        // Publish only after the caller's synchronous version fence has released.
+        if let change { publish(change) }
+    }
+    /// An explicit selection replaces authority even on the same volume.
+    public func reauthorize(_ rootID: AccessRootID, volumeUUID: String?) {
+        if let change = reauthorizeEntry(rootID, volumeUUID: volumeUUID) { publish(change) }
+    }
+    private func reauthorizeEntry(_ rootID: AccessRootID, volumeUUID: String?) -> AccessStateChange? {
+        guard var entry = entries[rootID] else { register(rootID, volumeUUID: volumeUUID); return nil }
+        let wasLost = entry.availability != .readable
+        entry.counter += 1
+        entry.volumeUUID = volumeUUID
+        entry.availability = .readable
+        entry.mounted = true
+        entry.authority.update(counter: entry.counter, readable: true)
+        entries[rootID] = entry
+        return wasLost ? .recovered(rootID, counter: entry.counter) : nil
+    }
     public func register(_ rootID: AccessRootID, volumeUUID: String?) {
         if var existing = entries[rootID] {
             // Explicitly replacing a grant revokes every old work stamp too.
@@ -68,16 +103,21 @@ public enum AccessStateChange: Equatable, Sendable {
                 existing.volumeUUID = volumeUUID
                 existing.availability = .readable
                 existing.mounted = true
+                existing.authority.update(counter: existing.counter, readable: true)
                 entries[rootID] = existing
             }
         } else {
             var entry = Entry(volumeUUID: volumeUUID)
             if let retired = retiredCounters[rootID] { entry.counter = retired + 1 }
+            entry.authority.update(counter: entry.counter, readable: true)
             entries[rootID] = entry
         }
     }
     public func forget(_ rootID: AccessRootID) {
-        if let entry = entries.removeValue(forKey: rootID) { retiredCounters[rootID] = entry.counter }
+        if let entry = entries.removeValue(forKey: rootID) {
+            entry.authority.update(counter: entry.counter, readable: false)
+            retiredCounters[rootID] = entry.counter
+        }
     }
     public func snapshot(for rootID: AccessRootID) -> AccessRootSnapshot? {
         guard let entry = entries[rootID] else { return nil }
@@ -105,6 +145,7 @@ public enum AccessStateChange: Equatable, Sendable {
             entry.mounted = false
             entry.counter += 1
             entry.availability = .lost(.diskNotConnected)
+            entry.authority.update(counter: entry.counter, readable: false)
             entries[id] = entry
             publish(.lost(id, counter: entry.counter))
         }
@@ -128,10 +169,11 @@ public enum AccessStateChange: Equatable, Sendable {
     }
     @discardableResult public func reportRootFailure(_ rootID: AccessRootID, cause: AccessLossCause,
                                                        from stamp: AccessWorkStamp) -> Bool {
-        guard mayDeliver(stamp), var entry = entries[rootID] else { return false }
+        guard stamp.rootID == rootID, mayDeliver(stamp), var entry = entries[rootID] else { return false }
         entry.counter += 1
         entry.availability = .lost(cause)
         if cause == .diskNotConnected { entry.mounted = false }
+        entry.authority.update(counter: entry.counter, readable: false)
         entries[rootID] = entry
         publish(.lost(rootID, counter: entry.counter))
         return true
@@ -141,6 +183,7 @@ public enum AccessStateChange: Equatable, Sendable {
               entry.counter == attempt.counter, entry.volumeUUID == attempt.volumeUUID,
               case .lost = entry.availability else { return false }
         entry.availability = .readable
+        entry.authority.update(counter: entry.counter, readable: true)
         entries[attempt.rootID] = entry
         publish(.recovered(attempt.rootID, counter: entry.counter))
         return true

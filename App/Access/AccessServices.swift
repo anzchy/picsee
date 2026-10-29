@@ -5,6 +5,7 @@ import PicseeInfrastructure
 
 struct AccessServices: Sendable {
     let files: FileAccess
+    let monitor: AccessMonitor
     let recent: RecentFolderStore
     let lister = SiblingLister()
     let browser: FolderBrowser
@@ -16,12 +17,15 @@ struct AccessServices: Sendable {
         let system = SystemSecurityScope()
         files = try FileAccess(scope: system, bookmarks: system,
             store: BookmarkStore(url: support.appendingPathComponent("access-roots.json")), buildSHA: buildSHA)
+        monitor = AccessMonitor(files: files)
         recent = RecentFolderStore(url: support.appendingPathComponent("recent-folders.json"))
         browser = FolderBrowser()
         watch = WatchHub(access: files, source: FSEventSource(), scheduler: DispatchWatchScheduler())
     }
-    init(files: FileAccess, recent: RecentFolderStore, browser: FolderBrowser, watch: WatchHub) {
+    init(files: FileAccess, recent: RecentFolderStore, browser: FolderBrowser, watch: WatchHub,
+         mounts: (any DiskMountPort)? = nil) {
         self.files = files
+        self.monitor = AccessMonitor(files: files, mounts: mounts)
         self.recent = recent
         self.browser = browser
         self.watch = watch
@@ -33,6 +37,7 @@ struct AccessServices: Sendable {
         let adapter = UITestContainerAccess(root: fixtureRoot)
         files = try FileAccess(scope: adapter, bookmarks: adapter,
             store: BookmarkStore(url: support.appendingPathComponent("access-roots.json")), buildSHA: buildSHA)
+        monitor = AccessMonitor(files: files)
         recent = RecentFolderStore(url: support.appendingPathComponent("recent-folders.json"))
         browser = FolderBrowser()
         watch = WatchHub(access: files, source: FSEventSource(), scheduler: DispatchWatchScheduler())
@@ -40,6 +45,7 @@ struct AccessServices: Sendable {
     #endif
     func grant(_ folder: URL) async throws -> AccessRootID {
         let id = try await files.grant(folder: folder)
+        await monitor.reauthorize(id)
         try await recent.add(RecentFolder(rootID: id, url: folder, displayName: folder.lastPathComponent))
         return id
     }
@@ -59,6 +65,7 @@ struct AccessServices: Sendable {
             guard let held = await files.rootURL(other) else { throw FileAccessError.needsReconnection(other) }
             targetID = other; url = held
         }
+        await monitor.reauthorize(targetID)
         try await recent.add(RecentFolder(rootID: targetID, url: url, displayName: url.lastPathComponent))
         return (targetID, url)
     }

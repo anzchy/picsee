@@ -134,7 +134,9 @@ public actor DecodeAdmission {
                           priority: DecodePriority, reuseExisting: Bool = true) -> DecodeSubscription {
         precondition(cost > 0 && cost <= configuration.budget)
         let id = UUID(), subscriber = UUID(), delivery = DecodeDelivery()
-        if reuseExisting, let existing = keyed[key] {
+        if reuseExisting, let existing = keyed[key], let existingJob = jobs[existing],
+           request.accessPermit.map({ $0.canCoalesce(with: existingJob.request.accessPermit) })
+               ?? (existingJob.request.accessPermit == nil) {
             jobs[existing]!.subscribers[subscriber] = delivery
             jobs[existing]!.priority = DecodePriority(rawValue: max(jobs[existing]!.priority.rawValue, priority.rawValue))!
             drain()
