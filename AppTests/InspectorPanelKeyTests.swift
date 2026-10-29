@@ -55,7 +55,7 @@ import PicseeCore
     #expect(shell.searchField.stringValue == "cat")
 }
 
-@MainActor @Test func issue136CombinedWindowSearchFocusEscapeAndInspectorToggle() throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func issue136CombinedWindowSearchFocusEscapeAndInspectorToggle() throws {
     _ = NSApplication.shared
     let unavailable = Task<AccessServices, Error> { throw CancellationError() }
     let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
@@ -73,7 +73,7 @@ import PicseeCore
     #expect(controller.session.inspectorFocus.isVisible)
     #expect(controller.route(.search, from: .key))
     let editor = try #require(shell.searchField.currentEditor() as? NSTextView)
-    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    runLoopUntil { window.firstResponder === editor }
     #expect(window.firstResponder === editor)
     editor.insertText("cat")
     #expect(shell.searchField.stringValue == "cat")
@@ -102,10 +102,12 @@ import PicseeCore
     #expect(controller.session.inspectorFocus.isVisible)
 }
 
-@MainActor @Test func issue136CombinedWindowWatchedSearchRefreshUpdatesInspectorSynchronously() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func issue136CombinedWindowWatchedSearchRefreshUpdatesInspectorSynchronously() async throws {
     _ = NSApplication.shared
+    // Parked for the whole test: CI can queue the main actor past a shorter delay, and its expiry starts the
+    // scan-failure path mid-test (#277). The defer cancels it.
     let delayed = Task<AccessServices, Error> {
-        try await Task.sleep(for: .seconds(60))
+        try await Task.sleep(for: .seconds(3600))
         throw CancellationError()
     }
     let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
@@ -130,8 +132,7 @@ import PicseeCore
     shell.focusSearch()
     shell.setSearchTerm("match")
     shell.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: shell.searchField))
-    let deadline = Date().addingTimeInterval(2)
-    while !shell.searchStatus.stringValue.contains("Search:") && Date() < deadline { await Task.yield() }
+    await waitUntil { shell.searchStatus.stringValue.contains("Search:") }
     #expect(shell.searchStatus.stringValue.contains("Search:"))
     #expect(controller.route(.inspector, from: .key))
     #expect(controller.inspector.name == d.url.lastPathComponent)
@@ -142,10 +143,12 @@ import PicseeCore
     #expect(controller.session.inspectorFocus.isVisible)
 }
 
-@MainActor @Test func issue136Combo2DirectSearchUpdatesInspectorWithoutWindowUpdate() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func issue136Combo2DirectSearchUpdatesInspectorWithoutWindowUpdate() async throws {
     _ = NSApplication.shared
+    // Parked for the whole test: CI can queue the main actor past a shorter delay, and its expiry starts the
+    // scan-failure path mid-test (#277). The defer cancels it.
     let delayed = Task<AccessServices, Error> {
-        try await Task.sleep(for: .seconds(60))
+        try await Task.sleep(for: .seconds(3600))
         throw CancellationError()
     }
     let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
@@ -174,14 +177,12 @@ import PicseeCore
             object: shell.searchField))
     }
     type("match-a")
-    let firstDeadline = Date().addingTimeInterval(2)
-    while !shell.searchStatus.stringValue.contains("match-a") && Date() < firstDeadline { await Task.yield() }
+    await waitUntil { shell.searchStatus.stringValue.contains("match-a") }
     #expect(shell.searchStatus.stringValue.contains("match-a"))
     #expect(controller.session.selection.currentItemID == a.itemID)
     #expect(controller.inspector.name == a.url.lastPathComponent)
     type("unmatched")
-    let emptyDeadline = Date().addingTimeInterval(2)
-    while !shell.searchStatus.stringValue.contains("unmatched") && Date() < emptyDeadline { await Task.yield() }
+    await waitUntil { shell.searchStatus.stringValue.contains("unmatched") }
     #expect(shell.searchEmptyVisible)
     #expect(controller.inspector.name == nil)
     type("")
@@ -189,7 +190,7 @@ import PicseeCore
     #expect(controller.inspector.name == d.url.lastPathComponent)
 }
 
-@MainActor @Test func issue136Combo2TabVisitsFooterAndInspectorInBothDirections() throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func issue136Combo2TabVisitsFooterAndInspectorInBothDirections() throws {
     _ = NSApplication.shared
     let unavailable = Task<AccessServices, Error> { throw CancellationError() }
     let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
@@ -220,7 +221,8 @@ import PicseeCore
         #expect(shell.searchField.isHidden)
     }
     window.sendEvent(tab)
-    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    runLoopUntil { controller.session.inspectorFocus.focus == .panel &&
+        (window.firstResponder as? NSView)?.accessibilityIdentifier() == "inspector.close" }
     #expect(controller.session.inspectorFocus.focus == .panel)
     #expect((window.firstResponder as? NSView)?.accessibilityIdentifier() == "inspector.close")
     window.sendEvent(tab)

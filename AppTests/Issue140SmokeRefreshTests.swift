@@ -41,18 +41,15 @@ import Darwin
     let window = try #require(controller.window)
     let chrome = try #require(window.contentView.flatMap(smokeChrome(in:)))
     controller.open(image, accessRequest: .root(root, file: image))
-    let deadline = ContinuousClock.now + .seconds(8)
-    while (controller.session.folderScan?.sourceSnapshot?.isComplete != true ||
-           controller.session.imageLoader.presented == nil || chrome.position == nil) &&
-          ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.folderScan?.sourceSnapshot?.isComplete == true &&
+        controller.session.imageLoader.presented != nil &&
+        chrome.position != nil }
     #expect(controller.session.folderScan?.sourceSnapshot?.isComplete == true)
     #expect(controller.session.imageLoader.presented != nil)
     return (controller, services, window, chrome)
 }
 
-@Test @MainActor func issue140SmokeWatchedRenameUpdatesViewedTitleLabelAndCurrentItem() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140SmokeWatchedRenameUpdatesViewedTitleLabelAndCurrentItem() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -69,16 +66,10 @@ import Darwin
     #expect(controller.session.previewSet?.currentItemID == id)
     try fm.moveItem(at: original, to: renamed)
     services.watch.reconcileAll()
-    let deadline = ContinuousClock.now + .seconds(8)
-    while controller.session.folderScan?.sourceSnapshot?.entries.first?.url.standardizedFileURL.resolvingSymlinksInPath() !=
-          renamed.standardizedFileURL.resolvingSymlinksInPath() &&
-          ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
-    while (controller.session.imageLoader.presented?.fileURL.lastPathComponent != renamed.lastPathComponent ||
-           chrome.filename != renamed.lastPathComponent) && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.folderScan?.sourceSnapshot?.entries.first?.url.standardizedFileURL.resolvingSymlinksInPath() ==
+        renamed.standardizedFileURL.resolvingSymlinksInPath() }
+    await waitUntil { controller.session.imageLoader.presented?.fileURL.lastPathComponent == renamed.lastPathComponent &&
+        chrome.filename == renamed.lastPathComponent }
     #expect(controller.session.folderScan?.sourceSnapshot?.entries.first?.url.standardizedFileURL.resolvingSymlinksInPath() ==
         renamed.standardizedFileURL.resolvingSymlinksInPath())
     #expect(controller.session.folderScan?.currentItemID == id)
@@ -91,7 +82,7 @@ import Darwin
     #expect(chrome.position == "Images: 1")
 }
 
-@Test @MainActor func issue140SmokeWatchedAtomicReplacementReloadsPresentedRevision() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140SmokeWatchedAtomicReplacementReloadsPresentedRevision() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -113,22 +104,16 @@ import Darwin
     }
     #expect(result == 0)
     services.watch.reconcileAll()
-    let deadline = ContinuousClock.now + .seconds(8)
-    while (controller.session.folderScan?.generation == generation ||
-           controller.session.folderScan?.isScanning == true) && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
-    while (controller.session.imageLoader.presented == nil ||
-           controller.session.imageLoader.presented?.key.revision == first.key.revision) &&
-          ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.folderScan?.generation != generation &&
+        controller.session.folderScan?.isScanning != true }
+    await waitUntil { controller.session.imageLoader.presented != nil &&
+        controller.session.imageLoader.presented?.key.revision != first.key.revision }
     #expect(controller.session.folderScan?.generation != generation)
     #expect(controller.session.imageLoader.presented?.key.revision != first.key.revision)
     #expect(controller.session.imageLoader.presented?.fileURL.lastPathComponent == image.lastPathComponent)
 }
 
-@Test @MainActor func issue140SmokeWatchedDeleteUpdatesBottomImageCount() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140SmokeWatchedDeleteUpdatesBottomImageCount() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -142,20 +127,14 @@ import Darwin
     #expect(chrome.position == "Images: 2")
     try fm.removeItem(at: shown)
     services.watch.reconcileAll()
-    let deadline = ContinuousClock.now + .seconds(8)
-    while controller.session.folderScan?.sourceSnapshot?.navigationEntries.count != 1 &&
-          ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
-    while chrome.position != "Images: 1" && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.folderScan?.sourceSnapshot?.navigationEntries.count == 1 }
+    await waitUntil { chrome.position == "Images: 1" }
     #expect(controller.session.folderScan?.sourceSnapshot?.navigationEntries.count == 1)
     #expect(controller.session.folderScan?.currentURL?.lastPathComponent == neighbour.lastPathComponent)
     #expect(chrome.position == "Images: 1")
 }
 
-@Test @MainActor func issue140InspectorFollowsWatchedRenameReplacementAndDeletion() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140InspectorFollowsWatchedRenameReplacementAndDeletion() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -169,10 +148,7 @@ import Darwin
     let (controller, services, window, _) = try await smokeViewer(in: base, image: original)
     defer { window.close() }
     #expect(controller.route(.inspector, from: .key))
-    let firstDeadline = ContinuousClock.now + .seconds(8)
-    while controller.inspector.value == .loading && ContinuousClock.now < firstDeadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.inspector.value != .loading }
     guard case .known(let firstMetadata) = controller.inspector.value else {
         Issue.record("Inspector did not read the initial image"); return
     }
@@ -180,12 +156,8 @@ import Darwin
 
     try fm.moveItem(at: original, to: renamed)
     services.watch.reconcileAll()
-    let renameDeadline = ContinuousClock.now + .seconds(8)
-    while (controller.inspector.name != renamed.lastPathComponent ||
-           controller.session.imageLoader.presented?.fileURL.lastPathComponent != renamed.lastPathComponent) &&
-          ContinuousClock.now < renameDeadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.inspector.name == renamed.lastPathComponent &&
+        controller.session.imageLoader.presented?.fileURL.lastPathComponent == renamed.lastPathComponent }
     #expect(controller.inspector.name == renamed.lastPathComponent)
     #expect(controller.session.imageLoader.presented?.fileURL.lastPathComponent == renamed.lastPathComponent)
 
@@ -195,12 +167,9 @@ import Darwin
     }
     #expect(replaceResult == 0)
     services.watch.reconcileAll()
-    let replacementDeadline = ContinuousClock.now + .seconds(8)
-    while ContinuousClock.now < replacementDeadline {
-        if case .known(let metadata) = controller.inspector.value,
-           metadata.pixelWidth != firstMetadata.pixelWidth,
-           metadata.pixelHeight != firstMetadata.pixelHeight { break }
-        try await Task.sleep(for: .milliseconds(10))
+    await waitUntil {
+        guard case .known(let metadata) = controller.inspector.value else { return false }
+        return metadata.pixelWidth != firstMetadata.pixelWidth && metadata.pixelHeight != firstMetadata.pixelHeight
     }
     guard case .known(let replacementMetadata) = controller.inspector.value else {
         Issue.record("Inspector did not read the replacement"); return
@@ -211,21 +180,14 @@ import Darwin
 
     try fm.removeItem(at: renamed)
     services.watch.reconcileAll()
-    let successorDeadline = ContinuousClock.now + .seconds(8)
-    while (controller.inspector.name != neighbour.lastPathComponent ||
-           controller.session.imageLoader.presented?.fileURL.lastPathComponent != neighbour.lastPathComponent) &&
-          ContinuousClock.now < successorDeadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.inspector.name == neighbour.lastPathComponent &&
+        controller.session.imageLoader.presented?.fileURL.lastPathComponent == neighbour.lastPathComponent }
     #expect(controller.inspector.name == neighbour.lastPathComponent)
     #expect(controller.session.imageLoader.presented?.fileURL.lastPathComponent == neighbour.lastPathComponent)
 
     try fm.removeItem(at: neighbour)
     services.watch.reconcileAll()
-    let emptyDeadline = ContinuousClock.now + .seconds(8)
-    while controller.inspector.name != nil && ContinuousClock.now < emptyDeadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.inspector.name == nil }
     #expect(controller.inspector.name == nil)
     #expect(controller.inspector.value == .unknown)
     #expect(controller.session.inspectorFocus.isVisible)

@@ -18,7 +18,7 @@ import PicseeMacUI
     return sheet.contentView.map(texts)?.filter { !$0.isEmpty }.joined(separator: " | ") ?? ""
 }
 
-@Test @MainActor func issue140DisplayedFileGrantTrashClearsWithoutReconnectSheet() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140DisplayedFileGrantTrashClearsWithoutReconnectSheet() async throws {
     _ = NSApplication.shared
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -41,18 +41,15 @@ import PicseeMacUI
     let window = try #require(controller.window)
     defer { window.close() }
     controller.open(file, accessRequest: .fileGrant(file))
-    let deadline = ContinuousClock.now + .seconds(8)
-    while controller.session.imageLoader.presented == nil && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.imageLoader.presented != nil }
     #expect(controller.session.imageLoader.presented != nil)
     var trashed: NSURL?
     try fm.trashItem(at: file, resultingItemURL: &trashed)
     defer { if let trashed { try? fm.removeItem(at: trashed as URL) } }
-    let reconcileDeadline = ContinuousClock.now + .seconds(8)
-    while controller.session.imageLoader.fileURL != nil && ContinuousClock.now < reconcileDeadline {
+    await waitUntil {
+        if controller.session.imageLoader.fileURL == nil { return true }
         controller.reconcileStandaloneImage()
-        try await Task.sleep(for: .milliseconds(10))
+        return false
     }
     #expect(controller.session.imageLoader.fileURL == nil)
     #expect(window.representedURL == nil)

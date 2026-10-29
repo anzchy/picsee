@@ -22,13 +22,12 @@ private extension ThumbnailDiskCache {
 @MainActor private func suspendCache(_ cache: ThumbnailDiskCache) async throws -> SettingsCacheGate {
     let gate = SettingsCacheGate()
     Task.detached { await cache.suspendForSettingsTest(gate) }
-    let deadline = Date().addingTimeInterval(2)
-    while !gate.isSuspended && Date() < deadline { try await Task.sleep(for: .milliseconds(5)) }
+    await waitUntil { gate.isSuspended }
     #expect(gate.isSuspended)
     return gate
 }
 
-@MainActor @Test func issue218CacheShowsBusyStateBeforePendingRefreshAndClear() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func issue218CacheShowsBusyStateBeforePendingRefreshAndClear() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -50,8 +49,7 @@ private extension ThumbnailDiskCache {
     #expect(!clear.isEnabled)
     refreshGate.resume()
     let occupied = ByteCountFormatter.string(fromByteCount: 42, countStyle: .file)
-    let measuredDeadline = Date().addingTimeInterval(2)
-    while size.stringValue != occupied && Date() < measuredDeadline { try await Task.sleep(for: .milliseconds(5)) }
+    await waitUntil { size.stringValue == occupied }
     #expect(size.stringValue == occupied)
     #expect(clear.isEnabled)
     let clearGate = try await suspendCache(cache)
@@ -64,8 +62,7 @@ private extension ThumbnailDiskCache {
     #expect(!clear.isEnabled)
     clearGate.resume()
     let empty = ByteCountFormatter.string(fromByteCount: 0, countStyle: .file)
-    let emptyDeadline = Date().addingTimeInterval(2)
-    while size.stringValue != empty && Date() < emptyDeadline { try await Task.sleep(for: .milliseconds(5)) }
+    await waitUntil { size.stringValue == empty }
     #expect(size.stringValue == empty)
     #expect(clear.isEnabled)
 }

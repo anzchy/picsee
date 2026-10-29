@@ -25,7 +25,7 @@ import PicseeMacUI
 
 /// #187 AC-2: after the Reading State hands over to the grid, keyboard focus is on the grid without a click,
 /// on both folder-open paths, with the window shown and its updates (state host refresh) running through reading.
-@Test(arguments: [false, true]) @MainActor
+@Test(.timeLimit(.minutes(3)), arguments: [false, true]) @MainActor
 func issue187OpenedGridTakesKeyboardFocusAndFirstDownMovesOneRow(granted: Bool) async throws {
     _ = NSApplication.shared
     let fm = FileManager.default
@@ -60,10 +60,10 @@ func issue187OpenedGridTakesKeyboardFocusAndFirstDownMovesOneRow(granted: Bool) 
         #expect(!controller.gridSearchAvailable)
         #expect(window.firstResponder is NSButton)
     }
-    let deadline = ContinuousClock.now + .seconds(8)
-    while !controller.gridSearchAvailable && ContinuousClock.now < deadline {
+    await waitUntil {
+        if controller.gridSearchAvailable { return true }
         window.update()
-        try await Task.sleep(for: .milliseconds(5))
+        return false
     }
     #expect(controller.gridSearchAvailable)
     let grid = try #require(issue187Grid(in: window.contentView))

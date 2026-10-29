@@ -101,7 +101,8 @@ private struct Issue150HoldingScanner: FolderScanning {
         try? FileManager.default.removeItem(at: base)
     }
     func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1000 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
+        // No wall-clock deadline (#277): the test's time limit cancels the sleep, which ends the wait.
+        while !condition() { try await Task.sleep(for: .milliseconds(10)) }
         #expect(condition(), "timed out")
     }
     static func button(_ identifier: String, in view: NSView?) -> NSButton? {
@@ -111,7 +112,7 @@ private struct Issue150HoldingScanner: FolderScanning {
     }
 }
 
-@Test @MainActor func issue150OpenGrantedFolderCancelRestoresFilePreviewSet() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue150OpenGrantedFolderCancelRestoresFilePreviewSet() async throws {
     let scene = try await Issue150Scene()
     defer { scene.close() }
     try await scene.openFilePreviewSetAtMiddle()
@@ -122,7 +123,7 @@ private struct Issue150HoldingScanner: FolderScanning {
     scene.expectSetRestoredAtMiddle()
 }
 
-@Test @MainActor func issue150OpenRecentCancelRestoresFilePreviewSet() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue150OpenRecentCancelRestoresFilePreviewSet() async throws {
     let scene = try await Issue150Scene()
     defer { scene.close() }
     let rootID = try await scene.services.files.grant(folder: scene.folder)

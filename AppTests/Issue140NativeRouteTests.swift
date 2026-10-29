@@ -91,7 +91,7 @@ private func issue140RouteServices(_ base: URL) async throws -> (AccessServices,
     #expect(window.representedURL == nil)
 }
 
-@Test @MainActor func issue140BothRootImageOpenRoutesBeginOneCompletedScan() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140BothRootImageOpenRoutesBeginOneCompletedScan() async throws {
     for inputRoute in [false, true] {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -113,18 +113,13 @@ private func issue140RouteServices(_ base: URL) async throws -> (AccessServices,
         } else {
             controller.open(image, accessRequest: .root(root, file: image))
         }
-        let deadline = ContinuousClock.now + .seconds(8)
-        while trace.completions.isEmpty && ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await waitUntil { !trace.completions.isEmpty }
         #expect(trace.begins == [1])
         #expect(trace.completions == [1])
         #expect(scan.generation == 1)
         #expect(scan.sourceSnapshot?.isComplete == true)
         #expect(scan.sourceSnapshot?.entries.map(\.url.lastPathComponent) == ["image.png"])
-        while controller.session.imageLoader.presented == nil && ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        await waitUntil { controller.session.imageLoader.presented != nil }
         #expect(controller.session.imageLoader.presented != nil)
         #expect(window.representedURL == image)
         #expect(window.attachedSheet == nil)

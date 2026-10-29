@@ -33,13 +33,10 @@ private actor CountingGridInspectorReader: InspectorMetadataReading {
 }
 
 @MainActor private func waitForGridInspector(_ condition: () -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(8)
-    while !condition() && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { condition() }
 }
 
-@Test @MainActor func issue140Combo136GridInspectorTracksRevisionsWithoutDuplicateReads() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140Combo136GridInspectorTracksRevisionsWithoutDuplicateReads() async throws {
     _ = NSApplication.shared
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -124,11 +121,11 @@ private actor CountingGridInspectorReader: InspectorMetadataReading {
 
     // A completed refresh and a change to another file preserve the selected revision and read count.
     let stableReads = await reader.count(for: selected)
-    let atomicGeneration = try #require(controller.session.folderScan?.sourceSnapshot?.version.generation)
+    // A refresh that finds the same entries keeps the source snapshot and its generation, so wait for the
+    // coordinator to start that refresh instead; the old 8 s deadline always expired here (#277).
+    let refreshesBefore = try #require(controller.session.folderScan?.generation)
     services.watch.reconcileAll()
-    try await waitForGridInspector {
-        (controller.session.folderScan?.sourceSnapshot?.version.generation ?? 0) > atomicGeneration
-    }
+    try await waitForGridInspector { (controller.session.folderScan?.generation ?? 0) > refreshesBefore }
     controller.applyObservedGridSnapshot(try #require(controller.session.folderScan?.snapshot))
     #expect(gridInspectorMetadata(controller)?.pixelWidth == atomicMetadata.pixelWidth)
     #expect(await reader.count(for: selected) == stableReads)
