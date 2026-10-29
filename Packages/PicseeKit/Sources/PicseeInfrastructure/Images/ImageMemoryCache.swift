@@ -34,6 +34,7 @@ public actor ImageMemoryCache {
         var pins = 0
         var variants: [DecodedImage] = []
         var stale = false
+        var accessPermit: AccessWorkPermit?
     }
     private let capacity: Int
     private var limit: Int
@@ -75,16 +76,21 @@ public actor ImageMemoryCache {
     func prefetchDelay() -> TimeInterval? { pressurePolicy.prefetchDelay() }
     func image(for key: RenderKey, context: ResourceSnapshotContext? = nil) -> DecodedImage? {
         guard let index = entries.firstIndex(where: { $0.key == key }) else { return nil }
+        if entries[index].accessPermit?.isCurrent == false {
+            entries[index].stale = true
+            if entries[index].pins == 0 { entries.remove(at: index); emit(context); account(context) }
+            return nil
+        }
         let entry = entries.remove(at: index)
         entries.append(entry)
         emit(context)
         return entry.image
     }
-    func insert(_ image: DecodedImage, for key: RenderKey, context: ResourceSnapshotContext? = nil) {
+    func insert(_ image: DecodedImage, for key: RenderKey, context: ResourceSnapshotContext? = nil, accessPermit: AccessWorkPermit? = nil) {
         guard image.image.bytesPerRow * image.image.height <= capacity else { return }
         guard pinCount(for: key) == 0 else { return }
         remove(key, context: context)
-        entries.append(Entry(key: key, image: image))
+        entries.append(Entry(key: key, image: image, accessPermit: accessPermit ?? image.accessPermit))
         emit(context)
         trim(to: limit, context: context)
     }
@@ -93,17 +99,33 @@ public actor ImageMemoryCache {
         entries.remove(at: index); emit(context); account(context)
     }
     func pin(_ key: RenderKey, image: DecodedImage, context: ResourceSnapshotContext? = nil) {
-        guard image.itemID == key.itemID, image.revision == key.revision else { return }
-        recordRevision(key.revision, for: key.itemID)
-        if let index = entries.firstIndex(where: { $0.key == key }) {
-            // An unpinned entry's buffer is held by no presenter: the pinned buffer replaces it rather than doubling it.
-            if entries[index].pins == 0 { entries[index].image = image }
-            else if entries[index].image.image !== image.image,
-               !entries[index].variants.contains(where: { $0.image === image.image }) {
-                entries[index].variants.append(image)
+        let previousWasRevoked = entries.first(where: { $0.key == key })?.accessPermit?.isCurrent == false
+        let accepted = (try? AccessWorkPermit.admitting(image.accessPermit) { () -> Bool in
+            guard image.itemID == key.itemID, image.revision == key.revision else { return false }
+            guard image.accessPermit != nil || !previousWasRevoked else { return false }
+            recordRevision(key.revision, for: key.itemID)
+            if let index = entries.firstIndex(where: { $0.key == key }) {
+                let replacesOrigin = image.accessPermit.map { !$0.canCoalesce(with: entries[index].accessPermit) } ?? false
+                if entries[index].pins == 0 || replacesOrigin {
+                    if entries[index].pins > 0, entries[index].image.image !== image.image,
+                       !entries[index].variants.contains(where: { $0.image === entries[index].image.image }) {
+                        entries[index].variants.append(entries[index].image)
+                    }
+                    entries[index].image = image
+                    entries[index].accessPermit = image.accessPermit ?? entries[index].accessPermit
+                    if replacesOrigin { entries[index].stale = false }
+                } else if entries[index].image.image !== image.image,
+                          !entries[index].variants.contains(where: { $0.image === image.image }) {
+                    entries[index].variants.append(image)
+                }
+                entries[index].pins += 1
+            } else {
+                entries.append(Entry(key: key, image: image, pins: 1, accessPermit: image.accessPermit))
             }
-            entries[index].pins += 1
-        } else { entries.append(Entry(key: key, image: image, pins: 1)) }
+            return true
+        }) ?? false
+        guard accepted else { return }
+        // Observers may revoke authority; never invoke them under the publication lock.
         emit(context)
         trim(to: limit, context: context)
     }
@@ -113,7 +135,7 @@ public actor ImageMemoryCache {
         emit(context)
         if entries[index].pins == 0 {
             if !entries[index].variants.isEmpty { entries[index].variants.removeAll(); emit(context) }
-            if entries[index].stale || entries[index].image.image.bytesPerRow * entries[index].image.image.height > capacity {
+            if entries[index].stale || entries[index].accessPermit?.isCurrent == false || entries[index].image.image.bytesPerRow * entries[index].image.image.height > capacity {
                 entries.remove(at: index)
                 emit(context)
             }
@@ -218,14 +240,23 @@ public actor ImageMemoryCache {
         context?.tracer.lookup(isPreview: key.isPreview, hit: request.image != nil)
         return request
     }
-    func finish(_ request: ImageCacheRequest, image: DecodedImage?, context: ResourceSnapshotContext? = nil) -> DecodedImage? {
-        guard pending.removeValue(forKey: request.id) == request.key,
-              let image, !Task.isCancelled, image.itemID == request.key.itemID,
-              image.revision == request.key.revision else { return nil }
-        // Independent waiters can complete after admission removed its shared job. Keep one buffer.
-        if let retained = entries.first(where: { $0.key == request.key }) { return retained.image }
-        insert(image, for: request.key, context: context)
-        return image
+    func finish(_ request: ImageCacheRequest, image: DecodedImage?, context: ResourceSnapshotContext? = nil,
+                accessPermit: AccessWorkPermit? = nil) -> DecodedImage? {
+        guard pending.removeValue(forKey: request.id) == request.key else { return nil }
+        var inserted = false
+        let accessPermit = accessPermit ?? image?.accessPermit
+        let result: DecodedImage? = try? AccessWorkPermit.admitting(accessPermit) {
+            guard let image, !Task.isCancelled, image.itemID == request.key.itemID,
+                  image.revision == request.key.revision else { return nil }
+            // Independent waiters can complete after admission removed its shared job. Keep one buffer.
+            if let retained = entries.first(where: { $0.key == request.key && !$0.stale }) { return retained.image }
+            // Telemetry is an external callback; publish it after releasing authority.
+            insert(image, for: request.key, accessPermit: accessPermit)
+            inserted = true
+            return image
+        }
+        if inserted { emit(context) }
+        return result
     }
     private func emit(_ context: ResourceSnapshotContext?) {
         guard let context else { return }

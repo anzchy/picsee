@@ -236,6 +236,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
     }
 
     public func prepare(_ request: ImageDecodeRequest) async throws -> ThumbnailCacheTicket? {
+        try request.accessPermit?.check()
         try Task.checkCancellation()
         let generation = CacheIndexLocks.shared.generation(for: directory)
         guard let render = request.renderKey,
@@ -246,10 +247,14 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
               request.maximumPixelSize > 0,
               request.maximumPixelSize <= Self.maximumPixelEdge,
               request.fileURL.isFileURL else { return nil }
-        let digest = try? fingerprint(request.fileURL, expected: render.revision)
+        let digest: String?
+        do { digest = try fingerprint(request.fileURL, expected: render.revision) }
+        catch where AccessReadFailure.isPermissionDenied(error) { throw error }
+        catch { digest = nil }
         try Task.checkCancellation()
         guard let digest, let key = DurableThumbnailKey(renderKey: render, sourceSHA256: digest,
                                                        encoderVersion: Self.encoderVersion) else { return nil }
+        try request.accessPermit?.check()
         return ThumbnailCacheTicket(request: request, key: key, sourceSHA256: digest,
                                     generation: generation)
     }
@@ -257,9 +262,12 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
     /// A returned image is a hit and nil a miss; a throw (cancellation) is neither. Counted per load attempt:
     /// a caller that discards a returned image afterwards (for example on its size checks) leaves the hit.
     public func load(_ ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
+        try ticket.request.accessPermit?.check()
         let image = try await loadPayload(ticket)
-        if image == nil { loadMisses += 1 } else { loadHits += 1 }
-        return image
+        return try AccessWorkPermit.admitting(ticket.request.accessPermit) {
+            if image == nil { loadMisses += 1 } else { loadHits += 1 }
+            return image
+        }
     }
 
     private func loadPayload(_ ticket: ThumbnailCacheTicket) async throws -> DecodedImage? {
@@ -281,6 +289,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
         var leaseHeld = true
         defer { if leaseHeld { PayloadLeaseRegistry.shared.release(payload.path) } }
         await afterReadLeaseAcquired?()
+        try ticket.request.accessPermit?.check()
         try Task.checkCancellation()
         let decodeOptions: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -288,9 +297,7 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceThumbnailMaxPixelSize: ticket.request.maximumPixelSize,
         ]
-        guard let size = (try? FileManager.default.attributesOfItem(atPath: payload.path)[.size] as? NSNumber)?.intValue,
-              size == row.byteCount, size <= Self.maximumPayloadBytes,
-              let data = try? Data(contentsOf: payload), data.count == row.byteCount,
+        guard let data = try boundedPayload(at: payload, expectedByteCount: row.byteCount),
               digest(data) == row.payloadSHA256,
               let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
               CGImageSourceGetCount(source) == 1,
@@ -311,10 +318,11 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
         touch(ticket.key.filename)
         return DecodedImage(image: image,
             sourcePixelSize: CGSize(width: row.sourceWidth, height: row.sourceHeight),
-            revision: render.revision, itemID: render.itemID)
+            revision: render.revision, itemID: render.itemID, accessPermit: ticket.request.accessPermit)
     }
 
     public func store(_ image: DecodedImage, for ticket: ThumbnailCacheTicket) async throws {
+        try ticket.request.accessPermit?.check()
         try Task.checkCancellation()
         guard let render = ticket.request.renderKey,
               let expectedKey = DurableThumbnailKey(renderKey: render, sourceSHA256: ticket.sourceSHA256,
@@ -358,15 +366,34 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
         guard let url = payloadURL(forKey: ticket.key.filename) else { return }
         guard PayloadLeaseRegistry.shared.acquireWrite(url.path) else { return }
         defer { PayloadLeaseRegistry.shared.releaseWrite(url.path) }
+        // An interrupted rewrite must not destroy a previously indexed render.
+        let previousPayload: Data?
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue,
+           size > 0, size <= Self.maximumPayloadBytes {
+            previousPayload = try? Data(contentsOf: url)
+        } else { previousPayload = nil }
+        defer {
+            if !didWrite, ticket.request.accessPermit?.isCurrent == false {
+                if let previousPayload { try? previousPayload.write(to: url, options: .atomic) }
+                else { try? FileManager.default.removeItem(at: url) }
+            }
+        }
         let temporary = directory.appendingPathComponent(".tmp-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: temporary) }
         try payload.write(to: temporary)
-        if FileManager.default.fileExists(atPath: url.path) {
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary)
-        } else {
-            try FileManager.default.moveItem(at: temporary, to: url)
+        try AccessWorkPermit.admitting(ticket.request.accessPermit) {
+            if FileManager.default.fileExists(atPath: url.path) {
+                _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary)
+            } else {
+                try FileManager.default.moveItem(at: temporary, to: url)
+            }
         }
         try afterPayloadWrite?()
+        do { try ticket.request.accessPermit?.check() }
+        catch {
+            if previousPayload == nil { try? FileManager.default.removeItem(at: url) }
+            throw error
+        }
         // Catch a source mutation during payload publication before indexing the bytes.
         let unchanged: Bool
         do { unchanged = try sourceMatches(ticket, render: render) }
@@ -379,18 +406,22 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
             throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
         }
         try Task.checkCancellation()
-        try withIndexLock {
-            try repairCorruptIndexIfNeeded()
-            try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
-                         payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
-                         sourceHeight: Int(image.sourcePixelSize.height))
-            didWrite = true
+        try AccessWorkPermit.admitting(ticket.request.accessPermit) {
+            try withIndexLock {
+                try repairCorruptIndexIfNeeded()
+                try writeRow(ticket, payloadPath: path, payloadBytes: payload.count,
+                             payloadSHA256: digest(payload), sourceWidth: Int(image.sourcePixelSize.width),
+                             sourceHeight: Int(image.sourcePixelSize.height))
+                didWrite = true
+            }
         }
         }
         if didWrite { lastWriteFailure = nil }
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ImageLoadError where error.kind == .sourceChanged {
+            throw error
+        } catch where AccessReadFailure.isPermissionDenied(error) {
             throw error
         } catch let error as ThumbnailStoreError where !error.isPersistentWriteFailure {
             logger.error("Thumbnail cache store failed; retry remains available: \(Self.publicErrorCode(error), privacy: .public)")
@@ -408,9 +439,22 @@ public actor ThumbnailDiskCache: ThumbnailCaching, CacheMaintenance {
             return try fingerprint(ticket.request.fileURL, expected: render.revision) == ticket.sourceSHA256
         } catch is CancellationError {
             throw CancellationError()
+        } catch where AccessReadFailure.isPermissionDenied(error) {
+            throw error
         } catch {
             throw ImageLoadError(.sourceChanged, itemID: render.itemID, revision: render.revision)
         }
+    }
+
+    private func boundedPayload(at url: URL, expectedByteCount: Int) throws -> Data? {
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard let size = (attributes[.size] as? NSNumber)?.intValue,
+                  size == expectedByteCount, size > 0, size <= Self.maximumPayloadBytes else { return nil }
+            let data = try Data(contentsOf: url)
+            return data.count == expectedByteCount ? data : nil
+        } catch where AccessReadFailure.isPermissionDenied(error) { throw error }
+        catch { return nil }
     }
 
     private func fingerprint(_ url: URL, expected: FileRevision) throws -> String? {

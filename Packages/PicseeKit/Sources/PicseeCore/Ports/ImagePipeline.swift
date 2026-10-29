@@ -4,6 +4,7 @@ import Foundation
 public enum DecodePriority: Int, Sendable { case prefetch, visible, current }
 
 public struct ImageDecodeRequest: Sendable {
+    public let accessPermit: AccessWorkPermit?
     public let identityRoot: ItemIdentityRoot?
     public let isPreview: Bool
     /// Pixel allocation ceiling for this admitted decode, rechecked against its own header.
@@ -14,7 +15,8 @@ public struct ImageDecodeRequest: Sendable {
     /// Longest edge in pixels; callers convert viewport points using backing scale.
     public let maximumPixelSize: Int
 
-    public init(fileURL: URL, maximumPixelSize: Int, renderKey: RenderKey? = nil, priority: DecodePriority = .current, sourceByteBudget: Int? = nil, isPreview: Bool = false, identityRoot: ItemIdentityRoot? = nil) {
+    public init(fileURL: URL, maximumPixelSize: Int, renderKey: RenderKey? = nil, priority: DecodePriority = .current, sourceByteBudget: Int? = nil, isPreview: Bool = false, identityRoot: ItemIdentityRoot? = nil, accessPermit: AccessWorkPermit? = nil) {
+        self.accessPermit = accessPermit
         self.identityRoot = identityRoot
         self.isPreview = isPreview
         self.sourceByteBudget = sourceByteBudget
@@ -29,13 +31,15 @@ public struct ImageDecodeRequest: Sendable {
 }
 
 public struct DecodedImage: Sendable {
+    public let accessPermit: AccessWorkPermit?
     public let itemID: ItemID?
     public let revision: FileRevision?
     public let formatIdentifier: String?
     public let image: CGImage
     public let sourcePixelSize: CGSize
 
-    public init(image: CGImage, sourcePixelSize: CGSize, formatIdentifier: String? = nil, revision: FileRevision? = nil, itemID: ItemID? = nil) {
+    public init(image: CGImage, sourcePixelSize: CGSize, formatIdentifier: String? = nil, revision: FileRevision? = nil, itemID: ItemID? = nil, accessPermit: AccessWorkPermit? = nil) {
+        self.accessPermit = accessPermit
         self.itemID = itemID
         self.revision = revision
         self.formatIdentifier = formatIdentifier

@@ -166,3 +166,48 @@ import PicseeApplication
     #expect(!access.mayDeliver(fresh))
     #expect(access.mayDeliver(access.stamp(for: root)))
 }
+
+
+@MainActor @Test func t229RootFailureRejectsAnotherRootsCurrentStamp() {
+    let state = AccessState(), a = AccessRootID(), b = AccessRootID()
+    state.register(a, volumeUUID: "111")
+    state.register(b, volumeUUID: "222")
+    let aStamp = state.stamp(for: a)
+    var events: [AccessStateChange] = []
+    state.observe { events.append($0) }
+    #expect(!state.reportRootFailure(b, cause: .unknown, from: aStamp))
+    #expect(state.snapshot(for: a)?.availability == .readable)
+    #expect(state.snapshot(for: b)?.availability == .readable)
+    #expect(state.snapshot(for: b)?.counter == 0)
+    #expect(events.isEmpty)
+    state.diskUnmounted(volumeUUID: "111")
+    #expect(!state.reportRootFailure(b, cause: .unknown, from: aStamp))
+    #expect(state.snapshot(for: b)?.availability == .readable)
+    #expect(state.reportRootFailure(b, cause: .unknown, from: state.stamp(for: b)))
+    #expect(state.snapshot(for: a)?.availability == .lost(.diskNotConnected))
+    #expect(state.snapshot(for: b)?.availability == .lost(.unknown))
+    #expect(state.snapshot(for: b)?.counter == 1)
+    #expect(events == [.lost(a, counter: 1), .lost(b, counter: 1)])
+}
+
+@MainActor @Test func t229ReplacementRegistrationRevokesPriorAuthorityAndWakeRetriesOnlyLostMountedRoots() throws {
+    let state = AccessState(), root = AccessRootID()
+    #expect(state.recoveryAttempt(for: root) == nil)
+    state.register(root, volumeUUID: "old")
+    let first = try #require(state.permit(for: root))
+    state.register(root, volumeUUID: "old")
+    #expect(first.isCurrent)
+    state.register(root, volumeUUID: "new")
+    #expect(!first.isCurrent)
+    #expect(state.snapshot(for: root)?.counter == 1)
+    #expect(state.snapshot(for: root)?.volumeUUID == "new")
+    #expect(state.recoveryAttempt(for: root) == nil)
+    #expect(state.reportRootFailure(root, cause: .unknown, from: state.stamp(for: root)))
+    let attempt = try #require(state.recoveryAttempt(for: root))
+    #expect(attempt == AccessRecoveryAttempt(rootID: root, counter: 2, volumeUUID: "new"))
+    state.diskUnmounted(volumeUUID: "new")
+    #expect(state.recoveryAttempt(for: root) == nil)
+    #expect(!state.completeRecovery(attempt, verified: true))
+    #expect(state.diskMounted(volumeUUID: "new").count == 1)
+    #expect(state.recoveryAttempt(for: root)?.counter == 3)
+}

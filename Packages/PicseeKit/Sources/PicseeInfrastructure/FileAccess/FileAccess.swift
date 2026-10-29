@@ -56,6 +56,11 @@ public actor FileAccess: AccessLeasing {
     private let buildSHA: String
     public let storeCorrupt: Bool
     private var saved: [AccessRootRecord]
+    private struct SavedGrantVersion {
+        let authority = AccessWorkAuthority()
+        var counter: UInt64 = 0
+    }
+    private var savedGrantVersions: [AccessRootID: SavedGrantVersion] = [:]
     private var roots: [AccessRootID: URL] = [:]
     /// Location memory only; never used as an access grant.
     private var lastKnownRoots: [AccessRootID: URL] = [:]
@@ -158,6 +163,21 @@ public actor FileAccess: AccessLeasing {
             outcomes[record.id] = outcome
             logger.notice("AccessRoot root=\(record.id.rawValue.uuidString, privacy: .public) outcome=\(outcome, privacy: .public) creating=\(record.creatingBuildSHA, privacy: .public) current=\(buildSHA, privacy: .public)")
         }
+    }
+    public func savedGrantSnapshot(_ id: AccessRootID) -> SavedAccessGrantSnapshot? {
+        guard let record = saved.first(where: { $0.id == id }) else { return nil }
+        let version = savedGrantVersions[id] ?? SavedGrantVersion()
+        savedGrantVersions[id] = version
+        return SavedAccessGrantSnapshot(record: record, bookmarkVolume: bookmarkVolume(record.bookmark),
+            rootURL: roots[id], version: version.authority.permit(counter: version.counter))
+    }
+    /// No await may separate this fence from the attempted persistent mutation.
+    /// A failed save conservatively invalidates previously captured versions too.
+    private func invalidateSavedGrantVersion(_ id: AccessRootID) {
+        guard var version = savedGrantVersions[id] else { return }
+        version.counter += 1
+        version.authority.update(counter: version.counter, readable: true)
+        savedGrantVersions[id] = version
     }
     public func records() -> [AccessRootRecord] { saved }
     public func launchOutcomes() -> [AccessRootID: String] { outcomes }
@@ -371,6 +391,7 @@ public actor FileAccess: AccessLeasing {
             if let index = saved.firstIndex(where: { $0.id == id }) { replacement.insert(record, at: index) }
             else { replacement.append(record) }
             phase = "store"
+            invalidateSavedGrantVersion(id)
             try store.save(replacement)
             saved = replacement
             legacyBaseline.removeValue(forKey: id)
@@ -434,6 +455,7 @@ public actor FileAccess: AccessLeasing {
                     creatingBuildSHA: buildSHA, createdAt: Date()))
             }
             phase = "store"
+            invalidateSavedGrantVersion(id)
             try store.save(replacement)
             saved = replacement
             legacyBaseline.removeValue(forKey: id)
@@ -542,6 +564,7 @@ public actor FileAccess: AccessLeasing {
         var replacement = record
         replacement.bookmark = try bookmarks.create(for: url)
         let refreshed = saved.map { $0.id == record.id ? replacement : $0 }
+        invalidateSavedGrantVersion(record.id)
         try store.save(refreshed)
         saved = refreshed
     }
