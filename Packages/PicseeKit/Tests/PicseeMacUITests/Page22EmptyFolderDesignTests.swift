@@ -377,3 +377,39 @@ private func designColor(_ light: PinnedDesign, _ dark: PinnedDesign, darkMode: 
         }
     }
 }
+
+/// Viewer rows (owner decision C, #137): the viewer surface reuses page 22, so at the same content size and appearance
+/// its layout and colours equal the grid page pinned above to empty-folder.html (light) and grid-dark.html (dark).
+@Test @MainActor func viewerPage22MatchesThePinnedGridPage() throws {
+    for (name, _) in page22Appearances {
+        for children in [["2024 冲绳", "手机备份", "扫描件"], []] {
+            let shell = try page22Shell(page22Sizes[0], name, children: children, recents: page22Recents())
+            let grid = shell.emptyFolderView
+            let host = ViewerStateHost(frame: grid.bounds)
+            host.appearance = try #require(NSAppearance(named: name))
+            shell.mirrorEmptyFolderPage(to: host)
+            host.display(.emptyFolder)
+            let viewer = host.emptyFolderView
+            viewer.layoutSubtreeIfNeeded()
+            let label = "\(name.rawValue) \(children.isEmpty ? "recents" : "subfolders")"
+            #expect(viewer.frame.size == grid.bounds.size, "\(label): size")
+            #expect(viewer.tiles.count == grid.tiles.count && viewer.recentRows.count == grid.recentRows.count, "\(label)")
+            #expect(viewer.heading.stringValue == grid.heading.stringValue, "\(label): heading")
+            #expect(viewer.detail.stringValue == grid.detail.stringValue, "\(label): detail")
+            let fixed: [(NSView, NSView)] = [(grid.icon, viewer.icon), (grid.heading, viewer.heading),
+                (grid.detail, viewer.detail), (grid.primaryButton, viewer.primaryButton),
+                (grid.chooseButton, viewer.chooseButton), (grid.recentsGroup, viewer.recentsGroup)]
+            let pairs = fixed + zip(grid.tiles, viewer.tiles).map { ($0 as NSView, $1 as NSView) }
+                + zip(grid.recentRows, viewer.recentRows).map { ($0 as NSView, $1 as NSView) }
+            for (index, (expected, actual)) in pairs.enumerated() {
+                let item = "\(label) #\(index) \(type(of: expected))"
+                #expect(rect(actual, in: viewer) == rect(expected, in: grid), "\(item): frame")
+                #expect(actual.isHidden == expected.isHidden, "\(item): hidden")
+                #expect(cgColor(actual.layer?.backgroundColor)?.usingColorSpace(.sRGB)
+                    == cgColor(expected.layer?.backgroundColor)?.usingColorSpace(.sRGB), "\(item): fill")
+                #expect(cgColor(actual.layer?.borderColor)?.usingColorSpace(.sRGB)
+                    == cgColor(expected.layer?.borderColor)?.usingColorSpace(.sRGB), "\(item): border")
+            }
+        }
+    }
+}
