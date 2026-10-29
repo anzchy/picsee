@@ -33,6 +33,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     /// Same-source failures join the same scoped stat; distinct evidence stays independent.
     private var sourceChecks: [SourceCheckKey: Task<Bool, Never>] = [:]
     private var port: (any DiskMountPort)?
+    private var diagnosticObservation: UUID?
     private var startup: Task<Void, Never>?
     private var events: Task<Void, Never>?
     private var notifications: [AccessMonitorNotification] = []
@@ -94,8 +95,14 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         if let startup { await startup.value; return }
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            let port = mounts ?? SystemDiskMountPort()
+            let port = mounts ?? SystemDiskMountPort(diagnostics: files.diagnostics)
             self.port = port
+            diagnosticObservation = state.observe { [weak self] change in
+                guard let self, case .lost(let id, let counter) = change,
+                      let snapshot = state.snapshot(for: id),
+                      case .lost(let cause) = snapshot.availability else { return }
+                files.diagnostics.emit("AccessRootLost root=\(id.rawValue.uuidString) counter=\(counter) cause=\(cause == .diskNotConnected ? "diskNotConnected" : "unknown") volume=\(snapshot.volumeUUID ?? "unknown")")
+            }
             let stream = await port.events()
             events = Task { @MainActor [weak self] in
                 defer { (port as? SystemDiskMountPort)?.stop() }
@@ -123,6 +130,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     private func receive(_ event: DiskMountEvent) {
         switch event {
         case .unmounted(let volume):
+            files.diagnostics.emit("AccessVolume event=unmount outcome=received volume=\(volume.uuid ?? "unknown")", path: volume.url)
             guard let uuid = volume.uuid else { return }
             for id in Array(recoveryTasks.keys) where state.snapshot(for: id)?.volumeUUID == uuid {
                 cancelRecovery(id)
@@ -132,6 +140,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
             latestMountEvents[uuid] = (mountEventRevision, false)
             state.diskUnmounted(volumeUUID: uuid)
         case .mounted(let volume):
+            files.diagnostics.emit("AccessVolume event=mount outcome=received volume=\(volume.uuid ?? "unknown")", path: volume.url)
             guard let uuid = volume.uuid else { return }
             if let name = volume.name { volumeNames[uuid] = name }
             mountEventRevision &+= 1
@@ -387,7 +396,11 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         recoveryRequests[attempt.rootID] = request
         recoveryTasks[attempt.rootID] = Task { @MainActor [weak self] in
             guard let self else { return }
+            var diagnosticOutcome = "refused"
+            var diagnosticStage = "grantOrSuperseded"
+            files.diagnostics.emit("AccessRecovery outcome=attempt root=\(attempt.rootID.rawValue.uuidString) counter=\(attempt.counter) request=\(request.uuidString)")
             defer {
+                files.diagnostics.emit("AccessRecovery outcome=\(diagnosticOutcome) stage=\(diagnosticStage) root=\(attempt.rootID.rawValue.uuidString) counter=\(attempt.counter) request=\(request.uuidString)")
                 if recoveryRequests[attempt.rootID] == request {
                     recoveryTasks.removeValue(forKey: attempt.rootID)
                     recoveryRequests.removeValue(forKey: attempt.rootID)
@@ -396,6 +409,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
             guard let port, let grant = await files.savedGrantSnapshot(attempt.rootID),
                   ownsRecovery(attempt, request: request) else { return }
             let revision = attempt.volumeUUID.flatMap { latestMountEvents[$0]?.revision }
+            diagnosticStage = "verificationOrSuperseded"
             let result = await files.verifySavedRootForRecovery(attempt.rootID, mounts: port)
             guard ownsRecovery(attempt, request: request) else { return }
             guard result.classification.cause == .readable, result.rootURL != nil,
@@ -405,6 +419,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
                     result.classification.cause == .diskNotConnected ? .diskNotConnected : .unknown)
                 return
             }
+            diagnosticStage = "mountedState"
             if let uuid = attempt.volumeUUID {
                 let connected = await isMounted(uuid)
                 guard ownsRecovery(attempt, request: request) else { return }
@@ -415,11 +430,14 @@ private final class AccessMonitorNotification: @unchecked Sendable {
                     _ = state.refineRecoveryFailure(attempt, cause: .unknown); return
                 }
             }
+            diagnosticStage = "admission"
             do {
-                _ = try state.completeRecovery(attempt, verified: true, admitting: { update in
+                let published = try state.completeRecovery(attempt, verified: true, admitting: { update in
                     try grant.admitting(update)
                 })
+                diagnosticOutcome = published ? "published" : "refused"
             } catch {
+                files.diagnostics.emit("AccessRecovery stage=admission error=\(AccessDiagnostics.errorKind(error)) root=\(attempt.rootID.rawValue.uuidString)")
                 guard ownsRecovery(attempt, request: request) else { return }
                 _ = state.refineRecoveryFailure(attempt, cause: .unknown)
             }

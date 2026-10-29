@@ -44,12 +44,13 @@ public struct AccessRecoveryVerification: Sendable {
 
 /// Shared by the application. All persisted-grant I/O runs on this actor's executor.
 public actor FileAccess: AccessLeasing {
+    public nonisolated let diagnostics: AccessDiagnostics
     private let scope: any SecurityScope
     private let bookmarks: any BookmarkCoding
     private let requiresEmbeddedIdentity: Bool
     private let resourceReader: any FileIdentityResourceReading
     private let bookmarkVolume: @Sendable (Data) -> AccessProbeVolume
-    private let resolvedVolumeUUID: @Sendable (URL) -> String?
+    private let resolvedVolumeUUID: @Sendable (URL) throws -> String?
     private let bookmarkIdentity: @Sendable (Data) -> FileResourceIdentity?
     private let mountedVolumesProvider: @Sendable () -> [AccessProbeVolume]
     private let store: BookmarkStore
@@ -79,12 +80,13 @@ public actor FileAccess: AccessLeasing {
     private var fileBookmarks: [URL: FileGrantBookmark] = [:]
 
     public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String,
+                diagnostics: AccessDiagnostics = AccessDiagnostics(),
                 resourceReader: any FileIdentityResourceReading = URLIdentityResourceReader(),
                 requiresEmbeddedIdentity: Bool? = nil,
                 boundary: @escaping @Sendable (URL, URL) -> Bool = { AccessBoundary.contains($0, in: $1) },
                 bookmarkVolume: @escaping @Sendable (Data) -> AccessProbeVolume = { AccessProbeFactGatherer.bookmarkVolume(in: $0) },
-                resolvedVolumeUUID: @escaping @Sendable (URL) -> String? = {
-                    (try? $0.resourceValues(forKeys: [.volumeUUIDStringKey]))?.volumeUUIDString
+                resolvedVolumeUUID: @escaping @Sendable (URL) throws -> String? = {
+                    try $0.resourceValues(forKeys: [.volumeUUIDStringKey]).volumeUUIDString
                 },
                 bookmarkIdentity: @escaping @Sendable (Data) -> FileResourceIdentity? = {
                     AccessProbeFactGatherer.bookmarkIdentity(in: $0)
@@ -94,6 +96,7 @@ public actor FileAccess: AccessLeasing {
                         includingResourceValuesForKeys: [.volumeUUIDStringKey, .volumeNameKey, .volumeURLKey],
                         options: []))
                 }) throws {
+        self.diagnostics = diagnostics
         self.boundary = boundary
         self.scope = scope; self.bookmarks = bookmarks; self.buildSHA = buildSHA
         self.requiresEmbeddedIdentity = requiresEmbeddedIdentity ?? bookmarks.requiresEmbeddedIdentity
@@ -130,7 +133,7 @@ public actor FileAccess: AccessLeasing {
                 // identity and has no remount tracking; a scoped listing still gates it.
                 let isUUIDLess = self.requiresEmbeddedIdentity && volume.uuid == nil
                 let resolution = try bookmarks.resolve(record.bookmark)
-                if volume.uuid != nil || isUUIDLess, resolvedVolumeUUID(resolution.url) != volume.uuid {
+                if volume.uuid != nil || isUUIDLess, (try? resolvedVolumeUUID(resolution.url)) != volume.uuid {
                     throw FileAccessError.needsReconnection(record.id)
                 }
                 let isLegacy = self.requiresEmbeddedIdentity && !isUUIDLess && bookmarkIdentity(record.bookmark) == nil
@@ -251,6 +254,14 @@ public actor FileAccess: AccessLeasing {
     }
     private func verifySavedRootForRecovery(_ id: AccessRootID, targetFolder: URL?,
                                             mounts: any DiskMountPort) async -> AccessRecoveryVerification {
+        let rootID = id.rawValue.uuidString
+        let attempt = UUID().uuidString
+        let prefix = "AccessRecoveryVerify root=\(rootID) attempt=\(attempt)"
+        var stage = "savedGrant"
+        var location = targetFolder
+        var outcome = "refused"
+        diagnostics.emit("\(prefix) outcome=attempt", path: targetFolder)
+        defer { diagnostics.emit("\(prefix) outcome=\(outcome) stage=\(stage)", path: location) }
         let empty = AccessProbeVolume(uuid: nil, url: nil, name: nil)
         // Mount enumeration suspends this actor. Read the saved grant afterwards
         // so an explicit reselection during that wait cannot be overwritten.
@@ -260,47 +271,93 @@ public actor FileAccess: AccessLeasing {
                                               bookmarkVolume: empty, rootURL: nil, folderURL: nil)
         }
         let volume = bookmarkVolume(record.bookmark)
+        diagnostics.emit("\(prefix) volume=\(volume.uuid ?? "unknown")")
         func classified(_ resolution: AccessProbeResolution, scopeStarted: Bool? = nil,
                         listing: AccessProbeDirectoryListing? = nil, isInTrash: Bool = false,
                         rootURL: URL? = nil, folderURL: URL? = nil) -> AccessRecoveryVerification {
             let facts = AccessProbeFacts(volume: volume, mountedVolumes: mounted, resolution: resolution,
                                          scopeStarted: scopeStarted, listing: listing, isInTrash: isInTrash)
-            return AccessRecoveryVerification(classification: AccessCauseClassifier.classify(facts),
+            let classification = AccessCauseClassifier.classify(facts)
+            diagnostics.emit("\(prefix) cause=\(classification.cause.rawValue)")
+            if classification.cause == .readable { outcome = "verified" }
+            return AccessRecoveryVerification(classification: classification,
                                               bookmarkVolume: volume, rootURL: rootURL, folderURL: folderURL)
         }
         // A bookmark can resolve to an empty abandoned mount point. Never use
         // scope or listing to override a missing or wrong UUID. A volume that
         // has no UUID at all is only retried here (foreground), never by disk events.
+        stage = "mount"
         if let uuid = volume.uuid, !mounted.contains(where: { $0.uuid == uuid }) {
             return classified(.failed(domain: "PicseeAccess", code: 0))
         }
+        stage = "bookmark"
         let resolution: ResolvedBookmark
         do { resolution = try bookmarks.resolve(record.bookmark) }
-        catch { return classified(.failed(Self.probeError(error))) }
+        catch {
+            diagnostics.emit("\(prefix) bookmark=failed error=\(AccessDiagnostics.errorKind(error))")
+            return classified(.failed(Self.probeError(error)))
+        }
         let root = resolution.url
+        location = root
+        diagnostics.emit("\(prefix) bookmark=resolved stale=\(resolution.stale)", path: root)
         let resolved = AccessProbeResolution.resolved(root, stale: resolution.stale)
-        guard resolvedVolumeUUID(root) == volume.uuid, !Self.isTrashed(root) else {
+        stage = "volumeRead"
+        let actualUUID: String?
+        do { actualUUID = try resolvedVolumeUUID(root) }
+        catch {
+            diagnostics.emit("\(prefix) stage=volumeRead error=\(AccessDiagnostics.errorKind(error))", path: root)
+            // The former try? adapter produced nil on read failure. Preserve its
+            // comparison semantics, including UUID-less roots, while explaining it.
+            actualUUID = nil
+        }
+        if actualUUID != volume.uuid {
+            stage = "volumeMismatch"
+            diagnostics.emit("\(prefix) stage=volumeMismatch expectedVolume=\(volume.uuid ?? "unknown") actualVolume=\(actualUUID ?? "unknown")", path: root)
             return classified(resolved, isInTrash: Self.isTrashed(root))
         }
+        stage = "trash"
+        guard !Self.isTrashed(root) else { return classified(resolved, isInTrash: true) }
         let expectedIdentity = bookmarkIdentity(record.bookmark) ?? legacyBaseline[id]
+        stage = "identityMissing"
         guard expectedIdentity != nil || !requiresEmbeddedIdentity || volume.uuid == nil else {
             return classified(resolved)
         }
+        stage = "scope"
         let session: ScopeSession
-        do { session = try ScopeSession(scope: scope, url: root, rootID: id) }
-        catch { return classified(resolved, scopeStarted: false) }
-        defer { session.stop() }
-        if let expectedIdentity,
-           (try? resourceReader.identity(for: root)) != expectedIdentity {
-            roots.removeValue(forKey: id)
-            return classified(resolved, scopeStarted: true)
+        do {
+            session = try ScopeSession(scope: scope, url: root, rootID: id)
+            diagnostics.emit("\(prefix) scopeStarted=true", path: root)
+        } catch {
+            diagnostics.emit("\(prefix) scopeStarted=false error=\(AccessDiagnostics.errorKind(error))", path: root)
+            return classified(resolved, scopeStarted: false)
         }
+        defer { session.stop() }
+        if let expectedIdentity {
+            let actualIdentity: FileResourceIdentity?
+            stage = "identityRead"
+            do { actualIdentity = try resourceReader.identity(for: root) }
+            catch {
+                diagnostics.emit("\(prefix) stage=identityRead error=\(AccessDiagnostics.errorKind(error))", path: root)
+                roots.removeValue(forKey: id)
+                return classified(resolved, scopeStarted: true)
+            }
+            stage = actualIdentity == nil ? "identityMissing" : "identityMismatch"
+            guard actualIdentity == expectedIdentity else {
+                roots.removeValue(forKey: id)
+                return classified(resolved, scopeStarted: true)
+            }
+            diagnostics.emit("\(prefix) identity=match", path: root)
+        }
+        stage = "rootRead"
         let rootListing: AccessProbeDirectoryListing
         do {
             rootListing = .succeeded(entryCount: try FileManager.default.contentsOfDirectory(
                 at: root, includingPropertiesForKeys: nil).count)
-        } catch { return classified(resolved, scopeStarted: true,
-                                    listing: .failed(Self.probeError(error))) }
+            diagnostics.emit("\(prefix) stage=rootRead outcome=readable", path: root)
+        } catch {
+            diagnostics.emit("\(prefix) stage=rootRead error=\(AccessDiagnostics.errorKind(error))", path: root)
+            return classified(resolved, scopeStarted: true, listing: .failed(Self.probeError(error)))
+        }
         let candidate: URL
         if let folder = targetFolder, let priorRoot = lastKnownRoots[id],
            folder.standardizedFileURL.pathComponents.starts(with: priorRoot.standardizedFileURL.pathComponents),
@@ -310,19 +367,24 @@ public actor FileAccess: AccessLeasing {
         } else { candidate = targetFolder ?? root }
         // Only a genuinely readable saved bookmark restores the published root.
         publishRoot(id, url: root)
+        stage = "boundary"
         guard boundary(candidate, root) else {
             return classified(resolved, scopeStarted: true, rootURL: root)
         }
         if candidate.standardizedFileURL == root.standardizedFileURL {
+            stage = "rootRead"
             return classified(resolved, scopeStarted: true, listing: rootListing,
                               rootURL: root, folderURL: root)
         }
+        stage = "folderRead"
+        location = candidate
         do {
             let listing = AccessProbeDirectoryListing.succeeded(entryCount: try FileManager.default.contentsOfDirectory(
                 at: candidate, includingPropertiesForKeys: nil).count)
             return classified(resolved, scopeStarted: true, listing: listing,
                               rootURL: root, folderURL: candidate)
         } catch {
+            diagnostics.emit("\(prefix) stage=folderRead error=\(AccessDiagnostics.errorKind(error))", path: candidate)
             return classified(resolved, scopeStarted: true,
                               listing: .failed(Self.probeError(error)), rootURL: root)
         }
@@ -613,7 +675,7 @@ public actor FileAccess: AccessLeasing {
         let volume = bookmarkVolume(record.bookmark)
         if let uuid = volume.uuid {
             guard mountedVolumesProvider().contains(where: { $0.uuid == uuid }),
-                  resolvedVolumeUUID(url) == uuid,
+                  (try? resolvedVolumeUUID(url)) == uuid,
                   let expected = bookmarkIdentity(record.bookmark),
                   (try? resourceReader.identity(for: url)) == expected else {
                 throw FileAccessError.needsReconnection(record.id)
@@ -622,7 +684,7 @@ public actor FileAccess: AccessLeasing {
         } else if requiresEmbeddedIdentity {
             // No volume UUID: no mount to match, but the root must still sit on a
             // UUID-less volume, match any known identity, and really list.
-            guard resolvedVolumeUUID(url) == nil else { throw FileAccessError.needsReconnection(record.id) }
+            guard (try? resolvedVolumeUUID(url)) == nil else { throw FileAccessError.needsReconnection(record.id) }
             if let expected = bookmarkIdentity(record.bookmark),
                (try? resourceReader.identity(for: url)) != expected {
                 throw FileAccessError.needsReconnection(record.id)
