@@ -6,11 +6,9 @@ import PicseeCore
 @MainActor private final class FolderOpenFirstByNameHost: FolderScanHost {
     var opens: [URL] = []
     var remembered: [URL] = []
-    var emptyCount = 0
 
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opens.append(url) }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { remembered.append(folder) }
-    func showEmptyFolder() { emptyCount += 1 }
 }
 
 @Suite @MainActor struct FolderOpenFirstByNameTests {
@@ -71,11 +69,11 @@ import PicseeCore
         await fixture.scanner.waitForStart()
         try await fixture.scanner.deliver([])
         #expect(fixture.coordinator.isReadingFolder)
-        #expect(host.emptyCount == 0)
+        #expect(!fixture.coordinator.isEmptyFolder)
         await fixture.scanner.finish()
         try await task.value
         #expect(!fixture.coordinator.isReadingFolder)
-        #expect(host.emptyCount == 1)
+        #expect(fixture.coordinator.isEmptyFolder)
         #expect(host.opens.isEmpty && host.remembered.isEmpty)
         #expect(await fixture.access.balance == [1, 1])
     }
@@ -90,7 +88,7 @@ import PicseeCore
         fixture.coordinator.cancel()
         await fixture.scanner.finish()
         try await task.value
-        #expect(host.opens.isEmpty && host.remembered.isEmpty && host.emptyCount == 0)
+        #expect(host.opens.isEmpty && host.remembered.isEmpty && !fixture.coordinator.isEmptyFolder)
         #expect(fixture.coordinator.snapshot == nil)
         #expect(fixture.coordinator.currentURL == nil)
         #expect(!fixture.coordinator.isReadingFolder)
@@ -106,7 +104,7 @@ import PicseeCore
         try await fixture.scanner.deliver(["img-0040.png"])
         await fixture.scanner.finish(failing: true)
         await #expect(throws: FolderScanTestError.expected) { try await task.value }
-        #expect(host.opens.isEmpty && host.remembered.isEmpty && host.emptyCount == 0)
+        #expect(host.opens.isEmpty && host.remembered.isEmpty && !fixture.coordinator.isEmptyFolder)
         #expect(fixture.coordinator.failure is FolderScanTestError)
         #expect(fixture.coordinator.snapshot?.isComplete == false)
         #expect(fixture.coordinator.snapshot?.entries.map(\.url.lastPathComponent) == ["img-0040.png"])

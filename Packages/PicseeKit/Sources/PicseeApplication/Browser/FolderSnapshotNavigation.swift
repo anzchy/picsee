@@ -4,7 +4,6 @@ import PicseeCore
 @MainActor public protocol FolderScanHost: AnyObject {
     func openFolderImage(_ url: URL, rootID: AccessRootID)
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws
-    func showEmptyFolder()
     func clearFolderImageForNoMatches()
     func folderScanDidComplete(count: Int)
     func folderScanDidStart()
@@ -74,6 +73,7 @@ extension ViewerSession {
     public var folderRecursiveEnabled: Bool { folderScan?.recursiveEnabled ?? false }
     public var folderAvailableExtensions: [String] { folderScan?.availableExtensions ?? [] }
     public var hasFolderSource: Bool { folderScan?.sourceSnapshot != nil }
+    public var isEmptyFolder: Bool { folderScan?.isEmptyFolder ?? false }
     public func setFolderConditions(_ conditions: FolderViewConditions) {
         guard filePreviewSet == nil, previewSet == nil else { return }
         folderScan?.setConditions(conditions)

@@ -32,7 +32,7 @@ import PicseeCore
     await fixture.scanner.finish(failing: event.hasSuffix("error")); try await task.value
     #expect(session.imageStatus == before && session.imageLoader.presented?.key == key)
     #expect(coordinator.snapshot == nil && !coordinator.isReadingFolder && coordinator.failure == nil)
-    #expect(host.opens.isEmpty && host.remembered.isEmpty && host.emptyCount == 0)
+    #expect(host.opens.isEmpty && host.remembered.isEmpty && !coordinator.isEmptyFolder)
     #expect(trace.events == ["begin-1", "replaced-1"])
     #expect(await fixture.access.balance == [1, 1])
     session.closeImage()

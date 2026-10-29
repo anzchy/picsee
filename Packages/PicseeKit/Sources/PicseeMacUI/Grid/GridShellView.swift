@@ -56,6 +56,14 @@ import PicseeCore
     public var onOpenSortMenu: ((NSButton, NSMenu) -> Void)?
     public var sortConditions: (() -> FolderViewConditions)?
     public var onMainFrameChange: ((NSRect) -> Void)?
+    public var onOpenRecent: ((RecentFolder) -> Void)?
+    public var onDropFolders: (([URL]) -> Void)?
+    public weak var session: ViewerSession?
+    public let emptyFolderView = EmptyFolderStateView()
+    public var emptyFolderVisible: Bool { !isHidden && !emptyFolderView.isHidden }
+    private var emptyFolderRequest: (recents: [RecentFolder], now: Date)?
+    private var footerActionsRequested = true
+    private var searchEmptyRequested = false
     private let preferencesStore: any DisplayPreferencesStore
     private let divider = GridSidebarDivider()
     private let folderName = NSTextField(labelWithString: "")
@@ -91,6 +99,15 @@ import PicseeCore
         sidebar.addSubview(favoritesButton)
         sidebar.addSubview(recentsButton)
         mainContent.addSubview(emptyState)
+        mainContent.addSubview(emptyFolderView)
+        emptyFolderView.isHidden = true
+        emptyFolderView.onSelectSubfolder = { [weak self] in self?.onSelectFolder?($0) }
+        emptyFolderView.onOpenRecent = { [weak self] in self?.onOpenRecent?($0) }
+        emptyFolderView.onDropFolders = { [weak self] in self?.onDropFolders?($0) }
+        emptyFolderView.onIncludeSubfolders = { [weak self] in self?.session?.setFolderRecursiveEnabled(true) }
+        emptyFolderView.onChooseFolder = { [weak self] in
+            if let session = self?.session { CommandRouter().route(.open, from: .button, to: session) }
+        }
         emptyState.addSubview(emptyTitle)
         emptyState.addSubview(emptyIcon)
         emptyState.addSubview(emptyDetail)
@@ -206,13 +223,35 @@ import PicseeCore
         folderName.stringValue = name ?? ""
         folderName.isHidden = name == nil
         folderName.setAccessibilityLabel(name ?? "")
-        updateKeyViewLoop()
+        refreshEmptyFolder()
     }
     public func showFolderTree(current: GridSidebarFolder, parent: GridSidebarFolder?, children: [GridSidebarFolder]) {
         folderName.isHidden = true
         folderTree.isHidden = false
         folderTree.show(current: current, parent: parent, children: children)
-        updateKeyViewLoop()
+        refreshEmptyFolder()
+    }
+    /// Page 22 after a complete empty scan (ADR-014); its tiles follow the folder tree's current children.
+    public func setEmptyFolderState(_ isEmpty: Bool, recents: [RecentFolder], now: Date) {
+        emptyFolderRequest = isEmpty ? (recents, now) : nil
+        refreshEmptyFolder()
+    }
+    private func refreshEmptyFolder() {
+        let subfolders = folderTree.isHidden ? [] : folderTree.children.map(\.url)
+        let content = emptyFolderRequest.flatMap {
+            EmptyFolderContent.make(isEmptyFolder: true, subfolders: subfolders, recents: $0.recents, now: $0.now,
+                                    locale: .current, calendar: .current)
+        }
+        emptyFolderView.isHidden = content == nil
+        if let content {
+            var rows: [EmptyFolderRecentRow] = []
+            if case .recents(let recents) = content { rows = recents }
+            mainContent.addSubview(emptyFolderView, positioned: .above, relativeTo: nil)
+            emptyFolderView.frame = mainContent.bounds
+            emptyFolderView.display(subfolders: subfolders, recents: rows,
+                                    includeSubfoldersAvailable: session?.folderRecursiveEnabled != true)
+        }
+        applyFooterState()
     }
     public func updateFolderCount(_ count: Int?, for url: URL) {
         folderTree.updateCount(count, for: url)
@@ -334,6 +373,7 @@ import PicseeCore
             views.append(divider)
             if !folderTree.isHidden { views.append(contentsOf: folderTree.rows) }
         }
+        views.append(contentsOf: pageKeyViews)
         if footerActionsEnabled {
             views.append(searchField.isHidden ? searchButton : searchField)
             views.append(sortButton)
@@ -349,10 +389,16 @@ import PicseeCore
         let next = index + (reverse ? -1 : 1)
         return views.indices.contains(next) ? views[next] : nil
     }
+    private var pageKeyViews: [NSView] { emptyFolderView.isHidden ? [] : emptyFolderView.keyViews }
     private func updateKeyViewLoop() {
         guard let focusAnchor else { return }
         focusAnchor.nextKeyView = toggleButton
-        let nextAction: NSView = footerActionsEnabled ? (searchField.isHidden ? searchButton : searchField) : focusAnchor
+        let page = pageKeyViews
+        let nextAction: NSView = footerActionsEnabled ? (searchField.isHidden ? searchButton : searchField)
+            : page.first ?? focusAnchor
+        for (index, view) in page.enumerated() {
+            view.nextKeyView = page.indices.contains(index + 1) ? page[index + 1] : focusAnchor
+        }
         let treeRows: [NSView] = preferencesStore.value.gridSidebarVisible && !folderTree.isHidden ? folderTree.rows : []
         toggleButton.nextKeyView = preferencesStore.value.gridSidebarVisible ? divider : nextAction
         divider.nextKeyView = treeRows.first ?? nextAction
@@ -396,12 +442,19 @@ import PicseeCore
         collapseSearch()
     }
     public func setFooterActionsEnabled(_ enabled: Bool) {
+        footerActionsRequested = enabled
+        if !enabled { searchEmptyRequested = false }
+        applyFooterState()
+    }
+    /// Page 22 disables footer search and sort and hides page 23 until it leaves.
+    private func applyFooterState() {
+        let enabled = footerActionsRequested && emptyFolderView.isHidden
         footerActionsEnabled = enabled
         searchField.isEnabled = enabled
         searchButton.isEnabled = enabled
         sortButton.isEnabled = enabled
+        emptyState.isHidden = !searchEmptyRequested || !emptyFolderView.isHidden
         emptyState.setAccessibilityHidden(!enabled || emptyState.isHidden)
-        if !enabled { emptyState.isHidden = true }
         updateKeyViewLoop()
     }
     public func setSearchTerm(_ term: String) {
@@ -431,9 +484,8 @@ import PicseeCore
     public func showSearchEmpty(_ visible: Bool, term: String = "") {
         if visible { mainContent.addSubview(emptyState, positioned: .above, relativeTo: nil) }
         if visible { setEmptyDetailText(String(format: String(localized: "No images with “%@” in their filename."), term)) }
-        emptyState.isHidden = !visible
-        emptyState.setAccessibilityHidden(!visible || !footerActionsEnabled)
-        updateKeyViewLoop()
+        searchEmptyRequested = visible
+        applyFooterState()
     }
     public var searchEmptyVisible: Bool { !emptyState.isHidden }
     public func controlTextDidChange(_ obj: Notification) { onSearchChange?(searchField.stringValue) }

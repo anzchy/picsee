@@ -45,7 +45,6 @@ private actor GatedScriptScanner: FolderScanning {
     var onComplete: (() -> Void)?
     func openFolderImage(_ url: URL, rootID: AccessRootID) {}
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws {}
-    func showEmptyFolder() {}
     func folderScanDidComplete(count: Int) { onComplete?() }
 }
 

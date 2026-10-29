@@ -6,7 +6,6 @@ import PicseeCore
 @MainActor private final class FolderReadingHost: FolderScanHost {
     var opens: [URL] = []
     var remembered: [(URL, AccessRootID)] = []
-    var emptyCount = 0
     var cleared = 0
     var onRemember: (() async throws -> Void)?
     var onOpen: (() -> Void)?
@@ -14,7 +13,6 @@ import PicseeCore
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws {
         remembered.append((folder, rootID)); try await onRemember?()
     }
-    func showEmptyFolder() { emptyCount += 1 }
     func clearFolderImageForNoMatches() { cleared += 1 }
 }
 
@@ -108,7 +106,7 @@ import PicseeCore
     #expect(host.opens.map(\.lastPathComponent) == ["img1.png"])
     #expect(host.remembered.map(\.0) == [fixture.folder])
     #expect(host.remembered.map(\.1) == [fixture.id])
-    #expect(host.remembered.count == 1 && host.emptyCount == 0)
+    #expect(host.remembered.count == 1 && !fixture.coordinator.isEmptyFolder)
     #expect(fixture.coordinator.snapshot?.entries.map(\.url.lastPathComponent) == ["img1.png", "img2.png", "img10.png"])
     #expect(fixture.coordinator.currentItemID == .rootRelative(rootID: fixture.id, relativePath: "A/img1.png"))
     #expect(fixture.coordinator.currentURL == fixture.folder.appendingPathComponent("img1.png"))
@@ -125,7 +123,7 @@ import PicseeCore
         await fixture.scanner.waitForStart()
         try await fixture.scanner.deliver([])
         await fixture.scanner.finish(); try await task.value
-        #expect(host.emptyCount == (inputImage ? 0 : 1))
+        #expect(fixture.coordinator.isEmptyFolder)
         #expect(host.opens.isEmpty && host.remembered.isEmpty)
         #expect(session.imageStatus == .empty)
         #expect(await fixture.access.balance == [1, 1])
@@ -142,7 +140,7 @@ import PicseeCore
         await fixture.scanner.waitForStart()
         try await fixture.scanner.deliver(["img2.png"])
         await fixture.scanner.finish(); try await task.value
-        #expect(host.opens.isEmpty && host.emptyCount == 0)
+        #expect(host.opens.isEmpty && !fixture.coordinator.isEmptyFolder)
         #expect(host.remembered.count == (falseAfterRemember ? 1 : 0))
         #expect(fixture.coordinator.failure == nil)
         #expect(await fixture.access.balance == [1, 1])
@@ -151,7 +149,7 @@ import PicseeCore
     fixture.coordinator.host = host
     let task = fixture.coordinator.begin(folder: fixture.folder, rootID: fixture.id, canPresent: { false })
     await fixture.scanner.waitForStart(); await fixture.scanner.finish(); try await task.value
-    #expect(host.emptyCount == 0 && host.opens.isEmpty)
+    #expect(!fixture.coordinator.isEmptyFolder && host.opens.isEmpty)
 }
 
 @Test(arguments: ["cancel-remember", "replace-remember", "cancel-open"])
@@ -173,7 +171,7 @@ import PicseeCore
     #expect(host.opens.count == (action == "cancel-open" ? 1 : 0))
     #expect(await fixture.access.released.count == 1)
     if replacement != nil { await fixture.scanner.waitForStart(1) }
-    #expect(host.remembered.count == 1 && host.emptyCount == 0)
+    #expect(host.remembered.count == 1 && !fixture.coordinator.isEmptyFolder)
     #expect(host.opens.count == (action == "cancel-open" ? 1 : 0))
     if let replacement {
         fixture.coordinator.cancel()
@@ -198,7 +196,7 @@ private struct FolderReadingOneBatchScanner: FolderScanning {
     await #expect(throws: FolderScanTestError.expected) { try await task.value }
     #expect(coordinator.failure is FolderScanTestError)
     #expect(!coordinator.isReadingFolder)
-    #expect(host.opens.isEmpty && host.emptyCount == 0 && host.remembered.count == 1)
+    #expect(host.opens.isEmpty && !coordinator.isEmptyFolder && host.remembered.count == 1)
     #expect(await access.balance == [1, 1])
 }
 
@@ -259,7 +257,7 @@ private actor FolderReadingOriginBarrier {
     if hasBatch { try await fixture.scanner.deliver(["img2.png"]) }
     await fixture.scanner.finish(); try await task.value
     #expect(origin.isCancelled)
-    #expect(host.opens.isEmpty && host.remembered.isEmpty && host.emptyCount == 0)
+    #expect(host.opens.isEmpty && host.remembered.isEmpty && !fixture.coordinator.isEmptyFolder)
     #expect(await fixture.access.balance == [1, 1])
     await originBarrier.finish(); await origin.value
 }

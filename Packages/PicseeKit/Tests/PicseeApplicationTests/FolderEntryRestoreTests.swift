@@ -41,7 +41,6 @@ import PicseeCore
     var gridReturns = 0
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opens.append(url) }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws {}
-    func showEmptyFolder() {}
     func performCanvas(_ command: CommandID, from entry: CommandEntry) {}
     func requestOpen() {}
     func applyFocus(_ focus: FocusContext) {}
