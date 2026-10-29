@@ -72,7 +72,7 @@ Apple说明外观可沿App→Window→View继承，并可在相应层覆盖：[N
 
 ## 4. 焦点、命令和可见性
 
-设置窗口（P3-07）无浏览器原型页：由 AppKit 持有单个 460×190 原生窗口，SwiftUI 表单显示真实缓存占用、清理按钮及可访问的本地化失败原因。⌘, 打开设置；⌘W、Esc 关闭设置窗口。首次打开与再次显示各测量一次；清理和租约排空期间禁用按钮。
+设置窗口（P3-07、#218）由 AppKit 持有单个 760×520 原生窗口（含 38 点标题栏，内容区 760×482），180 点侧栏切换通用、显示、缓存、更新、关于五个分区，并记住所选分区。对应状态稿为 [`settings.html`](../../prototypes/picsee-browser/states/settings.html)：`?section=general|display|cache|update|about` 选择分区，追加 `&theme=dark` 查看深色状态。通用页与“显示”菜单共用 DisplayPreferencesStore 和窗口外观适配器，外观、始终显示工具双向同步；显示、更新及关于页的未实现控件禁用并标注“即将推出”。⌘, 打开设置；⌘W、Esc 关闭设置窗口。缓存页继续使用 CacheSettingsModel，显示真实占用和可访问的本地化失败原因；首次打开、再次显示及切入缓存页时测量，测量时显示“正在测量…”（Measuring…）并禁用清理按钮。清理前需确认，取消保留缓存；清理和租约排空期间保持禁用，完成后重新测量占用。此处描述原生映射与行为契约，完整真机视觉、键盘及 VoiceOver 验证以功能账簿和验证记录为准。
 
 SwiftUI侧可用[FocusState](https://developer.apple.com/documentation/swiftui/focusstate)描述本地焦点目标；AppKit侧与窗口first responder/key view路径协调。它们反映同一当前焦点，不能各自持续抢焦点或在每次切图时强制focus。
 
