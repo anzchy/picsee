@@ -78,7 +78,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     var canNavigate: Bool { fileURL != nil && window?.attachedSheet == nil }
     var gridShellVisible: Bool { gridShell != nil && !gridShell.isHidden }
     func toggleGridSidebar() { if gridShellVisible { gridShell.toggleSidebar() } }
-    var gridSearchAvailable: Bool { gridShellVisible && !gridView.isHidden }
+    var gridSearchAvailable: Bool { gridShellVisible && !gridView.isHidden && gridShell.searchAvailable }
     private var inspectorHost: NSHostingView<MotionPolicyContent<InspectorPanel>>!
     private var inspectorOverlayMode = false
     var onOpenRequest: (() -> Void)?

@@ -151,7 +151,7 @@ private actor SwitchingSidebarCounter: SidebarFolderEnumerating {
     try await waitForSidebar("close rows and scan") { tree.rows.map(\.folderURL).contains(counter.child) &&
         controller.session.folderScan?.sourceSnapshot?.isComplete == true }
     try await waitForSidebar("blocked count") { await counter.started > 0 }
-    #expect(controller.gridSearchAvailable)
+    #expect(controller.gridShellVisible, "an imageless folder shows page 22, whose search is disabled")
     let childAcquiresAtClose = await tracker.childAcquires
     #expect(childAcquiresAtClose == 0)
     controller.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: controller.window))

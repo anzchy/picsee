@@ -204,6 +204,6 @@ private actor CountingGridInspectorReader: InspectorMetadataReading {
     try await waitForGridInspector { controller.inspector.name == nil }
     #expect(controller.inspector.name == nil)
     #expect(controller.inspector.value == .unknown)
-    #expect(controller.gridSearchAvailable)
+    #expect(controller.gridShellVisible, "the emptied folder stays in the grid shell; page 22 disables its search")
     #expect(controller.session.inspectorFocus.isVisible)
 }

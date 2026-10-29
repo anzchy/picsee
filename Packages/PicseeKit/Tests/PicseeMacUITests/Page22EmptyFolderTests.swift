@@ -665,3 +665,19 @@ private func recentFolders(_ count: Int) -> [RecentFolder] {
     #expect(scene.session.folderRecursiveEnabled)
     await scene.close()
 }
+
+/// gpt M2: with page 22 shown the footer search is disabled, so focusing search is refused.
+@Test @MainActor func page22RefusesSearchFocus() async throws {
+    let scene = Page22Scene()
+    scene.tree(["sub"])
+    try await scene.open([])
+    let shell = scene.shell
+    #expect(shell.emptyFolderVisible)
+    shell.focusSearch()
+    #expect(shell.searchField.isHidden && !shell.searchButton.isHidden)
+    #expect(scene.window.firstResponder !== shell.searchField && scene.window.firstResponder !== shell.searchField.currentEditor())
+    try await scene.refresh(["a.png"])
+    shell.focusSearch()
+    #expect(!shell.searchField.isHidden)
+    await scene.close()
+}
