@@ -121,11 +121,16 @@ private actor CountingGridInspectorReader: InspectorMetadataReading {
 
     // A completed refresh and a change to another file preserve the selected revision and read count.
     let stableReads = await reader.count(for: selected)
-    // A refresh that finds the same entries keeps the source snapshot and its generation, so wait for the
-    // coordinator to start that refresh instead; the old 8 s deadline always expired here (#277).
-    let refreshesBefore = try #require(controller.session.folderScan?.generation)
-    services.watch.reconcileAll()
-    try await waitForGridInspector { (controller.session.folderScan?.generation ?? 0) > refreshesBefore }
+    // A refresh that finds the same entries keeps the source snapshot and its generation, so nothing on the
+    // snapshot shows it finished (#277). Await this stage's own refresh task instead; a late watch hint that
+    // starts a newer refresh cancels it, so repeat until the awaited one is still the latest when it returns.
+    let scan = try #require(controller.session.folderScan)
+    var unchangedRefresh: UInt64
+    repeat {
+        let refresh = try #require(scan.refresh())
+        unchangedRefresh = scan.generation
+        try await refresh.value
+    } while scan.generation != unchangedRefresh && !Task.isCancelled
     controller.applyObservedGridSnapshot(try #require(controller.session.folderScan?.snapshot))
     #expect(gridInspectorMetadata(controller)?.pixelWidth == atomicMetadata.pixelWidth)
     #expect(await reader.count(for: selected) == stableReads)
