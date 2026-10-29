@@ -69,6 +69,12 @@ enum SettingsSection: String, CaseIterable {
         for (key, button) in sidebarButtons {
             button.state = key == section ? .on : .off
             button.setAccessibilityValue(key == section ? "1" : "0")
+            button.attributedTitle = NSAttributedString(string: button.title, attributes: [
+                .font: DesignMetrics.font("ui"),
+                .foregroundColor: key == section ? DesignColor.selectionText.nsColor : DesignColor.textPrimary.nsColor
+            ])
+            button.contentTintColor = key == section ? DesignColor.selectionText.nsColor : DesignColor.textSecondary.nsColor
+            button.needsDisplay = true
         }
         if section == .cache { refreshCache() }
     }
@@ -96,7 +102,7 @@ enum SettingsSection: String, CaseIterable {
             button.isBordered = false
             button.setButtonType(.toggle)
             button.alignment = .left
-            button.font = .systemFont(ofSize: 13)
+            button.font = DesignMetrics.font("ui")
             let symbols = ["gearshape", "rectangle.3.group", "externaldrive", "arrow.triangle.2.circlepath", "info.circle"]
             button.image = NSImage(systemSymbolName: symbols[index], accessibilityDescription: nil)
             button.imagePosition = .imageLeading
@@ -107,7 +113,7 @@ enum SettingsSection: String, CaseIterable {
             pane.setAccessibilityIdentifier("settings.pane.\(section.rawValue)")
             content.addSubview(pane)
             panes[section] = pane
-            let heading = label(section.title, size: 16, bold: true)
+            let heading = label(section.title, role: "title", bold: true)
             heading.frame = NSRect(x: 26, y: 444, width: 528, height: 20)
             pane.addSubview(heading)
         }
@@ -119,9 +125,10 @@ enum SettingsSection: String, CaseIterable {
         window.contentView = root
     }
 
-    private func label(_ text: String, size: CGFloat = 13, bold: Bool = false, muted: Bool = false) -> NSTextField {
+    private func label(_ text: String, role: String = "ui", bold: Bool = false, muted: Bool = false) -> NSTextField {
         let field = NSTextField(labelWithString: text)
-        field.font = bold ? .boldSystemFont(ofSize: size) : .systemFont(ofSize: size)
+        let font = DesignMetrics.font(role)
+        field.font = bold ? NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) : font
         field.textColor = muted ? .secondaryLabelColor : .labelColor
         field.lineBreakMode = .byWordWrapping
         field.maximumNumberOfLines = 0
@@ -149,7 +156,7 @@ enum SettingsSection: String, CaseIterable {
             button.tag = index
             button.bezelStyle = .rounded
             button.setButtonType(.pushOnPushOff)
-            button.font = .systemFont(ofSize: 12)
+            button.font = DesignMetrics.font("uiSmall")
             button.setAccessibilityRole(.radioButton)
             let width = max(62, button.intrinsicContentSize.width + 14)
             button.frame = NSRect(x: x, y: 397, width: width, height: 24)
@@ -161,27 +168,29 @@ enum SettingsSection: String, CaseIterable {
         rowLabel(String(localized: "Image Tools"), y: 350, in: pane)
         toolsButton = NSButton(checkboxWithTitle: String(localized: "Always Show Image Tools"),
                                target: self, action: #selector(changeTools(_:)))
+        toolsButton.font = DesignMetrics.font("ui")
         toolsButton.frame = NSRect(x: 162, y: 350, width: toolsButton.intrinsicContentSize.width, height: 24)
         toolsButton.setAccessibilityIdentifier("settings.always-show-tools")
         pane.addSubview(toolsButton)
-        let hint = label(String(localized: "When off, tools hide after inactivity. Move the pointer to an edge or press Tab to show them."), size: 12, muted: true)
+        let hint = label(String(localized: "When off, tools hide after inactivity. Move the pointer to an edge or press Tab to show them."), role: "uiSmall", muted: true)
         hint.frame = NSRect(x: 162, y: 310, width: 390, height: 36)
         pane.addSubview(hint)
         rowLabel(String(localized: "Language"), y: 275, in: pane)
-        let language = label(String(localized: "Follows the system language (Chinese / English). Set a language for picsee in System Settings → General → Language & Region."), size: 12, muted: true)
+        let language = label(String(localized: "Follows the system language (Chinese / English). Set a language for picsee in System Settings → General → Language & Region."), role: "uiSmall", muted: true)
         language.frame = NSRect(x: 162, y: 232, width: 390, height: 67)
         language.setAccessibilityIdentifier("settings.language-note")
         pane.addSubview(language)
     }
 
     private func future(_ control: NSControl, id: String, title: String) {
+        control.font = DesignMetrics.font("ui")
         control.isEnabled = false
         control.setAccessibilityIdentifier(id)
         control.setAccessibilityLabel(title + ", " + String(localized: "Coming Soon"))
     }
 
     private func soon(_ x: CGFloat, _ y: CGFloat, in pane: NSView) {
-        let badge = label(String(localized: "Coming Soon"), size: 12, muted: true)
+        let badge = label(String(localized: "Coming Soon"), role: "uiSmall", muted: true)
         badge.frame = NSRect(x: x, y: y, width: 100, height: 24)
         pane.addSubview(badge)
     }
@@ -196,6 +205,7 @@ enum SettingsSection: String, CaseIterable {
         soon(390, 397, in: pane)
         rowLabel(String(localized: "Show File Names"), y: 352, in: pane)
         let names = NSButton(checkboxWithTitle: String(localized: "Show names below thumbnails"), target: nil, action: nil)
+        names.font = DesignMetrics.font("ui")
         names.frame = NSRect(x: 162, y: 352, width: names.intrinsicContentSize.width, height: 24)
         future(names, id: "settings.display.names", title: String(localized: "Show File Names"))
         pane.addSubview(names)
@@ -204,6 +214,7 @@ enum SettingsSection: String, CaseIterable {
         var fitX: CGFloat = 162
         for (index, title) in [String(localized: "Fill and Crop"), String(localized: "Fit Entire Image")].enumerated() {
             let button = NSButton(title: title, target: nil, action: nil)
+            button.font = DesignMetrics.font("ui")
             let width = button.intrinsicContentSize.width
             button.frame = NSRect(x: fitX, y: 307, width: width, height: 24)
             future(button, id: "settings.display.fit.\(index)", title: title)
@@ -211,7 +222,7 @@ enum SettingsSection: String, CaseIterable {
             fitX += width + 8
         }
         soon(fitX, 307, in: pane)
-        let note = label(String(localized: "These are the same preferences as the grid footer Display panel; changes will sync immediately."), size: 12, muted: true)
+        let note = label(String(localized: "These are the same preferences as the grid footer Display panel; changes will sync immediately."), role: "uiSmall", muted: true)
         note.frame = NSRect(x: 162, y: 260, width: 390, height: 40)
         pane.addSubview(note)
     }
@@ -219,19 +230,20 @@ enum SettingsSection: String, CaseIterable {
     private func buildCache() {
         let pane = panes[.cache]!
         rowLabel(String(localized: "Thumbnail Cache"), y: 397, in: pane)
-        cacheSize = label(String(localized: "Unknown"), size: 12)
-        cacheSize.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        cacheSize = label(String(localized: "Unknown"), role: "uiSmall")
+        cacheSize.font = DesignMetrics.font("uiSmall", monospaced: true)
         cacheSize.frame = NSRect(x: 162, y: 397, width: 350, height: 24)
         cacheSize.setAccessibilityIdentifier("settings.cache.size")
         pane.addSubview(cacheSize)
         cacheClear = NSButton(title: String(localized: "Clear Cache…"), target: self, action: #selector(requestClear(_:)))
+        cacheClear.font = DesignMetrics.font("ui")
         cacheClear.frame = NSRect(x: 162, y: 353, width: cacheClear.intrinsicContentSize.width, height: 26)
         cacheClear.setAccessibilityIdentifier("settings.cache.clear")
         pane.addSubview(cacheClear)
-        let hint = label(String(localized: "Only thumbnails created by picsee are deleted. Your images are untouched. Confirm before clearing; thumbnails are rebuilt while browsing."), size: 12, muted: true)
+        let hint = label(String(localized: "Only thumbnails created by picsee are deleted. Your images are untouched. Confirm before clearing; thumbnails are rebuilt while browsing."), role: "uiSmall", muted: true)
         hint.frame = NSRect(x: 162, y: 302, width: 390, height: 45)
         pane.addSubview(hint)
-        cacheDiagnostic = label("", size: 12, muted: true)
+        cacheDiagnostic = label("", role: "uiSmall", muted: true)
         cacheDiagnostic.frame = NSRect(x: 162, y: 274, width: 390, height: 24)
         cacheDiagnostic.setAccessibilityIdentifier("settings.cache.diagnostic")
         pane.addSubview(cacheDiagnostic)
@@ -247,24 +259,26 @@ enum SettingsSection: String, CaseIterable {
     private func buildUpdates() {
         let pane = panes[.update]!
         rowLabel(String(localized: "Current Version"), y: 397, in: pane)
-        let version = label(Self.versionDescription, size: 12)
+        let version = label(Self.versionDescription, role: "uiSmall")
         version.frame = NSRect(x: 162, y: 397, width: 350, height: 24)
         pane.addSubview(version)
         rowLabel(String(localized: "Auto Check"), y: 352, in: pane)
         let automatic = NSButton(checkboxWithTitle: String(localized: "Check for updates automatically"), target: nil, action: nil)
+        automatic.font = DesignMetrics.font("ui")
         automatic.frame = NSRect(x: 162, y: 352, width: automatic.intrinsicContentSize.width, height: 24)
         future(automatic, id: "settings.update.automatic", title: automatic.title)
         pane.addSubview(automatic)
         soon(450, 352, in: pane)
-        let privacy = label(String(localized: "picsee contacts GitHub only to check for updates and sends no system information."), size: 12, muted: true)
+        let privacy = label(String(localized: "picsee contacts GitHub only to check for updates and sends no system information."), role: "uiSmall", muted: true)
         privacy.frame = NSRect(x: 162, y: 310, width: 390, height: 36)
         pane.addSubview(privacy)
         let check = NSButton(title: String(localized: "Check Now"), target: nil, action: nil)
+        check.font = DesignMetrics.font("ui")
         check.frame = NSRect(x: 162, y: 275, width: check.intrinsicContentSize.width, height: 26)
         future(check, id: "settings.update.now", title: check.title)
         pane.addSubview(check)
         soon(290, 275, in: pane)
-        let last = label(String(localized: "Last checked: Unknown"), size: 12, muted: true)
+        let last = label(String(localized: "Last checked: Unknown"), role: "uiSmall", muted: true)
         last.frame = NSRect(x: 162, y: 247, width: 390, height: 24)
         pane.addSubview(last)
     }
@@ -274,18 +288,19 @@ enum SettingsSection: String, CaseIterable {
         let icon = NSImageView(frame: NSRect(x: 26, y: 362, width: 64, height: 64))
         icon.image = NSImage(named: NSImage.applicationIconName)
         pane.addSubview(icon)
-        let name = label("picsee", size: 16, bold: true)
+        let name = label("picsee", role: "title", bold: true)
         name.frame = NSRect(x: 108, y: 406, width: 380, height: 20)
         pane.addSubview(name)
-        let version = label(String(localized: "Version") + " " + Self.versionDescription, size: 12, muted: true)
+        let version = label(String(localized: "Version") + " " + Self.versionDescription, role: "uiSmall", muted: true)
         version.frame = NSRect(x: 108, y: 383, width: 390, height: 20)
         pane.addSubview(version)
-        let privacy = label(String(localized: "A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."), size: 12, muted: true)
+        let privacy = label(String(localized: "A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."), role: "uiSmall", muted: true)
         privacy.frame = NSRect(x: 108, y: 327, width: 440, height: 54)
         pane.addSubview(privacy)
         var linkX: CGFloat = 108
         for (index, title) in [String(localized: "Report a Problem…"), String(localized: "Privacy Note"), String(localized: "Source Code")].enumerated() {
             let button = NSButton(title: title, target: nil, action: nil)
+            button.font = DesignMetrics.font("ui")
             let width = button.intrinsicContentSize.width
             button.frame = NSRect(x: linkX, y: 291, width: width, height: 26)
             future(button, id: "settings.about.link.\(index)", title: title)
@@ -293,7 +308,7 @@ enum SettingsSection: String, CaseIterable {
             linkX += width + 8
         }
         soon(linkX, 291, in: pane)
-        let licences = label(String(localized: "picsee is released under the MIT License.\nThird party: Sparkle (MIT) · Welcome sample images from Unsplash (Unsplash License)."), size: 12, muted: true)
+        let licences = label(String(localized: "picsee is released under the MIT License.\nThird party: Sparkle (MIT) · Welcome sample images from Unsplash (Unsplash License)."), role: "uiSmall", muted: true)
         licences.frame = NSRect(x: 108, y: 235, width: 440, height: 52)
         pane.addSubview(licences)
     }
@@ -363,14 +378,15 @@ private final class SettingsPanelNativeWindow: NSWindow {
 private final class SettingsSidebarButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         if state == .on {
-            let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            let accent = dark
-                ? NSColor(deviceRed: 96/255, green: 165/255, blue: 250/255, alpha: 0.22)
-                : NSColor(deviceRed: 37/255, green: 99/255, blue: 235/255, alpha: 0.14)
-            accent.setFill()
+            DesignColor.selectionFill.nsColor.setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
         }
         super.draw(dirtyRect)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }
 
@@ -380,14 +396,12 @@ private final class SettingsSurfaceView: NSView {
     init(frame: NSRect, surface: Surface) { self.surface = surface; super.init(frame: frame) }
     required init?(coder: NSCoder) { nil }
     override func draw(_ dirtyRect: NSRect) {
-        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let color: NSColor = surface == .sidebar
-            ? (dark ? NSColor(deviceRed: 22/255, green: 26/255, blue: 34/255, alpha: 1) : NSColor(deviceRed: 246/255, green: 247/255, blue: 251/255, alpha: 1))
-            : (dark ? NSColor(deviceRed: 20/255, green: 24/255, blue: 33/255, alpha: 1) : .white)
+            ? DesignColor.sidebarBackground.nsColor : DesignColor.popoverBackground.nsColor
         color.setFill()
         dirtyRect.fill()
         if surface == .sidebar {
-            (dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.1)).setFill()
+            DesignColor.divider.nsColor.setFill()
             NSRect(x: bounds.maxX - 1, y: 0, width: 1, height: bounds.height).fill()
         }
     }
