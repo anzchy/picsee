@@ -486,9 +486,10 @@ Never pipe `git rebase`; check its exit status. Write logs to `$(git rev-parse -
 - **`docs/feature-ledger.md` row conflicts.** `.agents/skills/picsee-delegator/scripts/resolve_rows.py` does a three-way merge
   by row key (stage 1/2/3). It keeps main's text and appends the commit's added suffix. It stops on rows that need
   manual merging, for example when both sides rewrote the same 限制 clause; merge those by hand.
-- **Part 3 area-review conflicts.** Use `.agents/skills/picsee-delegator/scripts/resolve_part3.py <file>`. It keeps main's row and appends each whole 。-ended
-  branch entry main's note lacks verbatim (never a substring match), and keeps the newer review date with its reviewer,
-  so main's notes are never dropped (the old "take theirs" rule silently dropped them on #243, 2026-10-28).
+- **Part 3 area-review conflicts.** Use `.agents/skills/picsee-delegator/scripts/resolve_part3.py <file>`. It keeps main's row and, reading the merge base
+  (`git show :1:docs/feature-ledger.md`), appends the branch's suffix over the base note verbatim, keeping the newer
+  review date with its reviewer. A branch that edited base text, a row with no base or mismatched cells stays
+  UNRESOLVED for you to merge by hand, so main's notes are never dropped (the old "take theirs" rule silently dropped them on #243, 2026-10-28).
 - **Any other conflict** (Swift, `CanvasWindowController`, xcstrings): stop and resolve deliberately, or send it back
   to the implementer.
 - The script runs git with `core.commentChar=';'`. The default message cleanup on `--continue` deletes every body

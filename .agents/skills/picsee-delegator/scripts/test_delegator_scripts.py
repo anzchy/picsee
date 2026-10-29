@@ -165,63 +165,74 @@ class OwnerGatesRefusalTests(unittest.TestCase):
 
 
 class ResolvePart3Tests(unittest.TestCase):
-    """Part 3 conflicts merge both sides; main's notes and dates are never dropped (2026-10-28 #243 near-miss)."""
+    """Part 3 conflicts append the branch's suffix over the merge base; main's text is never dropped (#243 near-miss)."""
 
-    def run_resolve(self, text):
+    def run_resolve(self, text, base=None):
         import importlib.util
         spec = importlib.util.spec_from_file_location('resolve_part3', Path(__file__).with_name('resolve_part3.py'))
         mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
-        return mod.resolve(text)
+        return mod.resolve(text, base)
 
-    def test_keeps_main_note_and_date_and_appends_branch_sentence(self):
-        text = ('| 区域 | 最近审查 | 审查人 | 备注 |\n'
-                '<<<<<<< HEAD\n'
-                '| 网格 | 2026-10-28 | doc-gardener | 主线注一。主线注二。 |\n'
-                '=======\n'
-                '| 网格 | 2026-10-27 | doc-gardener | 主线注一。分支注。 |\n'
-                '>>>>>>> abc (garden)\n')
-        out, ok = self.run_resolve(text)
+    def conflict(self, head, theirs, nl='\n'):
+        return nl.join(['<<<<<<< HEAD', head, '=======', theirs, '>>>>>>> x', ''])
+
+    def test_appends_branch_suffix_and_keeps_main_note_and_newer_date(self):
+        base = '| 网格 | 2026-10-26 | g | 主线注一。 |\n'
+        text = self.conflict('| 网格 | 2026-10-28 | g | 主线注一。 主线注二。 |', '| 网格 | 2026-10-27 | g | 主线注一。 分支注。 |')
+        out, ok = self.run_resolve(text, base)
         self.assertTrue(ok)
-        self.assertIn('| 网格 | 2026-10-28 | doc-gardener | 主线注一。主线注二。分支注。 |', out)
-        self.assertNotIn('2026-10-27', out)
-        self.assertNotIn('<<<<<<<', out)
+        self.assertEqual(out, '| 网格 | 2026-10-28 | g | 主线注一。 主线注二。 分支注。 |\n')
 
-    def test_branch_only_row_is_kept(self):
-        text = ('<<<<<<< HEAD\n| 甲 | 2026-10-28 | g | 甲注。 |\n=======\n'
-                '| 甲 | 2026-10-28 | g | 甲注。 |\n| 乙 | 2026-10-28 | g | 乙注。 |\n>>>>>>> x\n')
-        out, ok = self.run_resolve(text)
+    def test_repeated_stock_sentences_in_branch_entry_are_kept(self):
+        # audit confirm N1: 「这次没有检查真机。」 and 「无新增提议。」 recur across entries; none may be dropped
+        base = '| 甲 | 2026-10-26 | g | 甲（a..b）：OPEN-01 未变。无新增提议。 |\n'
+        head = '| 甲 | 2026-10-28 | g | 甲（a..b）：OPEN-01 未变。无新增提议。 丙（e..f）：这次没有检查真机。待 owner 确认。 |'
+        theirs = '| 甲 | 2026-10-28 | g | 甲（a..b）：OPEN-01 未变。无新增提议。 乙（c..d）：OPEN-02 升为 Partial。待 owner 确认。这次没有检查真机。无新增提议。 |'
+        out, ok = self.run_resolve(self.conflict(head, theirs), base)
         self.assertTrue(ok)
-        self.assertIn('| 乙 | 2026-10-28 | g | 乙注。 |', out)
-
-    def test_branch_entry_sharing_a_clause_with_main_is_kept_whole(self):
-        # audit F1: 「待 owner 确认。」 already in main must not swallow the branch's new entry
-        text = ('<<<<<<< HEAD\n| 网格 | 2026-10-28 | g | 甲（a..b）：待 owner 确认。 |\n=======\n'
-                '| 网格 | 2026-10-28 | g | 甲（a..b）：待 owner 确认。乙（c..d）：GRID-02 升为 Partial；未追溯；待 owner 确认。 |\n'
-                '>>>>>>> x\n')
-        out, ok = self.run_resolve(text)
-        self.assertTrue(ok)
-        self.assertIn('| 网格 | 2026-10-28 | g | 甲（a..b）：待 owner 确认。乙（c..d）：GRID-02 升为 Partial；未追溯；待 owner 确认。 |', out)
-
-    def test_branch_sentence_repeated_in_its_own_entry_is_kept(self):
-        text = '<<<<<<< HEAD\n| 甲 | 2026-10-28 | g | 主注。 |\n=======\n| 甲 | 2026-10-28 | g | 主注。无行为变化。无行为变化。 |\n>>>>>>> x\n'
-        out, ok = self.run_resolve(text)
-        self.assertIn('| 甲 | 2026-10-28 | g | 主注。无行为变化。无行为变化。 |', out)
+        self.assertIn('丙（e..f）：这次没有检查真机。待 owner 确认。 乙（c..d）：OPEN-02 升为 Partial。待 owner 确认。这次没有检查真机。无新增提议。 |', out)
 
     def test_newer_branch_review_date_and_reviewer_win(self):
-        # audit M1
-        text = '<<<<<<< HEAD\n| 网格 | 2026-10-20 | g | A。 |\n=======\n| 网格 | 2026-10-29 | h | A。B。 |\n>>>>>>> x\n'
+        base = '| 网格 | 2026-10-19 | g | A。 |\n'
+        out, ok = self.run_resolve(self.conflict('| 网格 | 2026-10-20 | g | A。 |', '| 网格 | 2026-10-29 | h | A。 B。 |'), base)
+        self.assertEqual(out, '| 网格 | 2026-10-29 | h | A。 B。 |\n')
+
+    def test_suffix_main_already_holds_is_not_doubled(self):
+        base = '| 甲 | 2026-10-26 | g | A。 |\n'
+        out, ok = self.run_resolve(self.conflict('| 甲 | 2026-10-28 | g | A。 B。 C。 |', '| 甲 | 2026-10-28 | g | A。 B。 |'), base)
+        self.assertEqual(out, '| 甲 | 2026-10-28 | g | A。 B。 C。 |\n')
+
+    def test_branch_that_edited_base_text_is_unresolved(self):
+        base = '| 甲 | 2026-10-26 | g | 甲：OPEN-01 限制未变。 |\n'
+        text = self.conflict('| 甲 | 2026-10-28 | g | 甲：OPEN-01 限制未变。 X。 |', '| 甲 | 2026-10-28 | g | 甲：OPEN-01 限制已更新。 |')
+        out, ok = self.run_resolve(text, base)
+        self.assertFalse(ok)
+        self.assertIn('<<<<<<<', out)
+
+    def test_without_merge_base_a_differing_row_is_unresolved(self):
+        out, ok = self.run_resolve(self.conflict('| 甲 | 2026-10-28 | g | A。 |', '| 甲 | 2026-10-28 | g | A。 B。 |'))
+        self.assertFalse(ok)
+
+    def test_cell_count_mismatch_is_unresolved(self):
+        # audit confirm N2: a pipe in a note must not silently drop the branch row
+        base = '| 甲 | 2026-10-26 | g | A。 |\n'
+        out, ok = self.run_resolve(self.conflict('| 甲 | 2026-10-28 | g | A。 |', '| 甲 | 2026-10-28 | g | A。 B \\| C。 |'), base)
+        self.assertFalse(ok)
+
+    def test_branch_only_row_is_kept(self):
+        text = self.conflict('| 甲 | 2026-10-28 | g | 甲注。 |', '| 甲 | 2026-10-28 | g | 甲注。 |\n| 乙 | 2026-10-28 | g | 乙注。 |')
         out, ok = self.run_resolve(text)
-        self.assertIn('| 网格 | 2026-10-29 | h | A。B。 |', out)
+        self.assertTrue(ok)
+        self.assertEqual(out, '| 甲 | 2026-10-28 | g | 甲注。 |\n| 乙 | 2026-10-28 | g | 乙注。 |\n')
 
     def test_unterminated_branch_tail_and_crlf_are_preserved(self):
-        # audit L1
-        text = '<<<<<<< HEAD\r\n| 甲 | 2026-10-28 | g | A。 |\r\n=======\r\n| 甲 | 2026-10-28 | g | A。B 待 owner |\r\n>>>>>>> x\r\n'
-        out, ok = self.run_resolve(text)
+        base = '| 甲 | 2026-10-26 | g | A。 |\r\n'
+        text = self.conflict('| 甲 | 2026-10-28 | g | A。 |', '| 甲 | 2026-10-28 | g | A。B 待 owner |', '\r\n')
+        out, ok = self.run_resolve(text, base)
         self.assertEqual(out, '| 甲 | 2026-10-28 | g | A。B 待 owner |\r\n')
 
     def test_non_row_conflict_is_left_unresolved(self):
-        text = '<<<<<<< HEAD\nprose A\n=======\nprose B\n>>>>>>> x\n'
-        out, ok = self.run_resolve(text)
+        out, ok = self.run_resolve(self.conflict('prose A', 'prose B'))
         self.assertFalse(ok)
         self.assertIn('<<<<<<<', out)
 
