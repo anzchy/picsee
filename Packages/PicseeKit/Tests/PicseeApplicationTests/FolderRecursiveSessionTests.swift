@@ -104,7 +104,7 @@ private struct PartialFailureScanner: FolderScanning {
     #expect(fixture.coordinator.snapshot?.entries.isEmpty == true)
     #expect(host.cleared == 1 && fixture.coordinator.isEmptyFolder)
     #expect(host.paintedURL == nil && host.nativeFileURL == nil && !host.retryAvailable)
-    #expect(session.imageLoader.fileURL == nil && session.imageStatus == .empty)
+    #expect(session.imageLoader.fileURL == nil && session.imageStatus == .emptyFolder)
     #expect(!session.isEnabled(.next) && !session.isEnabled(.previous))
     #expect(await fixture.access.balance == [4, 4])
 }
@@ -139,7 +139,7 @@ private struct PartialFailureScanner: FolderScanning {
     #expect(fixture.coordinator.snapshot?.entries.isEmpty == true)
     #expect(host.cleared == 1 && fixture.coordinator.isEmptyFolder)
     #expect(host.paintedURL == nil && host.nativeFileURL == nil && !host.retryAvailable)
-    #expect(session.imageLoader.fileURL == nil && session.imageStatus == .empty)
+    #expect(session.imageLoader.fileURL == nil && session.imageStatus == .emptyFolder)
     #expect(!session.isEnabled(.next) && !session.isEnabled(.previous))
     #expect(await fixture.access.balance == [3, 3])
 }
@@ -198,7 +198,7 @@ private struct PartialFailureScanner: FolderScanning {
     #expect(fixture.coordinator.currentURL == nil)
     #expect(host.cleared == 1)
     #expect(session.imageLoader.fileURL == nil)
-    #expect(session.imageStatus == .empty)
+    #expect(session.imageStatus == .emptyFolder)
     #expect(fixture.coordinator.canMove(.next, currentURL: nested) == false)
     #expect(fixture.coordinator.canMove(.previous, currentURL: nested) == false)
 }

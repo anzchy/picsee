@@ -247,14 +247,14 @@ import PicseeCore
     await fixture.scanner.waitForStart()
     await fixture.scanner.finish(); try await initial.value
     coordinator.setConditions(.init(selectedExtensions: ["png"]))
-    #expect(session.imageStatus == .empty && !coordinator.hasNoMatches)
+    #expect(session.imageStatus == .emptyFolder && !coordinator.hasNoMatches)
 
     let refresh = try #require(coordinator.refresh())
     await fixture.scanner.waitForStart(1)
-    #expect(session.imageStatus == .empty && !coordinator.hasNoMatches)
+    #expect(session.imageStatus == .emptyFolder && !coordinator.hasNoMatches)
     #expect(host.clears == 0)
     await fixture.scanner.finish(1); try await refresh.value
-    #expect(session.imageStatus == .empty && host.clears == 0)
+    #expect(session.imageStatus == .emptyFolder && host.clears == 0)
 }
 
 @Test @MainActor func issue123RefreshLosingPresentationAuthorityDoesNotClearHost() async throws {
