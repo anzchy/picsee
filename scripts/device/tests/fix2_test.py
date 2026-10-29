@@ -1,6 +1,7 @@
 """Round-two offline tests: report storage failures, re-signing, launch evidence."""
 import contextlib
 import errno
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -70,20 +71,26 @@ class RoundTwo(unittest.TestCase):
                     if argv[0].endswith('PlistBuddy'):
                         plist.write_bytes(plistlib.dumps(dict(PicseeGitSHA='abcdefg')))
                         return ''
+                    if argv[0].endswith('codesign') and argv[1]=='-d':
+                        # The leaf certificate xcodebuild signed with; a second same-named identity must not matter.
+                        prefix = argv[2].split('=',1)[1]
+                        Path(prefix+'0').write_bytes(b'fake-leaf-der')
+                        Path(prefix+'1').write_bytes(b'fake-intermediate-der')
+                        return ''
                     if argv[0].endswith('codesign'):
                         if mode=='dirty-failure': raise RuntimeError('fake re-sign failed')
                         return ''
                     raise AssertionError(argv)
                 with patch.object(d,'ROOT',self.root), patch.object(d,'running',return_value=[]), patch.object(d,'assert_clean_inputs',return_value={'App/main.swift':'hash'}), patch.object(d,'checked',side_effect=fake_checked), patch.object(d.subprocess,'run',side_effect=fake_build), patch.object(d,'machine',return_value={'scale':2}), patch.object(sys,'argv',['device.py','build',str(run)]), patch.dict(d.os.environ,{},clear=False), contextlib.redirect_stdout(io.StringIO()) as output:
                     result = d.main()
-                signing = [a for a in calls if a[0].endswith('codesign')]
+                signing = [a for a in calls if a[0].endswith('codesign') and '--sign' in a]
                 stamping = [a for a in calls if a[0].endswith('PlistBuddy')]
                 expected_count = 0 if mode=='clean' else 1
                 self.assertEqual(len(stamping), expected_count)
                 self.assertEqual(len(signing), expected_count)
                 if expected_count:
                     self.assertEqual(stamping[0], ['/usr/libexec/PlistBuddy','-c','Set :PicseeGitSHA abcdefg',str(plist)])
-                    self.assertEqual(signing[0], ['/usr/bin/codesign','--force','--sign','Apple Development','--preserve-metadata=entitlements,requirements,flags,runtime',str(app)])
+                    self.assertEqual(signing[0], ['/usr/bin/codesign','--force','--sign',hashlib.sha1(b'fake-leaf-der').hexdigest().upper(),'--preserve-metadata=entitlements,requirements,flags,runtime',str(app)])
                 if mode=='dirty-failure':
                     self.assertEqual(result, 1)
                     self.assertIn('FAIL build — fake re-sign failed',output.getvalue())
