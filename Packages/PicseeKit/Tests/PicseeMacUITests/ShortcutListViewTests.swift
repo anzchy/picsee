@@ -102,15 +102,24 @@ private func issue219Length(_ design: PinnedDesign, _ selector: String, _ proper
                         ":root", "--color-border-subtle", viewport: issue219Viewport)
                 }
                 for (keyIndex, key) in keys.enumerated() {
-                    #expect(key.frame.height == 22 && key.frame.width >= 22)
+                    let minWidth = try design.length("kbd", "min-width", viewport: issue219Viewport)
+                    let height = try design.length("kbd", "height", viewport: issue219Viewport)
+                    let padding = try design.edges("kbd", "padding", viewport: issue219Viewport)
+                    let border = try issue219Length(design, "kbd", "border")
+                    let bottomBorder = try design.length("kbd", "border-bottom-width", viewport: issue219Viewport)
+                    #expect(abs(Double(key.frame.height) - height) <= 0.01)
+                    let expectedWidth = max(minWidth, Double(key.label.intrinsicContentSize.width) + padding.left + padding.right + 2 * border)
+                    #expect(abs(Double(key.frame.width) - expectedWidth) <= 0.01)
                     if keyIndex > 0 { #expect(abs(key.frame.minX - keys[keyIndex - 1].frame.maxX - 4) <= 0.5) }
                     let layer = try #require(key.layer)
                     #expect(layer.borderWidth == 1 && layer.cornerRadius == 4)
-                    #expect(key.bottomEdge.frame.height == 1 && key.bottomEdge.frame.maxY == key.bounds.height)
+                    #expect(Double(key.bottomEdge.frame.height) == bottomBorder)
+                    #expect(Double(key.bottomEdge.frame.minY) == Double(key.bounds.height) - bottomBorder)
                     try design.assertColor(issue219CGColor(layer.borderColor, view.effectiveAppearance), "kbd", "border", viewport: issue219Viewport)
                     try design.assertColor(issue219CGColor(layer.backgroundColor, view.effectiveAppearance), "kbd", "background", viewport: issue219Viewport)
                     try design.assertLength(Double(key.label.font?.pointSize ?? 0), "kbd", "font-size", viewport: issue219Viewport)
-                    #expect(key.label.frame.minX == 6 && key.bounds.width - key.label.frame.maxX == 6)
+                    #expect(Double(key.label.frame.minX) == padding.left + border)
+                    #expect(Double(key.bounds.width - key.label.frame.maxX) == padding.right + border)
                 }
             }
         }
@@ -119,22 +128,59 @@ private func issue219Length(_ design: PinnedDesign, _ selector: String, _ proper
 
 @Test @MainActor func issue219ShortcutLongestLabelsFitChineseAndEnglish() throws {
     for language in [EntryPointLanguage.english, .simplifiedChinese] {
-        let view = try issue219View(language, .aqua)
-        try #require(view.cardViews.count == 3)
-        for card in view.cardViews {
-            for row in card.rowViews {
-                try #require(!row.keycapViews.isEmpty)
-                let keys = row.keycapViews
-                #expect(row.nameLabel.lineBreakMode == .byClipping)
-                #expect(row.nameLabel.intrinsicContentSize.width <= row.nameLabel.frame.width + 0.5,
-                    "\(language) \(row.nameLabel.stringValue) truncated")
-                #expect(row.nameLabel.frame.maxX + 8 <= keys[0].frame.minX + 0.5,
-                    "\(language) \(row.nameLabel.stringValue) overlaps keycaps")
-                for key in keys {
-                    #expect(key.label.intrinsicContentSize.width <= key.label.frame.width + 0.5)
-                    #expect(row.bounds.contains(key.frame))
+        for (appearance, _) in issue219Appearances {
+            let view = try issue219View(language, appearance)
+            try #require(view.cardViews.count == 3)
+            for card in view.cardViews {
+                for row in card.rowViews {
+                    try #require(!row.keycapViews.isEmpty)
+                    let keys = row.keycapViews
+                    #expect(row.nameLabel.lineBreakMode == .byClipping)
+                    #expect(row.nameLabel.intrinsicContentSize.width <= row.nameLabel.frame.width + 0.5,
+                        "\(language) \(appearance.rawValue) \(row.nameLabel.stringValue) truncated")
+                    #expect(row.nameLabel.frame.maxX + 8 <= keys[0].frame.minX + 0.5,
+                        "\(language) \(appearance.rawValue) \(row.nameLabel.stringValue) overlaps keycaps")
+                    for key in keys {
+                        #expect(key.label.intrinsicContentSize.width <= key.label.frame.width + 0.5)
+                        #expect(row.bounds.contains(key.frame))
+                    }
                 }
             }
+        }
+    }
+}
+
+@Test @MainActor func issue219ShortcutVisibleCopyIsBilingualWithChineseMenuTitles() throws {
+    for language in [EntryPointLanguage.english, .simplifiedChinese] {
+        for (appearance, _) in issue219Appearances {
+            let menu = issue219Menu()
+            if language == .simplifiedChinese {
+                let titles = [
+                    "Settings…": "设置…", "Hide Picsee": "隐藏 Picsee", "Hide Others": "隐藏其他",
+                    "Quit Picsee": "退出 Picsee", "Open…": "打开…", "Close": "关闭",
+                    "Search current folder": "搜索当前文件夹", "Hide sidebar": "隐藏侧栏",
+                    "Enter Full Screen": "进入全屏", "Minimize": "最小化",
+                ]
+                for item in menu.items {
+                    for menuItem in item.submenu?.items ?? [] {
+                        if let title = titles[menuItem.title] { menuItem.title = title }
+                    }
+                }
+            }
+            let catalog = ShortcutCatalog(menu: menu, language: language)
+            let view = ShortcutListView(frame: NSRect(x: 0, y: 0, width: issue219Viewport, height: 502), catalog: catalog)
+            view.appearance = NSAppearance(named: appearance)
+            view.layoutSubtreeIfNeeded()
+            try #require(view.cardViews.count == 3)
+            let actual = view.cardViews.flatMap { $0.rowViews.map(\.nameLabel.stringValue) }
+            #expect(actual.count == 20)
+            for (name, expected) in zip(actual, issue219ExpectedRows) {
+                #expect(name == (language == .english ? expected.3[0] : expected.4[0]))
+            }
+            let titles = language == .english ? ["Files & Windows", "Grid", "Image Viewer"] : ["文件与窗口", "网格", "大图"]
+            let when = language == .english ? ["Anytime", "While Browsing a Folder", "While Viewing One Image"] : ["任何时候", "浏览文件夹时", "查看一张图片时"]
+            #expect(view.cardViews.map(\.titleLabel.stringValue) == titles)
+            #expect(view.cardViews.map(\.whenLabel.stringValue) == when)
         }
     }
 }

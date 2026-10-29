@@ -38,7 +38,7 @@ import PicseeApplication
     return main
 }
 
-private let issue219ExpectedRows: [(String, [String], [String], [String], [String])] = [
+let issue219ExpectedRows: [(String, [String], [String], [String], [String])] = [
     ("files", ["command:open"], ["⌘", "O"], ["Open…"], ["打开…"]),
     ("files", ["menu:Settings…"], ["⌘", ","], ["Settings…"], ["设置…"]),
     ("files", ["menu:Close"], ["⌘", "W"], ["Close Window"], ["关闭窗口"]),
@@ -46,7 +46,7 @@ private let issue219ExpectedRows: [(String, [String], [String], [String], [Strin
     ("files", ["menu:Hide Picsee"], ["⌘", "H"], ["Hide picsee"], ["隐藏 picsee"]),
     ("files", ["menu:Hide Others"], ["⌥", "⌘", "H"], ["Hide Others"], ["隐藏其他"]),
     ("files", ["menu:Quit Picsee"], ["⌘", "Q"], ["Quit picsee"], ["退出 picsee"]),
-    ("grid", ["key:grid-arrows"], ["←", "→", "↑", "↓"], ["Move Current Item"], ["移动当前项"]),
+    ("grid", ["key:grid-arrows"], ["←", "→", "↑", "↓"], ["Move Current"], ["移动当前项"]),
     ("grid", ["command:preview"], ["Space"], ["Preview Current Item"], ["用大图查看当前项"]),
     ("grid", ["command:enter"], ["Return"], ["Open Current Item"], ["打开当前项"]),
     ("grid", ["menu:Search current folder"], ["⌘", "F"], ["Search Current Folder"], ["搜索当前文件夹"]),
@@ -58,7 +58,7 @@ private let issue219ExpectedRows: [(String, [String], [String], [String], [Strin
     ("viewer", ["command:zoomIn", "command:zoomOut"], ["+", "−"], ["Zoom In / Out"], ["放大 / 缩小"]),
     ("viewer", ["key:viewer-tab"], ["Tab"], ["Recall Tools"], ["唤回工具"]),
     ("viewer", ["command:inspector"], ["⌘", "I"], ["Image Information"], ["图片信息"]),
-    ("viewer", ["menu:Enter Full Screen"], ["⌃", "⌘", "F"], ["Enter / Exit Full Screen"], ["进入 / 退出全屏"]),
+    ("viewer", ["menu:Enter Full Screen"], ["⌃", "⌘", "F"], ["Toggle Full Screen"], ["进入 / 退出全屏"]),
 ]
 
 @MainActor private func issue219Flatten(_ catalog: ShortcutCatalog) -> [(String, [String], [String], String)] {
