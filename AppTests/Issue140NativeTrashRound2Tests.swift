@@ -56,7 +56,7 @@ private func round2Fixture(_ name: String) -> URL {
     }
     #expect(controller.session.imageLoader.presented?.fileURL.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.representedURL?.standardizedFileURL == moved.standardizedFileURL)
-    #expect(window.attachedSheet == nil)
+    #expect(window.attachedSheet == nil, "sheet: \(sheetText(window))")
 }
 
 @Test @MainActor func issue140NativeTrashThenSamePathReplacementShowsNewRevision() async throws {

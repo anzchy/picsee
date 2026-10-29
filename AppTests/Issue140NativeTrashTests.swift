@@ -10,6 +10,14 @@ import PicseeMacUI
     var onChange: (@MainActor () -> Void)?
 }
 
+@MainActor func sheetText(_ window: NSWindow) -> String {
+    guard let sheet = window.attachedSheet else { return "" }
+    func texts(_ view: NSView) -> [String] {
+        ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts)
+    }
+    return sheet.contentView.map(texts)?.filter { !$0.isEmpty }.joined(separator: " | ") ?? ""
+}
+
 @Test @MainActor func issue140DisplayedFileGrantTrashClearsWithoutReconnectSheet() async throws {
     _ = NSApplication.shared
     let fm = FileManager.default
@@ -48,5 +56,5 @@ import PicseeMacUI
     }
     #expect(controller.session.imageLoader.fileURL == nil)
     #expect(window.representedURL == nil)
-    #expect(window.attachedSheet == nil)
+    #expect(window.attachedSheet == nil, "sheet: \(sheetText(window))")
 }
