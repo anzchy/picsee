@@ -95,7 +95,7 @@ P0 技术验证、设计映射与命令底座
 | [15 显示与外观](../design/prototypes/picsee-browser/states/grid-display.html) | J4 | P1-09、P3-11 | 主题、密度、文件名、裁剪模式与常驻工具偏好 |
 | [16 深色 Inspector](../design/prototypes/picsee-browser/states/viewer-inspector.html) | J4 | P3-13、P5-01 | 真读数、异步结果不过期、深色层级 |
 | [21 首次打开](../design/prototypes/picsee-browser/states/first-launch.html) | J1 | P1-02；外观由 P3-16 改为 B4 散落相纸（用户 2026-10-27 定稿，原型见 #202） | 无目录时选择/拖入；不可用操作明确禁用 |
-| [22 空文件夹](../design/prototypes/picsee-browser/states/empty-folder.html) | J1 支线 | P2-08b（#137）；按 22-BD 实现（用户 2026-10-28：「22 选 B+D，26 选 B+C」） | 空快照显示“选择其他文件夹”，侧栏与底部工具仍可用 |
+| [22 空文件夹](../design/prototypes/picsee-browser/states/empty-folder.html) | J1 支线 | P2-08b（#137）；按 22-BD 实现（用户 2026-10-28：「22 选 B+D，26 选 B+C」） | 空快照显示“选择其他文件夹”，侧栏仍可用，底栏搜索与排序留在原处但置灰（用户 2026-10-29：「Visible, greyed out (Recommended)」） |
 | [23 搜索无结果](../design/prototypes/picsee-browser/states/search-empty.html) | J3 | P3-10 | 清除筛选恢复内容与合理当前项 |
 | [24 读取文件夹](../design/prototypes/picsee-browser/states/folder-loading.html) | J1 | P2-02/04（读取内容）、P3-10（网格外壳中的状态）；用户 2026-10-25：「先合入，page24 归 P3-10」；2026-10-27 起签名对照与真机记录由 P3-17b（#205）承担，侧栏/页脚差距仍属 P3-10 | 打开文件夹时内容区显示读取状态直到扫描完成，再显示完整网格、首张为当前项（ADR-0010）；取消回到上一个状态；以图片打开时该图先可用；未得总数不伪造百分比 |
 | [25 图片无法读取](../design/prototypes/picsee-browser/states/image-error.html) | J2 支线 | P1-07、P2-03 | 重试/下一张；经网格按钮或 Esc 返回，错误后不回流旧图 |
@@ -227,7 +227,7 @@ J1/J2 的完成标准：各有一份签名 App 端到端真机记录（§5 门�
 - [ ] `P2-06` 33页可选 Filmstrip：默认收起并保存偏好；展开后整合文件名/序号/前后导航，移除另一套中部导航，不缩小画布；选中项定位、虚拟化/有界预取，切目录释放旧订阅。
 - [ ] `P2-07` WatchHub/FSEvents：共享监听、事件合并、丢失后重扫、前后台核对。
 - [ ] `P2-08` 22/26页：当前文件被外部删除/重命名/替换、目录被移动、卷卸载、空文件夹与授权不足场景。本阶段响应外部变化，不提供主动删除功能。P2-08a（#140，外部变化）已合入。22/26 页形态已由用户选定（用户 2026-10-28：「22 选 B+D，26 选 B+C」；原型 `states/prototype-states-22-26.html`（分支 `prototype/states-22-26`），`?page=22&variant=22-BD`、`?page=26&variant=26-BC&cause=grant|volume|moved`）：
-  - `P2-08b`（#137，FOLDER-08）22-BD：空文件夹不再弹 NSAlert「此文件夹没有图片」，侧栏与底部工具保留。有子文件夹时显示子文件夹卡片、「包含子文件夹浏览」（P2-04 开关）与「选择其他文件夹…」；没有时显示最近文件夹（按打开时间）与「选择其他文件夹…」；内容区都可拖入另一个文件夹。
+  - `P2-08b`（#137，FOLDER-08）22-BD：空文件夹不再弹 NSAlert「此文件夹没有图片」，侧栏保留，底栏搜索与排序留在原处但置灰，有图片时恢复可用。有子文件夹时显示子文件夹卡片、「包含子文件夹浏览」（P2-04 开关）与「选择其他文件夹…」；没有时显示最近文件夹（按打开时间）与「选择其他文件夹…」；内容区都可拖入另一个文件夹。
   - `P2-08c`（#141，ACCESS-04、FOLDER-09）26-BC：失效文件夹在侧栏置灰加 ⚠、子文件夹折叠，收藏与最近查看仍可用；内容区按原因区分：授权失效 →「重新选择文件夹…」（回到原位置），卷未连接 → 无需操作、挂载后自动恢复（重新验证访问权后显示，属 FOLDER-09 新增验收，单独提交）；同卷移动或改名按 26M-C：跟随到新位置直接浏览（ACCESS-03 现行验收不变），网格上方显示可关闭的提示条，写明新位置并提供「不是这个？选择其他文件夹…」（用户 2026-10-28：「26 选 C」，原型 `?page=26m`，分支 `prototype/states-22-26` bb89e42）；bookmark 无法解析时显示「找不到」与「在新位置选择…」；原因分不清时用「无法访问此文件夹」（ADR-014）。侧栏「收藏与最近查看仍可用」要等 P3-14 落地，P2-08c 验收不含它。替换已验证流程中的 NSAlert（ReconnectPrompt，ACCESS-03），须重做真机记录。实现前先确认三种原因能否可靠区分（卷挂载状态、书签解析）。
   - 选定形态都要进入 `states/journeys.html`（用户 2026-10-27：「选中后都要进入 User journeys.html」）。决定记录：[ADR-014](adr/0014-recoverable-folder-states-in-window.md)。
 - [ ] `P2-09` 首批/扫描中/完成/取消状态和最近打开的授权入口；真实计数、未知总数和stale bookmark重连，不保存图片副本。
