@@ -12,40 +12,72 @@ import PicseeMacUI
 
 /// Once armed, moves the file inside the next header request, after the grant was resolved but before
 /// the read. This is the order the CI runner hit: reconcile resolved the original path, then the file moved.
+/// `armLoader` instead moves it inside the next loader decode request, after its lease resolved the grant.
+/// `holdHeader` suspends the next header request until `releaseHeader`, so that reconcile stays in flight.
 private final class MoveDuringRequestPipeline: ImagePipeline, @unchecked Sendable {
     let base = ImageIOPipeline()
     private let lock = NSLock()
     private let move: @Sendable () throws -> URL?
     private var armed = false
+    private var loaderArmed = false
+    private var headers = 0
+    private var holdNext = false
+    private var gate: CheckedContinuation<Void, Never>?
     private var movedURL: URL?
     private var ran = 0
     init(move: @escaping @Sendable () throws -> URL?) { self.move = move }
     func arm() { lock.withLock { armed = true } }
+    func armLoader() { lock.withLock { loaderArmed = true } }
     var moves: Int { lock.withLock { ran } }
     var moved: URL? { lock.withLock { movedURL } }
+    var headerRequests: Int { lock.withLock { headers } }
+    var headerHeld: Bool { lock.withLock { gate != nil } }
+    func holdHeader() { lock.withLock { holdNext = true } }
+    func releaseHeader() { lock.withLock { () -> CheckedContinuation<Void, Never>? in defer { gate = nil }; return gate }?.resume() }
     func request(for fileURL: URL, maximumPixelSize: Int) async throws -> ImageDecodeRequest {
-        let fire = lock.withLock { () -> Bool in
-            defer { armed = false }
-            return armed
+        let (fire, hold) = lock.withLock { () -> (Bool, Bool) in
+            defer { armed = false; holdNext = false; headers += 1 }
+            return (armed, holdNext)
         }
-        if fire {
-            let url = try move()
-            lock.withLock { ran += 1; movedURL = url }
-        }
+        if hold { await withCheckedContinuation { continuation in lock.withLock { gate = continuation } } }
+        if fire { try moveNow() }
         return try await base.request(for: fileURL, maximumPixelSize: maximumPixelSize)
     }
     func request(for fileURL: URL, maximumPixelSize: Int, identityRoot: ItemIdentityRoot?) async throws -> ImageDecodeRequest {
-        try await base.request(for: fileURL, maximumPixelSize: maximumPixelSize, identityRoot: identityRoot)
+        let fire = lock.withLock { () -> Bool in
+            defer { loaderArmed = false }
+            return loaderArmed
+        }
+        if fire { try moveNow() }
+        return try await base.request(for: fileURL, maximumPixelSize: maximumPixelSize, identityRoot: identityRoot)
     }
     func image(for request: ImageDecodeRequest) async throws -> DecodedImage {
         try await base.image(for: request)
     }
+    private func moveNow() throws {
+        let url = try move()
+        lock.withLock { ran += 1; movedURL = url }
+    }
 }
 
-@MainActor private func raceController(in base: URL, pipeline: MoveDuringRequestPipeline) throws -> CanvasWindowController {
+/// The system bookmarks, except that resolution fails once `failResolution` is set.
+private final class FailingBookmarks: BookmarkCoding, @unchecked Sendable {
+    private let system = SystemSecurityScope()
+    private let lock = NSLock()
+    private var failing = false
+    func failResolution() { lock.withLock { failing = true } }
+    func create(for url: URL) throws -> Data { try system.create(for: url) }
+    func resolve(_ data: Data) throws -> ResolvedBookmark {
+        if lock.withLock({ failing }) { throw CocoaError(.fileNoSuchFile) }
+        return try system.resolve(data)
+    }
+}
+
+@MainActor private func raceController(in base: URL, pipeline: MoveDuringRequestPipeline,
+                                       bookmarks: (any BookmarkCoding)? = nil) throws -> CanvasWindowController {
     _ = NSApplication.shared
     let scope = SystemSecurityScope()
-    let access = try FileAccess(scope: scope, bookmarks: scope,
+    let access = try FileAccess(scope: scope, bookmarks: bookmarks ?? scope,
         store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "issue273-race")
     let services = AccessServices(files: access,
         recent: RecentFolderStore(url: base.appendingPathComponent("recent.json")),
@@ -129,4 +161,114 @@ private func raceFixture() -> URL {
     #expect(controller.session.imageLoader.presented?.fileURL.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.representedURL?.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.attachedSheet == nil)
+}
+
+@Test @MainActor func issue273TrashDuringLoaderDetailRequestClearsWithoutReconnectSheet() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    let file = base.appendingPathComponent("image.png")
+    try fm.copyItem(at: raceFixture().deletingLastPathComponent().appendingPathComponent("pan-grid-4096x3072.png"),
+                    to: file)
+    let pipeline = MoveDuringRequestPipeline {
+        var trashed: NSURL?
+        try FileManager.default.trashItem(at: file, resultingItemURL: &trashed)
+        return trashed as URL?
+    }
+    defer { if let trashed = pipeline.moved { try? fm.removeItem(at: trashed) } }
+    let controller = try raceController(in: base, pipeline: pipeline)
+    let window = try #require(controller.window)
+    defer { window.close() }
+    controller.open(file, accessRequest: .fileGrant(file))
+    // Settle the viewer and the reconcile that open starts, so the grant is watched before the trash.
+    var deadline = ContinuousClock.now + .seconds(8)
+    while (controller.session.imageLoader.phase != .settled || pipeline.headerRequests == 0) &&
+          ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(controller.session.imageLoader.phase == .settled)
+    #expect(controller.session.imageLoader.presented != nil)
+    // A reconcile already in flight: the Trash's vnode event only marks another one pending,
+    // so the loader's failure is the first to report the trashed file.
+    pipeline.holdHeader()
+    defer { pipeline.releaseHeader() }
+    controller.reconcileStandaloneImage()
+    deadline = ContinuousClock.now + .seconds(8)
+    while !pipeline.headerHeld && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(pipeline.headerHeld)
+    // A larger detail request: the image stays shown while the loader refines and finds the file trashed.
+    pipeline.armLoader()
+    controller.session.requireImageResolution(4096)
+    #expect(controller.session.imageLoader.phase == .refining)
+    deadline = ContinuousClock.now + .seconds(8)
+    while (pipeline.moves == 0 || (controller.session.imageLoader.phase != .failed &&
+           controller.session.imageLoader.fileURL != nil)) &&
+          window.attachedSheet == nil && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(window.attachedSheet == nil, "sheet: \(sheetText(window))")
+    pipeline.releaseHeader()
+    deadline = ContinuousClock.now + .seconds(8)
+    while controller.session.imageLoader.fileURL != nil && window.attachedSheet == nil &&
+          ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(pipeline.moves == 1)
+    #expect(controller.session.imageLoader.fileURL == nil)
+    #expect(window.representedURL == nil)
+    #expect(window.attachedSheet == nil, "sheet: \(sheetText(window))")
+}
+
+/// A read that fails for a real access loss still asks to reconnect.
+@MainActor private func expectReconnectSheet(_ window: NSWindow, _ pipeline: MoveDuringRequestPipeline) async throws {
+    let deadline = ContinuousClock.now + .seconds(8)
+    while window.attachedSheet == nil && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(pipeline.moves == 1)
+    #expect(window.attachedSheet is NSPanel, "sheet: \(sheetText(window))")
+}
+
+@Test @MainActor func issue273RemovalDuringReconcileReadStillShowsReconnectSheet() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    let file = base.appendingPathComponent("image.png")
+    try fm.copyItem(at: raceFixture(), to: file)
+    let pipeline = MoveDuringRequestPipeline {
+        try FileManager.default.removeItem(at: file)
+        return nil
+    }
+    let controller = try raceController(in: base, pipeline: pipeline)
+    let window = try #require(controller.window)
+    defer { window.close() }
+    try await openThenArm(file, controller, pipeline)
+    try await expectReconnectSheet(window, pipeline)
+}
+
+@Test @MainActor func issue273FailedReresolutionDuringReconcileReadStillShowsReconnectSheet() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    let original = base.appendingPathComponent("image.png")
+    let moved = base.appendingPathComponent("moved.png")
+    try fm.copyItem(at: raceFixture(), to: original)
+    let bookmarks = FailingBookmarks()
+    // The file moves, but its bookmark no longer resolves, so re-resolution throws needsFileReconnection.
+    let pipeline = MoveDuringRequestPipeline {
+        try FileManager.default.moveItem(at: original, to: moved)
+        bookmarks.failResolution()
+        return moved
+    }
+    let controller = try raceController(in: base, pipeline: pipeline, bookmarks: bookmarks)
+    let window = try #require(controller.window)
+    defer { window.close() }
+    try await openThenArm(original, controller, pipeline)
+    try await expectReconnectSheet(window, pipeline)
 }
