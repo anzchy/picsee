@@ -16,12 +16,20 @@ private struct T229AppBookmarks: SecurityScope, BookmarkCoding {
 }
 private actor T229AppMounts: DiskMountPort {
     private var continuation: AsyncStream<DiskMountEvent>.Continuation?
+    private var volumes = [AccessProbeVolume(uuid: "111", url: URL(fileURLWithPath: "/"), name: "Disk"),
+                           AccessProbeVolume(uuid: "222", url: URL(fileURLWithPath: "/other"), name: "Other")]
     func mountedVolumes() -> [AccessProbeVolume] {
-        [AccessProbeVolume(uuid: "111", url: URL(fileURLWithPath: "/"), name: "Disk"),
-         AccessProbeVolume(uuid: "222", url: URL(fileURLWithPath: "/other"), name: "Other")]
+        volumes
     }
     func events() -> AsyncStream<DiskMountEvent> { AsyncStream { continuation = $0 } }
-    func emit(_ event: DiskMountEvent) { continuation?.yield(event) }
+    func emit(_ event: DiskMountEvent) {
+        switch event {
+        case .mounted(let volume):
+            volumes.removeAll { $0.uuid == volume.uuid }; volumes.append(volume)
+        case .unmounted(let volume): volumes.removeAll { $0.uuid == volume.uuid }
+        }
+        continuation?.yield(event)
+    }
 }
 @MainActor private final class T229AppMotion: ReduceMotionSource {
     var reduceMotion = false

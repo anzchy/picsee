@@ -27,12 +27,22 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let searchTerm: String
         let scrollOffset: NSPoint
         var counter: UInt64
+        var folderReference: AccessFolderRecoveryReference?
+        var resourceIdentifier: String?
+        var automaticRecovery = true
     }
     private(set) var waitingAccessPosition: WaitingAccessPosition?
     private(set) var accessLossCause: AccessLossCause?
     private var presentationRootID: AccessRootID?
     private var accessMonitor: AccessMonitor?
     private var accessObserver: UUID?
+    private var accessReadinessObserver: UUID?
+    private var accessRecoveryTask: Task<Void, Never>?
+    private var accessRecoveryID: UUID?
+    private var accessRecoveryScan: FolderScanCoordinator?
+    private var pendingAccessRecovery = false
+    private var folderRecoveryReference: AccessFolderRecoveryReference?
+    private var folderRecoveryURLs: Set<URL> = []
     private var accessAttachmentTask: Task<Void, Never>?
     private var accessAttachmentGeneration = UUID()
     private var scanReadContext: AccessMonitor.ReadContext?
@@ -323,7 +333,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         accessMonitor = monitor
         accessObserver = monitor.state.observe { [weak self] change in
             guard let self else { return }
-            if case .lost(let id, let counter) = change { self.handleAccessLoss(id, counter: counter) }
+            switch change {
+            case .lost(let id, let counter): self.handleAccessLoss(id, counter: counter)
+            case .recovered(let id, let counter): self.recoverWaitingAccess(id, counter: counter)
+            }
+        }
+        accessReadinessObserver = monitor.observeReadiness { [weak self] id in
+            guard let self, let counter = self.accessMonitor?.state.snapshot(for: id)?.counter else { return }
+            self.recoverWaitingAccess(id, counter: counter)
         }
     }
     private func applyCurrentAccessState() {
@@ -332,7 +349,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
               case .lost = snapshot.availability else { return }
         handleAccessLoss(root, counter: snapshot.counter)
     }
-    private func leaveWaitingAccess() {
+    private func leaveWaitingAccess(endedRoot: AccessRootID? = nil) {
+        if let root = endedRoot ?? waitingAccessPosition?.rootID {
+            accessMonitor?.endWaiting(root, window: ObjectIdentifier(self))
+        }
+        accessRecoveryID = nil
+        accessRecoveryTask?.cancel(); accessRecoveryTask = nil
+        accessRecoveryScan?.end(); accessRecoveryScan = nil
+        pendingAccessRecovery = false
         accessAnnouncementTask?.cancel(); accessAnnouncementTask = nil
         waitingAccessPosition = nil
         accessLossCause = nil
@@ -349,6 +373,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             // A cause refinement or another eject during recovery belongs to the
             // same waiting episode; retain the original private position.
             waitingAccessPosition?.counter = counter
+            if initialPosition == nil { waitingAccessPosition?.automaticRecovery = true }
+            accessRecoveryID = nil
+            accessRecoveryTask?.cancel(); accessRecoveryTask = nil
+            accessRecoveryScan?.end(); accessRecoveryScan = nil
             accessLossCause = cause
             showWaitingAccessState()
             return
@@ -362,6 +390,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             conditions: session.folderConditions, recursive: session.folderRecursiveEnabled,
             loop: session.folderLoopEnabled, searchTerm: gridSearch.term,
             scrollOffset: gridView.contentOffset, counter: counter)
+        if initialPosition == nil {
+            if folderRecoveryReference?.rootID == rootID, folderRecoveryURLs.contains(folder.standardizedFileURL) {
+                waitingAccessPosition?.folderReference = folderRecoveryReference
+            }
+            let current = waitingAccessPosition?.currentItemID
+            waitingAccessPosition?.resourceIdentifier = session.folderScan?.sourceSnapshot?.entries.first { $0.itemID == current }?.resourceIdentifier
+                ?? session.imageLoader.presented?.key.revision.resourceIdentifier
+        }
         accessLossCause = cause
 
         // Revoke every visible/AX value synchronously. Cancellation below only
@@ -437,6 +473,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
     private func announceAccessLoss(_ rootID: AccessRootID, title: String) {
         if let accessMonitor {
+            accessMonitor.beginWaiting(rootID, window: ObjectIdentifier(self))
             guard accessMonitor.claimAnnouncement(for: rootID, recovered: false) else { return }
             postAccessAnnouncement(([title] + lostAccessView.buttons.map(\.title)).joined(separator: ". "))
         } else if accessAnnouncementTask == nil {
@@ -468,23 +505,192 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             panel.orderOut(nil)
             DispatchQueue.main.async { [weak self] in
                 guard let self, operation.isCurrent, self.waitingAccessPosition?.rootID == position.rootID else { return }
-                guard response == .OK, let url = panel.url else { self.showWaitingAccessState(); return }
+                guard response == .OK, let url = panel.url else {
+                    self.showWaitingAccessState()
+                    if self.pendingAccessRecovery, let counter = self.accessMonitor?.state.snapshot(for: position.rootID)?.counter {
+                        self.recoverWaitingAccess(position.rootID, counter: counter)
+                    }
+                    return
+                }
                 if !reselect { self.openGrantedFolder(url); return }
+                let selectionOperation = self.accessIntent.begin()
+                self.accessRecoveryID = nil
+                self.accessRecoveryTask?.cancel(); self.accessRecoveryTask = nil
+                self.accessRecoveryScan?.end(); self.accessRecoveryScan = nil
                 self.navigationTask?.cancel()
                 self.navigationTask = Task { @MainActor [weak self, accessServices] in
                     do {
-                        let services = try await operation.wait { try await accessServices.value }
-                        let target = try await operation.wait { try await services.reconnect(position.rootID, folder: url) }
-                        guard let self, operation.isCurrent, self.waitingAccessPosition?.rootID == position.rootID else { return }
+                        let services = try await selectionOperation.wait { try await accessServices.value }
+                        let target = try await selectionOperation.wait { try await services.reconnect(position.rootID, folder: url) }
+                        guard let self, selectionOperation.isCurrent, self.waitingAccessPosition?.rootID == position.rootID else { return }
+                        if services.monitor.claimAnnouncement(for: position.rootID, recovered: true) {
+                            self.postAccessAnnouncement(String(localized: "Folder Access Restored"))
+                        }
                         self.refreshRecents()
                         self.openFolder(target.url, rootID: target.rootID)
                     } catch {
-                        guard let self, operation.isCurrent else { return }
+                        guard let self, selectionOperation.isCurrent else { return }
                         self.showWaitingAccessState()
                     }
                 }
             }
         }
+    }
+
+    private func captureRecoveryPosition(_ folder: URL, rootID: AccessRootID,
+                                         services: AccessServices, context: AccessMonitor.ReadContext,
+                                         operation: AccessOperation) async {
+        let reference = try? await services.files.captureRecoveryFolder(rootID: rootID, folder: folder)
+        guard operation.isCurrent, context.permit.isCurrent, waitingAccessPosition == nil,
+              presentationRootID == rootID else { return }
+        folderRecoveryReference = reference
+        folderRecoveryURLs = [folder.standardizedFileURL]
+        if let reference { folderRecoveryURLs.insert(reference.folderURL) }
+    }
+
+    private func recoverWaitingAccess(_ rootID: AccessRootID, counter: UInt64) {
+        guard var position = waitingAccessPosition, position.rootID == rootID, position.automaticRecovery,
+              counter >= position.counter, let monitor = accessMonitor,
+              let state = monitor.state.snapshot(for: rootID), state.counter == counter,
+              state.availability == .readable else { return }
+        guard window?.attachedSheet == nil else { pendingAccessRecovery = true; return }
+        guard accessRecoveryTask == nil else { return }
+        pendingAccessRecovery = false
+        position.counter = counter
+        waitingAccessPosition?.counter = counter
+        let request = UUID(), operation = accessIntent.current
+        accessRecoveryID = request
+        accessRecoveryTask = Task { @MainActor [weak self, accessServices] in
+            guard let self else { return }
+            defer {
+                if accessRecoveryID == request {
+                    accessRecoveryTask = nil
+                    accessRecoveryID = nil
+                    accessRecoveryScan?.end(); accessRecoveryScan = nil
+                }
+            }
+            do {
+                let services = try await operation.wait { try await accessServices.value }
+                let context = try await operation.wait { try await monitor.readContext(for: rootID) }
+                guard mayRestore(position, request: request, operation: operation, context: context),
+                      let root = await services.files.rootURL(rootID) else { throw CancellationError() }
+                var folder = root
+                var fallback = true
+                var reference: AccessFolderRecoveryReference?
+                var grant: SavedAccessGrantSnapshot?
+                if let saved = position.folderReference {
+                    if let location = try await services.files.resolveRecoveryFolder(saved, verifiedRoot: root) {
+                        folder = location.folderURL
+                        grant = location.grant
+                        reference = saved
+                        fallback = false
+                    }
+                }
+                if fallback {
+                    let ready = try await recoveryRootLocation(root, rootID: rootID, services: services)
+                    reference = ready.0; folder = ready.1.folderURL; grant = ready.1.grant
+                }
+                guard mayRestore(position, request: request, operation: operation, context: context) else { throw CancellationError() }
+                var scan = try await prepareRecoveredFolder(folder, position: position, request: request,
+                    operation: operation, context: context, services: services)
+                var current = position.resourceIdentifier.flatMap { resource in
+                    scan.sourceSnapshot?.entries.first { $0.resourceIdentifier == resource }
+                }
+                if !fallback, position.currentItemID != nil,
+                   position.resourceIdentifier == nil || current == nil {
+                    scan.end()
+                    fallback = true; current = nil
+                    let ready = try await recoveryRootLocation(root, rootID: rootID, services: services)
+                    reference = ready.0; folder = ready.1.folderURL; grant = ready.1.grant
+                    scan = try await prepareRecoveredFolder(folder, position: position, request: request,
+                        operation: operation, context: context, services: services)
+                }
+                guard let snapshot = scan.snapshot, snapshot.isComplete, let grant,
+                      mayRestore(position, request: request, operation: operation, context: context) else { throw CancellationError() }
+                let currentID = fallback ? nil : current?.itemID
+                var committed = false
+                // Commit only the window's state under the saved-record fence;
+                // AppKit, Session observation and announcements run afterward.
+                try grant.admitting {
+                    guard mayRestore(position, request: request, operation: operation, context: context) else { return }
+                    waitingAccessPosition = nil
+                    accessLossCause = nil
+                    accessRecoveryScan = nil
+                    accessRecoveryTask = nil
+                    accessRecoveryID = nil
+                    presentationRootID = rootID
+                    gridFolderRoot = rootID
+                    gridFolderURL = folder
+                    scanReadContext = context
+                    folderRecoveryReference = reference
+                    folderRecoveryURLs = [folder.standardizedFileURL]
+                    committed = true
+                }
+                guard committed else { throw CancellationError() }
+                let announce = monitor.claimAnnouncement(for: rootID, recovered: true)
+                leaveWaitingAccess(endedRoot: rootID)
+                session.endFolderScan()
+                session.folderScan = scan
+                scan.host = self
+                configureReadFailureReporting(scan, monitor: monitor)
+                gridProjection = FolderGridProjection()
+                _ = gridProjection.apply(snapshot)
+                gridSearch.reset()
+                if !fallback { gridSearch.setTerm(position.searchTerm, currentItemID: currentID) }
+                gridShell.setSearchTerm(fallback ? "" : position.searchTerm)
+                session.enterFolderGrid(items: snapshot.navigationEntries.map(\.itemID),
+                    sourceVersion: .init(snapshot.version.generation))
+                loadSidebarTree(folder, rootID: rootID, count: snapshot.navigationEntries.count)
+                completeGridDisplay(snapshot, currentItemID: currentID, offset: fallback ? nil : position.scrollOffset)
+                observeGridSnapshot(scan)
+                if let window { GridWindowIdentity.showFolder(folder, in: window) }
+                if !fallback, position.wasViewing, let currentID {
+                    session.focus(currentID)
+                    _ = route(.enter, from: .key)
+                } else { _ = window?.makeFirstResponder(gridView.collectionView) }
+                if announce { postAccessAnnouncement(String(localized: "Folder Access Restored")) }
+            } catch {
+                guard accessRecoveryID == request, waitingAccessPosition?.rootID == rootID else { return }
+                accessRecoveryScan?.end(); accessRecoveryScan = nil
+                if !Task.isCancelled, operation.isCurrent {
+                    accessLossCause = .unknown
+                    showWaitingAccessState()
+                }
+            }
+        }
+    }
+
+    private func mayRestore(_ position: WaitingAccessPosition, request: UUID,
+                            operation: AccessOperation, context: AccessMonitor.ReadContext) -> Bool {
+        !Task.isCancelled && operation.isCurrent && accessRecoveryID == request && context.permit.isCurrent &&
+            waitingAccessPosition?.rootID == position.rootID && waitingAccessPosition?.counter == position.counter
+    }
+    private func recoveryRootLocation(_ root: URL, rootID: AccessRootID,
+                                      services: AccessServices) async throws -> (AccessFolderRecoveryReference, AccessFolderRecoveryLocation) {
+        guard let reference = try await services.files.captureRecoveryFolder(rootID: rootID, folder: root),
+              let location = try await services.files.resolveRecoveryFolder(reference, verifiedRoot: root) else {
+            throw FileAccessError.needsReconnection(rootID)
+        }
+        return (reference, location)
+    }
+    private func prepareRecoveredFolder(_ folder: URL, position: WaitingAccessPosition, request: UUID,
+                                        operation: AccessOperation, context: AccessMonitor.ReadContext,
+                                        services: AccessServices) async throws -> FolderScanCoordinator {
+        let scan = FolderScanCoordinator(access: services.files, scanner: services.browser,
+            trace: NativeFolderScanTrace(), metadataReader: ImageFolderMetadataReader(), watcher: services.watch)
+        accessRecoveryScan = scan
+        _ = scan.setRecursiveEnabled(position.recursive)
+        scan.setLoopEnabled(position.loop)
+        let task = scan.begin(folder: folder, rootID: position.rootID, canPresent: { [weak self, weak scan] in
+            guard let self, let scan, context.permit.isCurrent, operation.isCurrent else { return false }
+            return self.mayRestore(position, request: request, operation: operation, context: context) ||
+                (self.waitingAccessPosition == nil && self.session.folderScan === scan && self.gridFolderRoot == position.rootID)
+        })
+        scan.setConditions(position.conditions)
+        try await task.value
+        guard mayRestore(position, request: request, operation: operation, context: context) else { scan.end(); throw CancellationError() }
+        guard !scan.isWatchUnavailable, scan.snapshot?.isComplete == true else { scan.end(); throw FileAccessError.startFailed }
+        return scan
     }
 
     required init?(coder: NSCoder) { nil }
@@ -552,6 +758,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 context = try await operation.wait { try await services.monitor.readContext(for: id) }
                 self.presentationReadContext = context
                 self.applyCurrentAccessState()
+                if let context {
+                    let folder = self.gridFolderRoot == id ? (self.gridFolderURL ?? url.deletingLastPathComponent()) : url.deletingLastPathComponent()
+                    await self.captureRecoveryPosition(folder, rootID: id, services: services, context: context, operation: operation)
+                }
             } else { context = nil }
             try operation.check()
             do {
@@ -728,9 +938,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         accessAttachmentGeneration = UUID()
         accessAttachmentTask?.cancel(); accessAttachmentTask = nil
+        leaveWaitingAccess()
         if let accessObserver { accessMonitor?.state.removeObserver(accessObserver) }
+        if let accessReadinessObserver { accessMonitor?.removeReadinessObserver(accessReadinessObserver) }
+        accessReadinessObserver = nil
         accessObserver = nil; accessMonitor = nil
-        leaveWaitingAccess(); presentationRootID = nil; scanReadContext = nil; presentationReadContext = nil
+        presentationRootID = nil; scanReadContext = nil; presentationReadContext = nil
         cancelSidebarTree()
         gridShell.showFolder(nil)
         standaloneWatch?.cancel(); standaloneWatch = nil
@@ -862,6 +1075,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 self.scanReadContext = context
                 self.applyCurrentAccessState()
                 try operation.check()
+                await self.captureRecoveryPosition(folder, rootID: rootID, services: services, context: context, operation: operation)
+                try operation.check()
                 try await folderScanner(services).begin(folder: folder, rootID: rootID,
                     canPresent: { authority.isCurrent && context.permit.isCurrent }).value
             } catch {
@@ -960,6 +1175,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     try operation.check()
                     let context = try await operation.wait { try await services.monitor.readContext(for: root) }
                     scanReadContext = context
+                    await captureRecoveryPosition(file.deletingLastPathComponent(), rootID: root, services: services, context: context, operation: operation)
+                    try operation.check()
                     try await folderScanner(services).begin(folder: file.deletingLastPathComponent(), rootID: root,
                         input: file, pending: direction, canPresent: { authority.isCurrent && context.permit.isCurrent }).value
                 } else { promptForFolder(file.deletingLastPathComponent(), currentImage: file, direction: direction) }
@@ -997,6 +1214,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                             try operation.check()
                             let context = try await operation.wait { try await services.monitor.readContext(for: id) }
                             scanReadContext = context
+                            await captureRecoveryPosition(currentImage.deletingLastPathComponent(), rootID: id, services: services, context: context, operation: operation)
+                            try operation.check()
                             try await folderScanner(services).begin(folder: currentImage.deletingLastPathComponent(), rootID: id,
                                 input: currentImage, pending: direction, canPresent: { authority.isCurrent && context.permit.isCurrent }).value
                         } else {
@@ -1284,6 +1503,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         let priorSearchTerm = gridSearch.term, priorCurrent = gridView.currentItemID
         let priorPresentationRoot = presentationRootID
         let priorScanContext = scanReadContext, priorImageContext = presentationReadContext
+        let priorWaitingPosition = waitingAccessPosition, priorLossCause = accessLossCause
         session.beginFolderEntry(shownImage: fileURL, hasCompleteGrid: completeGrid)
         return { [weak self] target in
             guard let self else { return }
@@ -1292,6 +1512,24 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             presentationRootID = priorPresentationRoot
             scanReadContext = priorScanContext
             presentationReadContext = priorImageContext
+            if let priorWaitingPosition {
+                waitingAccessPosition = priorWaitingPosition
+                accessLossCause = priorLossCause
+                presentationRootID = priorWaitingPosition.rootID
+                gridFolderRoot = nil; gridFolderURL = nil
+                // The abandoned target already named the window; the page owns it again.
+                gridProjection = FolderGridProjection()
+                gridView.clearPresentation()
+                cancelSidebarTree()
+                gridShell.showFolder(nil)
+                WindowImageTitle.apply(to: window, imageURL: nil)
+                showWaitingAccessState()
+                if let snapshot = accessMonitor?.state.snapshot(for: priorWaitingPosition.rootID) {
+                    if case .lost = snapshot.availability { handleAccessLoss(priorWaitingPosition.rootID, counter: snapshot.counter) }
+                    else { recoverWaitingAccess(priorWaitingPosition.rootID, counter: snapshot.counter) }
+                }
+                return
+            }
             applyCurrentAccessState()
             guard waitingAccessPosition == nil else { return }
             if let root, let folder { loadSidebarTree(folder, rootID: root, count: nil) }
@@ -1494,11 +1732,12 @@ extension CanvasWindowController: AccessRecoveryHost {
         presentationRootID = rootID
         gridFolderRoot = rootID
         gridFolderURL = lastKnownFolder
-        let position = WaitingAccessPosition(rootID: rootID, folderURL: lastKnownFolder,
+        var position = WaitingAccessPosition(rootID: rootID, folderURL: lastKnownFolder,
             currentItemID: nil, currentImageURL: nil, wasViewing: false,
             conditions: session.folderConditions, recursive: session.folderRecursiveEnabled,
             loop: session.folderLoopEnabled, searchTerm: "", scrollOffset: .zero,
             counter: accessMonitor?.state.snapshot(for: rootID)?.counter ?? 0)
+        position.automaticRecovery = false
         handleAccessLoss(rootID, counter: position.counter, initialPosition: position)
         let operation = accessIntent.current
         Task { @MainActor [weak self, accessServices] in

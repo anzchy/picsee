@@ -187,8 +187,64 @@ public actor FileAccess: AccessLeasing {
         guard let bookmark = saved.first(where: { $0.id == id })?.bookmark else { return nil }
         return bookmarkVolume(bookmark)
     }
+    /// Captures identity while the folder is readable. A later path alone never
+    /// establishes that a replacement directory is the previously browsed folder.
+    public func captureRecoveryFolder(rootID: AccessRootID, folder: URL) throws -> AccessFolderRecoveryReference? {
+        let lease = try acquire(.root(rootID, file: folder))
+        defer { release(lease) }
+        let root = canonical(lease.url)
+        var target = canonical(folder)
+        guard boundary(target, root) else { throw FileAccessError.outsideRoot }
+        target.removeAllCachedResourceValues()
+        do {
+            guard try target.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
+                  let rootIdentity = try resourceReader.identity(for: root),
+                  let folderIdentity = try resourceReader.identity(for: target) else { return nil }
+            return AccessFolderRecoveryReference(rootID: rootID,
+                relativeComponents: Array(target.pathComponents.dropFirst(root.pathComponents.count)),
+                folderURL: target,
+                rootIdentity: rootIdentity, folderIdentity: folderIdentity)
+        } catch where Self.isMissingRecoveryFolder(error) { return nil }
+    }
+    /// The caller has verified this root app-wide. This operation validates the
+    /// individual window's saved folder under a fresh lease without guessing paths.
+    public func resolveRecoveryFolder(_ reference: AccessFolderRecoveryReference,
+                                      verifiedRoot: URL) throws -> AccessFolderRecoveryLocation? {
+        let lease = try acquire(.root(reference.rootID, file: verifiedRoot))
+        defer { release(lease) }
+        let root = canonical(lease.url)
+        guard root == canonical(verifiedRoot),
+              (try resourceReader.identity(for: root)) == reference.rootIdentity else {
+            throw FileAccessError.needsReconnection(reference.rootID)
+        }
+        var folder = canonical(reference.relativeComponents.reduce(root) { $0.appendingPathComponent($1) })
+        guard boundary(folder, root) else { return nil }
+        folder.removeAllCachedResourceValues()
+        do {
+            guard try folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
+                  (try resourceReader.identity(for: folder)) == reference.folderIdentity else { return nil }
+            _ = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+            guard (try resourceReader.identity(for: folder)) == reference.folderIdentity else { return nil }
+            guard let grant = savedGrantSnapshot(reference.rootID) else {
+                throw FileAccessError.needsReconnection(reference.rootID)
+            }
+            return AccessFolderRecoveryLocation(rootURL: root, folderURL: folder, grant: grant)
+        } catch where Self.isMissingRecoveryFolder(error) { return nil }
+    }
+    private static func isMissingRecoveryFolder(_ error: Error) -> Bool {
+        let error = error as NSError
+        return (error.domain == NSCocoaErrorDomain && [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(error.code)) || (error.domain == NSPOSIXErrorDomain && [Int(ENOENT), Int(ENOTDIR)].contains(error.code))
+    }
+    public func verifySavedRootForRecovery(_ id: AccessRootID,
+                                           mounts: any DiskMountPort) async -> AccessRecoveryVerification {
+        await verifySavedRootForRecovery(id, targetFolder: nil, mounts: mounts)
+    }
     public func verifySavedRootForRecovery(_ id: AccessRootID, folder: URL,
                                            mounts: any DiskMountPort) async -> AccessRecoveryVerification {
+        await verifySavedRootForRecovery(id, targetFolder: folder, mounts: mounts)
+    }
+    private func verifySavedRootForRecovery(_ id: AccessRootID, targetFolder: URL?,
+                                            mounts: any DiskMountPort) async -> AccessRecoveryVerification {
         let empty = AccessProbeVolume(uuid: nil, url: nil, name: nil)
         // Mount enumeration suspends this actor. Read the saved grant afterwards
         // so an explicit reselection during that wait cannot be overwritten.
@@ -242,12 +298,12 @@ public actor FileAccess: AccessLeasing {
         } catch { return classified(resolved, scopeStarted: true,
                                     listing: .failed(Self.probeError(error))) }
         let candidate: URL
-        if let priorRoot = lastKnownRoots[id],
+        if let folder = targetFolder, let priorRoot = lastKnownRoots[id],
            folder.standardizedFileURL.pathComponents.starts(with: priorRoot.standardizedFileURL.pathComponents),
            priorRoot.standardizedFileURL != root.standardizedFileURL {
             let suffix = folder.standardizedFileURL.pathComponents.dropFirst(priorRoot.standardizedFileURL.pathComponents.count)
             candidate = suffix.reduce(root) { $0.appendingPathComponent($1) }
-        } else { candidate = folder }
+        } else { candidate = targetFolder ?? root }
         // Only a genuinely readable saved bookmark restores the published root.
         publishRoot(id, url: root)
         guard boundary(candidate, root) else {
