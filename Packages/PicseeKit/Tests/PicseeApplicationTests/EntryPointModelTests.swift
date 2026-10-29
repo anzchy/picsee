@@ -1,6 +1,12 @@
 import Testing
 import PicseeApplication
 
+@Test func issue215EntryPointLanguageFollowsResolvedBundleLocalization() {
+    #expect(EntryPointLanguage(preferredLocalization: "zh-Hans") == .simplifiedChinese)
+    #expect(EntryPointLanguage(preferredLocalization: "en") == .english)
+    #expect(EntryPointLanguage(preferredLocalization: "fr") == .english)
+}
+
 @Test func issue215EntryPointModelCoversEveryReleaseSurfaceEntry() {
     let expectedComingSoon: Set<EntryPoint> = [
         .keyboardShortcuts, .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay,

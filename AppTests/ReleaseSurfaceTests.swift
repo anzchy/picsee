@@ -40,5 +40,6 @@ import PicseeInfrastructure
     #expect(!shortcuts.isEnabled)
     #expect(shortcuts.keyEquivalent.isEmpty)
     #expect(shortcuts.action == nil)
-    #expect(shortcuts.accessibilityLabel()?.contains("Coming Soon") == true)
+    let marker = EntryPoint.keyboardShortcuts.accessibilityLabel(for: .preferred)
+    #expect(shortcuts.accessibilityLabel()?.contains(marker) == true)
 }
