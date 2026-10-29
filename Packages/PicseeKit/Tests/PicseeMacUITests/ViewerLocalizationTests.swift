@@ -121,4 +121,3 @@ private let statesLocalizationKeys = [
         #expect(catalog.value(english, "zh-Hans") == chinese)
     }
 }
-
