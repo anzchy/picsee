@@ -420,13 +420,16 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     do {
                         let current = try await services.files.resolveFileGrant(grant)
                         guard operation.isCurrent else { return }
-                        if current != checkedURL, FileManager.default.fileExists(atPath: current.path) {
+                        let follows = current != checkedURL && FileManager.default.fileExists(atPath: current.path)
+                        self.filesystemLogger.notice("File grant re-resolved after failed read outcome=\(follows ? "moved" : "missing", privacy: .public) file=\(grant.lastPathComponent, privacy: .private)")
+                        if follows {
                             self.open(current, accessRequest: .fileGrant(grant), fromFolderScan: true)
                             self.watchStandaloneFile(at: current)
                             return
                         }
                     } catch let resolution {
                         guard operation.isCurrent else { return }
+                        self.filesystemLogger.notice("File grant re-resolved after failed read outcome=failed error=\(String(describing: resolution), privacy: .private) file=\(grant.lastPathComponent, privacy: .private)")
                         error = resolution
                     }
                 }
@@ -1130,7 +1133,12 @@ extension CanvasWindowController: ViewerImageHost {
         }
         if let original = standaloneGrantURL, let fileURL,
            !FileManager.default.fileExists(atPath: fileURL.path) {
-            requestFileReconnection(original)
+            // A decode can be the first to find the file in the Trash, before reconcile does.
+            if let accessError = error as? FileAccessError, case .fileDeleted = accessError {
+                clearFolderImageForNoMatches()
+            } else {
+                requestFileReconnection(original)
+            }
             return
         }
         if error is FileAccessError { showAccessError(error) }
