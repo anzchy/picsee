@@ -558,6 +558,18 @@ private struct GridGeometry: Equatable {
         updating = true
         drawSelection()
         updating = false
+        scrollIntoView(next)
+    }
+    /// Finder-style: scroll the least distance that shows the whole tile, none when it is already visible.
+    /// Exact, not `scrollToVisible`: that rounds to whole points and leaves fractional-height rows clipped.
+    private func scrollIntoView(_ index: Int) {
+        let tile = collectionView.frameForItem(at: index)
+        let visible = scrollView.contentView.documentVisibleRect
+        var origin = scrollView.contentView.bounds.origin
+        if tile.minY < visible.minY { origin.y = tile.minY }
+        else if tile.maxY > visible.maxY { origin.y = tile.maxY - visible.height }
+        else { return }
+        restoreContentOffset(origin)
     }
     private func drawCurrent() {
         for case let item as GridPhotoItem in collectionView.visibleItems() {
