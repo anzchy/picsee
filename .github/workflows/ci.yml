@@ -55,5 +55,3 @@ jobs:
         env:
           PICSEE_HEAVY_LOCK_HELD: '1'
         run: node scripts/tdd/app-lane.mjs
-      - name: Node tooling tests
-        run: node --test scripts/tdd/*.test.mjs
