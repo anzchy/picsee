@@ -38,7 +38,7 @@ private func ink(_ image: CGImage, background: PinnedDesign.Color) -> (width: In
 
 // Match each actual label/value pair's glyphs against the full panel pixels, then assert
 // individual positions and separation from the pinned .inspector dl rule.
-@Test @MainActor func issue136PinnedPagesRenderAllFivePanelRowsInEnglishAndChinese() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue136PinnedPagesRenderAllFivePanelRowsInEnglishAndChinese() async throws {
     _ = NSApplication.shared
     for (pageName, theme) in [("viewer-inspector", DesignTheme.dark),
                               ("viewer-inspector-light", DesignTheme.light)] {
@@ -62,7 +62,7 @@ private func ink(_ image: CGImage, background: PinnedDesign.Color) -> (width: In
             let model = InspectorModel(reader: ParityReader(metadata: metadata))
             let url = URL(fileURLWithPath: "/tmp/inspector-parity.png")
             model.select(itemID: nil, url: url, access: .fileGrant(url))
-            for _ in 0..<100 where model.value == .loading { await Task.yield() }
+            await waitUntil { model.value != .loading }
             #expect(model.value == .known(metadata))
             let renderer = ImageRenderer(content: InspectorPanel(model: model, session: ViewerSession(),
                 translations: words, close: {}, restoreCanvasFocus: {}, updateFocus: { _ in })

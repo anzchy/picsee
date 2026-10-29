@@ -27,7 +27,7 @@ import PicseeCore
     catch { #expect((error as? ImageLoadError)?.kind == .cancelled) }
 }
 
-@Test(.timeLimit(.minutes(1))) func taskCancellationResumesOnceAfterBlockingDecoderReturns() async throws {
+@Test(.timeLimit(.minutes(2))) func taskCancellationResumesOnceAfterBlockingDecoderReturns() async throws {
     let decoder = BlockingDecoder()
     let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),
         executor: OperationDecodeExecutor(workers: 1), decoder: decoder)
@@ -100,7 +100,7 @@ private struct FailingDecoder: ImageDecoding {
     #expect(await admission.activity().running == 0)
 }
 
-@Test(.timeLimit(.minutes(1))) func controlledExecutorMidDecodeCancellationWaitsForRealReturn() async throws {
+@Test(.timeLimit(.minutes(2))) func controlledExecutorMidDecodeCancellationWaitsForRealReturn() async throws {
     let executor = ControlledExecutor()
     let decoder = BlockingDecoder()
     let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4), executor: executor, decoder: decoder)
@@ -182,7 +182,7 @@ private final class SubmissionHandshake: DecodeExecuting, Sendable {
         signal.yield(())
     }
 }
-@Test(.timeLimit(.minutes(1))) func cancellationAfterCompletionWinsStillRejectsDeliveredSuccess() async throws {
+@Test(.timeLimit(.minutes(2))) func cancellationAfterCompletionWinsStillRejectsDeliveredSuccess() async throws {
     let executor = SubmissionHandshake()
     let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),
                                     executor: executor, decoder: TinyDecoder())

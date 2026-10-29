@@ -27,7 +27,7 @@ private final class HeldWatchMetadataReader: FolderMetadataReading, @unchecked S
     var maxConcurrent: Int { lock.lock(); defer { lock.unlock() }; return peak }
 }
 
-@Test @MainActor func issue134WatchRefreshRejectsHeldReplyWithoutRereadingSettledNeighbor() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue134WatchRefreshRejectsHeldReplyWithoutRereadingSettledNeighbor() async throws {
     let f = try WatchFixture(folders: ["root/F"]); defer { f.remove() }
     let rootID = try await f.access.grant(folder: f.url("root"))
     let reader = HeldWatchMetadataReader()

@@ -4,7 +4,7 @@ import PicseeCore
 import PicseeApplication
 @testable import PicseeInfrastructure
 
-@Test @MainActor func issue140MovedEmptyRootPublishesRelocatedSnapshot() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue140MovedEmptyRootPublishesRelocatedSnapshot() async throws {
     let f = try WatchFixture(folders: ["root"]); defer { f.remove() }
     let root = f.url("root"), moved = f.url("moved")
     let id = try await f.access.grant(folder: root)

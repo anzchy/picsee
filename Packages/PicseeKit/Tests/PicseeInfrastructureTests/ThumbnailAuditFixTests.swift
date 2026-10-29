@@ -75,7 +75,7 @@ private final class AuditReplaceOnce: @unchecked Sendable {
     #expect(!FileManager.default.fileExists(atPath: cacheDirectory.appendingPathComponent("index.sqlite3").path))
 }
 
-@Test(.timeLimit(.minutes(1))) func p303EligibleInFlightCancellationHoldsLeaseUntilDecodeExits() async throws {
+@Test(.timeLimit(.minutes(2))) func p303EligibleInFlightCancellationHoldsLeaseUntilDecodeExits() async throws {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: folder) }

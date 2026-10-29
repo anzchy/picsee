@@ -4,7 +4,7 @@ import PicseeCore
 import PicseeApplication
 @testable import PicseeInfrastructure
 
-@Test @MainActor func watchedCoordinatorMovesDeletedCurrentToNeighbour() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func watchedCoordinatorMovesDeletedCurrentToNeighbour() async throws {
     struct Row {
         let name: String, files: [String], conditions: FolderViewConditions?, current: String, deleted: [String]
         let expected: String?, opened: [String], cleared: Int
@@ -62,7 +62,7 @@ import PicseeApplication
     #expect(w.host.opened.map(\.lastPathComponent) == ["c.png"])
 }
 
-@Test @MainActor func watchedCoordinatorRefreshYieldsToUserScanAndKeepsStream() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func watchedCoordinatorRefreshYieldsToUserScanAndKeepsStream() async throws {
     let gFolder = { (w: WatchedCoordinator) in SnapshotVersion(rootID: w.rootID, folder: w.url("G"), generation: 0).folder }
 
     // X1: the subscription exists during the scan; a hint that arrives then refreshes once it completes.

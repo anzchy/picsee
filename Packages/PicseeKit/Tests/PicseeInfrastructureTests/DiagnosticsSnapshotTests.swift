@@ -78,7 +78,7 @@ private func budgetFigures(_ pipeline: ImageIOPipeline) throws -> DiagnosticsSna
     #expect(group.entries == 1 && (group.storedBytes ?? 0) > 0 && group.hits == 1 && group.misses == 1)
 }
 
-@Test func diagnosticsSnapshotReadsTheQueueWhileDecodesAreHeld() async throws {
+@Test(.timeLimit(.minutes(2))) func diagnosticsSnapshotReadsTheQueueWhileDecodesAreHeld() async throws {
     let rig = try SnapshotRig(files: ["a.png", "b.png"])
     defer { rig.remove() }
     let decoder = HeldDecoder()
@@ -88,12 +88,7 @@ private func budgetFigures(_ pipeline: ImageIOPipeline) throws -> DiagnosticsSna
         Task { try await pipeline.image(for: try await pipeline.request(for: rig.file(name), maximumPixelSize: 64,
                                                                         identityRoot: rig.root)) }
     }
-    let deadline = ContinuousClock.now.advanced(by: .seconds(30))
-    var activity = await pipeline.admission.activity()
-    while !(activity.running == 1 && activity.waiting == 1), ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(5))
-        activity = await pipeline.admission.activity()
-    }
+    await waitUntil { let activity = await pipeline.admission.activity(); return activity.running == 1 && activity.waiting == 1 }
     let held = await pipeline.diagnostics()
     #expect(held.decoding == .init(running: 1, waiting: 1, finished: 0))
     #expect(held.budget?.staging == 12_288)

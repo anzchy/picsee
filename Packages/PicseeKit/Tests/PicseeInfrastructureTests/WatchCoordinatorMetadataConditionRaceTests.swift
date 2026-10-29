@@ -50,7 +50,7 @@ private final class HeldConditionMetadataReader: FolderMetadataReading, @uncheck
     var maxConcurrent: Int { lock.lock(); defer { lock.unlock() }; return peak }
 }
 
-@Test @MainActor func issue134M1SortChosenDuringHeldRefreshFinishesOnNewSnapshot() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue134M1SortChosenDuringHeldRefreshFinishesOnNewSnapshot() async throws {
     let f = try WatchFixture(folders: ["root/F"]); defer { f.remove() }
     let rootID = try await f.access.grant(folder: f.url("root"))
     let scanner = HeldRefreshMetadataScanner(), reader = HeldConditionMetadataReader()

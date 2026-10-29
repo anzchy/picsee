@@ -36,21 +36,21 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     return url
 }
 
-@Test @MainActor func realFSEventSourceDeliversWritesUntilStopAndRefreshesCoordinator() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func realFSEventSourceDeliversWritesUntilStopAndRefreshesCoordinator() async throws {
     // Part 1: a real write reaches stream A; after A.stop() returns, A sees nothing more, with sentinel B ending the wait.
     let dir = try makeTempDir("fsevents"); defer { try? FileManager.default.removeItem(at: dir) }
     let a = HintRecorder(), b = HintRecorder()
     let streamA = try FSEventSource().start(watching: dir, onHints: a.sink)
     let x = dir.appendingPathComponent("x.png")
     FileManager.default.createFile(atPath: x.path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(30)) { a.changedPaths.contains(canonicalPath(x)) })
+    #expect(await mainPoll { a.changedPaths.contains(canonicalPath(x)) })
     streamA.stop()
     streamA.stop() // idempotent
     let aAtStop = a.count
     let streamB = try FSEventSource().start(watching: dir, onHints: b.sink)
     let y = dir.appendingPathComponent("y.png")
     FileManager.default.createFile(atPath: y.path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(30)) { b.changedPaths.contains(canonicalPath(y)) })
+    #expect(await mainPoll { b.changedPaths.contains(canonicalPath(y)) })
     #expect(a.count == aAtStop)
     streamB.stop()
 
@@ -60,11 +60,11 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     holder.set(try FSEventSource().start(watching: dir) { hints in cSink(hints); holder.stream?.stop() })
     let z1 = dir.appendingPathComponent("z1.png")
     FileManager.default.createFile(atPath: z1.path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(30)) { c.count >= 1 })
+    #expect(await mainPoll { c.count >= 1 })
     let streamD = try FSEventSource().start(watching: dir, onHints: d.sink)
     let z2 = dir.appendingPathComponent("z2.png")
     FileManager.default.createFile(atPath: z2.path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(30)) { d.changedPaths.contains(canonicalPath(z2)) })
+    #expect(await mainPoll { d.changedPaths.contains(canonicalPath(z2)) })
     #expect(c.count == 1)
     streamD.stop()
 
@@ -84,22 +84,22 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     try await coordinator.begin(folder: folder, rootID: rootID).value
     #expect(coordinator.snapshot?.entries.map(\.relativePath) == ["F/a.png"])
     FileManager.default.createFile(atPath: folder.appendingPathComponent("new.png").path, contents: Data([1]))
-    #expect(await mainPoll(deadline: .seconds(30)) {
+    #expect(await mainPoll {
         coordinator.snapshot?.entries.map(\.relativePath).contains("F/new.png") == true })
     #expect(host.didStart == 1)
     coordinator.end()
     #expect(await mainPoll { let counts = scope.counts; return counts[0] == counts[1] })
 }
 
-@Test func dispatchWatchSchedulerFiresWithinRealTimeBound() async throws {
+@Test(.timeLimit(.minutes(3))) func dispatchWatchSchedulerFiresWithinRealTimeBound() async throws {
     #expect(FSEventSource.latency <= 0.1)
     let scheduler = DispatchWatchScheduler()
     let x = FireCounter(), y = FireCounter(), z = FireCounter()
     let startMilliseconds = scheduler.nowMilliseconds
     let start = ContinuousClock.now
     _ = scheduler.schedule(afterMilliseconds: 200, x.action)
-    // This 120 s deadline guards a missing callback; CI has delayed a 200 ms item by over 20 s.
-    #expect(await poll(deadline: .seconds(120)) { x.count >= 1 })
+    // The time limit guards a missing callback; CI has delayed a 200 ms item by over 20 s.
+    #expect(await poll { x.count >= 1 })
     let elapsed = (x.first ?? start) - start
     // Dispatch is allowed to run late under load; only an early callback violates the delay.
     #expect(elapsed >= .milliseconds(200))
@@ -107,7 +107,7 @@ private func makeTempDir(_ prefix: String) throws -> URL {
     scheduler.schedule(afterMilliseconds: 100, y.action).cancel()
     let zStart = ContinuousClock.now
     _ = scheduler.schedule(afterMilliseconds: 300, z.action)
-    #expect(await poll(deadline: .seconds(120)) { z.count == 1 })
+    #expect(await poll { z.count == 1 })
     #expect((z.first ?? zStart) - zStart >= .milliseconds(300))
     #expect(y.count == 0)
     #expect(x.count == 1)

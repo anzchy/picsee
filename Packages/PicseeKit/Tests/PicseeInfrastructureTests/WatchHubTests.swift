@@ -3,7 +3,7 @@ import Testing
 import PicseeCore
 @testable import PicseeInfrastructure
 
-@Test func watchHubSharesOneStreamAndLeasePerRoot() async throws {
+@Test(.timeLimit(.minutes(2))) func watchHubSharesOneStreamAndLeasePerRoot() async throws {
     let f = try WatchFixture(folders: ["root/A", "root/B", "other/X", "revoked/X"])
     defer { f.remove() }
     let root = try await f.access.grant(folder: f.url("root"))
@@ -137,7 +137,7 @@ private func refCountViolation(_ f: WatchFixture, live: [Probe], dead: [Probe]) 
     return nil
 }
 
-@Test func watchHubRefCountInvariantHoldsForAnyInterleaving() async throws {
+@Test(.timeLimit(.minutes(2))) func watchHubRefCountInvariantHoldsForAnyInterleaving() async throws {
     let specs = [("root/A", false), ("root/A", true), ("root/B", false)]
     for seed in UInt64(1)...40 {
         for n in 1...8 {

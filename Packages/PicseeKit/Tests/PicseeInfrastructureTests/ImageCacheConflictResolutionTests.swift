@@ -91,7 +91,7 @@ private func issue58Write(_ name: String, to file: URL) throws {
         await cache.unpin(old)
     }
 
-    @Test(.timeLimit(.minutes(1))) func issue122DelayedOldPipelineHeaderRejectsReplacement() async throws {
+    @Test(.timeLimit(.minutes(2))) func issue122DelayedOldPipelineHeaderRejectsReplacement() async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try issue58Write("orientation-1.tiff", to: tree.file)
         let cache = ImageMemoryCache(capacity: 1_000_000)
@@ -179,7 +179,7 @@ private func issue58Write(_ name: String, to file: URL) throws {
         }
     }
 
-    @MainActor @Test(.timeLimit(.minutes(1))) func issue122DisplayedCurrentRevisionSurvivesDelayedOldLookupAndZoom() async throws {
+    @MainActor @Test(.timeLimit(.minutes(2))) func issue122DisplayedCurrentRevisionSurvivesDelayedOldLookupAndZoom() async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try issue58Write("orientation-1.tiff", to: tree.file)
         let cache = ImageMemoryCache(capacity: 32_000_000)
@@ -211,7 +211,7 @@ private func issue58Write(_ name: String, to file: URL) throws {
         await cache.unpin(current)
     }
 
-    @Test(.timeLimit(.minutes(1))) func issue122PinnedFreshImageSurvivesRealReplacementAndOldObservation() async throws {
+    @Test(.timeLimit(.minutes(2))) func issue122PinnedFreshImageSurvivesRealReplacementAndOldObservation() async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try issue58Write("orientation-1.tiff", to: tree.file)
         let cache = ImageMemoryCache(capacity: 1_000_000)
@@ -235,7 +235,7 @@ private func issue58Write(_ name: String, to file: URL) throws {
         }
     }
 
-    @Test(.timeLimit(.minutes(1))) func issue122CancelledHeaderCannotPrunePendingRevision() async throws {
+    @Test(.timeLimit(.minutes(2))) func issue122CancelledHeaderCannotPrunePendingRevision() async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try issue58Write("orientation-2.tiff", to: tree.file)
         let cache = ImageMemoryCache(capacity: 1_000_000)
@@ -287,7 +287,7 @@ private func issue58Write(_ name: String, to file: URL) throws {
         await cache.unpin(current)
     }
 
-    @Test(.timeLimit(.minutes(1))) func issue58OlderLookupFirstCurrentRevisionSucceeds() async throws {
+    @Test(.timeLimit(.minutes(2))) func issue58OlderLookupFirstCurrentRevisionSucceeds() async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try issue58Write("orientation-1.tiff", to: tree.file)
         let cache = ImageMemoryCache(capacity: 1_000_000), decoder = CacheCountingDecoder()
@@ -323,7 +323,7 @@ private func issue58Write(_ name: String, to file: URL) throws {
         }
     }
 
-    @MainActor @Test(.timeLimit(.minutes(1))) func issue58LoaderSettlesAfterSingleReplacementAndDelayedOldLookup() async throws {
+    @MainActor @Test(.timeLimit(.minutes(2))) func issue58LoaderSettlesAfterSingleReplacementAndDelayedOldLookup() async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try issue58Write("orientation-1.tiff", to: tree.file)
         let cache = ImageMemoryCache(capacity: 1_000_000), decoder = CacheBlockingDecoder()
@@ -395,7 +395,7 @@ private func issue58RevisionKey(_ key: RenderKey, revision: FileRevision) -> Ren
 }
 
 extension ImageCacheConflictResolutionTests {
-    @Test(.timeLimit(.minutes(1)), arguments: Issue58Interruption.allCases)
+    @Test(.timeLimit(.minutes(2)), arguments: Issue58Interruption.allCases)
     fileprivate func issue58FreshValidationPreservesAuthorityAndCleanup(_ interruption: Issue58Interruption) async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try issue58Write("orientation-1.tiff", to: tree.file)

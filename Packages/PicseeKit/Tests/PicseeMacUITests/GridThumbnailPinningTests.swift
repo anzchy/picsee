@@ -135,8 +135,7 @@ private let pinningTile = ThumbnailCoverage(width: 212, height: 212)
             await scheduler.settlePins()
             #expect(await fake.held == 3)
         }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-        while await fake.held != 0, ContinuousClock.now < deadline { await Task.yield() }
+        await waitUntil { await fake.held == 0 }
         #expect(await fake.held == 0)
         #expect(await !fake.wentNegative)
     }

@@ -177,7 +177,7 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     }
 }
 
-@Test @MainActor func issue136InspectorPanelRendersKnownHeaderAndActualPreview() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue136InspectorPanelRendersKnownHeaderAndActualPreview() async throws {
     _ = NSApplication.shared
     let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -189,7 +189,7 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     let model = InspectorModel(reader: FilledInspectorReader(value: metadata)), session = ViewerSession()
     let url = URL(fileURLWithPath: "/tmp/long-name.png")
     model.select(itemID: nil, url: url, access: .fileGrant(url))
-    for _ in 0..<100 where model.value == .loading { await Task.yield() }
+    await waitUntil { model.value != .loading }
     #expect(model.value == .known(metadata))
     let renderer = ImageRenderer(content: InspectorPanel(model: model, session: session,
         close: {}, restoreCanvasFocus: {}, updateFocus: { _ in }).frame(height: 500))
@@ -208,7 +208,7 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     #expect(hasActualPreviewPixel)
 }
 
-@Test @MainActor func issue136InspectorPanelFocusEntersAndEscRestoresCanvas() {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue136InspectorPanelFocusEntersAndEscRestoresCanvas() {
     _ = NSApplication.shared
     let session = ViewerSession(), model = InspectorModel(reader: EmptyInspectorReader())
     var updates: [FocusContext] = [], restored = 0, closed = 0
@@ -229,17 +229,11 @@ private struct FilledInspectorReader: InspectorMetadataReading {
     session.setInspectorVisible(true)
     session.tab(reverse: false)
     host.layoutSubtreeIfNeeded()
-    let focusDeadline = Date().addingTimeInterval(1)
-    while updates.isEmpty && Date() < focusDeadline {
-        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
-    }
+    runLoopUntil { !updates.isEmpty }
     #expect(updates.contains(.panel))
     _ = CommandRouter().route(.escape, from: .key, to: session)
     host.layoutSubtreeIfNeeded()
-    let restoreDeadline = Date().addingTimeInterval(1)
-    while restored == 0 && Date() < restoreDeadline {
-        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
-    }
+    runLoopUntil { restored != 0 }
     #expect(restored > 0)
     #expect(session.inspectorFocus.focus == .canvas)
 }

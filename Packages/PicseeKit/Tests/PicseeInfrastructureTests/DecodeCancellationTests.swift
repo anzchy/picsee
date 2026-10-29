@@ -38,7 +38,7 @@ final class BlockingDecoder: ImageDecoding, @unchecked Sendable {
     }
 }
 
-@Test(.timeLimit(.minutes(1))) func realQueueCancellationBalancesThreePointsWithoutSleep() async throws {
+@Test(.timeLimit(.minutes(2))) func realQueueCancellationBalancesThreePointsWithoutSleep() async throws {
     let decoder = BlockingDecoder()
     let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),
         executor: OperationDecodeExecutor(workers: 1), decoder: decoder)
@@ -56,7 +56,7 @@ final class BlockingDecoder: ImageDecoding, @unchecked Sendable {
     #expect(await admission.activity().running == 0)
 }
 
-@Test(.timeLimit(.minutes(1))) func submittedPixelCancellationSkipsDecoderAndBalancesResources() async throws {
+@Test(.timeLimit(.minutes(2))) func submittedPixelCancellationSkipsDecoderAndBalancesResources() async throws {
     let executor = OperationDecodeExecutor(workers: 1)
     let (blocked, signalBlocked) = AsyncStream<Void>.makeStream()
     let release = DispatchSemaphore(value: 0)
@@ -90,7 +90,7 @@ final class BlockingDecoder: ImageDecoding, @unchecked Sendable {
     #expect(await admission.activity().heavy == 0)
 }
 
-@Test(.timeLimit(.minutes(1))) func freshAdmittedCancellationSkipsDecoderAndReleasesReservation() async throws {
+@Test(.timeLimit(.minutes(2))) func freshAdmittedCancellationSkipsDecoderAndReleasesReservation() async throws {
     let executor = ControlledExecutor()
     let decoder = DecodeCounter()
     let admission = DecodeAdmission(configuration: DecodeConfiguration(workers: 1, budget: 4),

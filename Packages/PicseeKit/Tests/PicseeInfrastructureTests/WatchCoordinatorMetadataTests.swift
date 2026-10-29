@@ -51,7 +51,7 @@ private actor FailNextMetadataScan: FolderScanning {
     }
 }
 
-@Test @MainActor func issue134WatchRefreshKeepsSettledMetadataAndReadsOnlyChangedEntries() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue134WatchRefreshKeepsSettledMetadataAndReadsOnlyChangedEntries() async throws {
     let w = try await MetadataWatchFixture()
     try w.write("a.png", bytes: 3); try w.write("b.png", bytes: 1)
     try await w.coordinator.begin(folder: w.f.url("root/F"), rootID: w.rootID).value

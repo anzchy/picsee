@@ -4,7 +4,7 @@ import PicseeCore
 import PicseeApplication
 @testable import PicseeInfrastructure
 
-@Test @MainActor func watchedCoordinatorFallsBackHonestlyWhenTheWatchFails() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func watchedCoordinatorFallsBackHonestlyWhenTheWatchFails() async throws {
     // A refused stream: the scan still completes, but no watch is pretended and the state is visible.
     let w = try await WatchedCoordinator(files: ["F/a.png", "F/b.png"], folders: ["root/F", "other/H"]); defer { w.f.remove() }
     let c = w.coordinator

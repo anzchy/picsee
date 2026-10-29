@@ -52,7 +52,7 @@ actor AccessPipelineProbe: ImagePipeline {
     }
 }
 
-@Test(.timeLimit(.minutes(1))) func accessImageSourceHoldsOldLeaseUntilDecodeActuallyReturns() async throws {
+@Test(.timeLimit(.minutes(2))) func accessImageSourceHoldsOldLeaseUntilDecodeActuallyReturns() async throws {
     let access = AccessProbe(); let pipeline = AccessPipelineProbe(access: access)
     let file = URL(fileURLWithPath: "/tmp/a.jpg")
     let old = try await AccessImageSource.open(.fileGrant(file), access: access, pipeline: pipeline)

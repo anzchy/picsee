@@ -85,7 +85,7 @@ private func issue140PNG(red: UInt8) throws -> Data {
     coordinator.end()
 }
 
-@Test @MainActor func issue140MovedRootRebasesSharedWatch() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue140MovedRootRebasesSharedWatch() async throws {
     let f = try WatchFixture(folders: ["root"]); defer { f.remove() }
     let root = f.url("root"), moved = f.url("moved")
     try Data().write(to: root.appendingPathComponent("a.png"))
@@ -121,7 +121,7 @@ private func issue140PNG(red: UInt8) throws -> Data {
     coordinator.end()
 }
 
-@Test @MainActor func issue140MovedRootReconcilesOtherWindowOnSharedWatch() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue140MovedRootReconcilesOtherWindowOnSharedWatch() async throws {
     let f = try WatchFixture(folders: ["root"]); defer { f.remove() }
     let root = f.url("root"), moved = f.url("moved")
     try Data().write(to: root.appendingPathComponent("a.png"))
@@ -137,7 +137,7 @@ private func issue140PNG(red: UInt8) throws -> Data {
     first.end(); second.end()
 }
 
-@Test @MainActor func issue140WatchedRenameKeepsCurrentUnderActiveExtensionFilter() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue140WatchedRenameKeepsCurrentUnderActiveExtensionFilter() async throws {
     let f = try WatchFixture(folders: ["root"]); defer { f.remove() }
     let root = f.url("root"), old = f.url("root/a.png"), renamed = f.url("root/z.png")
     try Data().write(to: old)

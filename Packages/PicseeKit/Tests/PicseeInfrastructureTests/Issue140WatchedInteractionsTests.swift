@@ -4,7 +4,7 @@ import PicseeCore
 import PicseeApplication
 @testable import PicseeInfrastructure
 
-@Test @MainActor func issue140WatchedDeleteUnderExtensionFilterNeverFlashesNoMatches() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue140WatchedDeleteUnderExtensionFilterNeverFlashesNoMatches() async throws {
     let w = try await WatchedCoordinator(files: ["F/a.png", "F/b.png", "F/c.png", "F/hidden.jpg"])
     defer { w.f.remove() }
     let c = w.coordinator
@@ -22,7 +22,7 @@ import PicseeApplication
     #expect(samples.values.allSatisfy { $0.snapshot?.isComplete == true && !$0.snapshot!.navigationEntries.isEmpty })
 }
 
-@Test @MainActor func issue140WatchedRenameAndDeletePreserveFilenameSearchCurrent() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue140WatchedRenameAndDeletePreserveFilenameSearchCurrent() async throws {
     let w = try await WatchedCoordinator(files: ["F/match-a.png", "F/match-b.png", "F/match-c.png", "F/other.png"])
     defer { w.f.remove() }
     let c = w.coordinator

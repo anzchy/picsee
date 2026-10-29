@@ -227,7 +227,7 @@ private struct PartialFailureScanner: FolderScanning {
     #expect(await fixture.access.balance == [2, 2])
 }
 
-@Test @MainActor func recursiveSessionFacadeTogglesAndRetryStartsFreshLease() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func recursiveSessionFacadeTogglesAndRetryStartsFreshLease() async throws {
     let fixture = FolderScanFixture(), session = ViewerSession(host: nil)
     session.folderScan = fixture.coordinator
     #expect(!session.folderRecursiveEnabled)
@@ -239,13 +239,13 @@ private struct PartialFailureScanner: FolderScanning {
     await fixture.scanner.finish(0)
     await fixture.scanner.finish(1, failing: true)
     try await first.value
-    for _ in 0..<1_000 where fixture.coordinator.failure == nil { await Task.yield() }
+    await waitUntil { fixture.coordinator.failure != nil }
     #expect(fixture.coordinator.failure != nil)
     session.retryFolderScan()
     await fixture.scanner.waitForStart(2)
     #expect(await fixture.scanner.options(at: 2).recursive)
     await fixture.scanner.finish(2)
-    for _ in 0..<1_000 where fixture.coordinator.sourceSnapshot?.isComplete != true { await Task.yield() }
+    await waitUntil { fixture.coordinator.sourceSnapshot?.isComplete == true }
     #expect(fixture.coordinator.sourceSnapshot?.isComplete == true)
     #expect(await fixture.access.balance == [3, 3])
 }

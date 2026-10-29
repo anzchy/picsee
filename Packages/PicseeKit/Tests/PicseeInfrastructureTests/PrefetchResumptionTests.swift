@@ -41,15 +41,14 @@ private final class SteppedPressureTime: @unchecked Sendable {
         }
         for sleeper in woken { sleeper.resume() }
     }
-    /// True once `count` sleeps have been asked for and are pending, within ten seconds.
+    /// True once `count` sleeps have been asked for and are pending; the suite's time limit bounds the wait (#277).
     func waitFor(asked count: Int) async -> Bool {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-        while requested.count != count || sleeping != 1, ContinuousClock.now < deadline { await Task.yield() }
+        await waitUntil { requested.count == count && sleeping == 1 }
         return requested.count == count && sleeping == 1
     }
 }
 
-@Suite(.timeLimit(.minutes(1))) struct PrefetchResumptionTests {
+@Suite(.timeLimit(.minutes(2))) struct PrefetchResumptionTests {
     private static func pipeline(_ time: SteppedPressureTime, delay: TimeInterval = 5) -> ImageIOPipeline {
         ImageIOPipeline(configuration: DecodeConfiguration(pressureRecoveryDelay: delay),
             pressureClock: { time.now }, pressureSleep: { try await time.sleep($0) })

@@ -41,7 +41,7 @@ private actor GenericFailureThenSuccessScanner: FolderScanning {
     }
 }
 
-@Test @MainActor func p204FixGenericFailureRendersPartialCountAndRetryButton() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func p204FixGenericFailureRendersPartialCountAndRetryButton() async throws {
     let scene = StatesScene(), scanner = GenericFailureThenSuccessScanner()
     defer { scene.window.close() }
     let folder = URL(fileURLWithPath: "/native-folder/A")
@@ -57,10 +57,7 @@ private actor GenericFailureThenSuccessScanner: FolderScanning {
     let retry = try #require(scene.state.buttons.first)
     #expect(retry.identifier?.rawValue == "state.retry-folder")
     retry.performClick(nil)
-    for _ in 0..<1_000 {
-        if await scanner.callCount >= 2 { break }
-        await Task.yield()
-    }
+    await waitUntil { await scanner.callCount >= 2 }
     #expect(await scanner.callCount == 2)
 }
 

@@ -51,7 +51,7 @@ private actor WatchRefreshThumbnailLog {
 }
 
 /// Mirrors the App's grid observer: the session reconciles first, then the grid shows the session's selection.
-@Test(.timeLimit(.minutes(1))) @MainActor
+@Test(.timeLimit(.minutes(2))) @MainActor
 func watchedRefreshReconcilesMultiSelectionAndCancelsRemovedThumbnails() async throws {
     _ = NSApplication.shared
     let folder = URL(fileURLWithPath: "/tmp/picsee-grid-watch-refresh")
