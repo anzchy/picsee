@@ -200,6 +200,17 @@ def run_dir(value):
     run.mkdir(parents=True, exist_ok=True)
     return run
 
+def signing_identity(app):
+    # Re-sign with the exact certificate xcodebuild chose for the team; the name
+    # "Apple Development" is ambiguous once the keychain holds another team's identity.
+    with tempfile.TemporaryDirectory(prefix='picsee-sign-') as folder:
+        prefix = Path(folder) / 'cert'
+        checked(['/usr/bin/codesign', '-d', '--extract-certificates=' + str(prefix), app])
+        leaf = Path(str(prefix) + '0')
+        if not leaf.exists():
+            raise RuntimeError('built app has no signing certificate to re-sign with')
+        return hashlib.sha1(leaf.read_bytes()).hexdigest().upper()
+
 def build(run):
     if running():
         raise RuntimeError('another Picsee is running; ask its owner to quit it')
@@ -223,7 +234,7 @@ def build(run):
     plist = app / 'Contents/Info.plist'
     if plistlib.loads(plist.read_bytes()).get('PicseeGitSHA') != sha:
         checked(['/usr/libexec/PlistBuddy', '-c', 'Set :PicseeGitSHA ' + sha, plist])
-        checked(['/usr/bin/codesign', '--force', '--sign', 'Apple Development',
+        checked(['/usr/bin/codesign', '--force', '--sign', signing_identity(app),
                  '--preserve-metadata=entitlements,requirements,flags,runtime', app])
     if inputs != assert_clean_inputs(ROOT):
         raise RuntimeError('build inputs changed during signing')
