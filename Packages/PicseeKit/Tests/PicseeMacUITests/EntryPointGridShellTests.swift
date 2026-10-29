@@ -65,12 +65,16 @@ import PicseeInfrastructure
             }
             #expect(abs(shell.displayButton.frame.maxX - (width - trailingInset)) < 0.01)
             shell.setSearchStatus(resultCount: 4, term: "旅行")
-            #expect(!shell.searchStatus.isHidden)
-            #expect(shell.searchStatus.frame.width >= 48)
+            shell.layoutSubtreeIfNeeded()
+            #expect(shell.searchStatus.isHidden == (width <= 480))
+            if width > 480 { #expect(shell.searchStatus.frame.width >= 48) }
             shell.focusSearch()
             shell.layoutSubtreeIfNeeded()
-            #expect(shell.searchStatus.frame.width >= 48)
-            #expect(shell.searchStatus.frame.maxX <= shell.searchField.frame.minX)
+            #expect(shell.searchStatus.isHidden == (width <= 480))
+            if !shell.searchStatus.isHidden {
+                #expect(shell.searchStatus.frame.width >= 48)
+                #expect(shell.searchStatus.frame.maxX <= shell.searchField.frame.minX)
+            }
 
             for sidebarWidth in [196, 160] {
                 preferences.value.gridSidebarWidth = Double(sidebarWidth)

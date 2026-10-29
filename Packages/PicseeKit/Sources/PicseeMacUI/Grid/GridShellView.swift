@@ -231,7 +231,8 @@ import PicseeCore
         mainContent.frame = main
         for content in mainContent.subviews { content.frame = mainContent.bounds }
         footer.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 40)
-        toggleButton.frame = NSRect(x: 8, y: 4, width: 32, height: 32)
+        let toggleWidth: CGFloat = footer.bounds.width < 280 ? 16 : 32
+        toggleButton.frame = NSRect(x: 8, y: 4, width: toggleWidth, height: 32)
         footerRule.frame = NSRect(x: 0, y: 39, width: bounds.width, height: 1)
         // grid-light.html: 12pt trailing inset, 7pt only through 480pt;
         // toolbar gap 6pt, reduced to 2pt through 800pt.
@@ -247,9 +248,10 @@ import PicseeCore
         searchButton.frame = NSRect(x: sortButton.frame.minX - buttonWidth - toolGap, y: 6,
                                     width: buttonWidth, height: 28)
         let statusReserve: CGFloat = 48 + 60 + 8
-        let searchWidth = min(190, max(0, sortButton.frame.minX - statusReserve - toolGap))
+        let searchWidth = min(190, max(120, sortButton.frame.minX - statusReserve - toolGap))
         searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - toolGap, y: 6,
                                    width: searchWidth, height: 28)
+        searchStatus.isHidden = footer.bounds.width <= 480 || searchStatus.stringValue.isEmpty
         searchStatus.frame = NSRect(x: 48, y: 6, width: max(0, (searchField.isHidden ? searchButton.frame.minX : searchField.frame.minX) - 56), height: 28)
         emptyState.frame = mainContent.bounds
         let centerX = emptyState.bounds.midX
@@ -411,7 +413,7 @@ import PicseeCore
         searchStatus.stringValue = term.isEmpty
             ? String(format: String(localized: "%lld images"), resultCount)
             : String(format: String(localized: "Search: %@ · %lld results"), term, resultCount)
-        searchStatus.isHidden = false
+        searchStatus.isHidden = footer.bounds.width <= 480
         searchButton.state = term.isEmpty ? .off : .on
     }
     private func setEmptyDetailText(_ text: String) {

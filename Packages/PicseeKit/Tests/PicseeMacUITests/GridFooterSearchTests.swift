@@ -160,6 +160,25 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
     #expect(shell.searchField.frame.maxX + 2 == shell.sortButton.frame.minX)
 }
 
+@Test @MainActor func issue215SearchFieldKeepsReadableFloorAtNarrowWidths() {
+    _ = NSApplication.shared
+    for width in [238.0, 480.0] {
+        let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: width, height: 680),
+                                  preferencesStore: InMemoryDisplayPreferencesStore())
+        shell.layoutSubtreeIfNeeded()
+        #expect(shell.searchField.frame.width >= 120, "idle field at \(width)pt: \(shell.searchField.frame)")
+        #expect(shell.searchField.frame.minX >= shell.toggleButton.frame.maxX)
+
+        shell.focusSearch()
+        shell.layoutSubtreeIfNeeded()
+        #expect(shell.searchField.frame.width >= 120, "editing field at \(width)pt: \(shell.searchField.frame)")
+        #expect(shell.searchField.frame.minX >= shell.toggleButton.frame.maxX)
+        shell.setSearchStatus(resultCount: 4, term: "旅行")
+        shell.layoutSubtreeIfNeeded()
+        #expect(shell.searchStatus.isHidden)
+    }
+}
+
 @Test @MainActor func issue136Combo2FooterTabTargetsFollowVisibleKeyLoop() {
     _ = NSApplication.shared
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 765, height: 600),
