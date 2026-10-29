@@ -8,9 +8,10 @@ import PicseeInfrastructure
     let previousMenu = NSApp.mainMenu
     var openedURLs: [URL] = []
     var diagnosticsCount = 0
+    var shortcutsCount = 0
     let menu = CommandMenu(preferencesStore: InMemoryDisplayPreferencesStore(),
         openWithoutWindow: {}, openSettings: {}, openDiagnostics: { diagnosticsCount += 1 },
-        openURL: { openedURLs.append($0) }, windowController: { nil })
+        openShortcuts: { shortcutsCount += 1 }, openURL: { openedURLs.append($0) }, windowController: { nil })
     defer { NSApp.mainMenu = previousMenu; withExtendedLifetime(menu) {} }
     let main = try #require(NSApp.mainMenu)
     func submenu(_ title: String) throws -> NSMenu {
@@ -36,10 +37,11 @@ import PicseeInfrastructure
     #expect(diagnosticsCount == 1)
 
     let shortcuts = help.items[2]
-    #expect(!menu.validateMenuItem(shortcuts))
-    #expect(!shortcuts.isEnabled)
+    #expect(menu.validateMenuItem(shortcuts))
+    #expect(shortcuts.isEnabled)
     #expect(shortcuts.keyEquivalent.isEmpty)
-    #expect(shortcuts.action == nil)
-    let marker = EntryPoint.keyboardShortcuts.accessibilityLabel(for: .preferred)
-    #expect(shortcuts.accessibilityLabel()?.contains(marker) == true)
+    #expect(shortcuts.action != nil)
+    #expect(shortcuts.title == String(localized: "Keyboard Shortcuts"))
+    #expect(NSApp.sendAction(try #require(shortcuts.action), to: shortcuts.target, from: shortcuts))
+    #expect(shortcutsCount == 1)
 }

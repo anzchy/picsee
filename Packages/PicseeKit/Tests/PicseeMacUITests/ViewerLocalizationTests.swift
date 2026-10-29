@@ -121,3 +121,35 @@ private let statesLocalizationKeys = [
         #expect(catalog.value(english, "zh-Hans") == chinese)
     }
 }
+
+@Test func issue219ShortcutCatalogCopyMatchesBothLanguagesExactly() throws {
+    let catalog = try statesCatalog()
+    let expected = [
+        "Files & Windows": "文件与窗口",
+        "Anytime": "任何时候",
+        "Grid": "网格",
+        "While Browsing a Folder": "浏览文件夹时",
+        "Image Viewer": "大图",
+        "While Viewing One Image": "查看一张图片时",
+        "Close Window": "关闭窗口",
+        "Hide picsee": "隐藏 picsee",
+        "Quit picsee": "退出 picsee",
+        "Move Current Item": "移动当前项",
+        "Preview Current Item": "用大图查看当前项",
+        "Open Current Item": "打开当前项",
+        "Search Current Folder": "搜索当前文件夹",
+        "Show / Hide Sidebar": "显示 / 隐藏侧栏",
+        "Previous / Next Image": "上一张 / 下一张",
+        "Return to Grid": "回到网格",
+        "Fit Window": "适应窗口",
+        "Zoom In / Out": "放大 / 缩小",
+        "Recall Tools": "唤回工具",
+        "Image Information": "图片信息",
+        "Enter / Exit Full Screen": "进入 / 退出全屏",
+    ]
+    #expect(expected.count == 21)
+    for (english, chinese) in expected {
+        #expect(catalog.value(english, "en") == english)
+        #expect(catalog.value(english, "zh-Hans") == chinese)
+    }
+}

@@ -15,7 +15,7 @@ struct PinnedDesign {
     private let rules: [Rule]
     private let appearance: String
 
-    static func page(_ name: String, source: String? = nil) throws -> Self {
+    static func page(_ name: String, source: String? = nil, appearance: String? = nil) throws -> Self {
         let tests = URL(fileURLWithPath: source ?? #filePath).deletingLastPathComponent()
         let root = tests.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -42,8 +42,8 @@ struct PinnedDesign {
                 throw Error("\(name) CSS load: \(error.description)")
             }
         }
-        let appearance = html.contains("class=\"theme-dark\"") ? "dark" : "light"
-        return Self(name: name, rules: rules, appearance: appearance)
+        let resolvedAppearance = appearance ?? (html.contains("class=\"theme-dark\"") ? "dark" : "light")
+        return Self(name: name, rules: rules, appearance: resolvedAppearance)
     }
 
     func raw(_ selector: String, _ property: String, viewport: Double) throws -> String {
