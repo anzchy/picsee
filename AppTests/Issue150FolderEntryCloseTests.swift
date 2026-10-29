@@ -22,3 +22,34 @@ import PicseeMacUI
     window.close()
     #expect(controller.session.cancelFolderEntry() == nil)
 }
+
+/// After a close the reused controller records a fresh folder entry: the new set is ended and comes back on Cancel.
+@Test @MainActor func issue150ReusedWindowRecordsNewFolderEntryAfterClose() async throws {
+    let scene = try await Issue150Scene()
+    defer { scene.close() }
+    try await scene.openFilePreviewSetAtMiddle()
+    scene.controller.openGrantedFolder(scene.folder)
+    try await scene.waitUntilReading()
+    scene.window.close()
+    try await scene.openFilePreviewSetAtMiddle()
+    scene.controller.openGrantedFolder(scene.folder)
+    try await scene.waitUntilReading()
+    #expect(scene.controller.session.filePreviewSet == nil, "a stale restore closure would skip recording this entry")
+    try await scene.cancelReading()
+    scene.expectSetRestoredAtMiddle()
+}
+
+/// Closing during a reading, then entering a folder straight away: Cancel returns to what the reopened window showed
+/// (nothing), not a stopped half-read grid. A restore closure kept across the close would skip recording this entry.
+@Test @MainActor func issue150FolderEntryRightAfterCloseCancelsToEmptyState() async throws {
+    let scene = try await Issue150Scene()
+    defer { scene.close() }
+    scene.controller.openGrantedFolder(scene.folder)
+    try await scene.waitUntilReading()
+    scene.window.close()
+    scene.controller.openGrantedFolder(scene.folder)
+    try await scene.waitUntilReading()
+    try await scene.cancelReading()
+    #expect(scene.controller.session.mode == .viewing)
+    #expect(scene.controller.session.folderScan?.isReadingFolder == false)
+}
