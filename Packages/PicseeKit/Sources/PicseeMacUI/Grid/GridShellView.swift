@@ -427,7 +427,10 @@ import PicseeCore
         sortButton.nextKeyView = emptyState.isHidden ? focusAnchor : clearSearchButton
         clearSearchButton.nextKeyView = focusAnchor
     }
+    /// Footer search is offered: not while reading, and not on page 22 (its search and sort are disabled).
+    public var searchAvailable: Bool { footerActionsEnabled }
     public func focusSearch() {
+        guard footerActionsEnabled else { return }
         searchButton.isHidden = true
         searchField.isHidden = false
         needsLayout = true

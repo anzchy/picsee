@@ -85,3 +85,23 @@ private func issue137SamePath(_ lhs: URL?, _ rhs: URL) -> Bool {
             controller.session.folderScan?.sourceSnapshot?.isComplete == true && controller.gridSearchAvailable
     }
 }
+
+/// gpt M2: page 22 disables footer search, so the search command (menu validation reads `gridSearchAvailable`, the
+/// key route checks it first) must not reveal the disabled field.
+@Test @MainActor func issue137Page22RefusesSearchCommandEntry() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let empty = base.appendingPathComponent("Empty")
+    try fm.createDirectory(at: empty, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    let (controller, root) = try await issue137Controller(base)
+    defer { controller.window?.close() }
+    let (shell, _) = try issue137Views(controller)
+    controller.browseRecoveredFolder(empty, rootID: root)
+    try await issue137Wait("grid page 22") { controller.session.isEmptyFolder && shell.emptyFolderVisible }
+    #expect(!controller.gridSearchAvailable)
+    #expect(!controller.route(.search, from: .key))
+    #expect(shell.searchField.isHidden && !shell.searchButton.isHidden)
+    let responder = controller.window?.firstResponder
+    #expect(responder !== shell.searchField && responder !== shell.searchField.currentEditor())
+}
