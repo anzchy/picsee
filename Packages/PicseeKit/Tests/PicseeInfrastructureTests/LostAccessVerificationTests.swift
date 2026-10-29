@@ -76,13 +76,10 @@ private final class T229MountedSnapshot: @unchecked Sendable {
 }
 
 private func nextEvent(in stream: AsyncStream<DiskMountEvent>) async -> DiskMountEvent? {
-    await withTaskGroup(of: DiskMountEvent?.self) { group in
-        group.addTask { var iterator = stream.makeAsyncIterator(); return await iterator.next() }
-        group.addTask { try? await Task.sleep(for: .seconds(15)); return nil }
-        let first = await group.next()!
-        group.cancelAll()
-        return first
-    }
+    // Let the enclosing test's time limit detect missing events. A separate
+    // timer can win while the native test suite delays MainActor delivery.
+    var iterator = stream.makeAsyncIterator()
+    return await iterator.next()
 }
 
 private func volume(_ uuid: String?, name: String = "Photos") -> AccessProbeVolume {
@@ -195,7 +192,8 @@ private func volume(_ uuid: String?, name: String = "Photos") -> AccessProbeVolu
     #expect(await port.mountedVolumes().map(\.uuid) == ["111"])
 }
 
-@MainActor @Test func t229SystemDiskMountPortUsesRememberedUUIDOnUnmountAndFreshUUIDOnMount() async {
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t229SystemDiskMountPortUsesRememberedUUIDOnUnmountAndFreshUUIDOnMount() async {
     let url = URL(fileURLWithPath: "/Volumes/Photos", isDirectory: true)
     let center = NotificationCenter()
     let snapshot = T229MountedSnapshot([volume("111")])
@@ -212,7 +210,8 @@ private func volume(_ uuid: String?, name: String = "Photos") -> AccessProbeVolu
     #expect(await port.mountedVolumes().map(\.uuid) == ["333"])
 }
 
-@MainActor @Test func t229SystemDiskMountPortBuffersEventUntilSubscriberStarts() async {
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t229SystemDiskMountPortBuffersEventUntilSubscriberStarts() async {
     let url = URL(fileURLWithPath: "/Volumes/Photos", isDirectory: true)
     let center = NotificationCenter()
     let snapshot = T229MountedSnapshot([volume("111")])
