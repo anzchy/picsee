@@ -34,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var commandMenu: CommandMenu?
     private var settingsWindow: SettingsPanelWindow?
     private var diagnosticsWindow: DiagnosticsWindow?
-    private var shortcutWindow: ShortcutWindow?
+    private(set) var shortcutWindow: ShortcutWindow?
     private var windowController: CanvasWindowController?
     #if DEBUG && PICSEE_UI_TEST_FIXTURE
     private var uiTestFixtureRoot: URL?
@@ -187,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         diagnosticsWindow?.show()
     }
 
-    private func showShortcuts() {
+    func showShortcuts() {
         if shortcutWindow == nil, let mainMenu = NSApp.mainMenu {
             shortcutWindow = ShortcutWindow(menu: mainMenu, appearanceAdapter: appearanceAdapter)
         }

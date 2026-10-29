@@ -38,6 +38,9 @@ import PicseeMacUI
     #expect(first.styleMask.contains(.titled))
     #expect(first.styleMask.contains(.closable))
     #expect(first.identifier?.rawValue == "keyboard-shortcuts.window")
+    let content = try #require(first.contentView)
+    #expect(content.frame.size == NSSize(width: 820, height: 502))
+    #expect(first.contentRect(forFrameRect: first.frame).size == content.frame.size)
     #expect(NSApp.sendAction(action, to: shortcuts.target, from: shortcuts))
     #expect(shortcutWindow.window === first)
 
@@ -73,4 +76,22 @@ import PicseeMacUI
         #expect(source != nil, "unmapped keyed menu item: \(item.title) \(item.action.map(NSStringFromSelector) ?? "")")
         if let source { #expect(sources.filter { $0 == source.id }.count == 1, "wrong source count for \(item.title)") }
     }
+}
+
+@MainActor @Test func issue219AppDelegateShowShortcutsReusesItsCachedWindow() throws {
+    _ = NSApplication.shared
+    let previousMenu = NSApp.mainMenu
+    let menu = CommandMenu(preferencesStore: InMemoryDisplayPreferencesStore(),
+        openWithoutWindow: {}, openSettings: {}, openDiagnostics: {}, windowController: { nil })
+    let delegate = AppDelegate()
+    defer {
+        delegate.shortcutWindow?.window.close()
+        NSApp.mainMenu = previousMenu
+        withExtendedLifetime(menu) {}
+    }
+    delegate.showShortcuts()
+    let first = try #require(delegate.shortcutWindow?.window)
+    #expect(first.isVisible)
+    delegate.showShortcuts()
+    #expect(delegate.shortcutWindow?.window === first)
 }

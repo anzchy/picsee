@@ -32,13 +32,10 @@ private func issue219Length(_ design: PinnedDesign, _ selector: String, _ proper
     try issue219Color(color.flatMap(NSColor.init(cgColor:)), appearance)
 }
 
-@Test @MainActor func issue219ShortcutCardsAndWindowFollowPinnedFrames() throws {
+@Test @MainActor func issue219ShortcutCardsFollowPinnedFrames() throws {
     for (name, theme) in issue219Appearances {
         let design = try PinnedDesign.page("shortcuts", appearance: theme)
         let view = try issue219View(.english, name)
-        try design.assertLength(Double(view.bounds.width), ".window", "width", viewport: issue219Viewport)
-        let titlebar = try design.length(".titlebar", "height", viewport: issue219Viewport)
-        try design.assertLength(Double(view.bounds.height) + titlebar, ".window", "height", viewport: issue219Viewport)
         try #require(view.cardViews.count == 3)
         let cards = view.cardViews
         let padding = try design.edges(".cards", "padding", viewport: issue219Viewport)
@@ -71,6 +68,7 @@ private func issue219Length(_ design: PinnedDesign, _ selector: String, _ proper
             try design.assertEdges(actualPadding, ".shortcut-card", "padding", viewport: issue219Viewport)
         }
         #expect(abs(Double(cards[1].frame.minX - cards[0].frame.maxX) - gap) <= 0.5)
+        #expect(cards.allSatisfy { $0.frame.height == cards[0].frame.height })
     }
 }
 
@@ -83,6 +81,8 @@ private func issue219Length(_ design: PinnedDesign, _ selector: String, _ proper
             let titleFont = try #require(card.titleLabel.font)
             try design.assertLength(Double(titleFont.pointSize), ".shortcut-card h3", "font-size", viewport: issue219Viewport)
             #expect(titleFont == NSFont.systemFont(ofSize: titleFont.pointSize, weight: .semibold))
+            try design.assertColor(issue219Color(card.titleLabel.textColor, view.effectiveAppearance),
+                ":root", "--color-text", viewport: issue219Viewport)
             let whenFont = try #require(card.whenLabel.font)
             try design.assertFont(PinnedDesign.Font(size: Double(whenFont.pointSize), weight: 400, lineHeight: nil),
                 ".shortcut-card .when", viewport: issue219Viewport)
