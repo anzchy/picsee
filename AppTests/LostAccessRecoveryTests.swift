@@ -428,3 +428,57 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     #expect(announcements.count == 2)
     #expect(announcements.filter { $0 == announcements.first }.count == 1)
 }
+
+// Audit gpt F1 (round 2): the recovery identity follows the grid the window
+// shows. (a) The root moves while readable; a later eject and remount restore
+// the moved child and its Current Item, not the root grid.
+@MainActor @Test func t229Fix2RecoveryFollowsRootMovedWhileReadable() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let controller = f.controller(); defer { controller.window?.close() }
+    controller.browseRecoveredFolder(f.childOne, rootID: f.rootA)
+    try await f.ready(controller, folder: f.childOne, count: 2)
+    let selected = try #require(controller.session.folderScan?.snapshot?.navigationEntries.last)
+    controller.session.focus(selected.itemID)
+    let moved = f.base.appendingPathComponent("MovedRoot", isDirectory: true)
+    let movedChild = moved.appendingPathComponent("One", isDirectory: true)
+    try FileManager.default.moveItem(at: f.a, to: moved)
+    f.bookmarks.relocate(f.a, to: moved)
+    for watched in [f.a, f.childOne] { f.watchSource.emit(.mustRescan, root: watched) }
+    try await f.ready(controller, folder: movedChild, count: 2)
+    try await recoveryWait { controller.window?.representedURL == movedChild }
+    await f.eject()
+    try await recoveryWait { recoveryPage(controller) != nil }
+    await f.mount()
+    try await f.ready(controller, folder: movedChild, count: 2)
+    #expect(controller.waitingAccessPosition == nil)
+    #expect(controller.session.selection.currentItemID == selected.itemID)
+    #expect(controller.window?.representedURL == movedChild)
+}
+
+// (b) Cancel Reading returns to the previous complete grid; the abandoned scan
+// must not keep the recovery identity.
+@MainActor @Test func t229Fix2CancelReadingBackToReadableGridKeepsItsRecoveryIdentity() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let controller = f.controller(); defer { controller.window?.close(); f.gate.release() }
+    controller.browseRecoveredFolder(f.childOne, rootID: f.rootA)
+    try await f.ready(controller, folder: f.childOne, count: 2)
+    let selected = try #require(controller.session.folderScan?.snapshot?.navigationEntries.last)
+    controller.session.focus(selected.itemID)
+    // Cancel Reading restores the grid view's Current Item, so select it there too, as a user would.
+    try recoveryGrid(controller).activate(currentItemID: selected.itemID)
+    f.gate.arm(f.b)
+    controller.browseRecoveredFolder(f.b, rootID: f.rootB)
+    try await recoveryWait { f.gate.isBlocked }
+    let state = try #require(controller.window?.contentView?.subviews.compactMap { $0 as? ViewerStateHost }.first)
+    try #require(state.buttons.first).performClick(nil)
+    f.gate.release()
+    try await f.ready(controller, folder: f.childOne, count: 2)
+    #expect(controller.window?.representedURL == f.childOne)
+    await f.eject()
+    try await recoveryWait { recoveryPage(controller) != nil }
+    await f.mount()
+    try await f.ready(controller, folder: f.childOne, count: 2)
+    #expect(controller.waitingAccessPosition == nil)
+    #expect(controller.session.selection.currentItemID == selected.itemID)
+    #expect(controller.window?.representedURL == f.childOne)
+}
