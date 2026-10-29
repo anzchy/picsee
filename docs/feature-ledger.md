@@ -148,7 +148,7 @@
 |---|---|---|---|---|---|---|
 | PREF-01 | 跟随系统 / 浅色 / 深色 | Partial | 单元 | P1-09 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/DisplayPreferences.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/DesignSystem/Appearance/WindowAppearanceAdapter.swift`、`App/Commands/CommandMenu.swift`、`App/UI/SettingsPanelWindow.swift` | 默认跟随系统，系统外观切换时窗口即时变化；手动选深色后不再跟随（11/12 页）。限制：系统外观实时切换仅单元证明（真机需用户切换系统设置）；手动浅/深即时切换与深色重开保持 @1x 真机通过（[记录](validation/P1.md#p1-09外观与显示偏好)）；设置窗口与菜单双向同步仅自动化测试；浅色重开未验；@2x 未验。 #218 修复：设置外观选项的浅/深色选中像素与 AX 值、重复选择保持选中仅自动化测试。 |
 | PREF-02 | 减少动态效果 | Partial | 单元 | P1-09 | `Packages/PicseeKit/Sources/PicseeMacUI/DesignSystem/Appearance/MotionPolicy.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/Chrome/ViewerChromeOverlay.swift`、`App/CanvasWindowController.swift` | 打开系统“减少动态效果”，工具显隐和面板切换没有动画。限制：工具显隐与面板切换本身无动画；组件过渡随系统开关为 0（单元）；系统开关真机未验（用户步骤）。 |
-| PREF-03 | 显示设置 | Absent | 无 | P3-11 | — | 15 页：点底部右侧“显示”按钮弹出面板，调缩略图大小、显示文件名、填充裁剪 / 完整显示、外观、始终显示大图工具，立即生效，退出重开仍保留；限制：设置窗口“显示”分区仅展示置灰占位，实际显示偏好待 P3-11。 |
+| PREF-03 | 显示设置 | Absent | 无 | P3-11 | — | 15 页：点底部右侧“显示”按钮弹出面板，调缩略图大小、显示文件名、填充裁剪 / 完整显示、外观、始终显示大图工具，立即生效，退出重开仍保留；限制：设置窗口“显示”分区仅展示置灰占位，实际显示偏好待 P3-11。 #218 修复：中英文设置按钮和勾选标题按实际控件测量，自动化检查无截断或相邻控件重叠；仍未实现显示偏好。 |
 | PREF-04 | 偏好在窗口间同步 | Partial | 单元 | P1-09、P4-01 | `Packages/PicseeKit/Sources/PicseeInfrastructure/Preferences/UserDefaultsDisplayPreferencesStore.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/DesignSystem/Appearance/WindowAppearanceAdapter.swift` | 开两个窗口，在一个里改主题、Filmstrip 显隐或工具常驻，另一个窗口即时同步（ADR-002）。限制：两窗口同步仅单元证明；文件夹排序字段与方向也经 DisplayPreferences 在窗口间同步，仅单元（#124）；App 目前只开一个窗口（P4-01）；Filmstrip 尚不存在（P2-06）。 |
 
 ### 文件夹浏览
@@ -290,7 +290,7 @@ v0.0.1 起就是门槛，范围是 J1/J2 的页面（见计划 P3「MVP 还需�
 | DIST-02 | 全新环境可用 | Absent | 无 | P6-05 | — | 新建一个 macOS 用户首次打开，没有旧授权和缓存也能正常使用；损坏的缓存数据库能自动恢复 |
 | DIST-03 | 安装包内容干净 | Absent | 无 | P6-07 | — | 检查 `.app` 内容，没有 REA、研究素材、私人照片或开发路径 |
 | DIST-04 | 升级保留数据 | Absent | 无 | P6-08 | — | 用新版本覆盖旧版本，设置、收藏和目录授权都还在 |
-| DIST-05 | 自动更新 | Absent | 无 | P6-08 | — | 有新版本时 App 提示更新，更新后签名校验通过；限制：设置窗口“更新”分区仅展示置灰占位，自动更新待 #220。 |
+| DIST-05 | 自动更新 | Absent | 无 | P6-08 | — | 有新版本时 App 提示更新，更新后签名校验通过；限制：设置窗口“更新”分区仅展示置灰占位，自动更新待 #220。 #218 修复：中英文设置按钮和勾选标题的实际尺寸仅自动化检查。 |
 | DIST-06 | App 图标 | Partial | 无 | P1-10 | `App/Resources/Assets.xcassets/AppIcon.appiconset/`、`project.yml` | 在 Dock、访达（列表与图标视图）和 ⌘Tab 里看到 Lens 图标，浅色/深色下 16–512 pt 都清晰无白边。限制：@1x Dock 与访达列表/图标视图通过（[记录](validation/P1.md#p1-10app-图标)）；⌘Tab、浅色 Dock、@2x 未验；无 Icon Composer `.icon`。 |
 
 ### 增强

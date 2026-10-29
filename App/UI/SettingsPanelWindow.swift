@@ -151,7 +151,7 @@ enum SettingsSection: String, CaseIterable {
             button.setButtonType(.pushOnPushOff)
             button.font = .systemFont(ofSize: 12)
             button.setAccessibilityRole(.radioButton)
-            let width = max(62, min(128, button.intrinsicContentSize.width + 14))
+            let width = max(62, button.intrinsicContentSize.width + 14)
             button.frame = NSRect(x: x, y: 397, width: width, height: 24)
             button.setAccessibilityIdentifier("settings.appearance.\(item.0.rawValue)")
             pane.addSubview(button)
@@ -161,7 +161,7 @@ enum SettingsSection: String, CaseIterable {
         rowLabel(String(localized: "Image Tools"), y: 350, in: pane)
         toolsButton = NSButton(checkboxWithTitle: String(localized: "Always Show Image Tools"),
                                target: self, action: #selector(changeTools(_:)))
-        toolsButton.frame = NSRect(x: 162, y: 350, width: 350, height: 24)
+        toolsButton.frame = NSRect(x: 162, y: 350, width: toolsButton.intrinsicContentSize.width, height: 24)
         toolsButton.setAccessibilityIdentifier("settings.always-show-tools")
         pane.addSubview(toolsButton)
         let hint = label(String(localized: "When off, tools hide after inactivity. Move the pointer to an edge or press Tab to show them."), size: 12, muted: true)
@@ -196,18 +196,21 @@ enum SettingsSection: String, CaseIterable {
         soon(390, 397, in: pane)
         rowLabel(String(localized: "Show File Names"), y: 352, in: pane)
         let names = NSButton(checkboxWithTitle: String(localized: "Show names below thumbnails"), target: nil, action: nil)
-        names.frame = NSRect(x: 162, y: 352, width: 280, height: 24)
+        names.frame = NSRect(x: 162, y: 352, width: names.intrinsicContentSize.width, height: 24)
         future(names, id: "settings.display.names", title: String(localized: "Show File Names"))
         pane.addSubview(names)
         soon(450, 352, in: pane)
         rowLabel(String(localized: "Thumbnails"), y: 307, in: pane)
+        var fitX: CGFloat = 162
         for (index, title) in [String(localized: "Fill and Crop"), String(localized: "Fit Entire Image")].enumerated() {
             let button = NSButton(title: title, target: nil, action: nil)
-            button.frame = NSRect(x: 162 + CGFloat(index * 120), y: 307, width: 116, height: 24)
+            let width = button.intrinsicContentSize.width
+            button.frame = NSRect(x: fitX, y: 307, width: width, height: 24)
             future(button, id: "settings.display.fit.\(index)", title: title)
             pane.addSubview(button)
+            fitX += width + 8
         }
-        soon(410, 307, in: pane)
+        soon(fitX, 307, in: pane)
         let note = label(String(localized: "These are the same preferences as the grid footer Display panel; changes will sync immediately."), size: 12, muted: true)
         note.frame = NSRect(x: 162, y: 260, width: 390, height: 40)
         pane.addSubview(note)
@@ -222,7 +225,7 @@ enum SettingsSection: String, CaseIterable {
         cacheSize.setAccessibilityIdentifier("settings.cache.size")
         pane.addSubview(cacheSize)
         cacheClear = NSButton(title: String(localized: "Clear Cache…"), target: self, action: #selector(requestClear(_:)))
-        cacheClear.frame = NSRect(x: 162, y: 353, width: 126, height: 26)
+        cacheClear.frame = NSRect(x: 162, y: 353, width: cacheClear.intrinsicContentSize.width, height: 26)
         cacheClear.setAccessibilityIdentifier("settings.cache.clear")
         pane.addSubview(cacheClear)
         let hint = label(String(localized: "Only thumbnails created by picsee are deleted. Your images are untouched. Confirm before clearing; thumbnails are rebuilt while browsing."), size: 12, muted: true)
@@ -249,7 +252,7 @@ enum SettingsSection: String, CaseIterable {
         pane.addSubview(version)
         rowLabel(String(localized: "Auto Check"), y: 352, in: pane)
         let automatic = NSButton(checkboxWithTitle: String(localized: "Check for updates automatically"), target: nil, action: nil)
-        automatic.frame = NSRect(x: 162, y: 352, width: 280, height: 24)
+        automatic.frame = NSRect(x: 162, y: 352, width: automatic.intrinsicContentSize.width, height: 24)
         future(automatic, id: "settings.update.automatic", title: automatic.title)
         pane.addSubview(automatic)
         soon(450, 352, in: pane)
@@ -257,7 +260,7 @@ enum SettingsSection: String, CaseIterable {
         privacy.frame = NSRect(x: 162, y: 310, width: 390, height: 36)
         pane.addSubview(privacy)
         let check = NSButton(title: String(localized: "Check Now"), target: nil, action: nil)
-        check.frame = NSRect(x: 162, y: 275, width: 120, height: 26)
+        check.frame = NSRect(x: 162, y: 275, width: check.intrinsicContentSize.width, height: 26)
         future(check, id: "settings.update.now", title: check.title)
         pane.addSubview(check)
         soon(290, 275, in: pane)
@@ -280,13 +283,16 @@ enum SettingsSection: String, CaseIterable {
         let privacy = label(String(localized: "A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."), size: 12, muted: true)
         privacy.frame = NSRect(x: 108, y: 327, width: 440, height: 54)
         pane.addSubview(privacy)
+        var linkX: CGFloat = 108
         for (index, title) in [String(localized: "Report a Problem…"), String(localized: "Privacy Note"), String(localized: "Source Code")].enumerated() {
             let button = NSButton(title: title, target: nil, action: nil)
-            button.frame = NSRect(x: 108 + CGFloat(index * 118), y: 291, width: 114, height: 26)
+            let width = button.intrinsicContentSize.width
+            button.frame = NSRect(x: linkX, y: 291, width: width, height: 26)
             future(button, id: "settings.about.link.\(index)", title: title)
             pane.addSubview(button)
+            linkX += width + 8
         }
-        soon(464, 291, in: pane)
+        soon(linkX, 291, in: pane)
         let licences = label(String(localized: "picsee is released under the MIT License.\nThird party: Sparkle (MIT) · Welcome sample images from Unsplash (Unsplash License)."), size: 12, muted: true)
         licences.frame = NSRect(x: 108, y: 235, width: 440, height: 52)
         pane.addSubview(licences)
