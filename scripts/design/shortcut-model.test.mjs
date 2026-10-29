@@ -93,10 +93,10 @@ test('a new keyDown case fails until it is declared', () => {
 });
 
 test('a new keyCode comparison in another file fails until it is declared', () => {
-  fails(withChange('App/UI/CacheSettingsWindow.swift',
+  fails(withChange('App/UI/SettingsPanelWindow.swift',
     replaceOnce('override func cancelOperation(_ sender: Any?) { performClose(sender) }',
       'override func cancelOperation(_ sender: Any?) { performClose(sender) }\n    override func keyDown(with event: NSEvent) { if event.keyCode == 51 { return } }')),
-  /CacheSettingsWindow\.swift handles key code 51, which KEY_SITES does not declare/);
+  /SettingsPanelWindow\.swift handles key code 51, which KEY_SITES does not declare/);
 });
 
 test('a new SwiftUI key press fails until it is declared', () => {
