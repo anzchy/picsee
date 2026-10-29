@@ -231,7 +231,7 @@
 | CMD-03 | 自定义快捷键 | Absent | 无 | P4-04 | — | 在设置里改一个快捷键，立即生效；与已有快捷键冲突时提示 |
 | CMD-04 | 鼠标与触控板预设 | Absent | 无 | P4-04 | — | 切换滚轮为“翻图”或“缩放”，行为随之改变；不影响文本框里的选区和系统手势 |
 | CMD-05 | 全局快捷键 | Absent | 无 | P7-09 | — | App 在后台时按全局快捷键，picsee 被唤到前台 |
-| CMD-06 | 报告问题入口 | Partial | 单元 | P6-09 | `App/Commands/CommandMenu.swift`、`Packages/PicseeKit/Sources/PicseeApplication/EntryPoints/EntryPoint.swift`、`AppTests/ReleaseSurfaceTests.swift`；菜单 ID：`help.report-issue.menu` | 在 Help 菜单选「报告问题…」，浏览器打开本仓库的新 issue 页面并带上 bug 模板。限制：菜单项与 URL 仅单元；签名真机打开浏览器未验。 |
+| CMD-06 | 报告问题入口 | Partial | 单元 | P6-09 | `App/Commands/CommandMenu.swift`、`Packages/PicseeKit/Sources/PicseeApplication/EntryPoints/EntryPoint.swift`、`AppTests/ReleaseSurfaceTests.swift`；菜单 ID：`help.report-issue.menu` | 在 Help 菜单选「报告问题…」，浏览器打开本仓库的新 issue 页面并带上 bug 模板。限制：Help 菜单项、设置 › 关于入口与共用 URL 仅自动化测试；签名真机打开浏览器未验。 |
 
 ### 窗口与桌面工具
 
