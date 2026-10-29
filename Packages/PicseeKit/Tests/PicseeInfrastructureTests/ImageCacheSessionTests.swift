@@ -65,7 +65,7 @@ private struct CacheDelayedPipeline: ImagePipeline {
         await source.close()
     }
 
-    @Test(.timeLimit(.minutes(1))) func cacheCachedADelayedBehindCIsRejected() async throws {
+    @Test(.timeLimit(.minutes(2))) func cacheCachedADelayedBehindCIsRejected() async throws {
         let decoder = CacheCountingDecoder(), cache = ImageMemoryCache(capacity: 16_000_000)
         let pipeline = ImageIOPipeline(decoder: decoder, cache: cache), access = CacheLeases()
         let session = ViewerSession(), host = CacheHost()

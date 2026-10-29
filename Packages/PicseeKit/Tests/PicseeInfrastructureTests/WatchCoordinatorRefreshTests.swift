@@ -87,17 +87,14 @@ private actor EntrySink {
     }
 }
 
-/// MainActor poll: sleeping yields the actor, so hint hops and refresh completions run between checks.
-@MainActor func mainPoll(deadline: Duration = .seconds(10), _ condition: () -> Bool) async -> Bool {
-    let end = ContinuousClock.now + deadline
-    while !condition() {
-        if ContinuousClock.now >= end { return false }
-        try? await Task.sleep(for: .milliseconds(5))
-    }
-    return true
+/// MainActor poll: sleeping yields the actor, so hint hops and refresh completions run between checks. No wall-clock
+/// deadline: the calling test's time limit bounds the wait (#277). False only once that limit cancels the wait.
+@MainActor func mainPoll(_ condition: () -> Bool) async -> Bool {
+    await waitUntil { condition() }
+    return condition()
 }
 
-@Test @MainActor func watchedCoordinatorRefreshIsSilentAndConvergesOnDisk() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func watchedCoordinatorRefreshIsSilentAndConvergesOnDisk() async throws {
     let w = try await WatchedCoordinator(files: ["F/a.png", "F/b.png", "G/g.png"]); defer { w.f.remove() }
     let c = w.coordinator
     try await c.begin(folder: w.url("F"), rootID: w.rootID).value

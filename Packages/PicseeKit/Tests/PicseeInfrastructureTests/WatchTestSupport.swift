@@ -93,14 +93,11 @@ final class ChangeLog: @unchecked Sendable {
     }
 }
 
-/// Positive waits only; the generous default keeps a loaded runner from failing a condition that does hold.
-func poll(deadline: Duration = .seconds(10), _ condition: () -> Bool) async -> Bool {
-    let end = ContinuousClock.now + deadline
-    while !condition() {
-        if ContinuousClock.now >= end { return false }
-        try? await Task.sleep(for: .milliseconds(5))
-    }
-    return true
+/// Positive waits only. No wall-clock deadline: the calling test's time limit bounds the wait, so a loaded runner
+/// cannot fail a condition that does hold (#277). False only once that limit cancels the wait.
+func poll(_ condition: () -> Bool) async -> Bool {
+    await waitUntil { condition() }
+    return condition()
 }
 
 /// Real FileAccess over a fresh temp dir, with the fake source and clock.

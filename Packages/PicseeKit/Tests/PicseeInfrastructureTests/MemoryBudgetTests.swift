@@ -32,7 +32,7 @@ private struct BudgetRig {
     }
 }
 
-@Suite(.timeLimit(.minutes(1))) struct MemoryBudgetTests {
+@Suite(.timeLimit(.minutes(2))) struct MemoryBudgetTests {
     // 2.1, 2.1b–d: a full cache gives up exactly the shortfall, oldest first, before the decoder allocates.
     @Test func budgetEvictsOnlyTheShortfallBeforeTheDecodeRuns() async throws {
         let rig = BudgetRig()
@@ -188,7 +188,7 @@ private struct BudgetRig {
 }
 
 /// Real pipeline over real pixels: costs come from the fixture's header, not from constants.
-@Suite(.timeLimit(.minutes(1))) struct PipelineMemoryBudgetTests {
+@Suite(.timeLimit(.minutes(2))) struct PipelineMemoryBudgetTests {
     private static func decodeCost(_ edge: Int) throws -> Int {
         try DecodeBudget.outputCost(width: 1280, height: 960, maximumPixelSize: edge, bytesPerPixel: 4, budget: .max)
     }
@@ -211,8 +211,7 @@ private struct BudgetRig {
         let request = try await pipeline.request(for: file, maximumPixelSize: 16)
         let waiting = Task { try await pipeline.image(for: ImageDecodeRequest(fileURL: file, maximumPixelSize: 16,
             renderKey: request.renderKey, priority: .visible)) }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-        while await pipeline.admission.activity().waiting == 0, ContinuousClock.now < deadline { await Task.yield() }
+        await waitUntil { await pipeline.admission.activity().waiting != 0 }
         #expect(await pipeline.admission.activity().waiting == 1)
         #expect(await pipeline.admission.activity().running == 0)
         for key in pinned { await pipeline.unpin(key) }

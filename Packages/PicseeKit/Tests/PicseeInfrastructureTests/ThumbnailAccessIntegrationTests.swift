@@ -206,7 +206,7 @@ private actor P303ChangedTicketSignalCache: ThumbnailCaching {
     }
 }
 
-@Test(.timeLimit(.minutes(1))) func p303HeldOldDecodeCannotJoinNewDurableTicketOrPersistOldPixels() async throws {
+@Test(.timeLimit(.minutes(2))) func p303HeldOldDecodeCannotJoinNewDurableTicketOrPersistOldPixels() async throws {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: folder) }

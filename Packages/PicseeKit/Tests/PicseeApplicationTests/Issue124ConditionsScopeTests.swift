@@ -111,7 +111,7 @@ private final class Issue124MetadataReader: FolderMetadataReading, @unchecked Se
     await fixture.scanner.finish(1); try await regranted.value
 }
 
-@Test(arguments: [FolderSortKey.captureDate, .pixelDimensions])
+@Test(.timeLimit(.minutes(2)), arguments: [FolderSortKey.captureDate, .pixelDimensions])
 @MainActor func issue124RestoredMetadataSortStartsOnDemandReads(key: FolderSortKey) async throws {
     let fixture = FolderScanFixture(), reader = Issue124MetadataReader()
     let preferences = InMemoryDisplayPreferencesStore()
@@ -123,7 +123,7 @@ private final class Issue124MetadataReader: FolderMetadataReading, @unchecked Se
     await fixture.scanner.waitForStart()
     try await fixture.scanner.deliver(["a.jpg"])
     await fixture.scanner.finish(); try await task.value
-    for _ in 0..<100 where reader.requested.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+    await waitUntil { !reader.requested.isEmpty }
     #expect(reader.requested == ["a.jpg"])
     #expect(scan.conditions.sort == key)
 }
@@ -273,7 +273,7 @@ private final class Issue124MetadataReader: FolderMetadataReading, @unchecked Se
         hasFolderSource: session.hasFolderSource, previewActive: false).checked)
 }
 
-@Test @MainActor func issue124Fix2ChangedBackAndUnchangedExitsDoNotReadMetadata() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func issue124Fix2ChangedBackAndUnchangedExitsDoNotReadMetadata() async throws {
     let fixture = FolderScanFixture(), reader = Issue124MetadataReader()
     let store = InMemoryDisplayPreferencesStore()
     var initial = store.value
@@ -286,7 +286,7 @@ private final class Issue124MetadataReader: FolderMetadataReading, @unchecked Se
     await fixture.scanner.waitForStart()
     try await fixture.scanner.deliver(["a.jpg", "b.png"])
     await fixture.scanner.finish(); try await task.value
-    for _ in 0..<100 where reader.requested.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
+    await waitUntil { reader.requested.count >= 2 }
     #expect(reader.requested.count == 2)
     let original = try #require(scan.snapshot)
     let ids = original.navigationEntries.map(\.itemID)

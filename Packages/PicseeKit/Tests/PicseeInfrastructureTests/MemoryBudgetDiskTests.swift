@@ -68,14 +68,9 @@ private actor DiskReadGate {
 
 /// Whether `count` jobs come to wait in admission. It sleeps between looks: a `Task.yield()` spin starved the
 /// loads it waited for on the 3-core CI runner, and kept spinning after the suite's time limit cancelled the test.
-/// Bounded below that limit, and it stops when cancelled; callers leave no room, so a queued job stays queued.
-private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int,
-                              within limit: Duration = .seconds(45)) async -> Bool {
-    let deadline = ContinuousClock.now.advanced(by: limit)
-    while !Task.isCancelled, ContinuousClock.now < deadline {
-        if await pipeline.admission.activity().waiting == count { return true }
-        try? await Task.sleep(for: .milliseconds(5))
-    }
+/// The suite's time limit bounds it (#277); callers leave no room, so a queued job stays queued.
+private func waitUntilWaiting(_ pipeline: ImageIOPipeline, _ count: Int) async -> Bool {
+    await waitUntil { await pipeline.admission.activity().waiting == count }
     return await pipeline.admission.activity().waiting == count
 }
 /// The durable payloads the first load wrote, so the next load of that edge is a warm disk hit.
@@ -84,7 +79,7 @@ private func diskPayloads(_ rig: DiskRig) throws -> [URL] {
         .filter { $0.pathExtension == "png" }
 }
 
-@Suite(.timeLimit(.minutes(1))) struct MemoryBudgetDiskTests {
+@Suite(.timeLimit(.minutes(2))) struct MemoryBudgetDiskTests {
     /// A 16-pixel thumbnail of the fixture; the warm load reserves the square bound for that edge.
     private static let edge = 16
     private static func squareCost() throws -> Int {

@@ -4,7 +4,7 @@ import PicseeCore
 @testable import PicseeInfrastructure
 
 @Suite struct ImageCacheStaleDeliveryTests {
-    @Test(.timeLimit(.minutes(1))) func cacheNewerObservationRejectsLateMatchingOldResult() async throws {
+    @Test(.timeLimit(.minutes(2))) func cacheNewerObservationRejectsLateMatchingOldResult() async throws {
         let decoder = CacheBlockingDecoder(), cache = ImageMemoryCache(capacity: 100_000)
         let pipeline = ImageIOPipeline(decoder: decoder, cache: cache)
         let request = try await pipeline.request(for: fixture("coordinate-grid.png"), maximumPixelSize: 16)

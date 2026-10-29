@@ -196,7 +196,7 @@ private enum ObservationFailure: Error { case expected }
         #expect(await cache.usage() == ImageCacheUsage(entries: 1, previewBytes: 0, detailBytes: 16))
     }
 
-    @Test(.timeLimit(.minutes(1))) func cachePipelineObservationPrecedesHeaderWithoutOldEntry() async throws {
+    @Test(.timeLimit(.minutes(2))) func cachePipelineObservationPrecedesHeaderWithoutOldEntry() async throws {
         let tree = try IdentityTree(); defer { tree.remove() }
         try Data(contentsOf: fixture("orientation-1.tiff")).write(to: tree.file)
         let cache = ImageMemoryCache(capacity: 100_000), resolver = ObservationIdentityGate(root: tree.scope)

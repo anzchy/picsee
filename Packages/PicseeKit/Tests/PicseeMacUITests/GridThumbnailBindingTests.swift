@@ -53,7 +53,7 @@ private actor GridThumbnailEdgeLog {
     func contains(_ edge: Int) -> Bool { edges.contains(edge) }
 }
 
-@Test @MainActor func gridThumbnailRequestsFollowSidebarMainColumnSize() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func gridThumbnailRequestsFollowSidebarMainColumnSize() async throws {
     _ = NSApplication.shared
     let store = InMemoryDisplayPreferencesStore()
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 1280, height: 772), preferencesStore: store)
@@ -81,10 +81,7 @@ private actor GridThumbnailEdgeLog {
             height: layout.itemSize.height - 36), backingScale: window.backingScaleFactor)
     }
     func awaitRequest(_ edge: Int) async {
-        for _ in 0..<200 {
-            if await log.contains(edge) { break }
-            await Task.yield()
-        }
+        await waitUntil { await log.contains(edge) }
         #expect(await log.contains(edge))
     }
     let initial = expectedEdge()

@@ -4,7 +4,7 @@ import PicseeCore
 import PicseeApplication
 @testable import PicseeInfrastructure
 
-@Test @MainActor func watchedCoordinatorUpdatesWithinTwoSecondsOfQuiescenceOnOneFakeClock() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func watchedCoordinatorUpdatesWithinTwoSecondsOfQuiescenceOnOneFakeClock() async throws {
     // Filesystem event → hub debounce → coordinator hop → silent rescan → snapshot, timed on the hub's fake clock.
     // A rescan takes no fake time here, so this bounds the pipeline's waiting, not a large folder's scan (未测).
     let w = try await WatchedCoordinator(files: ["F/a.png"]); defer { w.f.remove() }

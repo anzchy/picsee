@@ -4,7 +4,7 @@ import PicseeCore
 import PicseeApplication
 @testable import PicseeInfrastructure
 
-@Test @MainActor func watchedCoordinatorFollowsAliasDeletion() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func watchedCoordinatorFollowsAliasDeletion() async throws {
     // Deleting the alias being viewed keeps the same image under the URL that still exists.
     let alias = try await WatchedCoordinator(files: ["F/b.png", "F/c.png"]); defer { alias.f.remove() }
     try FileManager.default.createSymbolicLink(at: alias.url("F/a.png"), withDestinationURL: alias.url("F/c.png"))

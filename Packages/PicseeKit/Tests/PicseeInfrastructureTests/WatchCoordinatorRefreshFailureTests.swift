@@ -29,7 +29,7 @@ private actor FlakyScanner: FolderScanning {
     var failures: Int { w.trace.ends.filter { $0.outcome == .failed }.count }
 }
 
-@Test @MainActor func watchedCoordinatorFailedRefreshShowsFailureAndDropsAGoneImage() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func watchedCoordinatorFailedRefreshShowsFailureAndDropsAGoneImage() async throws {
     // The viewed folder deleted, or moved away: the failure surface shows and the gone image is not kept on screen.
     for move in [false, true] {
         let v = try await Viewed(); defer { v.w.f.remove() }

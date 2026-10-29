@@ -129,7 +129,7 @@ private struct CacheCancelOnHit: ResourceSnapshotTracing {
         #expect(await cache.usage() == ImageCacheUsage(entries: 1, previewBytes: 0, detailBytes: 16))
     }
 
-    @Test(.timeLimit(.minutes(1))) func cacheCancelledRunningResultNeverBecomesReusable() async throws {
+    @Test(.timeLimit(.minutes(2))) func cacheCancelledRunningResultNeverBecomesReusable() async throws {
         let decoder = CacheBlockingDecoder(), cache = ImageMemoryCache(capacity: 100_000)
         let pipeline = ImageIOPipeline(decoder: decoder, cache: cache)
         let request = try await pipeline.request(for: fixture("coordinate-grid.png"), maximumPixelSize: 16)

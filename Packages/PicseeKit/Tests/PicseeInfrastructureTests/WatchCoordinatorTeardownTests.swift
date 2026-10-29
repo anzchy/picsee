@@ -37,7 +37,7 @@ private final class GatedWatcher: FolderWatching, @unchecked Sendable {
 
 @MainActor private func released(_ w: WatchedCoordinator) async -> Bool { await mainPoll { w.f.source.active == 0 && w.scopeBalanced } }
 
-@Test @MainActor func watchedCoordinatorCancelsItsSubscriptionsWhenEndedOrReleased() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func watchedCoordinatorCancelsItsSubscriptionsWhenEndedOrReleased() async throws {
     // end() and release in the same turn: nothing waits on the released coordinator to cancel.
     do {
         let (w, _) = try await section(); defer { w.f.remove() }

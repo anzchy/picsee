@@ -103,11 +103,10 @@ private final class ManualSleeper: @unchecked Sendable {
     }
 }
 
-/// Waits for a condition the sleeper can't signal, sleeping 10 ms between looks so the polls add little to a busy
-/// main actor. Bounded at 45 s, inside the suite's time limit, and stops when cancelled.
+/// Waits for a condition the sleeper can't signal, sleeping between looks so the polls add little to a busy main
+/// actor. The suite's time limit bounds it (#277), and it stops when cancelled.
 @MainActor private func until(_ condition: @MainActor () -> Bool) async -> Bool {
-    let deadline = ContinuousClock.now.advanced(by: .seconds(45))
-    while !condition(), !Task.isCancelled, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(10)) }
+    await waitUntil { condition() }
     return condition()
 }
 
@@ -132,7 +131,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
     return ((localizations?[language] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
 }
 
-@Suite(.timeLimit(.minutes(1))) @MainActor struct DiagnosticsPanelModelTests {
+@Suite(.timeLimit(.minutes(2))) @MainActor struct DiagnosticsPanelModelTests {
     @Test func diagnosticsPanelShowsUnknownForEveryMissingValue() async throws {
         let source = ScriptedDiagnostics([DiagnosticsSnapshot(
             diskCache: .init(entries: nil, storedBytes: nil, hits: 4, misses: 6),
@@ -300,7 +299,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
     }
 }
 
-@Suite(.timeLimit(.minutes(1))) @MainActor struct DiagnosticsPanelClockTests {
+@Suite(.timeLimit(.minutes(2))) @MainActor struct DiagnosticsPanelClockTests {
     @Test func diagnosticsPanelDefaultClockRefreshesUntilHidden() async throws {
         let source = ScriptedDiagnostics([fullSnapshot])
         let model = DiagnosticsPanelModel(source: source, interval: .milliseconds(10))
@@ -315,7 +314,7 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
     }
 }
 
-@Suite(.timeLimit(.minutes(1))) @MainActor struct DiagnosticsPanelIndexCostTests {
+@Suite(.timeLimit(.minutes(2))) @MainActor struct DiagnosticsPanelIndexCostTests {
     @Test func diagnosticsPanelTicksDoNotScanTheDiskIndexEachTime() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

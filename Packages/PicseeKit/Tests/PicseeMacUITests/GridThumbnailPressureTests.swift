@@ -188,10 +188,9 @@ final class ManualPressureTime: @unchecked Sendable {
         }
         for sleeper in woken { sleeper.resume() }
     }
-    /// True once `count` sleeps are pending, within ten seconds.
+    /// True once `count` sleeps are pending; the test's time limit bounds the wait (#277).
     func waitForSleepers(_ count: Int) async -> Bool {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-        while sleeping != count, ContinuousClock.now < deadline { await Task.yield() }
+        await waitUntil { sleeping == count }
         return sleeping == count
     }
 }
@@ -219,9 +218,9 @@ actor GatedResumption: PrefetchResuming {
     func release() { waiter?.resume(); waiter = nil }
 }
 
+/// The test's time limit bounds the wait (#277).
 @MainActor private func eventually(_ condition: @MainActor () async -> Bool) async -> Bool {
-    let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-    while await !condition(), ContinuousClock.now < deadline { await Task.yield() }
+    await waitUntil { await condition() }
     return await condition()
 }
 

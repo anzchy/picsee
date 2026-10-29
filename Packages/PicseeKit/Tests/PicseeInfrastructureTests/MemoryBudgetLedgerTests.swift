@@ -32,7 +32,7 @@ import Testing
         #expect(budget.usage == MemoryBudget.Usage(pinned: 80, evictable: 0, reserved: 0))
     }
 
-    @Test(.timeLimit(.minutes(1))) func ledgerNeverRecordsMoreThanItsLimitUnderContention() async {
+    @Test(.timeLimit(.minutes(2))) func ledgerNeverRecordsMoreThanItsLimitUnderContention() async {
         let budget = MemoryBudget(limit: 4096)
         await withTaskGroup(of: Void.self) { group in
             for worker in 0..<8 {
