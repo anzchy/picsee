@@ -64,10 +64,18 @@ private actor RecoveryMounts: DiskMountPort {
 }
 
 /// Gates only the real enumerator's resource-values I/O; neither App state nor scan results are fabricated.
-private final class RecoveryReadGate: @unchecked Sendable {
+private final class RecoveryReadGate: FileIdentityResourceReading, @unchecked Sendable {
     private let condition = NSCondition()
     private var prefix: String?
     private var blocked = false
+    private var mountGeneration = 0
+    func nextMount() { condition.lock(); mountGeneration += 1; condition.unlock() }
+    func identity(for fileURL: URL) throws -> FileResourceIdentity? {
+        let raw = try URLIdentityResourceReader().identity(for: fileURL)
+        condition.lock(); let generation = mountGeneration; condition.unlock()
+        return raw.map { FileResourceIdentity(volumeUUID: $0.volumeUUID,
+            fileIdentifier: generation == 0 ? $0.fileIdentifier : "dev\(generation):\($0.fileIdentifier)") }
+    }
     var isBlocked: Bool { condition.lock(); defer { condition.unlock() }; return blocked }
     func arm(_ folder: URL) { condition.lock(); prefix = folder.path + "/"; blocked = false; condition.unlock() }
     func release() { condition.lock(); prefix = nil; blocked = false; condition.broadcast(); condition.unlock() }
@@ -81,7 +89,7 @@ private final class RecoveryReadGate: @unchecked Sendable {
         }
         condition.unlock()
         return try url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isPackageKey, .contentTypeKey,
-            .contentModificationDateKey, .fileSizeKey])
+            .contentModificationDateKey, .fileSizeKey, .volumeUUIDStringKey, .fileIdentifierKey])
     }
 }
 
@@ -173,7 +181,7 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
         self.base = base; self.a = a; self.b = b; childOne = one; childTwo = two
         self.rootA = rootA; self.rootB = rootB; self.bookmarks = bookmarks; self.mounts = mounts; self.gate = gate; watchSource = source
         services = AccessServices(files: files, recent: RecentFolderStore(url: base.appendingPathComponent("recent.json")),
-            browser: FolderBrowser(readValues: { try gate.read($0) }),
+            browser: FolderBrowser(readValues: { try gate.read($0) }, resourceReader: gate),
             watch: WatchHub(access: files, source: source, scheduler: DispatchWatchScheduler()), mounts: mounts)
     }
     func controller() -> CanvasWindowController {
@@ -575,4 +583,37 @@ private final class RecoveryDiagnosticTrace: @unchecked Sendable {
     await f.mount()
     try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .readable }
     #expect(trace.messages.contains { $0.contains("AccessRecovery outcome=published") })
+}
+
+@MainActor @Test func t229R2GridRestoresNonFirstCurrentItemAfterMountTokenChanges() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    try FileManager.default.copyItem(at: f.childOne.appendingPathComponent("one.png"),
+        to: f.childOne.appendingPathComponent("three.png"))
+    let controller = f.controller(); defer { controller.window?.close() }
+    controller.browseRecoveredFolder(f.childOne, rootID: f.rootA)
+    try await f.ready(controller, folder: f.childOne, count: 3)
+    let conditions = FolderViewConditions(sort: .name, direction: .descending, selectedExtensions: ["png"])
+    controller.session.setFolderConditions(conditions)
+    try await f.ready(controller, folder: f.childOne, count: 2)
+    let before = try #require(controller.session.folderScan?.snapshot?.navigationEntries.last)
+    controller.session.focus(before.itemID)
+    try recoveryGrid(controller).activate(currentItemID: before.itemID)
+    await f.eject()
+    try await recoveryWait { recoveryPage(controller) != nil }
+    f.gate.nextMount()
+    await f.mount()
+    try await recoveryWait { controller.waitingAccessPosition == nil }
+    let snapshot = try #require(controller.session.folderScan?.snapshot)
+    let current = snapshot.entries.first { $0.itemID == controller.session.selection.currentItemID }
+    #expect(snapshot.version.folder.standardizedFileURL.path == f.childOne.standardizedFileURL.path)
+    #expect(current?.url.standardizedFileURL.path == before.url.standardizedFileURL.path)
+    #expect(current?.resourceIdentifier != before.resourceIdentifier)
+    #expect(controller.session.folderConditions == conditions)
+    await f.eject()
+    try await recoveryWait { recoveryPage(controller) != nil }
+    f.gate.nextMount()
+    await f.mount()
+    try await recoveryWait { controller.waitingAccessPosition == nil }
+    let repeated = controller.session.folderScan?.snapshot?.entries.first { $0.itemID == controller.session.selection.currentItemID }
+    #expect(repeated?.url.standardizedFileURL.path == before.url.standardizedFileURL.path)
 }

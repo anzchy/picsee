@@ -29,6 +29,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         var counter: UInt64
         var folderReference: AccessFolderRecoveryReference?
         var resourceIdentifier: String?
+        var recoveryIdentifier: String?
         var automaticRecovery = true
     }
     private(set) var waitingAccessPosition: WaitingAccessPosition?
@@ -397,6 +398,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 waitingAccessPosition?.folderReference = folderRecoveryReference
             }
             let current = waitingAccessPosition?.currentItemID
+            waitingAccessPosition?.recoveryIdentifier = session.folderScan?.sourceSnapshot?.entries.first { $0.itemID == current }?.recoveryIdentifier
             waitingAccessPosition?.resourceIdentifier = session.folderScan?.sourceSnapshot?.entries.first { $0.itemID == current }?.resourceIdentifier
                 ?? session.imageLoader.presented?.key.revision.resourceIdentifier
         }
@@ -609,11 +611,16 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 guard mayRestore(position, request: request, operation: operation, context: context) else { throw CancellationError() }
                 var scan = try await prepareRecoveredFolder(folder, position: position, request: request,
                     operation: operation, context: context, services: services)
-                var current = position.resourceIdentifier.flatMap { resource in
-                    scan.sourceSnapshot?.entries.first { $0.resourceIdentifier == resource }
+                var current: FolderEntry?
+                if let recovery = position.recoveryIdentifier {
+                    current = scan.sourceSnapshot?.entries.first { $0.recoveryIdentifier == recovery }
+                } else {
+                    current = position.resourceIdentifier.flatMap { resource in
+                        scan.sourceSnapshot?.entries.first { $0.resourceIdentifier == resource }
+                    }
                 }
                 if !fallback, position.currentItemID != nil,
-                   position.resourceIdentifier == nil || current == nil {
+                   current == nil {
                     scan.end()
                     fallback = true; current = nil
                     let ready = try await recoveryRootLocation(root, rootID: rootID, services: services)

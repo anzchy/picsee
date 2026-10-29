@@ -23,13 +23,17 @@ public struct FolderEntry: Equatable, Sendable {
     public let fileSize: Int64?
     /// Session-only file resource token; distinguishes same-path atomic replacement.
     public let resourceIdentifier: String?
+    /// Session-only volume/inode evidence for restoring an active window after remount.
+    /// Never persisted or substituted for ItemID or cache revision identity.
+    public let recoveryIdentifier: String?
     public var normalizedExtension: String { url.pathExtension.lowercased() }
     public init(url: URL, root: ItemIdentityRoot, modificationDate: Date? = nil, fileSize: Int64? = nil,
-                itemID: ItemID? = nil, resourceIdentifier: String? = nil) {
+                itemID: ItemID? = nil, resourceIdentifier: String? = nil, recoveryIdentifier: String? = nil) {
         self.url = url
         self.modificationDate = modificationDate
         self.fileSize = fileSize
         self.resourceIdentifier = resourceIdentifier
+        self.recoveryIdentifier = recoveryIdentifier
         let boundary = root.url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
         let target = url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
         let displayPath = url.standardizedFileURL.deletingLastPathComponent().resolvingSymlinksInPath()

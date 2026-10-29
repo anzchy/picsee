@@ -8,13 +8,19 @@ public actor FolderBrowser: FolderScanning {
     public static let firstBatchSize = 64
     public static let batchSize = 256
     private let readValues: @Sendable (URL) throws -> URLResourceValues
+    private let resourceReader: any FileIdentityResourceReading
     public init() {
+        resourceReader = URLIdentityResourceReader()
         readValues = { url in try url.resourceValues(forKeys: [
             .isRegularFileKey, .isDirectoryKey, .isPackageKey, .contentTypeKey,
-            .contentModificationDateKey, .fileSizeKey]) }
+            .contentModificationDateKey, .fileSizeKey, .volumeUUIDStringKey, .fileIdentifierKey]) }
     }
     // Test seam for a real traversal with a deterministic metadata failure.
-    init(readValues: @escaping @Sendable (URL) throws -> URLResourceValues) { self.readValues = readValues }
+    init(readValues: @escaping @Sendable (URL) throws -> URLResourceValues,
+         resourceReader: any FileIdentityResourceReading = URLIdentityResourceReader()) {
+        self.readValues = readValues
+        self.resourceReader = resourceReader
+    }
     public func scan(in folder: URL, root: ItemIdentityRoot, options: FolderScanOptions,
         emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
         try Task.checkCancellation()
@@ -66,12 +72,13 @@ public actor FolderBrowser: FolderScanning {
                 guard values.isRegularFile == true, values.contentType?.conforms(to: .image) == true else { continue }
                 // A file can disappear between metadata admission and identity lookup.
                 guard let identity = try? await resolver.identity(for: target) else { continue }
-                let resource = try? URLIdentityResourceReader().identity(for: target)
+                let resource = try? resourceReader.identity(for: target)
                 let token = resource.map {
                     ItemID.resource(volumeUUID: $0.volumeUUID, fileIdentifier: $0.fileIdentifier).stableEncoding
                 }
                 let entry = FolderEntry(url: file, root: root, modificationDate: values.contentModificationDate,
-                    fileSize: values.fileSize.map(Int64.init), itemID: identity, resourceIdentifier: token)
+                    fileSize: values.fileSize.map(Int64.init), itemID: identity, resourceIdentifier: token,
+                    recoveryIdentifier: URLRecoveryIdentityResourceReader.token(from: values))
                 // Keep alias URLs through filtering; FolderSnapshot chooses one navigable URL per identity.
                 batch.append(entry)
                 admittedImages += 1

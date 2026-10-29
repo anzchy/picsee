@@ -49,6 +49,7 @@ public actor FileAccess: AccessLeasing {
     private let bookmarks: any BookmarkCoding
     private let requiresEmbeddedIdentity: Bool
     private let resourceReader: any FileIdentityResourceReading
+    private let recoveryResourceReader: any FileIdentityResourceReading
     private let bookmarkVolume: @Sendable (Data) -> AccessProbeVolume
     private let resolvedVolumeUUID: @Sendable (URL) throws -> String?
     private let bookmarkIdentity: @Sendable (Data) -> FileResourceIdentity?
@@ -69,6 +70,9 @@ public actor FileAccess: AccessLeasing {
     /// Legacy bookmarks have no embedded root identity. This baseline is valid
     /// only for roots verified as readable during this process lifetime.
     private var legacyBaseline: [AccessRootID: FileResourceIdentity] = [:]
+    /// Established only while the saved opaque proof is still valid. Session-only:
+    /// inode values are not durable across arbitrary filesystems or process launches.
+    private var recoveryBaseline: [AccessRootID: FileResourceIdentity] = [:]
     private var previousRoots: [AccessRootID: [URL]] = [:]
     private var outcomes: [AccessRootID: String] = [:]
     private struct Active { let session: ScopeSession; var tokens: Set<UUID> }
@@ -81,7 +85,8 @@ public actor FileAccess: AccessLeasing {
 
     public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String,
                 diagnostics: AccessDiagnostics = AccessDiagnostics(),
-                resourceReader: any FileIdentityResourceReading = URLIdentityResourceReader(),
+                resourceReader: (any FileIdentityResourceReading)? = nil,
+                recoveryResourceReader: (any FileIdentityResourceReading)? = nil,
                 requiresEmbeddedIdentity: Bool? = nil,
                 boundary: @escaping @Sendable (URL, URL) -> Bool = { AccessBoundary.contains($0, in: $1) },
                 bookmarkVolume: @escaping @Sendable (Data) -> AccessProbeVolume = { AccessProbeFactGatherer.bookmarkVolume(in: $0) },
@@ -100,7 +105,10 @@ public actor FileAccess: AccessLeasing {
         self.boundary = boundary
         self.scope = scope; self.bookmarks = bookmarks; self.buildSHA = buildSHA
         self.requiresEmbeddedIdentity = requiresEmbeddedIdentity ?? bookmarks.requiresEmbeddedIdentity
-        self.resourceReader = resourceReader
+        let liveReader = resourceReader ?? URLIdentityResourceReader()
+        let recoveryReader = recoveryResourceReader ?? resourceReader ?? URLRecoveryIdentityResourceReader()
+        self.resourceReader = liveReader
+        self.recoveryResourceReader = recoveryReader
         self.bookmarkVolume = bookmarkVolume
         self.resolvedVolumeUUID = resolvedVolumeUUID
         self.bookmarkIdentity = bookmarkIdentity
@@ -142,16 +150,18 @@ public actor FileAccess: AccessLeasing {
                     defer { session.stop() }
                     _ = try FileManager.default.contentsOfDirectory(at: resolution.url,
                         includingPropertiesForKeys: nil)
-                    guard let identity = try resourceReader.identity(for: resolution.url) else {
+                    guard let identity = try liveReader.identity(for: resolution.url) else {
                         throw FileAccessError.needsReconnection(record.id)
                     }
                     legacyBaseline[record.id] = identity
+                    recoveryBaseline[record.id] = Self.trustedRecoveryIdentity(at: resolution.url,
+                        expected: identity, rawReader: liveReader, recoveryReader: recoveryReader)
                     outcome = "resolved"
                 } else if resolution.stale || isUUIDLess {
                     let session = try ScopeSession(scope: scope, url: resolution.url, rootID: record.id)
                     defer { session.stop() }
                     if let expected = bookmarkIdentity(record.bookmark),
-                       (try? resourceReader.identity(for: resolution.url)) != expected {
+                       (try? liveReader.identity(for: resolution.url)) != expected {
                         throw FileAccessError.needsReconnection(record.id)
                     }
                     if volume.uuid != nil || isUUIDLess {
@@ -165,13 +175,33 @@ public actor FileAccess: AccessLeasing {
                         saved = refreshed
                         outcome = "stale"
                     } else { outcome = "resolved" }
-                } else { outcome = "resolved" }
+                    recoveryBaseline[record.id] = Self.trustedRecoveryIdentity(at: resolution.url,
+                        expected: bookmarkIdentity(record.bookmark), rawReader: liveReader, recoveryReader: recoveryReader)
+                } else {
+                    outcome = "resolved"
+                    if let expected = bookmarkIdentity(record.bookmark),
+                       let session = try? ScopeSession(scope: scope, url: resolution.url, rootID: record.id) {
+                        defer { session.stop() }
+                        recoveryBaseline[record.id] = Self.trustedRecoveryIdentity(at: resolution.url,
+                            expected: expected, rawReader: liveReader, recoveryReader: recoveryReader)
+                    }
+                }
                 roots[record.id] = resolution.url
                 lastKnownRoots[record.id] = resolution.url
             } catch { outcome = "failed" }
             outcomes[record.id] = outcome
             logger.notice("AccessRoot root=\(record.id.rawValue.uuidString, privacy: .public) outcome=\(outcome, privacy: .public) creating=\(record.creatingBuildSHA, privacy: .public) current=\(buildSHA, privacy: .public)")
         }
+    }
+    /// Caller owns the scope. No baseline is first established by recovery itself.
+    private static func trustedRecoveryIdentity(at root: URL, expected: FileResourceIdentity?,
+        rawReader: any FileIdentityResourceReading, recoveryReader: any FileIdentityResourceReading) -> FileResourceIdentity? {
+        guard let expected, (try? rawReader.identity(for: root)) == expected,
+              (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) != nil else { return nil }
+        let identity = try? recoveryReader.identity(for: root)
+        // A replacement during metadata/listing must not establish its own proof.
+        guard (try? rawReader.identity(for: root)) == expected else { return nil }
+        return identity
     }
     public func savedGrantSnapshot(_ id: AccessRootID) -> SavedAccessGrantSnapshot? {
         guard let record = saved.first(where: { $0.id == id }) else { return nil }
@@ -207,8 +237,8 @@ public actor FileAccess: AccessLeasing {
         target.removeAllCachedResourceValues()
         do {
             guard try target.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
-                  let rootIdentity = try resourceReader.identity(for: root),
-                  let folderIdentity = try resourceReader.identity(for: target) else { return nil }
+                  let rootIdentity = try recoveryResourceReader.identity(for: root),
+                  let folderIdentity = try recoveryResourceReader.identity(for: target) else { return nil }
             return AccessFolderRecoveryReference(rootID: rootID,
                 relativeComponents: Array(target.pathComponents.dropFirst(root.pathComponents.count)),
                 folderURL: target,
@@ -223,7 +253,7 @@ public actor FileAccess: AccessLeasing {
         defer { release(lease) }
         let root = canonical(lease.url)
         guard root == canonical(verifiedRoot),
-              (try resourceReader.identity(for: root)) == reference.rootIdentity else {
+              (try recoveryResourceReader.identity(for: root)) == reference.rootIdentity else {
             throw FileAccessError.needsReconnection(reference.rootID)
         }
         var folder = canonical(reference.relativeComponents.reduce(root) { $0.appendingPathComponent($1) })
@@ -231,9 +261,9 @@ public actor FileAccess: AccessLeasing {
         folder.removeAllCachedResourceValues()
         do {
             guard try folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
-                  (try resourceReader.identity(for: folder)) == reference.folderIdentity else { return nil }
+                  (try recoveryResourceReader.identity(for: folder)) == reference.folderIdentity else { return nil }
             _ = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-            guard (try resourceReader.identity(for: folder)) == reference.folderIdentity else { return nil }
+            guard (try recoveryResourceReader.identity(for: folder)) == reference.folderIdentity else { return nil }
             // The lease above proved the saved record exists; no await separates it from here.
             return savedGrantSnapshot(reference.rootID).map {
                 AccessFolderRecoveryLocation(rootURL: root, folderURL: folder, grant: $0)
@@ -317,7 +347,8 @@ public actor FileAccess: AccessLeasing {
         }
         stage = "trash"
         guard !Self.isTrashed(root) else { return classified(resolved, isInTrash: true) }
-        let expectedIdentity = bookmarkIdentity(record.bookmark) ?? legacyBaseline[id]
+        let sessionIdentity = recoveryBaseline[id]
+        let expectedIdentity = sessionIdentity ?? bookmarkIdentity(record.bookmark) ?? legacyBaseline[id]
         stage = "identityMissing"
         guard expectedIdentity != nil || !requiresEmbeddedIdentity || volume.uuid == nil else {
             return classified(resolved)
@@ -335,7 +366,7 @@ public actor FileAccess: AccessLeasing {
         if let expectedIdentity {
             let actualIdentity: FileResourceIdentity?
             stage = "identityRead"
-            do { actualIdentity = try resourceReader.identity(for: root) }
+            do { actualIdentity = try (sessionIdentity == nil ? resourceReader : recoveryResourceReader).identity(for: root) }
             catch {
                 diagnostics.emit("\(prefix) stage=identityRead error=\(AccessDiagnostics.errorKind(error))", path: root)
                 roots.removeValue(forKey: id)
@@ -517,6 +548,8 @@ public actor FileAccess: AccessLeasing {
             try store.save(replacement)
             saved = replacement
             legacyBaseline.removeValue(forKey: id)
+            recoveryBaseline[id] = Self.trustedRecoveryIdentity(at: folder, expected: bookmarkIdentity(bookmark),
+                rawReader: resourceReader, recoveryReader: recoveryResourceReader)
             publishRoot(id, url: folder)
             logger.notice("AccessReconnect root=\(id.rawValue.uuidString, privacy: .public) outcome=reconnected error=none path=\(folder.path, privacy: .private)")
             return folder
@@ -581,6 +614,8 @@ public actor FileAccess: AccessLeasing {
             try store.save(replacement)
             saved = replacement
             legacyBaseline.removeValue(forKey: id)
+            recoveryBaseline[id] = Self.trustedRecoveryIdentity(at: folder, expected: bookmarkIdentity(bookmark),
+                rawReader: resourceReader, recoveryReader: recoveryResourceReader)
             publishRoot(id, url: folder)
             logger.notice("AccessGrant kind=panelFolder scopeStarted=true root=\(id.rawValue.uuidString, privacy: .public) existing=\(existing, privacy: .public) outcome=granted path=\(folder.path, privacy: .private)")
             return id
@@ -664,6 +699,13 @@ public actor FileAccess: AccessLeasing {
     }
     /// The caller holds either a newly started or an existing live session scope.
     private func validateLegacyRoot(_ id: AccessRootID, at url: URL) throws {
+        if let expected = recoveryBaseline[id] {
+            guard (try? recoveryResourceReader.identity(for: url)) == expected else {
+                roots.removeValue(forKey: id)
+                throw FileAccessError.needsReconnection(id)
+            }
+            return
+        }
         guard let expected = legacyBaseline[id] else { return }
         guard (try? resourceReader.identity(for: url)) == expected else {
             roots.removeValue(forKey: id)
@@ -676,8 +718,8 @@ public actor FileAccess: AccessLeasing {
         if let uuid = volume.uuid {
             guard mountedVolumesProvider().contains(where: { $0.uuid == uuid }),
                   (try? resolvedVolumeUUID(url)) == uuid,
-                  let expected = bookmarkIdentity(record.bookmark),
-                  (try? resourceReader.identity(for: url)) == expected else {
+                  let expected = recoveryBaseline[record.id] ?? bookmarkIdentity(record.bookmark),
+                  (try? (recoveryBaseline[record.id] == nil ? resourceReader : recoveryResourceReader).identity(for: url)) == expected else {
                 throw FileAccessError.needsReconnection(record.id)
             }
             _ = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
