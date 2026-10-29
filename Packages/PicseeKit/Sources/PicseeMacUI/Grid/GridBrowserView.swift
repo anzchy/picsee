@@ -175,7 +175,9 @@ import PicseeApplication
         selectionBadge.layer?.backgroundColor = badgeFill
         selectionBadge.layer?.borderColor = NSColor(calibratedRed: 1, green: 1, blue: 1, alpha: 1).cgColor
         selectionBadge.isHidden = !isSelected
-        view.setAccessibilityValue(isSelected ? String(localized: "Selected") : "")
+        // VoiceOver tells the Current Item apart from Selection; whole keys keep zh-Hans 「已选中，当前」 punctuation.
+        view.setAccessibilityValue(isSelected && isCurrent ? String(localized: "Selected, Current")
+            : isSelected ? String(localized: "Selected") : isCurrent ? String(localized: "Current") : "")
     }
     public var isSelectionBadgeVisible: Bool { !selectionBadge.isHidden }
 }

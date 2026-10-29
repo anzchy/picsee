@@ -112,3 +112,12 @@ private let statesLocalizationKeys = [
         #expect(catalog.value(english, "zh-Hans") == chinese)
     }
 }
+
+@Test func gridCurrentItemAccessibilityValueIsBilingual() throws {
+    let catalog = try statesCatalog()
+    let expected = ["Current": "当前", "Selected, Current": "已选中，当前", "Selected": "已选中"]
+    for (english, chinese) in expected {
+        #expect(catalog.value(english, "en") == english)
+        #expect(catalog.value(english, "zh-Hans") == chinese)
+    }
+}
