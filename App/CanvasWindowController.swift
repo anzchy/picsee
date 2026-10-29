@@ -541,13 +541,25 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private func captureRecoveryPosition(_ folder: URL, rootID: AccessRootID,
                                          services: AccessServices, context: AccessMonitor.ReadContext,
-                                         operation: AccessOperation) async {
+                                         operation: AccessOperation, shownFolder: URL? = nil) async {
         let reference = try? await services.files.captureRecoveryFolder(rootID: rootID, folder: folder)
         guard operation.isCurrent, context.permit.isCurrent, waitingAccessPosition == nil,
-              presentationRootID == rootID else { return }
+              presentationRootID == rootID, shownFolder.map({ gridFolderURL == $0 }) ?? true else { return }
         folderRecoveryReference = reference
         folderRecoveryURLs = [folder.standardizedFileURL]
         if let reference { folderRecoveryURLs.insert(reference.folderURL) }
+    }
+    /// A watched move keeps the recovery identity with the folder the grid shows.
+    /// The identity still proves the folder on resolve; the new spelling only associates it.
+    private func followRecoveryPosition(to folder: URL, rootID: AccessRootID) {
+        guard let context = scanReadContext, context.permit.isCurrent else { return }
+        if folderRecoveryReference?.rootID == rootID { folderRecoveryURLs.insert(folder.standardizedFileURL) }
+        let operation = accessIntent.current
+        Task { @MainActor [weak self, accessServices] in
+            guard let services = try? await accessServices.value, let self else { return }
+            await captureRecoveryPosition(folder, rootID: rootID, services: services, context: context,
+                operation: operation, shownFolder: folder)
+        }
     }
 
     private func recoverWaitingAccess(_ rootID: AccessRootID, counter: UInt64) {
@@ -1518,9 +1530,13 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         let priorPresentationRoot = presentationRootID
         let priorScanContext = scanReadContext, priorImageContext = presentationReadContext
         let priorWaitingPosition = waitingAccessPosition, priorLossCause = accessLossCause
+        let priorRecoveryReference = folderRecoveryReference, priorRecoveryURLs = folderRecoveryURLs
         session.beginFolderEntry(shownImage: fileURL, hasCompleteGrid: completeGrid)
         return { [weak self] target in
             guard let self else { return }
+            // The abandoned scan captured its own identity; the restored grid owns the prior one.
+            folderRecoveryReference = priorRecoveryReference
+            folderRecoveryURLs = priorRecoveryURLs
             gridFolderRoot = root
             gridFolderURL = folder
             presentationRootID = priorPresentationRoot
@@ -1881,6 +1897,7 @@ extension CanvasWindowController: FolderScanHost {
             }
             if gridFolderURL != snapshot.version.folder {
                 gridFolderURL = snapshot.version.folder
+                followRecoveryPosition(to: snapshot.version.folder, rootID: snapshot.version.rootID)
                 loadSidebarTree(snapshot.version.folder, rootID: snapshot.version.rootID, count: nil)
                 if session.mode == .browsing, let window {
                     GridWindowIdentity.showFolder(snapshot.version.folder, in: window)
