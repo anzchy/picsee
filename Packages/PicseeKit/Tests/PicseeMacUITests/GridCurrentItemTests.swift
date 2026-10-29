@@ -227,3 +227,46 @@ private func gridCellAccessibilityValue(selected: Bool, current: Bool) -> String
     #expect(source.contains("String(localized: \"Selected, Current\")"))
     #expect(!source.contains(".joined(separator: \", \")"))
 }
+
+extension CurrentItemScene {
+    func emptied(generation: UInt64) -> FolderSnapshot {
+        FolderSnapshot(version: .init(rootID: rootID, folder: folder, generation: generation), entries: [], isComplete: false)
+    }
+    func ringed() -> [String] {
+        grid.layoutSubtreeIfNeeded()
+        grid.collectionView.layoutSubtreeIfNeeded()
+        return grid.collectionView.visibleItems().compactMap { $0 as? GridPhotoItem }
+            .filter { $0.isCurrent && !$0.currentRingLayer.isHidden }.map(\.filename).sorted()
+    }
+}
+
+@Test @MainActor func gridKeepsRequestedCurrentUntilAnEmptiedGridIsRefilled() throws {
+    _ = NSApplication.shared
+    let scene = CurrentItemScene()
+    let a = scene.entry("A.jpg"), b = scene.entry("B.jpg"), c = scene.entry("C.jpg")
+    let session = ViewerSession()
+    var changes: [ItemID] = []
+    scene.grid.onSelect = { session.select($0) }
+    scene.grid.onCurrentChange = { session.focus($0); changes.append($0) }
+    session.beginBrowsing(items: [a, b, c].map(\.itemID), sourceVersion: .init(1), scrollAnchor: nil)
+    scene.grid.display(scene.snapshot([a, b, c]), selectedItemID: nil)
+    scene.grid.activate(currentItemID: c.itemID)
+    #expect(session.selection.currentItemID == c.itemID)
+    // A folder entry empties the grid; Cancel restores a preview; the Current Item is requested before the refill.
+    scene.grid.display(scene.emptied(generation: 2), selectedItemID: nil)
+    scene.grid.activate(currentItemID: c.itemID)
+    #expect(scene.grid.currentItemID == nil, "an empty grid has no Current Item to draw")
+    // Esc (returnToGrid → GridWatchedSearchRefresh.restoreGrid) refills from the Session's selection, then activates.
+    scene.grid.display(scene.snapshot([a, b, c], generation: 3), selection: session.selection)
+    scene.grid.activate(currentItemID: session.selection.currentItemID)
+    #expect(scene.grid.currentItemID == c.itemID)
+    #expect(session.selection.currentItemID == c.itemID)
+    #expect(scene.ringed() == ["C.jpg"])
+    let delivered = changes.count
+    scene.grid.collectionView(scene.grid.collectionView, didSelectItemsAt: [IndexPath(item: 0, section: 0)])
+    scene.grid.display(scene.snapshot([a, b, c], generation: 4), selection: session.selection)
+    #expect(scene.grid.currentItemID == a.itemID, "an applied request is not replayed")
+    #expect(session.selection.currentItemID == a.itemID)
+    #expect(scene.ringed() == ["A.jpg"])
+    #expect(!changes[delivered...].contains(c.itemID))
+}
