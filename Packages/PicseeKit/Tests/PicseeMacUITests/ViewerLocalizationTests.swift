@@ -93,3 +93,22 @@ private let statesLocalizationKeys = [
         #expect(catalog.value(key, "zh-Hans") != key)
     }
 }
+
+@Test func issue215ReleaseSurfaceCatalogCopyMatchesBothLanguagesExactly() throws {
+    let catalog = try statesCatalog()
+    let expected = [
+        "Coming Soon": "即将推出",
+        "Personal Favorites": "个人收藏",
+        "Recently Viewed": "最近查看",
+        "Show Image Information": "显示图片信息",
+        "Display and Appearance": "显示与外观",
+        "Help": "帮助",
+        "Report a Problem…": "报告问题…",
+        "Keyboard Shortcuts": "键盘快捷键",
+        "Diagnostics": "诊断信息",
+    ]
+    for (english, chinese) in expected {
+        #expect(catalog.value(english, "en") == english)
+        #expect(catalog.value(english, "zh-Hans") == chinese)
+    }
+}

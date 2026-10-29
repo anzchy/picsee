@@ -202,7 +202,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         diagnostics.identifier = NSUserInterfaceItemIdentifier("diagnostics.menu")
         diagnostics.setAccessibilityIdentifier("diagnostics.menu")
         let shortcutEntry = EntryPoint.keyboardShortcuts
-        let shortcutTitle = "\(String(localized: "Keyboard Shortcuts")) · \(String(localized: "Coming Soon"))"
+        let shortcutTitle = "\(String(localized: "Keyboard Shortcuts")) · \(shortcutEntry.accessibilityLabel(for: .preferred))"
         let shortcuts = help.addItem(withTitle: shortcutTitle, action: nil, keyEquivalent: shortcutEntry.keyEquivalent ?? "")
         shortcuts.isEnabled = shortcutEntry.isEnabled
         shortcuts.representedObject = shortcutEntry.rawValue
