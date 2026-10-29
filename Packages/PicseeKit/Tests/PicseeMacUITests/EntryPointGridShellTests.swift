@@ -90,3 +90,24 @@ import PicseeInfrastructure
         }
     }
 }
+
+@Test @MainActor func issue215EveryVisibleComingSoonControlIsDeclaredInModel() throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
+                              preferencesStore: InMemoryDisplayPreferencesStore())
+    shell.layoutSubtreeIfNeeded()
+    let controls = (shell.footer.subviews + shell.sidebar.subviews).compactMap { $0 as? NSButton }.filter {
+        !$0.isEnabled && ($0.accessibilityLabel()?.contains("Coming Soon") == true
+            || $0.accessibilityLabel()?.contains("即将推出") == true)
+    }
+    #expect(Set(controls.compactMap { $0.accessibilityIdentifier() }) == [
+        "grid.favorites.row", "grid.recents.row", "grid.info.button", "grid.display.button",
+    ])
+    for control in controls {
+        let entry = try #require(shell.entryPoint(for: control),
+                                 "Undeclared coming-soon control: \(control.accessibilityIdentifier())")
+        #expect(entry.state == .comingSoon)
+        #expect(control.toolTip?.contains(entry.accessibilityLabel(for: .english)) == true)
+        #expect(control.accessibilityLabel()?.contains(entry.accessibilityLabel(for: .english)) == true)
+    }
+}

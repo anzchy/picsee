@@ -8,6 +8,10 @@ public enum EntryPointState: String, CaseIterable, Sendable {
 public enum EntryPointLanguage: Sendable {
     case english
     case simplifiedChinese
+
+    public static var preferred: EntryPointLanguage {
+        Locale.preferredLanguages.first?.hasPrefix("zh") == true ? .simplifiedChinese : .english
+    }
 }
 
 public enum EntryPoint: String, CaseIterable, Sendable {

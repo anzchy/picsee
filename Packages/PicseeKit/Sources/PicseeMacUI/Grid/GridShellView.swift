@@ -72,6 +72,7 @@ import PicseeCore
     private weak var focusAnchor: NSView?
     private var footerActionsEnabled = true
     private var preserveRestoredSearchEditor = false
+    private var comingSoonEntries: [ObjectIdentifier: EntryPoint] = [:]
 
     public init(frame: NSRect, preferencesStore: any DisplayPreferencesStore) {
         self.preferencesStore = preferencesStore
@@ -483,9 +484,13 @@ import PicseeCore
         guard let action = item.representedObject as? FolderMenuAction else { return }
         onSort?(action)
     }
+    public func entryPoint(for button: NSButton) -> EntryPoint? {
+        comingSoonEntries[ObjectIdentifier(button)]
+    }
     private func configureComingSoon(_ button: NSButton, entry: EntryPoint, title: String, identifier: String,
                                      systemImage: String, iconOnly: Bool = false) {
-        let label = "\(title) · \(String(localized: "Coming Soon"))"
+        let label = "\(title) · \(entry.accessibilityLabel(for: .preferred))"
+        comingSoonEntries[ObjectIdentifier(button)] = entry
         button.title = iconOnly ? "" : title
         button.font = .systemFont(ofSize: 12)
         button.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil)
