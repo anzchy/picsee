@@ -25,6 +25,7 @@
 | controlBorder / inputBackground | --color-control-border / --color-input-bg | 自定义输入边界/背景 |
 | error / errorFill / errorText | --color-danger / --color-danger-soft / --color-error-text | 错误，不作装饰 |
 | scrim | --color-scrim | 真正模态场景的背景遮罩 |
+| waitingIndicator | --color-banner-unsaved | 页面 26 等待外接磁盘连接的状态点；两种主题均为 #f59e0b，仅表示等待 |
 
 系统 NSMenu、窗口控件、系统选择/焦点和可访问性高对比度外观优先遵循平台；不要为复刻网页边框而手绘系统窗口或劫持系统菜单材质。自定义组件再使用上述角色。
 

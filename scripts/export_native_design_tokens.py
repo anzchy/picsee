@@ -7,6 +7,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 SYSTEM = ROOT / 'design/picsee-ui-system'
 ROLES = {
+    'waitingIndicator': 'color-banner-unsaved',
     'canvasBackground': 'color-bg', 'sidebarBackground': 'color-surface',
     'popoverBackground': 'color-panel', 'textPrimary': 'color-text',
     'textSecondary': 'color-muted', 'divider': 'color-border',
@@ -61,7 +62,7 @@ def main():
                                'reducedMotionTransitionSeconds': 0, 'timerOwner': 'PicseeApplication'},
         'legacyExclusion': ['editor-*', 'color-editor-bg', 'color-code-bg', 'color-highlight',
                             'bottom-tabs-height', 'traffic-lights-*', 'color-running-*',
-                            'color-banner-unsaved', 'unused aliases'],
+                            'unused aliases'],
     }
     output = SYSTEM / 'native/TOKEN_REGISTRY.json'
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')

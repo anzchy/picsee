@@ -44,6 +44,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
 
     private var chromeOverlay: ViewerChromeOverlay!
     private var stateHost: ViewerStateHost!
+    private var lostAccessView: LostAccessStateView!
+    private var accessAnnouncementTask: Task<Void, Never>?
     private var retryIntent: ViewerRetryIntent?
     private var retryFromFolderScan = false
     private let chromeTimer = ChromeTimerAdapter()
@@ -105,6 +107,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var inspectorHost: NSHostingView<MotionPolicyContent<InspectorPanel>>!
     private var inspectorOverlayMode = false
     var onOpenRequest: (() -> Void)?
+    var accessAnnouncementObserver: ((String) -> Void)?
     var menuTracking: () -> Bool = { false }
     var appearanceAdapter: WindowAppearanceAdapter?
 
@@ -242,6 +245,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             self.gridView.synchronizeSelection(self.session.selection)
         }
         gridShell.mainContent.addSubview(gridView)
+        lostAccessView = LostAccessStateView(frame: gridShell.mainContent.bounds)
+        lostAccessView.autoresizingMask = [.width, .height]
+        lostAccessView.isHidden = true
+        lostAccessView.setAccessibilityHidden(true)
+        lostAccessView.onReselectFolder = { [weak self] in self?.chooseAccessFolder(reselect: true) }
+        lostAccessView.onChooseAnotherFolder = { [weak self] in self?.chooseAccessFolder(reselect: false) }
+        gridShell.mainContent.addSubview(lostAccessView)
+        observeAccessMotionPolicy()
         content.addSubview(stateHost, positioned: .above, relativeTo: gridShell)
         content.addSubview(inspectorHost, positioned: .above, relativeTo: stateHost)
         content.addSubview(chromeOverlay, positioned: .above, relativeTo: inspectorHost)
@@ -285,6 +296,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         attachAccessMonitor()
     }
 
+    private func observeAccessMotionPolicy() {
+        withObservationTracking {
+            lostAccessView.reduceMotion = motionPolicy.reduceMotion
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.observeAccessMotionPolicy() }
+        }
+    }
+
     private func attachAccessMonitor() {
         guard accessObserver == nil, accessAttachmentTask == nil else { return }
         let attachment = accessAttachmentGeneration
@@ -314,10 +333,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         handleAccessLoss(root, counter: snapshot.counter)
     }
     private func leaveWaitingAccess() {
+        accessAnnouncementTask?.cancel(); accessAnnouncementTask = nil
         waitingAccessPosition = nil
         accessLossCause = nil
+        lostAccessView?.isHidden = true
+        lostAccessView?.setAccessibilityHidden(true)
     }
-    private func handleAccessLoss(_ rootID: AccessRootID, counter: UInt64) {
+    private func handleAccessLoss(_ rootID: AccessRootID, counter: UInt64,
+                                  initialPosition: WaitingAccessPosition? = nil) {
         guard gridFolderRoot == rootID || presentationRootID == rootID || waitingAccessPosition?.rootID == rootID else { return }
         let cause: AccessLossCause
         if case .lost(let known)? = accessMonitor?.state.snapshot(for: rootID)?.availability { cause = known }
@@ -333,7 +356,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let folder = gridFolderURL ?? session.folderScan?.sourceSnapshot?.version.folder
             ?? fileURL?.deletingLastPathComponent()
         guard let folder else { return }
-        waitingAccessPosition = WaitingAccessPosition(rootID: rootID, folderURL: folder,
+        waitingAccessPosition = initialPosition ?? WaitingAccessPosition(rootID: rootID, folderURL: folder,
             currentItemID: session.currentItemID ?? session.folderScan?.currentItemID,
             currentImageURL: fileURL, wasViewing: session.mode == .viewing,
             conditions: session.folderConditions, recursive: session.folderRecursiveEnabled,
@@ -377,15 +400,91 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         stateHost.refresh()
         showWaitingAccessState()
     }
-    // Page 26 replaces this shell in WI-4; keep the existing state host detached
-    // from Lost Access presentation without changing the page-22 component.
     func showWaitingAccessState() {
-        guard waitingAccessPosition != nil else { return }
+        guard let position = waitingAccessPosition else { return }
         presentation.showGrid(reading: true)
         stateHost.isHidden = true
         stateHost.setAccessibilityHidden(true)
         inspectorHost.isHidden = true
+        let copy = lostAccessCopy(position)
+        lostAccessView.display(cause: accessLossCause ?? .unknown, text: copy)
+        lostAccessView.isHidden = false
+        lostAccessView.setAccessibilityHidden(false)
+        gridShell.mainContent.addSubview(lostAccessView, positioned: .above, relativeTo: nil)
         layoutInspector()
+        gridShell.layoutSubtreeIfNeeded()
+        lostAccessView.layoutSubtreeIfNeeded()
+        if let first = lostAccessView.buttons.first, let last = lostAccessView.buttons.last {
+            gridShell.linkKeyViews(from: first, through: last)
+            _ = window?.makeFirstResponder(first)
+        }
+        announceAccessLoss(position.rootID, title: copy.title)
+    }
+    private func lostAccessCopy(_ position: WaitingAccessPosition) -> LostAccessStateText {
+        let disk = accessLossCause == .diskNotConnected
+        let title: String
+        if disk, let name = accessMonitor?.volumeName(for: position.rootID) {
+            title = String(format: String(localized: "External Disk “%@” Is Not Connected"), name)
+        } else {
+            title = disk ? String(localized: "External Disk Is Not Connected") : String(localized: "Unable to Access This Folder")
+        }
+        let detail = disk
+            ? String(localized: "“%@” is on an external disk.\nConnect the disk and picsee will verify access before restoring your place.")
+            : String(localized: "picsee can’t read “%@” right now. Choose this folder again, or choose another folder to continue.")
+        return LostAccessStateText(title: title, detail: String(format: detail, position.folderURL.lastPathComponent),
+            waiting: String(localized: "Waiting for the disk…"), reselect: String(localized: "Choose Folder Again…"),
+            chooseOther: String(localized: "Choose Another Folder…"))
+    }
+    private func announceAccessLoss(_ rootID: AccessRootID, title: String) {
+        if let accessMonitor {
+            guard accessMonitor.claimAnnouncement(for: rootID, recovered: false) else { return }
+            postAccessAnnouncement(([title] + lostAccessView.buttons.map(\.title)).joined(separator: ". "))
+        } else if accessAnnouncementTask == nil {
+            accessAnnouncementTask = Task { @MainActor [weak self, accessServices] in
+                guard let services = try? await accessServices.value, !Task.isCancelled,
+                      let self, self.waitingAccessPosition?.rootID == rootID else { return }
+                self.bindAccessMonitor(services.monitor)
+                self.accessAnnouncementTask = nil
+                self.announceAccessLoss(rootID, title: title)
+            }
+        }
+    }
+    private func postAccessAnnouncement(_ message: String) {
+        accessAnnouncementObserver?(message)
+        NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested,
+            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+    }
+    private func chooseAccessFolder(reselect: Bool) {
+        guard let position = waitingAccessPosition, let window, window.attachedSheet == nil else { return }
+        let operation = accessIntent.current
+        let panel = NSOpenPanel()
+        panel.title = String(localized: reselect ? "Reconnect Folder" : "Grant Folder Access")
+        panel.prompt = String(localized: reselect ? "Choose Folder Again…" : "Grant Folder")
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = position.folderURL.deletingLastPathComponent()
+        panel.beginSheetModal(for: window) { [weak self] response in
+            panel.orderOut(nil)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, operation.isCurrent, self.waitingAccessPosition?.rootID == position.rootID else { return }
+                guard response == .OK, let url = panel.url else { self.showWaitingAccessState(); return }
+                if !reselect { self.openGrantedFolder(url); return }
+                self.navigationTask?.cancel()
+                self.navigationTask = Task { @MainActor [weak self, accessServices] in
+                    do {
+                        let services = try await operation.wait { try await accessServices.value }
+                        let target = try await operation.wait { try await services.reconnect(position.rootID, folder: url) }
+                        guard let self, operation.isCurrent, self.waitingAccessPosition?.rootID == position.rootID else { return }
+                        self.refreshRecents()
+                        self.openFolder(target.url, rootID: target.rootID)
+                    } catch {
+                        guard let self, operation.isCurrent else { return }
+                        self.showWaitingAccessState()
+                    }
+                }
+            }
+        }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -1234,6 +1333,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
         stateHost.refresh()
     }
     private func consumePanelKey(_ event: NSEvent) -> Bool {
+        if waitingAccessPosition != nil, window?.attachedSheet == nil, !menuTracking(), event.keyCode == 53 { return true }
         if event.keyCode == 34, event.modifierFlags.contains(.command),
            event.modifierFlags.intersection([.control, .option]).isEmpty,
            !menuTracking() {
@@ -1389,25 +1489,27 @@ extension CanvasWindowController: AccessRecoveryHost {
     func browseRecoveredFolder(_ url: URL, rootID: AccessRootID) { openFolder(url, rootID: rootID) }
     func showAccessRecoveryError(_ error: any Error) { showAccessError(error) }
     func requestFolderReconnection(rootID: AccessRootID, lastKnownFolder: URL, displayName: String) {
-        guard let window, window.attachedSheet == nil else { return }
+        guard window?.attachedSheet == nil else { return }
+        leaveWaitingAccess()
+        presentationRootID = rootID
+        gridFolderRoot = rootID
+        gridFolderURL = lastKnownFolder
+        let position = WaitingAccessPosition(rootID: rootID, folderURL: lastKnownFolder,
+            currentItemID: nil, currentImageURL: nil, wasViewing: false,
+            conditions: session.folderConditions, recursive: session.folderRecursiveEnabled,
+            loop: session.folderLoopEnabled, searchTerm: "", scrollOffset: .zero,
+            counter: accessMonitor?.state.snapshot(for: rootID)?.counter ?? 0)
+        handleAccessLoss(rootID, counter: position.counter, initialPosition: position)
         let operation = accessIntent.current
-        ReconnectPrompt.request(displayName: displayName, lastKnownFolder: lastKnownFolder,
-                                window: window, isCurrent: { operation.isCurrent }) { [weak self] selection in
-            guard let self, operation.isCurrent else { return }
-            switch selection {
-            case .anotherFolder(let url): openGrantedFolder(url)
-            case .reconnect(let url):
-                navigationTask?.cancel()
-                navigationTask = Task { [self] in
-                    do {
-                        let services = try await operation.wait { try await accessServices.value }
-                        let target = try await operation.wait { try await services.reconnect(rootID, folder: url) }
-                        refreshRecents()
-                        try operation.check()
-                        openFolder(target.url, rootID: target.rootID)
-                    } catch { if operation.isCurrent { showAccessError(error) } }
-                }
-            }
+        Task { @MainActor [weak self, accessServices] in
+            guard let services = try? await accessServices.value, operation.isCurrent,
+                  let self, self.waitingAccessPosition?.rootID == rootID else { return }
+            self.bindAccessMonitor(services.monitor)
+            await services.monitor.register(rootID)
+            guard operation.isCurrent, self.waitingAccessPosition?.rootID == rootID else { return }
+            // A vanished descendant only changes this window. A real scoped
+            // root read must fail before other windows lose the Access Root.
+            await services.monitor.reportReadFailure(rootID, from: services.monitor.state.stamp(for: rootID))
         }
     }
 }

@@ -11,6 +11,14 @@
     "design/DESIGN.md": "1c7e55e45db79bcce2cac97d30f43aa7a9b26006795cca5e7a5c041a9796e967"
   },
   "colors": {
+    "waitingIndicator": {
+      "cssToken": "--color-banner-unsaved",
+      "sourceExpressions": {
+        "light": "#f59e0b",
+        "dark": "#f59e0b"
+      },
+      "nativeResolution": "sRGB value/alias/alpha; validate before native resource generation"
+    },
     "canvasBackground": {
       "cssToken": "--color-bg",
       "sourceExpressions": {
@@ -268,7 +276,6 @@
     "bottom-tabs-height",
     "traffic-lights-*",
     "color-running-*",
-    "color-banner-unsaved",
     "unused aliases"
   ]
 }

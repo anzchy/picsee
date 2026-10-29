@@ -34,7 +34,7 @@ const FOCUSED_CONTROL = 'focus and activation inside a focused control (Tab, Spa
 export const KEY_SITES = {
   'Packages/PicseeKit/Sources/PicseeMacUI/Grid/GridBrowserView.swift': { 123: 'key:grid-arrows', 124: 'key:grid-arrows', 125: 'key:grid-arrows', 126: 'key:grid-arrows' },
   'Packages/PicseeKit/Sources/PicseeMacUI/Canvas/CanvasView.swift': { 48: 'key:viewer-tab' },
-  'App/CanvasWindowController.swift': { 34: 'command:inspector', 49: 'command:preview', 36: 'command:enter', 76: 'command:enter',
+  'App/CanvasWindowController.swift': { 34: 'command:inspector', 53: 'command:escape', 49: 'command:preview', 36: 'command:enter', 76: 'command:enter',
     48: { excluded: 'Tab moves focus between the grid, its footer and the Inspector' } },
   'App/Commands/CommandMenu.swift': { 34: 'command:inspector' },
   'Packages/PicseeKit/Sources/PicseeApplication/Viewer/InspectorEscapePolicy.swift': { 53: 'command:escape' },

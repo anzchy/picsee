@@ -31,3 +31,58 @@ import PicseeInfrastructure
     tree.clear(); grid.clearPresentation()
     #expect(tree.rows.isEmpty && grid.displayedItemIDs.isEmpty)
 }
+
+@MainActor @Test func t229LostPageTwoActionFocusOrderSurvivesSidebarToggle() throws {
+    _ = NSApplication.shared
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 680),
+        styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.autorecalculatesKeyViewLoop = false
+    defer { window.close() }
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 680),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    window.contentView = shell
+    shell.layoutSubtreeIfNeeded()
+    let page = LostAccessStateView(frame: shell.mainContent.bounds)
+    shell.mainContent.addSubview(page)
+    page.display(cause: .unknown, text: .init(title: "Unable to Access This Folder",
+        detail: "Choose this folder again.", waiting: "Waiting…", reselect: "Choose Folder Again…", chooseOther: "Choose Another Folder…"))
+    shell.setFooterActionsEnabled(false)
+    shell.linkKeyViews(from: page.reselectButton, through: page.chooseOtherButton)
+    for _ in 0..<3 {
+        #expect(window.makeFirstResponder(page.reselectButton))
+        window.selectNextKeyView(nil)
+        #expect(window.firstResponder === page.chooseOtherButton)
+        window.selectPreviousKeyView(nil)
+        #expect(window.firstResponder === page.reselectButton)
+        shell.toggleSidebar()
+        shell.layoutSubtreeIfNeeded()
+    }
+    // Ordinary grid focus linking still replaces the complete recovery action group.
+    shell.linkKeyViews(from: page.chooseOtherButton)
+    #expect(window.makeFirstResponder(page.chooseOtherButton))
+    window.selectNextKeyView(nil)
+    #expect(window.firstResponder !== page.reselectButton)
+}
+
+@MainActor @Test func t229LostAccessSearchClearingErasesRetainedAccessibilityValues() throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 680),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    let query = "private-photo-name.png"
+    shell.setSearchTerm(query)
+    shell.setSearchStatus(resultCount: 0, term: query)
+    shell.showSearchEmpty(true, term: query)
+    let detail = try #require(shell.emptyStateDetail)
+    #expect(detail.stringValue.contains(query))
+    #expect(shell.searchStatus.stringValue.contains(query))
+    // These are the exact public clearing inputs used by a Lost Access transition.
+    shell.setSearchTerm("")
+    shell.showSearchEmpty(false)
+    #expect(shell.searchField.stringValue.isEmpty)
+    #expect(shell.searchStatus.stringValue.isEmpty)
+    #expect(!detail.stringValue.contains(query))
+    #expect((detail.accessibilityValue() as? String)?.contains(query) != true)
+    #expect((shell.searchStatus.accessibilityValue() as? String)?.contains(query) != true)
+    #expect(shell.searchStatus.isHidden && !shell.searchEmptyVisible)
+}

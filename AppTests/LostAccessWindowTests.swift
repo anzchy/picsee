@@ -250,3 +250,174 @@ private struct T229AppInspector: InspectorMetadataReading {
     let grid = try #require(shell.mainContent.subviews.compactMap { $0 as? GridBrowserView }.first)
     #expect(grid.displayedItemIDs.count == 1)
 }
+
+@MainActor private struct T229PageFixture {
+    let base: URL
+    let folder: URL
+    let root: AccessRootID
+    let mounts: T229AppMounts
+    let services: AccessServices
+    init() async throws {
+        base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        folder = base.appendingPathComponent("PrivatePhotos", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let image = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("TestAssets/synthetic/landscape-3x2.png")
+        try FileManager.default.copyItem(at: image, to: folder.appendingPathComponent("private.png"))
+        let adapter = T229AppBookmarks()
+        let files = try FileAccess(scope: adapter, bookmarks: adapter,
+            store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "T229-page26",
+            bookmarkVolume: { _ in AccessProbeVolume(uuid: "111", url: nil, name: "Disk") })
+        root = try await files.grant(folder: folder)
+        mounts = T229AppMounts()
+        services = AccessServices(files: files, recent: RecentFolderStore(url: base.appendingPathComponent("recent.json")),
+            browser: FolderBrowser(), watch: WatchHub(access: files, source: FSEventSource(), scheduler: DispatchWatchScheduler()),
+            mounts: mounts)
+    }
+    func controller() -> CanvasWindowController {
+        CanvasWindowController(pipeline: ImageIOPipeline(), preferencesStore: InMemoryDisplayPreferencesStore(),
+            accessServices: Task { services }, motionPolicy: MotionPolicy(source: T229AppMotion()))
+    }
+    func controller(motion: T229AppMotion) -> CanvasWindowController {
+        CanvasWindowController(pipeline: ImageIOPipeline(), preferencesStore: InMemoryDisplayPreferencesStore(),
+            accessServices: Task { services }, motionPolicy: MotionPolicy(source: motion))
+    }
+    func remove() { try? FileManager.default.removeItem(at: base) }
+}
+
+@MainActor private func t229LostPage(_ controller: CanvasWindowController) -> LostAccessStateView? {
+    controller.window?.contentView?.subviews.compactMap { $0 as? GridShellView }.first?
+        .mainContent.subviews.compactMap { $0 as? LostAccessStateView }.first { !$0.isHidden }
+}
+
+@MainActor @Test func t229FormerReconnectRouteShowsUnknownPageAndPanelsCancelWithoutLeavingIt() async throws {
+    _ = NSApplication.shared
+    let fixture = try await T229PageFixture(); defer { fixture.remove() }
+    let controller = fixture.controller(), window = try #require(controller.window)
+    defer {
+        if let sheet = window.attachedSheet { window.endSheet(sheet, returnCode: .cancel) }
+        window.close()
+    }
+    controller.showWindow(nil)
+    controller.requestFolderReconnection(rootID: fixture.root, lastKnownFolder: fixture.folder, displayName: "PrivatePhotos")
+    #expect(window.attachedSheet == nil)
+    let page = try #require(t229LostPage(controller))
+    #expect(controller.gridShellVisible && !controller.hasImage)
+    #expect(controller.accessLossCause == .unknown)
+    #expect(page.titleLabel.stringValue == String(localized: "Unable to Access This Folder"))
+    #expect(page.buttons.count == 2)
+    #expect(window.firstResponder === page.reselectButton)
+    #expect(window.representedURL == nil && window.title == "Picsee")
+    window.selectNextKeyView(nil)
+    #expect(window.firstResponder === page.chooseOtherButton)
+    window.selectPreviousKeyView(nil)
+    #expect(window.firstResponder === page.reselectButton)
+    controller.toggleGridSidebar()
+    window.selectNextKeyView(nil)
+    #expect(window.firstResponder === page.chooseOtherButton)
+    window.selectPreviousKeyView(nil)
+    #expect(window.firstResponder === page.reselectButton)
+    for button in [page.reselectButton, page.chooseOtherButton] {
+        button.performClick(nil)
+        try await t229Wait { window.attachedSheet is NSOpenPanel }
+        let panel = try #require(window.attachedSheet as? NSOpenPanel)
+        #expect(panel.canChooseDirectories && !panel.canChooseFiles && !panel.allowsMultipleSelection)
+        window.endSheet(panel, returnCode: .cancel)
+        try await t229Wait { window.attachedSheet == nil }
+        #expect(t229LostPage(controller) === page)
+        #expect(controller.waitingAccessPosition?.rootID == fixture.root)
+        #expect(page.buttons.count == 2)
+        #expect(window.firstResponder === page.reselectButton)
+    }
+    let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
+        charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+    window.sendEvent(escape)
+    #expect(t229LostPage(controller) === page)
+    #expect(controller.waitingAccessPosition?.rootID == fixture.root)
+}
+
+@MainActor @Test func t229VolumePageFocusAndOneAnnouncementAcrossWindowsAndDuplicateLoss() async throws {
+    _ = NSApplication.shared
+    let fixture = try await T229PageFixture(); defer { fixture.remove() }
+    let controllers = [fixture.controller(), fixture.controller()]
+    defer { controllers.forEach { $0.window?.close() } }
+    var announcements: [String] = []
+    for controller in controllers {
+        controller.accessAnnouncementObserver = { announcements.append($0) }
+        controller.browseRecoveredFolder(fixture.folder, rootID: fixture.root)
+    }
+    try await t229Wait { controllers.allSatisfy { $0.session.folderScan?.snapshot?.isComplete == true } }
+    for controller in controllers { try await t229WaitForNativeGrid(controller) }
+    let loss = DiskMountEvent.unmounted(AccessProbeVolume(uuid: "111", url: nil, name: "Disk"))
+    await fixture.mounts.emit(loss)
+    try await t229Wait { controllers.allSatisfy { $0.waitingAccessPosition != nil } }
+    for controller in controllers {
+        let page = try #require(t229LostPage(controller))
+        #expect(controller.accessLossCause == .diskNotConnected)
+        #expect(page.titleLabel.stringValue == String(format: String(localized: "External Disk “%@” Is Not Connected"), "Disk"))
+        #expect(page.buttons.count == 1 && page.mainButton === page.chooseOtherButton)
+        #expect(!page.waitingLabel.isHidden && !page.waitingLabel.stringValue.isEmpty)
+        #expect(controller.window?.firstResponder === page.chooseOtherButton)
+        #expect(page.chooseOtherButton.isAccessibilityEnabled())
+    }
+    try await t229Wait { announcements.count == 1 }
+    #expect(announcements.count == 1)
+    #expect(announcements.first?.contains(String(localized: "Choose Another Folder…")) == true)
+    await fixture.mounts.emit(loss)
+    try await Task.sleep(for: .milliseconds(20))
+    #expect(announcements.count == 1)
+}
+
+@MainActor @Test func t229UnavailableChildPageCannotRevokeReadableRootOrOtherWindow() async throws {
+    _ = NSApplication.shared
+    let fixture = try await T229PageFixture(); defer { fixture.remove() }
+    let child = fixture.folder.appendingPathComponent("Child", isDirectory: true)
+    try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: fixture.folder.appendingPathComponent("private.png"),
+        to: child.appendingPathComponent("child.png"))
+    let controllers = [fixture.controller(), fixture.controller()]
+    defer { controllers.forEach { $0.window?.close() } }
+    controllers[0].browseRecoveredFolder(child, rootID: fixture.root)
+    controllers[1].browseRecoveredFolder(fixture.folder, rootID: fixture.root)
+    try await t229Wait { controllers.allSatisfy { $0.session.folderScan?.snapshot?.isComplete == true } }
+    for controller in controllers { try await t229WaitForNativeGrid(controller) }
+    try FileManager.default.removeItem(at: child)
+    controllers[0].requestFolderReconnection(rootID: fixture.root, lastKnownFolder: child, displayName: "Child")
+    try await t229Wait { t229LostPage(controllers[0]) != nil }
+    // Let the actual asynchronous root check finish; a child failure is never
+    // evidence to clear the other window's complete readable-root presentation.
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(fixture.services.monitor.state.snapshot(for: fixture.root)?.availability == .readable)
+    #expect(fixture.services.monitor.state.permit(for: fixture.root)?.isCurrent == true)
+    #expect(controllers[1].waitingAccessPosition == nil)
+    #expect(controllers[1].window?.representedURL == fixture.folder)
+    #expect(controllers[1].session.folderScan?.snapshot?.isComplete == true)
+    #expect(t229LostPage(controllers[0])?.buttons.count == 2)
+}
+
+@MainActor @Test func t229WaitingPulseFollowsLiveApplicationReduceMotionPolicy() async throws {
+    _ = NSApplication.shared
+    let fixture = try await T229PageFixture(); defer { fixture.remove() }
+    let source = T229AppMotion()
+    let controller = fixture.controller(motion: source)
+    defer { controller.window?.close() }
+    controller.browseRecoveredFolder(fixture.folder, rootID: fixture.root)
+    try await t229Wait { controller.session.folderScan?.snapshot?.isComplete == true }
+    try await t229WaitForNativeGrid(controller)
+    await fixture.mounts.emit(.unmounted(AccessProbeVolume(uuid: "111", url: nil, name: "Disk")))
+    try await t229Wait { t229LostPage(controller) != nil }
+    let page = try #require(t229LostPage(controller))
+    func hasPulse() -> Bool { page.waitingDot.layer?.animationKeys()?.isEmpty == false }
+    try await t229Wait { hasPulse() }
+    source.reduceMotion = true
+    source.onChange?()
+    try await t229Wait { !hasPulse() }
+    #expect(t229LostPage(controller) === page)
+    #expect(page.mainButton === page.chooseOtherButton)
+    source.reduceMotion = false
+    source.onChange?()
+    try await t229Wait { hasPulse() }
+    controller.window?.close()
+    #expect(!hasPulse())
+}

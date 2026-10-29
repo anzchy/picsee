@@ -3,6 +3,7 @@ import SwiftUI
 
 public enum DesignTheme: CaseIterable, Sendable { case light, dark }
 public enum DesignColor: String, CaseIterable, Sendable {
+    case waitingIndicator
     case canvasBackground, sidebarBackground, popoverBackground, textPrimary, textSecondary
     case divider, dividerSubtle, hoverBackground, accent, focusRing, selectionFill, selectionText
     case primaryFill, primaryFillHover, onPrimary, controlBorder, inputBackground, error, errorFill, errorText, scrim
@@ -14,6 +15,7 @@ public enum DesignColor: String, CaseIterable, Sendable {
         let blue: [Double] = dark ? [96, 165, 250] : [37, 99, 235]
         let rgb: [Double]; let alpha: Double
         switch self {
+        case .waitingIndicator: rgb = [245, 158, 11]; alpha = 1
         case .canvasBackground: rgb = dark ? [15, 17, 21] : [255, 255, 255]; alpha = 1
         case .sidebarBackground: rgb = dark ? [22, 26, 34] : [246, 247, 251]; alpha = 1
         case .popoverBackground: rgb = dark ? [20, 24, 33] : [255, 255, 255]; alpha = 1
