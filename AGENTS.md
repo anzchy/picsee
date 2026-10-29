@@ -112,7 +112,7 @@ receipt lane 和两个 discovery probe 均走 `scripts/heavy-lock.sh`；其他�
 - **sandbox 不关。** 不添加 Full Disk Access 依赖，不用 entitlement 绕过授权。遇到冲突，记录复现步骤，写 ADR，问用户。
 - **研究资料不进 App。** App target 不打包 REA、npm、`evidence/`、HTML/CSS 或 Stitch 产物。
 - **不入库的内容**：`.gitignore` 里列出的大体积反汇编和字符串转储（其中含第三方 API key）、`.stitch/` 工作区、本地工具状态。不要用 `git add -A` 把它们带进来，只暂存你能逐个说出名字的路径。
-- **不伪造数据。** 没测过的性能不写数字；读不到的元数据显示“未知”；未实现的快捷键不显示提示。
+- **不伪造数据。** 没测过的性能不写数字；读不到的元数据显示“未知”；后续版本功能的可见入口按用户原话「显示但置灰」「置灰显示，改规则」标注「即将推出」，不可点击、不可聚焦、不显示快捷键，VoiceOver 读出「即将推出」。
 - **提交信息** 用 `<type>(<scope>): <summary>`，例如 `feat(viewer): anchor zoom at cursor`。在提交说明里写相关的账簿 ID 和工作包 ID，gardener 靠它们把改动对应到账簿行。实现提交加 trailer `Implemented-by: <角色>`；真机验证记录单独提交，加 `Validated-by: <角色> run=<运行 ID>`（见[功能验收指南](docs/guide/feature-verification-guide.md)）。
 - **危险命令先问**：`rm -r`、`git reset --hard`、`git push --force`、删除分支或 worktree。
 

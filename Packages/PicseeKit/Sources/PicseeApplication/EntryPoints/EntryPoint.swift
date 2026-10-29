@@ -1,0 +1,42 @@
+import Foundation
+
+public enum EntryPointState: String, CaseIterable, Sendable {
+    case implemented
+    case comingSoon
+}
+
+public enum EntryPointLanguage: Sendable {
+    case english
+    case simplifiedChinese
+}
+
+public enum EntryPoint: String, CaseIterable, Sendable {
+    public static let reportIssueURL = URL(string: "https://github.com/anzchy/picsee/issues/new?template=bug_report.yml")!
+
+    case reportIssue
+    case diagnostics
+    case keyboardShortcuts
+    case contextMenu
+    case filmstrip
+    case favorites
+    case recents
+    case footerInfo
+    case footerDisplay
+
+    public var state: EntryPointState {
+        switch self {
+        case .reportIssue, .diagnostics: .implemented
+        case .keyboardShortcuts, .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay: .comingSoon
+        }
+    }
+    public var isEnabled: Bool { state == .implemented }
+    public var isFocusable: Bool { state == .implemented }
+    public var keyEquivalent: String? { nil }
+    public func accessibilityLabel(for language: EntryPointLanguage) -> String {
+        guard state == .comingSoon else { return "" }
+        return switch language {
+        case .english: "Coming Soon"
+        case .simplifiedChinese: "即将推出"
+        }
+    }
+}
