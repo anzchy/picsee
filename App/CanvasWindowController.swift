@@ -222,7 +222,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 } catch { await source.close(); throw error }
             } catch {
                 if !Task.isCancelled, !(error is CancellationError) {
-                    await services.monitor.reportReadFailure(rootID, from: context.stamp, error: error)
+                    await services.monitor.reportReadFailure(rootID, from: context.stamp, error: error, file: entry.url)
                 }
                 throw error
             }
@@ -794,8 +794,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 return try await AccessImageSource.open(request, access: services.files, pipeline: pipeline,
                     accessPermit: context?.permit)
             } catch {
-                if let context, !Task.isCancelled, case .root(let id, _) = request, !(error is CancellationError) {
-                    await services.monitor.reportReadFailure(id, from: context.stamp, error: error)
+                if let context, !Task.isCancelled, case .root(let id, let file) = request, !(error is CancellationError) {
+                    await services.monitor.reportReadFailure(id, from: context.stamp, error: error, file: file)
                 }
                 throw error
             }
@@ -1725,9 +1725,9 @@ extension CanvasWindowController: ViewerImageHost {
         }
         if cancelled { return }
         if let root = presentationRootID, let context = presentationReadContext, let monitor = accessMonitor {
-            let operation = accessIntent.current
+            let operation = accessIntent.current, file = session.imageLoader.fileURL
             Task { @MainActor [weak self] in
-                await monitor.reportReadFailure(root, from: context.stamp, error: error)
+                await monitor.reportReadFailure(root, from: context.stamp, error: error, file: file)
                 guard operation.isCurrent, let self else { return }
                 if error is FileAccessError { self.showAccessError(error) }
             }
