@@ -110,7 +110,10 @@ private actor CountingGridInspectorReader: InspectorMetadataReading {
     #expect(atomic.fileSize == initial.fileSize)
     #expect(atomic.modificationDate == initial.modificationDate)
     #expect(atomic.resourceIdentifier != initial.resourceIdentifier)
-    try await waitForGridInspector { gridInspectorMetadata(controller)?.pixelWidth != initialMetadata.pixelWidth }
+    try await waitForGridInspector {
+        guard let metadata = gridInspectorMetadata(controller), let width = metadata.pixelWidth else { return false }
+        return width != initialMetadata.pixelWidth
+    }
     let atomicMetadata = try #require(gridInspectorMetadata(controller))
     #expect(atomicMetadata.pixelWidth != initialMetadata.pixelWidth)
     #expect(atomicMetadata.pixelHeight != initialMetadata.pixelHeight)
