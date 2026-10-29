@@ -396,3 +396,35 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     try await recoveryWait { announcements.count == 3 }
     #expect(announcements.count == 3)
 }
+
+// Audit M6: the root is readable again, but one window's own folder cannot be
+// listed. That window falls back to the root grid instead of staying on page 26,
+// and loss is not announced again after "Folder Access Restored".
+@MainActor @Test func t229FixPerWindowRestoreFailureFallsBackToRootGridWithoutReannouncingLoss() async throws {
+    let f = try await RecoveryFixture()
+    let viewer = f.controller(), gridWindow = f.controller()
+    defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: f.childTwo.path)
+        viewer.window?.close(); gridWindow.window?.close(); f.remove()
+    }
+    viewer.browseRecoveredFolder(f.childOne, rootID: f.rootA)
+    gridWindow.browseRecoveredFolder(f.childTwo, rootID: f.rootA)
+    try await f.ready(viewer, folder: f.childOne, count: 2)
+    try await f.ready(gridWindow, folder: f.childTwo, count: 2)
+    var announcements: [String] = []
+    viewer.accessAnnouncementObserver = { announcements.append($0) }
+    gridWindow.accessAnnouncementObserver = { announcements.append($0) }
+    await f.eject()
+    try await recoveryWait { recoveryPage(viewer) != nil && recoveryPage(gridWindow) != nil && announcements.count == 1 }
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.childTwo.path)
+    await f.mount()
+    try await f.ready(viewer, folder: f.childOne, count: 2)
+    try await recoveryWait { gridWindow.waitingAccessPosition == nil && recoveryPage(gridWindow) == nil }
+    try await f.ready(gridWindow, folder: f.a)
+    #expect(gridWindow.window?.representedURL == f.a)
+    #expect(gridWindow.session.folderScan?.snapshot?.version.rootID == f.rootA)
+    #expect(f.services.monitor.state.snapshot(for: f.rootA)?.availability == .readable)
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(announcements.count == 2)
+    #expect(announcements.filter { $0 == announcements.first }.count == 1)
+}

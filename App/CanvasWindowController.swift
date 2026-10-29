@@ -569,11 +569,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     accessRecoveryScan?.end(); accessRecoveryScan = nil
                 }
             }
+            var verifiedRoot: URL?
             do {
                 let services = try await operation.wait { try await accessServices.value }
                 let context = try await operation.wait { try await monitor.readContext(for: rootID) }
                 guard mayRestore(position, request: request, operation: operation, context: context),
                       let root = await services.files.rootURL(rootID) else { throw CancellationError() }
+                verifiedRoot = root
                 var folder = root
                 var fallback = true
                 var reference: AccessFolderRecoveryReference?
@@ -652,10 +654,20 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             } catch {
                 guard accessRecoveryID == request, waitingAccessPosition?.rootID == rootID else { return }
                 accessRecoveryScan?.end(); accessRecoveryScan = nil
-                if !Task.isCancelled, operation.isCurrent {
-                    accessLossCause = .unknown
-                    showWaitingAccessState()
+                guard !Task.isCancelled, operation.isCurrent else { return }
+                if !(error is CancellationError), let root = verifiedRoot,
+                   let state = monitor.state.snapshot(for: rootID), state.counter == position.counter,
+                   state.availability == .readable {
+                    // Only this window's own place failed; the root is readable
+                    // again, so show its grid rather than page 26.
+                    let announce = monitor.claimAnnouncement(for: rootID, recovered: true)
+                    leaveWaitingAccess(endedRoot: rootID)
+                    openFolder(root, rootID: rootID)
+                    if announce { postAccessAnnouncement(String(localized: "Folder Access Restored")) }
+                    return
                 }
+                accessLossCause = .unknown
+                showWaitingAccessState()
             }
         }
     }
