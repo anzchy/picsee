@@ -1,10 +1,35 @@
 import AppKit
 
 private final class ShortcutTextField: NSTextField {
+    private var text: NSAttributedString {
+        NSAttributedString(string: stringValue, attributes: [
+            .font: font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize),
+            .foregroundColor: textColor ?? NSColor.labelColor,
+        ])
+    }
+
     override var intrinsicContentSize: NSSize {
-        let size = attributedStringValue.size()
+        let size = text.size()
         return NSSize(width: size.width, height: ceil(size.height))
     }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let text = text
+        let size = text.size()
+        let x = switch alignment {
+        case .center: bounds.minX + (bounds.width - size.width) / 2
+        case .right: bounds.maxX - size.width
+        default: bounds.minX
+        }
+        let rect = NSRect(x: x, y: bounds.minY, width: size.width, height: size.height)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            text.draw(in: rect)
+        }
+    }
+}
+
+@MainActor private func shortcutTextField(_ string: String) -> ShortcutTextField {
+    ShortcutTextField(labelWithString: string)
 }
 
 final class ShortcutKeycapView: NSView {
@@ -12,7 +37,7 @@ final class ShortcutKeycapView: NSView {
     let bottomEdge = NSView()
 
     init(_ glyph: String) {
-        label = ShortcutTextField(labelWithString: glyph)
+        label = shortcutTextField(glyph)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.borderWidth = 1
@@ -57,7 +82,7 @@ final class ShortcutRowView: NSView {
     let separator = NSView()
 
     init(row: ShortcutRow) {
-        nameLabel = ShortcutTextField(labelWithString: row.name)
+        nameLabel = shortcutTextField(row.name)
         keycapViews = row.keycaps.map(ShortcutKeycapView.init)
         super.init(frame: .zero)
         nameLabel.font = .systemFont(ofSize: 13)
@@ -102,8 +127,8 @@ final class ShortcutCardView: NSView {
     let rowViews: [ShortcutRowView]
 
     init(card: ShortcutCard) {
-        titleLabel = NSTextField(labelWithString: card.title)
-        whenLabel = NSTextField(labelWithString: card.when)
+        titleLabel = shortcutTextField(card.title)
+        whenLabel = shortcutTextField(card.when)
         rowViews = card.rows.map(ShortcutRowView.init)
         super.init(frame: .zero)
         wantsLayer = true
@@ -128,8 +153,8 @@ final class ShortcutCardView: NSView {
     override func layout() {
         super.layout()
         let contentWidth = max(0, bounds.width - 30)
-        titleLabel.frame = NSRect(x: 15, y: 15, width: titleLabel.intrinsicContentSize.width, height: 16)
-        whenLabel.frame = NSRect(x: titleLabel.frame.maxX + 8, y: 17,
+        titleLabel.frame = NSRect(x: 14, y: 15, width: titleLabel.intrinsicContentSize.width, height: 16)
+        whenLabel.frame = NSRect(x: titleLabel.frame.maxX + 7.5, y: 17,
             width: whenLabel.intrinsicContentSize.width, height: 15)
         for (index, row) in rowViews.enumerated() {
             row.frame = NSRect(x: 15, y: 37 + CGFloat(index) * 34, width: contentWidth, height: 34)
