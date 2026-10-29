@@ -51,24 +51,31 @@ func issue187OpenedGridTakesKeyboardFocusAndFirstDownMovesOneRow(granted: Bool) 
     let window = try #require(controller.window)
     defer { window.close() }
     controller.showWindow(nil)
+    window.orderFrontRegardless()
     window.update()
     if granted { controller.openGrantedFolder(folder) }
-    else { controller.browseRecoveredFolder(folder, rootID: try await access.grant(folder: folder)) }
+    else {
+        controller.browseRecoveredFolder(folder, rootID: try await access.grant(folder: folder))
+        // The handover under test: Reading State shows with Cancel focused before the grid exists.
+        #expect(!controller.gridSearchAvailable)
+        #expect(window.firstResponder is NSButton)
+    }
     let deadline = ContinuousClock.now + .seconds(8)
     while !controller.gridSearchAvailable && ContinuousClock.now < deadline {
         window.update()
         try await Task.sleep(for: .milliseconds(5))
     }
     #expect(controller.gridSearchAvailable)
-    // The Reading State teardown and state host refreshes keep running after the handover.
-    for _ in 0..<20 {
+    let grid = try #require(issue187Grid(in: window.contentView))
+    // Focus is on the grid from the first check after the handover and stays there through later
+    // Reading State teardown and state host refreshes (no deferred focus fix-up).
+    for poll in 0..<20 {
+        #expect(window.firstResponder === grid.collectionView, "poll \(poll): \(String(describing: window.firstResponder))")
         window.update()
         try await Task.sleep(for: .milliseconds(5))
     }
-    let grid = try #require(issue187Grid(in: window.contentView))
     #expect(grid.displayedItemIDs.count == 120)
     #expect(grid.currentItemID == grid.itemID(at: 0))
-    #expect(window.firstResponder === grid.collectionView)
 
     window.layoutIfNeeded()
     let firstRow = grid.collectionView.frameForItem(at: 0).minY
@@ -76,4 +83,6 @@ func issue187OpenedGridTakesKeyboardFocusAndFirstDownMovesOneRow(granted: Bool) 
     #expect(columns > 1)
     window.sendEvent(try #require(issue187Down(window)))
     #expect(grid.currentItemID == grid.itemID(at: columns))
+    window.sendEvent(try #require(issue187Down(window)))
+    #expect(grid.currentItemID == grid.itemID(at: 2 * columns))
 }
