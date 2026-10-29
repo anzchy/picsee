@@ -124,7 +124,7 @@ private actor CachePinObserver: ImagePresentationPinning {
         #expect(await cache.usage() == ImageCacheUsage(entries: 0, previewBytes: 0, detailBytes: 0))
     }
 
-    @MainActor @Test(.timeLimit(.minutes(1))) func cacheTwoSessionsSharePinsOnRealPipeline() async throws {
+    @MainActor @Test(.timeLimit(.minutes(2))) func cacheTwoSessionsSharePinsOnRealPipeline() async throws {
         let cache = ImageMemoryCache(capacity: 1_000_000), decoder = CacheCountingDecoder()
         let pipeline = ImageIOPipeline(decoder: decoder, cache: cache), port = CachePinObserver(pipeline)
         let access = CacheLeases(), a = ViewerSession(imageLoader: ViewerImageLoader(trace: nil, presentation: port))

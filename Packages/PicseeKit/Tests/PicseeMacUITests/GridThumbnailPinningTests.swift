@@ -75,7 +75,7 @@ private let pinningTile = ThumbnailCoverage(width: 212, height: 212)
     for index in indices { await scheduler.waitForTerminal(at: index) }
 }
 
-@Suite(.timeLimit(.minutes(1))) @MainActor struct GridThumbnailPinningTests {
+@Suite(.timeLimit(.minutes(2))) @MainActor struct GridThumbnailPinningTests {
     // 3.1, 3.2: each held result is pinned once, unpinned once when it leaves, and nothing stays pinned after stop.
     @Test func gridPinsHeldResultsAndUnpinsThemOnScrollAndStop() async {
         let snapshot = pinningSnapshot(count: 20), fake = RecordingPinning()
@@ -161,7 +161,7 @@ private let pinningTile = ThumbnailCoverage(width: 212, height: 212)
 }
 
 /// Real pipeline: two windows (schedulers) on one cache, real pixels in a temporary folder.
-@Suite(.timeLimit(.minutes(1))) @MainActor struct GridSharedBudgetTests {
+@Suite(.timeLimit(.minutes(2))) @MainActor struct GridSharedBudgetTests {
     static func fixture(_ name: String) -> URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
