@@ -58,7 +58,7 @@ enum SettingsSection: String, CaseIterable {
         appearanceAdapter.register(window)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        Task { await model.refresh(); renderCache() }
+        refreshCache()
     }
 
     func select(_ section: SettingsSection) {
@@ -70,7 +70,7 @@ enum SettingsSection: String, CaseIterable {
             button.state = key == section ? .on : .off
             button.setAccessibilityValue(key == section ? "1" : "0")
         }
-        if section == .cache { Task { await model.refresh(); renderCache() } }
+        if section == .cache { refreshCache() }
     }
 
     func preferencesDidChange(_ preferences: DisplayPreferences) {
@@ -306,6 +306,20 @@ enum SettingsSection: String, CaseIterable {
         cacheClear.isEnabled = !model.isMeasuring && !model.isClearing
     }
 
+    private func showCacheBusy() {
+        cacheSize.stringValue = String(localized: "Measuring…")
+        cacheClear.isEnabled = false
+    }
+
+    private func refreshCache() {
+        showCacheBusy()
+        Task {
+            showCacheBusy()
+            await model.refresh()
+            renderCache()
+        }
+    }
+
     private static func presentClearConfirmation(window: NSWindow, completion: @escaping (Bool) -> Void) {
         let alert = NSAlert()
         alert.messageText = String(localized: "Clear Thumbnail Cache?")
@@ -318,8 +332,12 @@ enum SettingsSection: String, CaseIterable {
     @objc private func requestClear(_ sender: NSButton) {
         confirmClear(window) { [weak self] confirmed in
             guard confirmed, let self else { return }
-            self.cacheClear.isEnabled = false
-            Task { await self.model.clear(); self.renderCache() }
+            self.showCacheBusy()
+            Task {
+                self.showCacheBusy()
+                await self.model.clear()
+                self.renderCache()
+            }
         }
     }
 
