@@ -27,4 +27,3 @@ public struct AccessFolderRecoveryLocation: Sendable {
         self.rootURL = rootURL; self.folderURL = folderURL; self.grant = grant
     }
 }
-
