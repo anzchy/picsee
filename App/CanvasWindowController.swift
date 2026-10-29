@@ -55,6 +55,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
     private var presentation: GridViewerPresentation!
     private var gridFolderRoot: AccessRootID?
+    private var latestRecents: [RecentFolder] = []
     private var gridFolderURL: URL?
     private var gridPreviewScrollOffset: NSPoint?
     private var folderEntryRestore: ((FolderEntryRestoreTarget) -> Void)?
@@ -155,6 +156,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             guard let self, let rootID = self.gridFolderRoot else { return }
             self.openFolder(folder, rootID: rootID)
         }
+        gridShell.session = session
+        gridShell.onOpenRecent = { [weak self] folder in self?.openRecent(folder) }
+        gridShell.onDropFolders = { [weak self] urls in self?.openInput(urls) }
         gridShell.onSort = { [weak self] action in self?.applyGridSort(action) }
         gridShell.onOpenSortMenu = { button, menu in
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
@@ -466,6 +470,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 let services = try await operation.wait { try await accessServices.value }
                 let folders = try await operation.wait { try await services.recent.load() }
                 onRecentsChanged?(folders)
+                latestRecents = folders
+                updateEmptyFolderState()
             } catch { if operation.isCurrent { showAccessError(error) } }
         }
     }
@@ -1194,6 +1200,7 @@ extension CanvasWindowController: FolderScanHost {
             gridView.setMetadataSortState(scan.metadataSortState)
             chromeOverlay.setMetadataSortState(scan.metadataSortState)
             if let snapshot = scan.snapshot { applyObservedGridSnapshot(snapshot) }
+            updateEmptyFolderState()
             if let source = scan.sourceSnapshot, source.isComplete,
                viewedRefreshVersion != source.version {
                 viewedRefreshVersion = source.version
@@ -1293,7 +1300,10 @@ extension CanvasWindowController: FolderScanHost {
         guard authority.isCurrent else { throw CancellationError() }
         refreshRecents()
     }
-    func showEmptyFolder() { showAccessMessage(String(localized: "No Images in This Folder")) }
+    /// Page 22 (ADR-014) replaces the empty-folder alert once a complete scan finds no images.
+    private func updateEmptyFolderState() {
+        gridShell.setEmptyFolderState(session.isEmptyFolder, recents: latestRecents, now: Date())
+    }
     func folderScanDidComplete(count: Int) { chromeOverlay.refresh(session: session) }
     func folderScanDidStart() {
         standaloneWatch?.cancel(); standaloneWatch = nil

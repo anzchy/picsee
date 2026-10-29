@@ -436,19 +436,171 @@
         }
       }
     },
-    "No Images in This Folder": {
+    "This level has no images, but has %lld subfolders": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No Images in This Folder"
+            "value": "This level has no images, but has %lld subfolders"
+          },
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "This level has no images, but has %lld subfolder"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "This level has no images, but has %lld subfolders"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "此文件夹没有图片"
+            "value": "这一层没有图片，但有 %lld 个子文件夹"
+          }
+        }
+      }
+    },
+    "This folder has no images to browse yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This folder has no images to browse yet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个文件夹还没有可浏览的图片"
+          }
+        }
+      }
+    },
+    "Open a subfolder, show the images in subfolders too, or drop another folder here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open a subfolder, show the images in subfolders too, or drop another folder here."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开一个子文件夹，把子文件夹里的图片一起显示，或把其他文件夹拖到这里。"
+          }
+        }
+      }
+    },
+    "Choose another folder to continue, or drop a folder here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose another folder to continue, or drop a folder here."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "换一个文件夹继续，或把文件夹拖到这里。"
+          }
+        }
+      }
+    },
+    "Browse Including Subfolders": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse Including Subfolders"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "包含子文件夹浏览"
+          }
+        }
+      }
+    },
+    "Recently Opened": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recently Opened"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最近打开"
+          }
+        }
+      }
+    },
+    "Subfolder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subfolder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "子文件夹"
+          }
+        }
+      }
+    },
+    "%@, Subfolder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, Subfolder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@，子文件夹"
+          }
+        }
+      }
+    },
+    "Content area: drop a folder to open it": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content area: drop a folder to open it"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容区：可拖入文件夹打开"
           }
         }
       }

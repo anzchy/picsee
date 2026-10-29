@@ -119,7 +119,7 @@ public struct GridSidebarFolder: Sendable, Equatable {
     private let document = NSView()
     private var parent: GridSidebarFolder?
     private var currentFolder: GridSidebarFolder?
-    private var children: [GridSidebarFolder] = []
+    public private(set) var children: [GridSidebarFolder] = []
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scroll.drawsBackground = false

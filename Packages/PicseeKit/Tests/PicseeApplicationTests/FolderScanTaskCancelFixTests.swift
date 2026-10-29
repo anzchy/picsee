@@ -15,13 +15,11 @@ actor FolderFixBarrier {
 @MainActor final class FolderFixEffectsHost: FolderScanHost {
     var opens: [URL] = []
     var remembered: [URL] = []
-    var emptyCount = 0
     var onRemember: (() async -> Void)?
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opens.append(url) }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async {
         remembered.append(folder); await onRemember?()
     }
-    func showEmptyFolder() { emptyCount += 1 }
 }
 private struct FolderFixReleaseLeases: AccessLeasing {
     let base: FolderScanCountingLeases
@@ -42,7 +40,7 @@ private struct FolderFixReleaseLeases: AccessLeasing {
     task.cancel()
     try await fixture.scanner.deliver(["img2.png", "img10.png"])
     #expect(coordinator.snapshot == before)
-    #expect(host.opens.isEmpty && host.remembered.isEmpty && host.emptyCount == 0)
+    #expect(host.opens.isEmpty && host.remembered.isEmpty && !coordinator.isEmptyFolder)
     #expect(trace.events == ["begin-1"])
     #expect(await fixture.access.balance == [1, 0])
     await fixture.scanner.finish(failing: input); try await task.value

@@ -37,7 +37,6 @@ private struct PartialFolderMetadataReader: FolderMetadataReading {
 @MainActor private final class CancelledRememberHost: FolderScanHost {
     func openFolderImage(_ url: URL, rootID: AccessRootID) {}
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { throw CancellationError() }
-    func showEmptyFolder() {}
 }
 
 @Test @MainActor func issue108MetadataSortPendingInvalidatesStaleRepliesAndKeepsBaseList() async throws {

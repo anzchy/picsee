@@ -10,7 +10,6 @@ import PicseeApplication
     var rememberHook: (@MainActor () async -> Void)?
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opened.append(url) }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { await rememberHook?() }
-    func showEmptyFolder() { }
     func clearFolderImageForNoMatches() { cleared += 1 }
     func folderScanDidComplete(count: Int) { completed.append(count) }
     func folderScanDidStart() { didStart += 1 }
@@ -191,4 +190,21 @@ private actor EntrySink {
     }
     #expect(generations == generations.sorted())
     #expect(w.host.didStart == 0)
+}
+
+/// I-1 (#137): a real scan of a folder holding only a non-image file and a subfolder is empty; real refreshes toggle it.
+@Test @MainActor func realEmptyFolderScanSetsIsEmptyFolderAndWatchedRefreshClearsIt() async throws {
+    let w = try await WatchedCoordinator(files: ["F/notes.txt"], folders: ["root/F", "root/F/sub"]); defer { w.f.remove() }
+    let c = w.coordinator
+    try await c.begin(folder: w.url("F"), rootID: w.rootID).value
+    #expect(c.isEmptyFolder, "a non-image file and a subfolder are not images")
+    w.write("F/a.png")
+    try await c.refresh()?.value
+    #expect(!c.isEmptyFolder, "an image arrived")
+    w.delete("F/a.png")
+    try await c.refresh()?.value
+    #expect(c.isEmptyFolder, "the image was removed")
+    w.write("F/sub/b.png")
+    try await c.setRecursiveEnabled(true)?.value
+    #expect(!c.isEmptyFolder, "the subfolder image counts with Include Subfolders")
 }

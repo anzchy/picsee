@@ -8,7 +8,6 @@ import PicseeCore
     var clears = 0
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opens.append(url) }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { }
-    func showEmptyFolder() { }
     func clearFolderImageForNoMatches() { clears += 1 }
 }
 

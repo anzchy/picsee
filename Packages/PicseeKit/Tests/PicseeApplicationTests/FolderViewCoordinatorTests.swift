@@ -6,10 +6,8 @@ import PicseeCore
 @MainActor private final class FolderViewTestHost: FolderScanHost {
     var opens: [URL] = []
     var cleared = 0
-    var empty = 0
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opens.append(url) }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { }
-    func showEmptyFolder() { empty += 1 }
     func clearFolderImageForNoMatches() { cleared += 1 }
 }
 
@@ -165,7 +163,7 @@ import PicseeCore
     try await fixture.scanner.deliver(["excluded.jpg"])
     await fixture.scanner.finish(); try await task.value
     #expect(coordinator.hasNoMatches)
-    #expect(host.cleared == 1 && host.empty == 0 && host.opens.isEmpty)
+    #expect(host.cleared == 1 && !coordinator.isEmptyFolder && host.opens.isEmpty)
     coordinator.setConditions(.init(selectedExtensions: ["png"]))
     #expect(host.cleared == 1)
     coordinator.setConditions(.init())
@@ -175,7 +173,7 @@ import PicseeCore
     await fixture.scanner.waitForStart(1)
     await fixture.scanner.finish(1); try await empty.value
     #expect(!coordinator.hasNoMatches)
-    #expect(host.empty == 1 && host.cleared == 1)
+    #expect(coordinator.isEmptyFolder && host.cleared == 1)
 }
 
 @Test @MainActor func folderViewFilterExcludesExplicitInputBeforeItsBatchArrives() async throws {

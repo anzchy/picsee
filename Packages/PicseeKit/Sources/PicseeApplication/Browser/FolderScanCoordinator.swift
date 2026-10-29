@@ -41,6 +41,10 @@ struct FolderScanRestorePoint {
         sourceSnapshot?.isComplete == true && (refreshTask == nil || noMatchesPresented)
             && sourceSnapshot?.entries.isEmpty == false && snapshot?.entries.isEmpty == true
     }
+    /// A complete, failure-free source with no supported images; a refresh in flight keeps the shown value.
+    public var isEmptyFolder: Bool {
+        failure == nil && !isReadingFolder && sourceSnapshot?.isComplete == true && sourceSnapshot?.entries.isEmpty == true
+    }
     public var isAwaitingFilteredMatch: Bool {
         guard failure == nil, !isReadingFolder, !hasNoMatches, conditions.selectedExtensions != nil,
               snapshot?.entries.isEmpty == true,
@@ -376,7 +380,6 @@ struct FolderScanRestorePoint {
                     })
                 try Task.checkCancellation()
                 guard activeGeneration == token, retainReadingAuthority(), let completed = sourceSnapshot else { return }
-                let showEmpty = input == nil && completed.entries.isEmpty && automaticPresentationAllowed?() != false
                 sourceSnapshot = completed.appending([], isComplete: true)
                 projectSource()
                 let first = input == nil ? snapshot?.entries.first : nil
@@ -418,7 +421,6 @@ struct FolderScanRestorePoint {
                 trace?.complete(count: completed.navigationEntries.count, generation: token)
                 trace?.end(outcome: .complete, generation: token)
                 host?.folderScanDidComplete(count: completed.navigationEntries.count)
-                if showEmpty { host?.showEmptyFolder() }
                 if refreshPending { refresh() }
             } catch {
                 guard activeGeneration == token else { return }

@@ -9,7 +9,6 @@ import PicseeInfrastructure
     var visible: URL?
     var opens: [URL] = []
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { }
-    func showEmptyFolder() { }
     func openFolderImage(_ url: URL, rootID: AccessRootID) { visible = url; opens.append(url) }
 }
 

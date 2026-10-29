@@ -20,7 +20,6 @@ private actor FolderAuthorityBarrier {
     var opens: [URL] = []
     var remembered: [URL] = []
     var rememberAttempts = 0
-    var emptyCount = 0
     var beforeRememberCommit: (() async -> Void)?
     var commitAllowed: () -> Bool = { true }
     func openFolderImage(_ url: URL, rootID: AccessRootID) { opens.append(url) }
@@ -29,7 +28,6 @@ private actor FolderAuthorityBarrier {
         await beforeRememberCommit?()
         if commitAllowed() { remembered.append(folder) }
     }
-    func showEmptyFolder() { emptyCount += 1 }
 }
 
 @Test @MainActor func folderAuthorityTracksAccessInputAndOriginIndependently() async {
@@ -74,7 +72,7 @@ private actor FolderAuthorityBarrier {
     #expect(!authority.isCurrent)
     if effect != "empty" { try await fixture.scanner.deliver(["img1.png", "img2.png"]) }
     await fixture.scanner.finish(); try await task.value
-    #expect(host.opens.isEmpty && host.remembered.isEmpty && host.rememberAttempts == 0 && host.emptyCount == 0)
+    #expect(host.opens.isEmpty && host.remembered.isEmpty && host.rememberAttempts == 0 && !fixture.coordinator.isEmptyFolder)
     // Fix round 1: the authorized foreground policy is replaced, not silently completed.
     #expect(fixture.coordinator.snapshot?.isComplete == (effect == "pending" ? true : nil))
     #expect(await fixture.access.balance == [1, 1])
@@ -109,7 +107,7 @@ private actor FolderAuthorityBarrier {
     #expect(!authority.isCurrent)
     await rememberBarrier.finish(); try await task.value
     #expect(host.remembered.isEmpty && host.opens.isEmpty)
-    #expect(host.emptyCount == 0 && coordinator.failure == nil)
+    #expect(!coordinator.isEmptyFolder && coordinator.failure == nil)
     #expect(coordinator.snapshot == nil)
     #expect(coordinator.inputURL == nil && coordinator.currentItemID == nil && coordinator.currentURL == nil)
     #expect(coordinator.pendingDirection == nil && !coordinator.isReadingFolder)

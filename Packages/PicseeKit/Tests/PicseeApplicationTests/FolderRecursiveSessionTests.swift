@@ -47,7 +47,6 @@ private struct PartialFailureScanner: FolderScanning {
 @MainActor private final class RecursiveSelectionHost: FolderScanHost, ViewerSessionNavigationHost, ViewerImageHost {
     var opened: [URL] = []
     var cleared = 0
-    var emptyAlerts = 0
     var paintedURL: URL?
     var nativeFileURL: URL?
     var retryAvailable = false
@@ -58,7 +57,6 @@ private struct PartialFailureScanner: FolderScanning {
         opened.append(url); paintedURL = url; nativeFileURL = url; retryAvailable = true
     }
     func rememberFolder(_ folder: URL, rootID: AccessRootID) async throws { }
-    func showEmptyFolder() { emptyAlerts += 1 }
     func clearFolderImageForNoMatches() {
         cleared += 1; paintedURL = nil; nativeFileURL = nil; retryAvailable = false; session?.closeImage()
     }
@@ -104,7 +102,7 @@ private struct PartialFailureScanner: FolderScanning {
     try await firstOff.value; try await on.value; try await finalOff.value
     #expect(fixture.coordinator.snapshot?.isComplete == true)
     #expect(fixture.coordinator.snapshot?.entries.isEmpty == true)
-    #expect(host.cleared == 1 && host.emptyAlerts == 1)
+    #expect(host.cleared == 1 && fixture.coordinator.isEmptyFolder)
     #expect(host.paintedURL == nil && host.nativeFileURL == nil && !host.retryAvailable)
     #expect(session.imageLoader.fileURL == nil && session.imageStatus == .empty)
     #expect(!session.isEnabled(.next) && !session.isEnabled(.previous))
@@ -139,7 +137,7 @@ private struct PartialFailureScanner: FolderScanning {
     await fixture.scanner.waitForStart(2)
     await fixture.scanner.finish(2); try await retry.value
     #expect(fixture.coordinator.snapshot?.entries.isEmpty == true)
-    #expect(host.cleared == 1 && host.emptyAlerts == 1)
+    #expect(host.cleared == 1 && fixture.coordinator.isEmptyFolder)
     #expect(host.paintedURL == nil && host.nativeFileURL == nil && !host.retryAvailable)
     #expect(session.imageLoader.fileURL == nil && session.imageStatus == .empty)
     #expect(!session.isEnabled(.next) && !session.isEnabled(.previous))
