@@ -210,6 +210,9 @@ public struct EmptyFolderPage: Equatable, Sendable {
                                       includeSubfoldersAvailable: includeSubfoldersAvailable)
         guard request != displayedRequest else { return }
         displayedRequest = request
+        // A live change rebuilds the controls; focus returns to the same folder's control, else to the same position.
+        let focusedIndex = keyViews.firstIndex { $0 === window?.firstResponder }
+        let focusedIdentity = focusedIndex.map { Self.identity(of: keyViews[$0]) }
         tiles.forEach { $0.removeFromSuperview() }; recentRows.forEach { $0.removeFromSuperview() }
         tiles = subfolders.map { url in
             let tile = EmptyFolderTile(url: url)
@@ -233,6 +236,18 @@ public struct EmptyFolderPage: Equatable, Sendable {
         applyColors()
         needsLayout = true
         layoutSubtreeIfNeeded()
+        if let focusedIndex, let window {
+            let views = keyViews
+            window.makeFirstResponder(views.first { Self.identity(of: $0) == focusedIdentity }
+                ?? views[min(focusedIndex, views.count - 1)])
+        }
+    }
+    private static func identity(of control: NSView) -> AnyHashable {
+        switch control {
+        case let tile as EmptyFolderTile: tile.url
+        case let row as EmptyFolderRecentButton: [row.folder.rootID.rawValue.uuidString, row.folder.url.path]
+        default: ObjectIdentifier(control)
+        }
     }
     public func setDetailText(_ text: String) {
         let paragraph = NSMutableParagraphStyle()
