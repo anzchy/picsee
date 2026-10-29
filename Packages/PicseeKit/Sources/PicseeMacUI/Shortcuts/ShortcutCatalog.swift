@@ -31,12 +31,13 @@ public struct ShortcutCatalog: Sendable {
             let key: String
             let modifiers: NSEvent.ModifierFlags
         }
-        var menuKeys: [String: MenuKey] = [:]
+        var menuKeys: [String: [MenuKey]] = [:]
         func collect(_ menu: NSMenu) {
             for item in menu.items {
                 if let submenu = item.submenu { collect(submenu) }
-                if !item.keyEquivalent.isEmpty {
-                    menuKeys[item.title] = MenuKey(key: item.keyEquivalent, modifiers: item.keyEquivalentModifierMask)
+                if !item.keyEquivalent.isEmpty, let action = item.action {
+                    menuKeys[NSStringFromSelector(action), default: []].append(
+                        MenuKey(key: item.keyEquivalent, modifiers: item.keyEquivalentModifierMask))
                 }
             }
         }
@@ -61,11 +62,16 @@ public struct ShortcutCatalog: Sendable {
             return ShortcutRow(sources: available.map(commandSource), name: name,
                 keycaps: available.flatMap { shortcutKeycaps($0.defaultKey, command: $0.usesCommand) })
         }
-        func menuRow(_ title: String, _ english: String, _ chinese: String,
-                     requiredCommand: CommandID? = nil) -> ShortcutRow? {
-            guard let item = menuKeys[title], !item.key.isEmpty else { return nil }
+        func menuRow(_ sourceID: String, _ action: String, _ english: String, _ chinese: String,
+                     requiredCommand: CommandID? = nil, key: String? = nil,
+                     modifiers: NSEvent.ModifierFlags = []) -> ShortcutRow? {
+            let candidates = menuKeys[action] ?? []
+            let matches = candidates.count > 1 ? candidates.filter {
+                (key == nil || $0.key == key) && (modifiers.isEmpty || $0.modifiers == modifiers)
+            } : candidates
+            guard let item = matches.first, !item.key.isEmpty else { return nil }
             if let requiredCommand, !implementedCommands.contains(requiredCommand) { return nil }
-            return ShortcutRow(sources: [source("menu:\(title)")], name: text(english, chinese),
+            return ShortcutRow(sources: [source("menu:\(sourceID)")], name: text(english, chinese),
                 keycaps: shortcutKeycaps(item.key, modifiers: item.modifiers))
         }
         func keyRow(_ id: String, _ keycaps: [String], _ english: String, _ chinese: String) -> ShortcutRow {
@@ -74,19 +80,19 @@ public struct ShortcutCatalog: Sendable {
 
         let files = [
             commandRow([.open], "Open…", "打开…"),
-            menuRow("Settings…", "Settings…", "设置…"),
-            menuRow("Close", "Close Window", "关闭窗口"),
-            menuRow("Minimize", "Minimize", "最小化"),
-            menuRow("Hide Picsee", "Hide picsee", "隐藏 picsee"),
-            menuRow("Hide Others", "Hide Others", "隐藏其他"),
-            menuRow("Quit Picsee", "Quit picsee", "退出 picsee"),
+            menuRow("Settings…", "showSettings:", "Settings…", "设置…"),
+            menuRow("Close", "performClose:", "Close Window", "关闭窗口"),
+            menuRow("Minimize", "performMiniaturize:", "Minimize", "最小化"),
+            menuRow("Hide Picsee", "hide:", "Hide picsee", "隐藏 picsee"),
+            menuRow("Hide Others", "hideOtherApplications:", "Hide Others", "隐藏其他"),
+            menuRow("Quit Picsee", "terminate:", "Quit picsee", "退出 picsee"),
         ].compactMap { $0 }
         let grid = [
             keyRow("grid-arrows", ["←", "→", "↑", "↓"], "Move Current Item", "移动当前项"),
             commandRow([.preview], "Preview Current Item", "用大图查看当前项"),
             commandRow([.enter], "Open Current Item", "打开当前项"),
-            menuRow("Search current folder", "Search Current Folder", "搜索当前文件夹", requiredCommand: .search),
-            menuRow("Hide sidebar", "Show / Hide Sidebar", "显示 / 隐藏侧栏"),
+            menuRow("Search current folder", "focusGridSearch:", "Search Current Folder", "搜索当前文件夹", requiredCommand: .search),
+            menuRow("Hide sidebar", "toggleSidebar:", "Show / Hide Sidebar", "显示 / 隐藏侧栏"),
         ].compactMap { $0 }
         let viewer = [
             commandRow([.previous, .next], "Previous / Next Image", "上一张 / 下一张",
@@ -98,7 +104,7 @@ public struct ShortcutCatalog: Sendable {
                 singleNames: [("Zoom In", "放大"), ("Zoom Out", "缩小")]),
             keyRow("viewer-tab", ["Tab"], "Recall Tools", "唤回工具"),
             commandRow([.inspector], "Image Information", "图片信息"),
-            menuRow("Enter Full Screen", "Enter / Exit Full Screen", "进入 / 退出全屏"),
+            menuRow("Enter Full Screen", "toggleFullScreen:", "Enter / Exit Full Screen", "进入 / 退出全屏"),
         ].compactMap { $0 }
         cards = [
             ShortcutCard(id: .files, title: text("Files & Windows", "文件与窗口"),
