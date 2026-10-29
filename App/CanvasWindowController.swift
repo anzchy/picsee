@@ -414,6 +414,22 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 }
             } catch {
                 guard operation.isCurrent else { return }
+                var error = error
+                // The file can move or reach the Trash between resolving the grant and reading it.
+                if !(error is FileAccessError), !FileManager.default.fileExists(atPath: checkedURL.path) {
+                    do {
+                        let current = try await services.files.resolveFileGrant(grant)
+                        guard operation.isCurrent else { return }
+                        if current != checkedURL, FileManager.default.fileExists(atPath: current.path) {
+                            self.open(current, accessRequest: .fileGrant(grant), fromFolderScan: true)
+                            self.watchStandaloneFile(at: current)
+                            return
+                        }
+                    } catch let resolution {
+                        guard operation.isCurrent else { return }
+                        error = resolution
+                    }
+                }
                 if let accessError = error as? FileAccessError, case .fileDeleted = accessError {
                     self.clearFolderImageForNoMatches()
                 } else if error is FileAccessError || !FileManager.default.fileExists(atPath: checkedURL.path) {
