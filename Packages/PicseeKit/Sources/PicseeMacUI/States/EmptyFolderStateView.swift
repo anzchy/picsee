@@ -148,6 +148,10 @@ import PicseeCore
     public var onChooseFolder: (() -> Void)?
     public var onDropFolders: (([URL]) -> Void)?
     private let document = FlippedView()
+    private struct DisplayRequest: Equatable {
+        let subfolders: [URL]; let recents: [EmptyFolderRecentRow]; let includeSubfolders: Bool
+    }
+    private var displayedRequest: DisplayRequest?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -194,6 +198,10 @@ import PicseeCore
     }
     /// Subfolder tiles (with 「包含子文件夹浏览」 when `includeSubfoldersAvailable`), else the recents list.
     public func display(subfolders: [URL], recents: [EmptyFolderRecentRow], includeSubfoldersAvailable: Bool) {
+        // A repeated request (watched refresh, recents reload) keeps the controls so keyboard focus stays put.
+        let request = DisplayRequest(subfolders: subfolders, recents: recents, includeSubfolders: includeSubfoldersAvailable)
+        guard request != displayedRequest else { return }
+        displayedRequest = request
         tiles.forEach { $0.removeFromSuperview() }; recentRows.forEach { $0.removeFromSuperview() }
         tiles = subfolders.map { url in
             let tile = EmptyFolderTile(url: url)
