@@ -60,6 +60,12 @@ public struct ResolvedBookmark: Sendable {
 public protocol BookmarkCoding: Sendable {
     func create(for url: URL) throws -> Data
     func resolve(_ data: Data) throws -> ResolvedBookmark
+    /// True when created bookmarks embed the volume UUID and root resource identity,
+    /// so a root on a UUID-bearing volume is trusted only after matching them.
+    var requiresEmbeddedIdentity: Bool { get }
+}
+public extension BookmarkCoding {
+    var requiresEmbeddedIdentity: Bool { false }
 }
 
 public struct AccessRootRecord: Codable, Equatable, Sendable {

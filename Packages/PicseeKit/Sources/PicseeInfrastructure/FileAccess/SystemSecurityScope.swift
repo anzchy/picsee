@@ -3,6 +3,7 @@ import PicseeCore
 
 public struct SystemSecurityScope: SecurityScope, BookmarkCoding {
     public init() {}
+    public var requiresEmbeddedIdentity: Bool { true }
     public func start(_ url: URL) -> Bool { url.startAccessingSecurityScopedResource() }
     public func stop(_ url: URL) { url.stopAccessingSecurityScopedResource() }
     public func isReadable(_ url: URL) -> Bool { FileManager.default.isReadableFile(atPath: url.path) }
