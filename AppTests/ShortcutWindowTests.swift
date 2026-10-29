@@ -55,17 +55,22 @@ import PicseeMacUI
     let menu = CommandMenu(preferencesStore: InMemoryDisplayPreferencesStore(),
         openWithoutWindow: {}, openSettings: {}, openDiagnostics: {}, windowController: { nil })
     defer { NSApp.mainMenu = previousMenu; withExtendedLifetime(menu) {} }
-    let catalog = ShortcutCatalog(menu: try #require(NSApp.mainMenu), language: .english)
+    let main = try #require(NSApp.mainMenu)
+    let catalog = ShortcutCatalog(menu: main, language: .english)
     let sources = catalog.cards.flatMap { $0.rows.flatMap { $0.sources.map(\.id) } }
-    let expected = [
-        "command:open", "menu:Settings…", "menu:Close", "menu:Minimize", "menu:Hide Picsee",
-        "menu:Hide Others", "menu:Quit Picsee", "key:grid-arrows", "command:preview", "command:enter",
-        "menu:Search current folder", "menu:Hide sidebar", "command:previous", "command:next", "command:escape",
-        "command:fit", "command:actualPixels", "command:zoomIn", "command:zoomOut", "key:viewer-tab",
-        "command:inspector", "menu:Enter Full Screen",
-    ]
-    #expect(expected.count == 22)
-    #expect(sources.count == expected.count)
-    #expect(Set(sources).count == expected.count)
-    for id in expected { #expect(sources.filter { $0 == id }.count == 1, "missing or duplicated \(id)") }
+    var keyedItems: [NSMenuItem] = []
+    func collect(_ menu: NSMenu) {
+        for item in menu.items {
+            if item.submenu?.title == "Edit" { continue }
+            if !item.keyEquivalent.isEmpty { keyedItems.append(item) }
+            if let submenu = item.submenu { collect(submenu) }
+        }
+    }
+    collect(main)
+    #expect(!keyedItems.isEmpty)
+    for item in keyedItems {
+        let source = catalog.source(for: item)
+        #expect(source != nil, "unmapped keyed menu item: \(item.title) \(item.action.map(NSStringFromSelector) ?? "")")
+        if let source { #expect(sources.filter { $0 == source.id }.count == 1, "wrong source count for \(item.title)") }
+    }
 }

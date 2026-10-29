@@ -21,6 +21,18 @@ public struct ShortcutCard: Sendable {
     public let rows: [ShortcutRow]
 }
 
+private let shortcutMenuSourceIDs = [
+    "showSettings:": "Settings…",
+    "performClose:": "Close",
+    "performMiniaturize:": "Minimize",
+    "hide:": "Hide Picsee",
+    "hideOtherApplications:": "Hide Others",
+    "terminate:": "Quit Picsee",
+    "focusGridSearch:": "Search current folder",
+    "toggleSidebar:": "Hide sidebar",
+    "toggleFullScreen:": "Enter Full Screen",
+]
+
 public struct ShortcutCatalog: Sendable {
     public let cards: [ShortcutCard]
 
@@ -62,9 +74,10 @@ public struct ShortcutCatalog: Sendable {
             return ShortcutRow(sources: available.map(commandSource), name: name,
                 keycaps: available.flatMap { shortcutKeycaps($0.defaultKey, command: $0.usesCommand) })
         }
-        func menuRow(_ sourceID: String, _ action: String, _ english: String, _ chinese: String,
+        func menuRow(_ action: String, _ english: String, _ chinese: String,
                      requiredCommand: CommandID? = nil, key: String? = nil,
                      modifiers: NSEvent.ModifierFlags = []) -> ShortcutRow? {
+            guard let sourceID = shortcutMenuSourceIDs[action] else { return nil }
             let candidates = menuKeys[action] ?? []
             let matches = candidates.count > 1 ? candidates.filter {
                 (key == nil || $0.key == key) && (modifiers.isEmpty || $0.modifiers == modifiers)
@@ -80,19 +93,19 @@ public struct ShortcutCatalog: Sendable {
 
         let files = [
             commandRow([.open], "Open…", "打开…"),
-            menuRow("Settings…", "showSettings:", "Settings…", "设置…"),
-            menuRow("Close", "performClose:", "Close Window", "关闭窗口"),
-            menuRow("Minimize", "performMiniaturize:", "Minimize", "最小化"),
-            menuRow("Hide Picsee", "hide:", "Hide picsee", "隐藏 picsee"),
-            menuRow("Hide Others", "hideOtherApplications:", "Hide Others", "隐藏其他"),
-            menuRow("Quit Picsee", "terminate:", "Quit picsee", "退出 picsee"),
+            menuRow("showSettings:", "Settings…", "设置…"),
+            menuRow("performClose:", "Close Window", "关闭窗口"),
+            menuRow("performMiniaturize:", "Minimize", "最小化"),
+            menuRow("hide:", "Hide picsee", "隐藏 picsee"),
+            menuRow("hideOtherApplications:", "Hide Others", "隐藏其他"),
+            menuRow("terminate:", "Quit picsee", "退出 picsee"),
         ].compactMap { $0 }
         let grid = [
             keyRow("grid-arrows", ["←", "→", "↑", "↓"], "Move Current Item", "移动当前项"),
             commandRow([.preview], "Preview Current Item", "用大图查看当前项"),
             commandRow([.enter], "Open Current Item", "打开当前项"),
-            menuRow("Search current folder", "focusGridSearch:", "Search Current Folder", "搜索当前文件夹", requiredCommand: .search),
-            menuRow("Hide sidebar", "toggleSidebar:", "Show / Hide Sidebar", "显示 / 隐藏侧栏"),
+            menuRow("focusGridSearch:", "Search Current Folder", "搜索当前文件夹", requiredCommand: .search),
+            menuRow("toggleSidebar:", "Show / Hide Sidebar", "显示 / 隐藏侧栏"),
         ].compactMap { $0 }
         let viewer = [
             commandRow([.previous, .next], "Previous / Next Image", "上一张 / 下一张",
@@ -104,7 +117,7 @@ public struct ShortcutCatalog: Sendable {
                 singleNames: [("Zoom In", "放大"), ("Zoom Out", "缩小")]),
             keyRow("viewer-tab", ["Tab"], "Recall Tools", "唤回工具"),
             commandRow([.inspector], "Image Information", "图片信息"),
-            menuRow("Enter Full Screen", "toggleFullScreen:", "Enter / Exit Full Screen", "进入 / 退出全屏"),
+            menuRow("toggleFullScreen:", "Enter / Exit Full Screen", "进入 / 退出全屏"),
         ].compactMap { $0 }
         cards = [
             ShortcutCard(id: .files, title: text("Files & Windows", "文件与窗口"),
@@ -114,6 +127,19 @@ public struct ShortcutCatalog: Sendable {
             ShortcutCard(id: .viewer, title: text("Image Viewer", "大图"),
                 when: text("While Viewing One Image", "查看一张图片时"), rows: viewer),
         ]
+    }
+
+    @MainActor public func source(for item: NSMenuItem) -> ShortcutSource? {
+        let source: ShortcutSource?
+        if let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) {
+            source = ShortcutSource(id: "command:\(id.rawValue)")
+        } else if let action = item.action, let id = shortcutMenuSourceIDs[NSStringFromSelector(action)] {
+            source = ShortcutSource(id: "menu:\(id)")
+        } else {
+            source = nil
+        }
+        guard let source else { return nil }
+        return cards.flatMap(\.rows).flatMap(\.sources).contains(source) ? source : nil
     }
 }
 
