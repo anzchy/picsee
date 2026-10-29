@@ -127,3 +127,30 @@ private actor RootCheckMounts: DiskMountPort {
     #expect(await f.mounts.enumerations - before == 1)
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
 }
+
+// Audit opus M7 (round 2): a missing source is access evidence, not content.
+// ENOENT maps to sourceChanged; a decoder failure on a file that no longer
+// exists can't be told from damage. Each starts exactly one root check; a
+// damaged file that is still there starts none.
+@MainActor @Test func t229Fix2MissingSourceFailuresStartOneRootCheck() async throws {
+    let f = try await RootCheckFixture(); defer { f.remove() }
+    let stamp = f.monitor.state.stamp(for: f.root)
+    let gone = f.base.appendingPathComponent("Root/gone.jpg")
+    let enoent = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOENT))
+    let missing: [(any Error, URL?)] = [(ImageLoadError(.sourceChanged), nil), (ImageLoadError(.sourceChanged), gone),
+        (ImageLoadError(.corruptImage), gone), (ImageLoadError(.unsupportedFormat), gone),
+        (ImageDecodeError.unreadableImage, gone), (enoent, gone)]
+    for (failure, file) in missing {
+        let before = await f.mounts.enumerations
+        await f.monitor.reportReadFailure(f.root, from: stamp, error: failure, file: file)
+        #expect(await f.mounts.enumerations - before == 1, "\(failure)")
+    }
+    let broken = f.base.appendingPathComponent("Root/broken.jpg")
+    let before = await f.mounts.enumerations
+    for failure: any Error in [ImageLoadError(.corruptImage), ImageLoadError(.unsupportedFormat), ImageDecodeError.unreadableImage,
+                               ImageLoadError(.resourceLimit), ImageLoadError(.cancelled)] {
+        await f.monitor.reportReadFailure(f.root, from: stamp, error: failure, file: broken)
+    }
+    #expect(await f.mounts.enumerations == before)
+    #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
+}

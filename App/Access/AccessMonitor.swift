@@ -229,18 +229,40 @@ private final class AccessMonitorNotification: @unchecked Sendable {
 
     /// A descendant's failure is only evidence to check the root, never proof
     /// that the whole root lost access. The captured counter survives every await.
-    /// Decode and format failures say nothing about access and start no check.
-    func reportReadFailure(_ id: AccessRootID, from stamp: AccessWorkStamp, error: (any Error)? = nil) async {
+    /// Decode, format and budget failures say nothing about access and start no check,
+    /// unless the failed file itself is gone.
+    func reportReadFailure(_ id: AccessRootID, from stamp: AccessWorkStamp, error: (any Error)? = nil,
+                           file: URL? = nil) async {
         guard stamp.rootID == id, !Task.isCancelled else { return }
-        if let error, Self.isContentFailure(error) { return }
+        if let error, Self.isContentFailure(error, file: file) { return }
         await start()
         guard !Task.isCancelled, state.mayDeliver(stamp) else { return }
         let cause = await sharedRootCheck(id)
         guard !Task.isCancelled, let cause, state.mayDeliver(stamp) else { return }
         _ = state.reportRootFailure(id, cause: cause, from: stamp)
     }
-    static func isContentFailure(_ error: any Error) -> Bool {
-        error is ImageLoadError || error is ImageDecodeError || error is FolderScanLimitError
+    /// A missing source (`sourceChanged`) is access evidence. A decoder can't tell a
+    /// vanished file from a damaged one, so those count as content only while the file exists.
+    static func isContentFailure(_ error: any Error, file: URL? = nil) -> Bool {
+        let undecodable: Bool
+        switch error {
+        case is FolderScanLimitError: return true
+        case let failure as ImageLoadError:
+            switch failure.kind {
+            case .sourceChanged: return false
+            case .resourceLimit, .cancelled: return true
+            case .corruptImage, .unsupportedFormat: undecodable = true
+            }
+        case let failure as ImageDecodeError:
+            switch failure {
+            case .budgetExceeded: return true
+            case .invalidRequest: return false
+            case .unreadableImage: undecodable = true
+            }
+        default: return false
+        }
+        guard undecodable, let file else { return undecodable }
+        return FileManager.default.fileExists(atPath: file.path)
     }
     /// Callers re-check their own cancellation and stamp after awaiting the shared result.
     private func sharedRootCheck(_ id: AccessRootID) async -> AccessLossCause? {
