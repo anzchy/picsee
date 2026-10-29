@@ -101,7 +101,7 @@ public struct ShortcutCatalog: Sendable {
             menuRow("terminate:", "Quit picsee", "退出 picsee"),
         ].compactMap { $0 }
         let grid = [
-            keyRow("grid-arrows", ["←", "→", "↑", "↓"], "Move Current Item", "移动当前项"),
+            keyRow("grid-arrows", ["←", "→", "↑", "↓"], "Move Current", "移动当前项"),
             commandRow([.preview], "Preview Current Item", "用大图查看当前项"),
             commandRow([.enter], "Open Current Item", "打开当前项"),
             menuRow("focusGridSearch:", "Search Current Folder", "搜索当前文件夹", requiredCommand: .search),
@@ -117,7 +117,7 @@ public struct ShortcutCatalog: Sendable {
                 singleNames: [("Zoom In", "放大"), ("Zoom Out", "缩小")]),
             keyRow("viewer-tab", ["Tab"], "Recall Tools", "唤回工具"),
             commandRow([.inspector], "Image Information", "图片信息"),
-            menuRow("toggleFullScreen:", "Enter / Exit Full Screen", "进入 / 退出全屏"),
+            menuRow("toggleFullScreen:", "Toggle Full Screen", "进入 / 退出全屏"),
         ].compactMap { $0 }
         cards = [
             ShortcutCard(id: .files, title: text("Files & Windows", "文件与窗口"),

@@ -28,12 +28,12 @@ final class ShortcutKeycapView: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
-    var preferredWidth: CGFloat { max(22, label.intrinsicContentSize.width + 12) }
+    var preferredWidth: CGFloat { max(22, label.intrinsicContentSize.width + 14) }
 
     override func layout() {
         super.layout()
-        label.frame = NSRect(x: 6, y: 0, width: max(0, bounds.width - 12), height: bounds.height)
-        bottomEdge.frame = NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
+        label.frame = NSRect(x: 7, y: 0, width: max(0, bounds.width - 14), height: bounds.height)
+        bottomEdge.frame = NSRect(x: 0, y: bounds.height - 2, width: bounds.width, height: 2)
         applyColors()
     }
 
