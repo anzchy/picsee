@@ -68,7 +68,18 @@ _Avoid_: highlighted items, current item
 The ordered list of images the viewer pages through, fixed when the viewer opens: the whole filtered and sorted folder, starting at the Current Item, when nothing or a single image is selected, or only the selected images in grid order for a multi-selection.
 _Avoid_: playlist, range, "all images" when only a selection was meant
 
+### Settings
+
+**Interface Language**（界面语言）:
+The single language every piece of text in picsee appears in, including the text macOS draws for it: Follow System, English or Simplified Chinese. Follow System means Simplified Chinese when the system prefers Chinese, English otherwise.
+_Avoid_: locale, region, "translation" for the setting itself
+
 ## Relationships
+
+- A change of **Interface Language** takes effect at the next launch; until then all text stays in the language picsee launched with, so the window never shows two languages at once.
+- Follow System maps any Chinese system language, Traditional included, to Simplified Chinese.
+- Relaunching to apply an **Interface Language** reopens what was open: the same folder in the **Grid**, or the same image.
+- **Interface Language** covers interface text only; file and folder names and metadata values read from a file are never translated.
 
 - An **Access Root** is created only by a user action in the system open panel; a **File Grant** never becomes one by itself.
 - A **Library Folder** lies inside exactly one **Access Root**; adding a Library Folder inside an existing Access Root creates no new grant.
