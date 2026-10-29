@@ -458,6 +458,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridFolderRoot = nil
         gridFolderURL = nil
         endInput()
+        // A reused window starts fresh: Cancel Reading must not bring back what was shown before the close.
+        folderEntryRestore = nil
+        session.completeFolderEntry()
         session.endFolderScan()
         accessIntent.invalidate()
         session.closeImage()

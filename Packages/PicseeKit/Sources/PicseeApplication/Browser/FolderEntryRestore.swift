@@ -31,7 +31,7 @@ extension ViewerSession {
     public func cancelFolderEntry() -> FolderEntryRestoreTarget? {
         guard let point = folderEntryRestore else { return nil }
         folderEntryRestore = nil
-        // Back first, so the restored folder source cannot present over the File Preview Set.
+        // Back before the folder source, so anything reacting to the restored source sees the set again.
         filePreviewSet = point.filePreviewSet
         // restore() stops the reading scan itself and keeps the restored folder's watch on the same stream.
         if let scan = point.scan, let folderScan {
