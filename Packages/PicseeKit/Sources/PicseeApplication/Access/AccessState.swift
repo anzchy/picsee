@@ -178,14 +178,41 @@ public enum AccessStateChange: Equatable, Sendable {
         publish(.lost(rootID, counter: entry.counter))
         return true
     }
-    @discardableResult public func completeRecovery(_ attempt: AccessRecoveryAttempt, verified: Bool) -> Bool {
-        guard verified, var entry = entries[attempt.rootID], entry.mounted,
+    @discardableResult public func completeRecovery(_ attempt: AccessRecoveryAttempt, verified: Bool,
+        admitting admission: (_ update: () -> Void) throws -> Void) rethrows -> Bool {
+        var change: AccessStateChange?
+        try admission { change = completeRecoveryEntry(attempt, verified: verified) }
+        if let change { publish(change) }
+        return change != nil
+    }
+    /// Cause refinement belongs to the same waiting episode and cannot confer
+    /// readability. A matching mount may be retried after a transient failure.
+    @discardableResult public func refineRecoveryFailure(_ attempt: AccessRecoveryAttempt,
+                                                         cause: AccessLossCause) -> Bool {
+        guard var entry = entries[attempt.rootID], entry.mounted,
               entry.counter == attempt.counter, entry.volumeUUID == attempt.volumeUUID,
               case .lost = entry.availability else { return false }
+        let changed = entry.availability != .lost(cause)
+        entry.availability = .lost(cause)
+        if cause == .diskNotConnected { entry.mounted = false }
+        entry.authority.update(counter: entry.counter, readable: false)
+        entries[attempt.rootID] = entry
+        if changed { publish(.lost(attempt.rootID, counter: entry.counter)) }
+        return changed
+    }
+    @discardableResult public func completeRecovery(_ attempt: AccessRecoveryAttempt, verified: Bool) -> Bool {
+        guard let change = completeRecoveryEntry(attempt, verified: verified) else { return false }
+        publish(change)
+        return true
+    }
+    private func completeRecoveryEntry(_ attempt: AccessRecoveryAttempt, verified: Bool) -> AccessStateChange? {
+        guard verified, var entry = entries[attempt.rootID], entry.mounted,
+              entry.counter == attempt.counter, entry.volumeUUID == attempt.volumeUUID,
+              case .lost = entry.availability else { return nil }
         entry.availability = .readable
         entry.authority.update(counter: entry.counter, readable: true)
         entries[attempt.rootID] = entry
-        publish(.recovered(attempt.rootID, counter: entry.counter))
-        return true
+        return .recovered(attempt.rootID, counter: entry.counter)
     }
+
 }

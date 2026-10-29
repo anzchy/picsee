@@ -34,6 +34,20 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     private var reauthorizationRequests: [AccessRootID: UUID] = [:]
     private var volumeNames: [String: String] = [:]
     private var announcementPhase: [AccessRootID: Bool] = [:]
+    private var waitingWindows: [AccessRootID: Set<ObjectIdentifier>] = [:]
+    private var recoveryTasks: [AccessRootID: Task<Void, Never>] = [:]
+    private var recoveryRequests: [AccessRootID: UUID] = [:]
+    private var readinessObservers: [UUID: @MainActor (AccessRootID) -> Void] = [:]
+    func beginWaiting(_ rootID: AccessRootID, window: ObjectIdentifier) {
+        waitingWindows[rootID, default: []].insert(window)
+    }
+    func endWaiting(_ rootID: AccessRootID, window: ObjectIdentifier) {
+        waitingWindows[rootID]?.remove(window)
+        if waitingWindows[rootID]?.isEmpty == true {
+            waitingWindows.removeValue(forKey: rootID)
+            announcementPhase.removeValue(forKey: rootID)
+        }
+    }
     func volumeName(for rootID: AccessRootID) -> String? {
         state.snapshot(for: rootID)?.volumeUUID.flatMap { volumeNames[$0] }
     }
@@ -86,6 +100,9 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         switch event {
         case .unmounted(let volume):
             guard let uuid = volume.uuid else { return }
+            for id in Array(recoveryTasks.keys) where state.snapshot(for: id)?.volumeUUID == uuid {
+                cancelRecovery(id)
+            }
             if let name = volume.name { volumeNames[uuid] = name }
             mountEventRevision &+= 1
             latestMountEvents[uuid] = (mountEventRevision, false)
@@ -119,6 +136,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         }
     }
     func reauthorize(_ id: AccessRootID) async {
+        cancelRecovery(id)
         let request = UUID()
         reauthorizationRequests[id] = request
         defer {
@@ -233,18 +251,81 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     }
     private func recheckRoots() async {
         for record in await files.records() {
+            guard !Task.isCancelled else { return }
+            await registerEntry(record.id)
             if state.snapshot(for: record.id)?.availability == .readable {
                 await reportReadFailure(record.id, from: state.stamp(for: record.id))
-            } else if let attempt = state.recoveryAttempt(for: record.id) {
-                publishRecovery(attempt)
+                guard !Task.isCancelled else { return }
+                if state.snapshot(for: record.id)?.availability == .readable {
+                    for observer in Array(readinessObservers.values) { observer(record.id) }
+                }
+            } else {
+                if let uuid = state.snapshot(for: record.id)?.volumeUUID {
+                    if await isMounted(uuid) { _ = state.diskMounted(volumeUUID: uuid) }
+                    else { state.diskUnmounted(volumeUUID: uuid) }
+                }
+                if let attempt = state.recoveryAttempt(for: record.id) { publishRecovery(attempt) }
             }
         }
     }
+    @discardableResult func observeReadiness(_ observer: @escaping @MainActor (AccessRootID) -> Void) -> UUID {
+        let id = UUID(); readinessObservers[id] = observer; return id
+    }
+    func removeReadinessObserver(_ id: UUID) { readinessObservers.removeValue(forKey: id) }
     @discardableResult func observeRecovery(_ observer: @escaping @MainActor (AccessRecoveryAttempt) -> Void) -> UUID {
         let id = UUID(); recoveryObservers[id] = observer; return id
     }
     func removeRecoveryObserver(_ id: UUID) { recoveryObservers.removeValue(forKey: id) }
     private func publishRecovery(_ attempt: AccessRecoveryAttempt) {
         for observer in Array(recoveryObservers.values) { observer(attempt) }
+        guard recoveryTasks[attempt.rootID] == nil else { return }
+        let request = UUID()
+        recoveryRequests[attempt.rootID] = request
+        recoveryTasks[attempt.rootID] = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if recoveryRequests[attempt.rootID] == request {
+                    recoveryTasks.removeValue(forKey: attempt.rootID)
+                    recoveryRequests.removeValue(forKey: attempt.rootID)
+                }
+            }
+            guard let port, let grant = await files.savedGrantSnapshot(attempt.rootID),
+                  ownsRecovery(attempt, request: request) else { return }
+            let revision = attempt.volumeUUID.flatMap { latestMountEvents[$0]?.revision }
+            let result = await files.verifySavedRootForRecovery(attempt.rootID, mounts: port)
+            guard ownsRecovery(attempt, request: request) else { return }
+            guard result.classification.cause == .readable, result.rootURL != nil,
+                  result.bookmarkVolume.uuid == attempt.volumeUUID,
+                  grant.bookmarkVolume.uuid == attempt.volumeUUID else {
+                _ = state.refineRecoveryFailure(attempt, cause:
+                    result.classification.cause == .diskNotConnected ? .diskNotConnected : .unknown)
+                return
+            }
+            if let uuid = attempt.volumeUUID {
+                let connected = await isMounted(uuid)
+                guard ownsRecovery(attempt, request: request) else { return }
+                guard connected else {
+                    _ = state.refineRecoveryFailure(attempt, cause: .diskNotConnected); return
+                }
+                guard latestMountEvents[uuid]?.revision == revision else {
+                    _ = state.refineRecoveryFailure(attempt, cause: .unknown); return
+                }
+            }
+            do {
+                _ = try state.completeRecovery(attempt, verified: true, admitting: { update in
+                    try grant.admitting(update)
+                })
+            } catch {
+                guard ownsRecovery(attempt, request: request) else { return }
+                _ = state.refineRecoveryFailure(attempt, cause: .unknown)
+            }
+        }
+    }
+    private func ownsRecovery(_ attempt: AccessRecoveryAttempt, request: UUID) -> Bool {
+        !Task.isCancelled && recoveryRequests[attempt.rootID] == request && state.recoveryAttempt(for: attempt.rootID) == attempt
+    }
+    private func cancelRecovery(_ id: AccessRootID) {
+        recoveryTasks.removeValue(forKey: id)?.cancel()
+        recoveryRequests.removeValue(forKey: id)
     }
 }
