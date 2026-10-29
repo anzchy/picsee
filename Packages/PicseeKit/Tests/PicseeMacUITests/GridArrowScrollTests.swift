@@ -177,3 +177,28 @@ import PicseeApplication
     #expect(fixture.grid.currentItemID == nil)
     #expect(fixture.visible.origin.y == 0)
 }
+
+/// #187 AC-1: with scroll view content insets (a titlebar or bar over the grid), the tile clears the insets too.
+@Test @MainActor func issue187ArrowScrollClearsContentInsets() {
+    let fixture = GridArrowScrollFixture()
+    let scrollView = fixture.grid.collectionView.enclosingScrollView!
+    scrollView.automaticallyAdjustsContentInsets = false
+    scrollView.contentInsets = NSEdgeInsets(top: 40, left: 0, bottom: 24, right: 0)
+    fixture.grid.layoutSubtreeIfNeeded()
+    var inset: NSRect {
+        let visible = fixture.visible
+        return NSRect(x: visible.minX, y: visible.minY + 40, width: visible.width, height: visible.height - 64)
+    }
+    var scrolledDown = false
+    for _ in 0..<12 {
+        fixture.press(125)
+        #expect(inset.contains(fixture.currentFrame), "Down to \(fixture.currentIndex!): \(fixture.currentFrame) outside \(inset)")
+        scrolledDown = scrolledDown || abs(fixture.currentFrame.maxY - inset.maxY) < 0.5
+    }
+    #expect(scrolledDown)
+    for _ in 0..<12 {
+        fixture.press(126)
+        #expect(inset.contains(fixture.currentFrame), "Up to \(fixture.currentIndex!): \(fixture.currentFrame) outside \(inset)")
+    }
+    #expect(abs(fixture.currentFrame.minY - inset.minY) < 0.5)
+}

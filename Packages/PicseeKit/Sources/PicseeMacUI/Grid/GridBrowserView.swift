@@ -564,10 +564,14 @@ private struct GridGeometry: Equatable {
     /// Exact, not `scrollToVisible`: that rounds to whole points and leaves fractional-height rows clipped.
     private func scrollIntoView(_ index: Int) {
         let tile = collectionView.frameForItem(at: index)
-        let visible = scrollView.contentView.documentVisibleRect
+        // The clip includes area under content insets (a bar over the grid); the tile must clear it.
+        let insets = scrollView.contentInsets
+        var visible = scrollView.contentView.documentVisibleRect
+        visible.origin.y += insets.top
+        visible.size.height -= insets.top + insets.bottom
         var origin = scrollView.contentView.bounds.origin
-        if tile.minY < visible.minY { origin.y = tile.minY }
-        else if tile.maxY > visible.maxY { origin.y = tile.maxY - visible.height }
+        if tile.minY < visible.minY { origin.y += tile.minY - visible.minY }
+        else if tile.maxY > visible.maxY { origin.y += tile.maxY - visible.maxY }
         else { return }
         restoreContentOffset(origin)
     }
