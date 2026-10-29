@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var commandMenu: CommandMenu?
     private var settingsWindow: SettingsPanelWindow?
     private var diagnosticsWindow: DiagnosticsWindow?
+    private var shortcutWindow: ShortcutWindow?
     private var windowController: CanvasWindowController?
     #if DEBUG && PICSEE_UI_TEST_FIXTURE
     private var uiTestFixtureRoot: URL?
@@ -105,7 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commandMenu = CommandMenu(preferencesStore: displayPreferences,
                                   openWithoutWindow: { [weak self] in self?.viewer().route(.open, from: .menu) },
                                   openSettings: { [weak self] in self?.showSettings() },
-                                  openDiagnostics: { [weak self] in self?.showDiagnostics() })
+                                  openDiagnostics: { [weak self] in self?.showDiagnostics() },
+                                  openShortcuts: { [weak self] in self?.showShortcuts() })
         viewer().showWindow(nil)
         viewer().refreshRecents()
         #if DEBUG && PICSEE_UI_TEST_FIXTURE
@@ -183,6 +185,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             diagnosticsWindow = DiagnosticsWindow(source: imagePipeline, appearanceAdapter: appearanceAdapter)
         }
         diagnosticsWindow?.show()
+    }
+
+    private func showShortcuts() {
+        if shortcutWindow == nil, let mainMenu = NSApp.mainMenu {
+            shortcutWindow = ShortcutWindow(menu: mainMenu, appearanceAdapter: appearanceAdapter)
+        }
+        shortcutWindow?.show()
     }
 }
 

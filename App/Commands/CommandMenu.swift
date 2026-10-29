@@ -58,6 +58,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     private let openWithoutWindow: () -> Void
     private let openSettings: () -> Void
     private let openDiagnostics: () -> Void
+    private let openShortcuts: () -> Void
     private let openURL: (URL) -> Void
     private let windowController: () -> CanvasWindowController?
     var activeWindowController: CanvasWindowController? { windowController() }
@@ -68,6 +69,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
     init(preferencesStore: any DisplayPreferencesStore, openWithoutWindow: @escaping () -> Void,
          openSettings: @escaping () -> Void, openDiagnostics: @escaping () -> Void,
+         openShortcuts: @escaping () -> Void = {},
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
          windowController: @escaping () -> CanvasWindowController? = {
              NSApp.keyWindow?.windowController as? CanvasWindowController
@@ -76,6 +78,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         self.openWithoutWindow = openWithoutWindow
         self.openSettings = openSettings
         self.openDiagnostics = openDiagnostics
+        self.openShortcuts = openShortcuts
         self.openURL = openURL
         self.windowController = windowController
         super.init()
@@ -202,8 +205,12 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
         diagnostics.identifier = NSUserInterfaceItemIdentifier("diagnostics.menu")
         diagnostics.setAccessibilityIdentifier("diagnostics.menu")
         let shortcutEntry = EntryPoint.keyboardShortcuts
-        let shortcutTitle = "\(String(localized: "Keyboard Shortcuts")) · \(shortcutEntry.accessibilityLabel(for: .preferred))"
-        let shortcuts = help.addItem(withTitle: shortcutTitle, action: nil, keyEquivalent: shortcutEntry.keyEquivalent ?? "")
+        let shortcutMarker = shortcutEntry.accessibilityLabel(for: .preferred)
+        let shortcutTitle = [String(localized: "Keyboard Shortcuts"), shortcutMarker].filter { !$0.isEmpty }.joined(separator: " · ")
+        let shortcuts = help.addItem(withTitle: shortcutTitle,
+            action: shortcutEntry.isEnabled ? #selector(showShortcuts(_:)) : nil,
+            keyEquivalent: shortcutEntry.keyEquivalent ?? "")
+        shortcuts.target = self
         shortcuts.isEnabled = shortcutEntry.isEnabled
         shortcuts.representedObject = shortcutEntry.rawValue
         shortcuts.identifier = NSUserInterfaceItemIdentifier("help.keyboard-shortcuts.menu")
@@ -239,6 +246,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
     @objc private func showSettings(_ item: NSMenuItem) { openSettings() }
     @objc private func showDiagnostics(_ item: NSMenuItem) { openDiagnostics() }
+    @objc private func showShortcuts(_ item: NSMenuItem) { openShortcuts() }
     @objc private func reportIssue(_ item: NSMenuItem) { openURL(EntryPoint.reportIssueURL) }
 
     @objc private func toggleAlwaysShowTools(_ item: NSMenuItem) {
@@ -279,7 +287,7 @@ final class CommandMenu: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(showSettings(_:)) || item.action == #selector(showDiagnostics(_:))
-            || item.action == #selector(reportIssue(_:)) { return true }
+            || item.action == #selector(showShortcuts(_:)) || item.action == #selector(reportIssue(_:)) { return true }
         if let raw = item.representedObject as? String, let entry = EntryPoint(rawValue: raw), entry.state == .comingSoon {
             item.isEnabled = false
             item.keyEquivalent = ""
