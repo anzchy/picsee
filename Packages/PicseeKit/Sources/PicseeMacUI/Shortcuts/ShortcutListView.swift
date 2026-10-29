@@ -1,6 +1,6 @@
 import AppKit
 
-private final class ShortcutTextField: NSTextField {
+final class ShortcutTextField: NSTextField {
     private var text: NSAttributedString {
         NSAttributedString(string: stringValue, attributes: [
             .font: font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize),
@@ -13,15 +13,29 @@ private final class ShortcutTextField: NSTextField {
         return NSSize(width: size.width, height: ceil(size.height))
     }
 
+    func fittingSize(constrainedToWidth width: CGFloat) -> NSSize {
+        let rect = text.boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading])
+        return NSSize(width: ceil(rect.width), height: ceil(rect.height))
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         let text = text
         let size = text.size()
-        let x = switch alignment {
-        case .center: bounds.minX + (bounds.width - size.width) / 2
-        case .right: bounds.maxX - size.width
-        default: bounds.minX
+        let x: CGFloat
+        let width: CGFloat
+        switch alignment {
+        case .center:
+            x = bounds.minX + (bounds.width - size.width) / 2
+            width = size.width
+        case .right:
+            x = bounds.maxX - size.width
+            width = size.width
+        default:
+            x = bounds.minX
+            width = bounds.width
         }
-        let rect = NSRect(x: x, y: bounds.minY, width: size.width, height: size.height)
+        let rect = NSRect(x: x, y: bounds.minY, width: width, height: bounds.height)
         effectiveAppearance.performAsCurrentDrawingAppearance {
             text.draw(in: rect)
         }
@@ -108,7 +122,9 @@ final class ShortcutRowView: NSView {
             x -= 4
         }
         let keysMinX = keycapViews.first?.frame.minX ?? bounds.width
-        nameLabel.frame = NSRect(x: 0, y: 0, width: max(0, keysMinX - 8), height: bounds.height)
+        let nameHeight = nameLabel.intrinsicContentSize.height + 2
+        nameLabel.frame = NSRect(x: 0, y: (bounds.height - nameHeight) / 2,
+            width: max(0, keysMinX - 8), height: nameHeight)
         separator.frame = NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
         effectiveAppearance.performAsCurrentDrawingAppearance {
             separator.layer?.backgroundColor = DesignColor.dividerSubtle.nsColor.cgColor
@@ -122,8 +138,8 @@ final class ShortcutRowView: NSView {
 }
 
 final class ShortcutCardView: NSView {
-    let titleLabel: NSTextField
-    let whenLabel: NSTextField
+    let titleLabel: ShortcutTextField
+    let whenLabel: ShortcutTextField
     let rowViews: [ShortcutRowView]
 
     init(card: ShortcutCard) {
@@ -138,6 +154,9 @@ final class ShortcutCardView: NSView {
         titleLabel.textColor = DesignColor.textPrimary.nsColor
         whenLabel.font = .systemFont(ofSize: 12)
         whenLabel.textColor = DesignColor.textSecondary.nsColor
+        whenLabel.lineBreakMode = .byWordWrapping
+        whenLabel.maximumNumberOfLines = 2
+        whenLabel.cell?.wraps = true
         addSubview(titleLabel)
         addSubview(whenLabel)
         for (index, row) in rowViews.enumerated() {
@@ -148,16 +167,32 @@ final class ShortcutCardView: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
-    var requiredHeight: CGFloat { 44 + CGFloat(rowViews.count) * 34 }
+    var requiredHeight: CGFloat { requiredHeight(forWidth: bounds.width) }
+
+    private func headerHeight(forWidth width: CGFloat) -> CGFloat {
+        let titleWidth = titleLabel.intrinsicContentSize.width
+        let whenWidth = max(0, width - 30 - titleWidth - 8)
+        let whenHeight = whenLabel.fittingSize(constrainedToWidth: whenWidth).height
+        return max(19, whenHeight + 2)
+    }
+
+    func requiredHeight(forWidth width: CGFloat) -> CGFloat {
+        15 + headerHeight(forWidth: width) + 6 + CGFloat(rowViews.count) * 34 + 7
+    }
 
     override func layout() {
         super.layout()
         let contentWidth = max(0, bounds.width - 30)
-        titleLabel.frame = NSRect(x: 14, y: 15, width: titleLabel.intrinsicContentSize.width, height: 16)
-        whenLabel.frame = NSRect(x: titleLabel.frame.maxX + 7.5, y: 17,
-            width: whenLabel.intrinsicContentSize.width, height: 15)
+        let headerHeight = headerHeight(forWidth: bounds.width)
+        titleLabel.frame = NSRect(x: 15, y: 15,
+            width: titleLabel.intrinsicContentSize.width, height: headerHeight)
+        let whenX = titleLabel.frame.maxX + 8
+        let whenWidth = max(0, bounds.width - 15 - whenX)
+        whenLabel.frame = NSRect(x: whenX, y: 17, width: whenWidth,
+            height: whenLabel.fittingSize(constrainedToWidth: whenWidth).height)
         for (index, row) in rowViews.enumerated() {
-            row.frame = NSRect(x: 15, y: 37 + CGFloat(index) * 34, width: contentWidth, height: 34)
+            row.frame = NSRect(x: 15, y: 15 + headerHeight + 6 + CGFloat(index) * 34,
+                width: contentWidth, height: 34)
         }
         applyColors()
     }
@@ -192,7 +227,7 @@ public final class ShortcutListView: NSView {
         super.layout()
         let gap: CGFloat = 14
         let width = floor((bounds.width - 36 - gap * 2) / 3)
-        let height = cardViews.map(\.requiredHeight).max() ?? 0
+        let height = cardViews.map { $0.requiredHeight(forWidth: width) }.max() ?? 0
         for (index, card) in cardViews.enumerated() {
             card.frame = NSRect(x: 18 + CGFloat(index) * (width + gap), y: 18, width: width, height: height)
         }
