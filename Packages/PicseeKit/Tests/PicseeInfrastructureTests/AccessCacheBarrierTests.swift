@@ -58,7 +58,7 @@ private func t229Request(_ original: ImageDecodeRequest, permit: AccessWorkPermi
     #expect(await cache.writeDiagnostics().failureCount == 0)
 }
 
-@Test func t229DiskHeldHitIsRejectedButRetainedPayloadCanBeRevalidated() async throws {
+@Test(.timeLimit(.minutes(3))) func t229DiskHeldHitIsRejectedButRetainedPayloadCanBeRevalidated() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -77,7 +77,7 @@ private func t229Request(_ original: ImageDecodeRequest, permit: AccessWorkPermi
     let pause = T229CachePause()
     let reader = ThumbnailDiskCache(directory: path, afterReadLeaseAcquired: { await pause.pause() })
     let pending = Task { try await reader.load(ticket) }
-    while !(await pause.entered) { await Task.yield() }
+    while !(await pause.entered) { try Task.checkCancellation(); await Task.yield() }
     authority.update(counter: 1, readable: false)
     await pause.resume()
     await #expect(throws: CancellationError.self) { try await pending.value }
@@ -161,29 +161,37 @@ private final class T229RevokingTrace: ResourceSnapshotTracing, @unchecked Senda
     private let thread: Thread
     private let lock = NSLock()
     private var observations: [Bool] = []
+    private var cancelled = false
     init(_ authority: AccessWorkAuthority) {
         let worker = T229RevocationWorker(authority)
         self.worker = worker
         thread = Thread { worker.run() }
         thread.name = "picsee.test.access-revocation"
         thread.start()
-        // The test begins its bounded lock-release check only after its dedicated
-        // worker is ready. It does not depend on the shared global queue's load.
+        // Await the dedicated worker's startup before requesting revocation.
         worker.ready.wait()
     }
     deinit { worker.stop() }
     var admittedRevocationDuringCallback: Bool { lock.withLock { !observations.isEmpty && observations.allSatisfy { $0 } } }
     func lookup(isPreview: Bool, hit: Bool) {}
+    func cancel() {
+        lock.withLock { cancelled = true }
+        // Unblock even a lock-order regression when the enclosing test expires.
+        // Cancellation is recorded as failure, never as successful revocation.
+        worker.completed.signal()
+    }
     func snapshot(_ snapshot: ResourceSnapshot) {
+        guard lock.withLock({ !cancelled }) else {
+            lock.withLock { observations.append(false) }
+            return
+        }
         worker.requested.signal()
-        // Bounded wait turns a held publication lock into a failing assertion,
-        // rather than hanging this regression test forever.
-        let revoked = worker.completed.wait(timeout: .now() + .milliseconds(500)) == .success
-        lock.withLock { observations.append(revoked) }
+        worker.completed.wait()
+        lock.withLock { observations.append(!cancelled) }
     }
 }
 
-@Test func t229MemoryPublicationReleasesAuthorityBeforeTracing() async throws {
+@Test(.timeLimit(.minutes(3))) func t229MemoryPublicationReleasesAuthorityBeforeTracing() async throws {
     let authority = AccessWorkAuthority(); authority.update(counter: 0, readable: true)
     let permit = authority.permit(counter: 0), cache = ImageMemoryCache(capacity: 1024)
     let key = cacheKey(229)
@@ -191,8 +199,12 @@ private final class T229RevokingTrace: ResourceSnapshotTracing, @unchecked Senda
     let trace = T229RevokingTrace(authority)
     let context = ResourceSnapshotContext(tracer: trace,
         activity: DecodeActivity(running: 0, nonCurrent: 0, visible: 0, heavy: 0, reservedBytes: 0, waiting: 0))
-    _ = await cache.finish(request, image: cacheImage(try cachePixels(), key: key),
-        context: context, accessPermit: permit)
+    let image = cacheImage(try cachePixels(), key: key)
+    await withTaskCancellationHandler {
+        _ = await cache.finish(request, image: image, context: context, accessPermit: permit)
+    } onCancel: {
+        trace.cancel()
+    }
     #expect(trace.admittedRevocationDuringCallback)
     #expect(!permit.isCurrent)
     #expect(await cache.image(for: key) == nil)

@@ -83,8 +83,9 @@ private final class RecoveryReadGate: FileIdentityResourceReading, @unchecked Se
         condition.lock()
         if let prefix, url.path.hasPrefix(prefix) {
             blocked = true
-            let deadline = Date().addingTimeInterval(30)
-            while blocked && condition.wait(until: deadline) {}
+            // The test releases this gate explicitly, including in deferred cleanup.
+            // CI scheduling delay must not release the held scan early.
+            while blocked { condition.wait() }
             blocked = false
         }
         condition.unlock()
@@ -121,13 +122,11 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
 }
 
 @MainActor private func recoveryWait(_ predicate: @MainActor () -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(8)
-    while !predicate(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    while !predicate() { try await Task.sleep(for: .milliseconds(10)) }
     #expect(predicate())
 }
 @MainActor private func recoveryWaitAsync(_ predicate: @MainActor () async -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(8)
-    while !(await predicate()), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    while !(await predicate()) { try await Task.sleep(for: .milliseconds(10)) }
     #expect(await predicate())
 }
 @MainActor private func recoveryShell(_ controller: CanvasWindowController) throws -> GridShellView {
@@ -201,7 +200,7 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
     func remove() { gate.release(); try? FileManager.default.removeItem(at: base) }
 }
 
-@MainActor @Test func t229RecoveryRestoresTwoIndependentPositionsAfterRootMoves() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229RecoveryRestoresTwoIndependentPositionsAfterRootMoves() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let viewer = f.controller(), gridWindow = f.controller()
     defer { viewer.window?.close(); gridWindow.window?.close() }
@@ -255,7 +254,7 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
 }
 
 private enum RecoveryMissing: String, CaseIterable, Sendable { case childGone, itemGone, childReplaced, itemReplaced }
-@MainActor @Test(arguments: RecoveryMissing.allCases)
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: RecoveryMissing.allCases)
 private func t229RecoveryFallsBackToRootGridWhenOriginalPositionIsGone(_ missing: RecoveryMissing) async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let controller = f.controller(); defer { controller.window?.close() }
@@ -288,7 +287,7 @@ private func t229RecoveryFallsBackToRootGridWhenOriginalPositionIsGone(_ missing
     #expect(controller.session.folderScan?.snapshot?.entries.first?.url.lastPathComponent == "root.png")
 }
 
-@MainActor @Test func t229RecoveryFailedRootVerificationStaysUnknownThenRetriesSavedBookmark() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229RecoveryFailedRootVerificationStaysUnknownThenRetriesSavedBookmark() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let controller = f.controller(); defer { controller.window?.close() }
     controller.browseRecoveredFolder(f.childOne, rootID: f.rootA)
@@ -315,7 +314,7 @@ private struct RecoveryInterleaving: Sendable {
     let secondEject: Bool
     static let all = [false, true].flatMap { duringScan in [false, true].map { Self(duringScan: duringScan, secondEject: $0) } }
 }
-@MainActor @Test(arguments: RecoveryInterleaving.all)
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: RecoveryInterleaving.all)
 private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace: RecoveryInterleaving) async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let first = f.controller(), second = f.controller()
@@ -357,7 +356,7 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     #expect(first.window?.representedURL == f.b)
 }
 
-@MainActor @Test func t229RecoveryCancelReadingAnotherRootRestoresWaitingPosition() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229RecoveryCancelReadingAnotherRootRestoresWaitingPosition() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let controller = f.controller(); defer { controller.window?.close(); f.gate.release() }
     var announcements: [String] = []
@@ -384,7 +383,7 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     #expect(announcements == [loss, "Folder Access Restored"])
 }
 
-@MainActor @Test func t229RecoveryAnnouncementBudgetRestartsAfterNavigationAway() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229RecoveryAnnouncementBudgetRestartsAfterNavigationAway() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let controller = f.controller(); defer { controller.window?.close() }
     var announcements: [String] = []
@@ -413,7 +412,7 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
 // Audit M6: the root is readable again, but one window's own folder cannot be
 // listed. That window falls back to the root grid instead of staying on page 26,
 // and loss is not announced again after "Folder Access Restored".
-@MainActor @Test func t229FixPerWindowRestoreFailureFallsBackToRootGridWithoutReannouncingLoss() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229FixPerWindowRestoreFailureFallsBackToRootGridWithoutReannouncingLoss() async throws {
     let f = try await RecoveryFixture()
     let viewer = f.controller(), gridWindow = f.controller()
     defer {
@@ -437,6 +436,8 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     #expect(gridWindow.window?.representedURL == f.a)
     #expect(gridWindow.session.folderScan?.snapshot?.version.rootID == f.rootA)
     #expect(f.services.monitor.state.snapshot(for: f.rootA)?.availability == .readable)
+    try await recoveryWait { announcements.count == 2 }
+    // Recovery has announced; observe only unwanted repeat announcements.
     try await Task.sleep(for: .milliseconds(300))
     #expect(announcements.count == 2)
     #expect(announcements.filter { $0 == announcements.first }.count == 1)
@@ -445,7 +446,7 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
 // Audit gpt F1 (round 2): the recovery identity follows the grid the window
 // shows. (a) The root moves while readable; a later eject and remount restore
 // the moved child and its Current Item, not the root grid.
-@MainActor @Test func t229Fix2RecoveryFollowsRootMovedWhileReadable() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229Fix2RecoveryFollowsRootMovedWhileReadable() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let controller = f.controller(); defer { controller.window?.close() }
     controller.browseRecoveredFolder(f.childOne, rootID: f.rootA)
@@ -470,7 +471,7 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
 
 // (b) Cancel Reading returns to the previous complete grid; the abandoned scan
 // must not keep the recovery identity.
-@MainActor @Test func t229Fix2CancelReadingBackToReadableGridKeepsItsRecoveryIdentity() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229Fix2CancelReadingBackToReadableGridKeepsItsRecoveryIdentity() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let controller = f.controller(); defer { controller.window?.close(); f.gate.release() }
     controller.browseRecoveredFolder(f.childOne, rootID: f.rootA)
@@ -499,7 +500,7 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
 // Audit gpt F2 (round 2): one loss episode announces loss once and recovery
 // once. Window B leaves Choose Another Folder open while A recovers; cancelling
 // B's panel afterwards must not announce loss again, nor a second recovery.
-@MainActor @Test func t229Fix2PanelLeftOpenDuringRecoveryAnnouncesLossAndRecoveryOnce() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229Fix2PanelLeftOpenDuringRecoveryAnnouncesLossAndRecoveryOnce() async throws {
     let f = try await RecoveryFixture()
     let first = f.controller(), second = f.controller()
     let window = try #require(second.window)
@@ -528,6 +529,8 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     window.endSheet(panel, returnCode: .cancel)
     try await recoveryWait { window.attachedSheet == nil }
     try await f.ready(second, folder: f.childTwo, count: 2)
+    try await recoveryWait { announcements.count == 2 }
+    // Both windows completed; cancelling the panel must not announce again.
     try await Task.sleep(for: .milliseconds(300))
     let loss = try #require(announcements.first)
     #expect(announcements == [loss, String(localized: "Folder Access Restored")])
@@ -541,7 +544,7 @@ private final class RecoveryDiagnosticTrace: @unchecked Sendable {
     var diagnostics: AccessDiagnostics { AccessDiagnostics { [self] message, _ in lock.withLock { stored.append(message) } } }
 }
 
-@MainActor @Test func t229DiagnosticsAppRefusalThenRecoveryPublishesTruthfulState() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229DiagnosticsAppRefusalThenRecoveryPublishesTruthfulState() async throws {
     let trace = RecoveryDiagnosticTrace(), f = try await RecoveryFixture(diagnostics: trace.diagnostics)
     defer { f.remove() }
     await f.services.monitor.start()
@@ -563,7 +566,7 @@ private final class RecoveryDiagnosticTrace: @unchecked Sendable {
 }
 
 
-@MainActor @Test func t229DiagnosticsSupersededRecoveryRefusesPublication() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229DiagnosticsSupersededRecoveryRefusesPublication() async throws {
     let trace = RecoveryDiagnosticTrace(), f = try await RecoveryFixture(diagnostics: trace.diagnostics)
     defer { f.remove(); Task { await f.mounts.release() } }
     await f.services.monitor.start()
@@ -585,7 +588,7 @@ private final class RecoveryDiagnosticTrace: @unchecked Sendable {
     #expect(trace.messages.contains { $0.contains("AccessRecovery outcome=published") })
 }
 
-@MainActor @Test func t229R2GridRestoresNonFirstCurrentItemAfterMountTokenChanges() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229R2GridRestoresNonFirstCurrentItemAfterMountTokenChanges() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     try FileManager.default.copyItem(at: f.childOne.appendingPathComponent("one.png"),
         to: f.childOne.appendingPathComponent("three.png"))
