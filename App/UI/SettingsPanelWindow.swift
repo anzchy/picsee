@@ -76,6 +76,7 @@ enum SettingsSection: String, CaseIterable {
     func preferencesDidChange(_ preferences: DisplayPreferences) {
         for (appearance, button) in appearanceButtons {
             button.state = appearance == preferences.appearance ? .on : .off
+            button.setAccessibilityValue(appearance == preferences.appearance ? "1" : "0")
         }
         toolsButton.state = preferences.alwaysShowTools ? .on : .off
     }
@@ -147,6 +148,7 @@ enum SettingsSection: String, CaseIterable {
             let button = NSButton(title: item.1, target: self, action: #selector(changeAppearance(_:)))
             button.tag = index
             button.bezelStyle = .rounded
+            button.setButtonType(.pushOnPushOff)
             button.font = .systemFont(ofSize: 12)
             button.setAccessibilityRole(.radioButton)
             let width = max(62, min(128, button.intrinsicContentSize.width + 14))
@@ -322,6 +324,7 @@ enum SettingsSection: String, CaseIterable {
     @objc private func changeAppearance(_ sender: NSButton) {
         let appearance: DisplayAppearance = [.system, .light, .dark][sender.tag]
         preferencesStore.value.appearance = appearance
+        preferencesDidChange(preferencesStore.value)
     }
 
     @objc private func changeTools(_ sender: NSButton) {
