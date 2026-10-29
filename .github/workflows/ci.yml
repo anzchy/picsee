@@ -3,9 +3,20 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Heavy lanes run here instead of on the Mac mini: `gh workflow run CI --ref <branch>`.
+  workflow_dispatch:
+    inputs:
+      swift_filter:
+        description: Optional `swift test --filter` pattern; empty runs the whole package suite
+        required: false
+        default: ''
+      app_tests:
+        description: Also build and run the App test bundle
+        type: boolean
+        default: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -18,32 +29,31 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Check generated feature ledger HTML
         run: node scripts/ledger/build.mjs --check
-      - name: Install pinned npm dev dependencies
-        run: npm ci --ignore-scripts
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium
-      - name: Check design catalog and journeys
-        run: npm run design:check
-      - name: Select locked Xcode
-        run: |
-          set -euo pipefail
-          test -d /Applications/Xcode_26.6.app
-          sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
-          xcodebuild -version | tee /tmp/picsee-xcode-version.txt
-          grep -Fx 'Xcode 26.6' /tmp/picsee-xcode-version.txt
-          grep -Fx 'Build version 17F113' /tmp/picsee-xcode-version.txt
-      - name: Install XcodeGen
-        run: |
-          set -euo pipefail
-          mkdir -p .build/ci-tools
-          curl --fail --location --silent --show-error https://github.com/yonaskolb/XcodeGen/releases/download/2.44.1/xcodegen.zip --output .build/ci-tools/xcodegen.zip
-          echo 'a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73  .build/ci-tools/xcodegen.zip' | shasum -a 256 --check
-          unzip -q -o .build/ci-tools/xcodegen.zip -d .build/ci-tools
-          .build/ci-tools/xcodegen/bin/xcodegen --version | grep -Fx 'Version: 2.44.1'
-          echo "$PWD/.build/ci-tools/xcodegen/bin" >> "$GITHUB_PATH"
-      - name: Generate project
-        run: xcodegen generate
+      - name: Set up Xcode
+        uses: ./.github/actions/xcode-setup
       - name: Swift Testing
-        run: swift test --package-path Packages/PicseeKit
+        env:
+          SWIFT_FILTER: ${{ inputs.swift_filter }}
+        run: swift test --package-path Packages/PicseeKit ${SWIFT_FILTER:+--filter "$SWIFT_FILTER"}
       - name: Build unsigned app
         run: xcodebuild build -scheme Picsee -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -derivedDataPath .build/dd-ci
+
+  app-tests:
+    name: App tests
+    if: github.event_name != 'workflow_dispatch' || inputs.app_tests
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Xcode
+        uses: ./.github/actions/xcode-setup
+      - name: Build App tests
+        run: xcodebuild build-for-testing -scheme Picsee -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -derivedDataPath .build/dd-ci
+      - name: Run App tests
+        # The runner is the only job on its machine, so the local heavy lock is not needed.
+        env:
+          PICSEE_HEAVY_LOCK_HELD: '1'
+        run: node scripts/tdd/app-lane.mjs
+      - name: Node tooling tests
+        run: node --test scripts/tdd/*.test.mjs

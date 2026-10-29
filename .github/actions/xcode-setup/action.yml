@@ -1,0 +1,27 @@
+name: Xcode setup
+description: Select the locked Xcode, install the pinned XcodeGen and generate the project.
+runs:
+  using: composite
+  steps:
+    - name: Select locked Xcode
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -d /Applications/Xcode_26.6.app
+        sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
+        xcodebuild -version | tee /tmp/picsee-xcode-version.txt
+        grep -Fx 'Xcode 26.6' /tmp/picsee-xcode-version.txt
+        grep -Fx 'Build version 17F113' /tmp/picsee-xcode-version.txt
+    - name: Install XcodeGen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p .build/ci-tools
+        curl --fail --location --silent --show-error https://github.com/yonaskolb/XcodeGen/releases/download/2.44.1/xcodegen.zip --output .build/ci-tools/xcodegen.zip
+        echo 'a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73  .build/ci-tools/xcodegen.zip' | shasum -a 256 --check
+        unzip -q -o .build/ci-tools/xcodegen.zip -d .build/ci-tools
+        .build/ci-tools/xcodegen/bin/xcodegen --version | grep -Fx 'Version: 2.44.1'
+        echo "$PWD/.build/ci-tools/xcodegen/bin" >> "$GITHUB_PATH"
+    - name: Generate project
+      shell: bash
+      run: .build/ci-tools/xcodegen/bin/xcodegen generate
