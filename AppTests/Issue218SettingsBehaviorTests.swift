@@ -176,7 +176,7 @@ import PicseeMacUI
     }
 }
 
-@MainActor @Test func issue218CacheClearRequiresConfirmation() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func issue218CacheClearRequiresConfirmation() async throws {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: folder) }
@@ -206,8 +206,7 @@ import PicseeMacUI
     let windowContent = try #require(panel.window.contentView)
     let size = try #require(settingsControl("settings.cache.size", in: windowContent) as? NSTextField)
     let measuredLabel = ByteCountFormatter.string(fromByteCount: initialBytes, countStyle: .file)
-    let measureDeadline = Date().addingTimeInterval(3)
-    while size.stringValue != measuredLabel && Date() < measureDeadline { await Task.yield() }
+    await waitUntil { size.stringValue == measuredLabel }
     #expect(size.stringValue == measuredLabel)
     let clear = try #require(settingsControl("settings.cache.clear", in: windowContent) as? NSButton)
     clear.performClick(nil)
@@ -216,12 +215,10 @@ import PicseeMacUI
     #expect(size.stringValue == measuredLabel)
     confirm = true
     clear.performClick(nil)
-    let deadline = Date().addingTimeInterval(3)
-    while (try await cache.sizeBytes()) != 0 && Date() < deadline { await Task.yield() }
+    try await waitUntil { try await cache.sizeBytes() == 0 }
     #expect(prompts == 2)
     #expect(try await cache.sizeBytes() == 0)
     let emptyLabel = ByteCountFormatter.string(fromByteCount: 0, countStyle: .file)
-    let refreshDeadline = Date().addingTimeInterval(3)
-    while size.stringValue != emptyLabel && Date() < refreshDeadline { await Task.yield() }
+    await waitUntil { size.stringValue == emptyLabel }
     #expect(size.stringValue == emptyLabel)
 }

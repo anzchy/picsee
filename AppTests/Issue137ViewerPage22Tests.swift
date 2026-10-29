@@ -12,8 +12,7 @@ import PicseeMacUI
 
 @MainActor private func issue137Wait(_ stage: String, detail: () -> String = { "" },
                                       _ condition: () -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(10)
-    while !condition() && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    await waitUntil { condition() }
     try #require(condition(), "Issue 137 stage: \(stage) \(detail())")
 }
 
@@ -46,7 +45,7 @@ private func issue137SamePath(_ lhs: URL?, _ rhs: URL) -> Bool {
 /// Owner decision C (#137, 2026-10-29): a viewer folder session that ends up with nothing to show (here the opened
 /// image is removed) renders page 22's content on the viewer surface, lists the folder's subfolders, and its tile
 /// routes exactly as the grid page's tile does.
-@Test @MainActor func issue137ViewerEmptyFolderShowsPage22AndTileOpensSubfolder() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue137ViewerEmptyFolderShowsPage22AndTileOpensSubfolder() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let trip = base.appendingPathComponent("Trip"), sub = trip.appendingPathComponent("Sub")
@@ -88,7 +87,7 @@ private func issue137SamePath(_ lhs: URL?, _ rhs: URL) -> Bool {
 
 /// gpt M2: page 22 disables footer search, so the search command (menu validation reads `gridSearchAvailable`, the
 /// key route checks it first) must not reveal the disabled field.
-@Test @MainActor func issue137Page22RefusesSearchCommandEntry() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue137Page22RefusesSearchCommandEntry() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let empty = base.appendingPathComponent("Empty")

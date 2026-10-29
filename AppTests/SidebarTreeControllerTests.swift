@@ -30,8 +30,7 @@ private func sameSidebarURL(_ lhs: URL, _ rhs: URL) -> Bool {
 }
 
 @MainActor private func waitForSidebar(_ stage: String, _ condition: () async -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(8)
-    while !(await condition()) && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    await waitUntil { await condition() }
     try #require(await condition(), "Sidebar stage: \(stage)")
 }
 
@@ -82,7 +81,7 @@ private actor SwitchingSidebarCounter: SidebarFolderEnumerating {
     func release() { released = true; for waiter in waiters { waiter.resume() }; waiters.removeAll() }
 }
 
-@Test @MainActor func sidebarABARevisitRejectsStaleBlockedCount() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func sidebarABARevisitRejectsStaleBlockedCount() async throws {
     _ = NSApplication.shared
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -127,7 +126,7 @@ private actor SwitchingSidebarCounter: SidebarFolderEnumerating {
     }
 }
 
-@Test @MainActor func sidebarCloseCancelsBlockedCountAndTakesNoChildLease() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func sidebarCloseCancelsBlockedCountAndTakesNoChildLease() async throws {
     _ = NSApplication.shared
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -161,7 +160,7 @@ private actor SwitchingSidebarCounter: SidebarFolderEnumerating {
     #expect(await tracker.childAcquires == childAcquiresAtClose)
 }
 
-@Test @MainActor func sidebarCancelRestoresPriorTreeAndWatchRefreshRemovesDeletedChild() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func sidebarCancelRestoresPriorTreeAndWatchRefreshRemovesDeletedChild() async throws {
     _ = NSApplication.shared
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)

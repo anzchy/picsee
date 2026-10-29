@@ -97,16 +97,13 @@ private func raceFixture() -> URL {
 @MainActor private func openThenArm(_ file: URL, _ controller: CanvasWindowController,
                                     _ pipeline: MoveDuringRequestPipeline) async throws {
     controller.open(file, accessRequest: .fileGrant(file))
-    let deadline = ContinuousClock.now + .seconds(8)
-    while controller.session.imageLoader.phase != .settled && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.imageLoader.phase == .settled }
     #expect(controller.session.imageLoader.phase == .settled)
     pipeline.arm()
     controller.reconcileStandaloneImage()
 }
 
-@Test @MainActor func issue273TrashDuringReconcileReadClearsWithoutReconnectSheet() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue273TrashDuringReconcileReadClearsWithoutReconnectSheet() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -123,18 +120,15 @@ private func raceFixture() -> URL {
     let window = try #require(controller.window)
     defer { window.close() }
     try await openThenArm(file, controller, pipeline)
-    let deadline = ContinuousClock.now + .seconds(8)
-    while (pipeline.moves == 0 || controller.session.imageLoader.fileURL != nil) &&
-          window.attachedSheet == nil && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { (pipeline.moves != 0 && controller.session.imageLoader.fileURL == nil) ||
+        window.attachedSheet != nil }
     #expect(pipeline.moves == 1)
     #expect(controller.session.imageLoader.fileURL == nil)
     #expect(window.representedURL == nil)
     #expect(window.attachedSheet == nil)
 }
 
-@Test @MainActor func issue273DotTrashMoveDuringReconcileReadFollowsWithoutSheet() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue273DotTrashMoveDuringReconcileReadFollowsWithoutSheet() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let ordinaryTrash = base.appendingPathComponent(".Trash")
@@ -151,19 +145,16 @@ private func raceFixture() -> URL {
     let window = try #require(controller.window)
     defer { window.close() }
     try await openThenArm(original, controller, pipeline)
-    let deadline = ContinuousClock.now + .seconds(8)
-    while (pipeline.moves == 0 ||
-           controller.session.imageLoader.presented?.fileURL.standardizedFileURL != moved.standardizedFileURL) &&
-          window.attachedSheet == nil && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { (pipeline.moves != 0 &&
+        controller.session.imageLoader.presented?.fileURL.standardizedFileURL == moved.standardizedFileURL) ||
+        window.attachedSheet != nil }
     #expect(pipeline.moves == 1)
     #expect(controller.session.imageLoader.presented?.fileURL.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.representedURL?.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.attachedSheet == nil)
 }
 
-@Test @MainActor func issue273TrashDuringLoaderDetailRequestClearsWithoutReconnectSheet() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue273TrashDuringLoaderDetailRequestClearsWithoutReconnectSheet() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -182,11 +173,7 @@ private func raceFixture() -> URL {
     defer { window.close() }
     controller.open(file, accessRequest: .fileGrant(file))
     // Settle the viewer and the reconcile that open starts, so the grant is watched before the trash.
-    var deadline = ContinuousClock.now + .seconds(8)
-    while (controller.session.imageLoader.phase != .settled || pipeline.headerRequests == 0) &&
-          ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.imageLoader.phase == .settled && pipeline.headerRequests != 0 }
     try await Task.sleep(for: .milliseconds(100))
     #expect(controller.session.imageLoader.phase == .settled)
     #expect(controller.session.imageLoader.presented != nil)
@@ -195,28 +182,17 @@ private func raceFixture() -> URL {
     pipeline.holdHeader()
     defer { pipeline.releaseHeader() }
     controller.reconcileStandaloneImage()
-    deadline = ContinuousClock.now + .seconds(8)
-    while !pipeline.headerHeld && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { pipeline.headerHeld }
     #expect(pipeline.headerHeld)
     // A larger detail request: the image stays shown while the loader refines and finds the file trashed.
     pipeline.armLoader()
     controller.session.requireImageResolution(4096)
     #expect(controller.session.imageLoader.phase == .refining)
-    deadline = ContinuousClock.now + .seconds(8)
-    while (pipeline.moves == 0 || (controller.session.imageLoader.phase != .failed &&
-           controller.session.imageLoader.fileURL != nil)) &&
-          window.attachedSheet == nil && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { (pipeline.moves != 0 && (controller.session.imageLoader.phase == .failed ||
+        controller.session.imageLoader.fileURL == nil)) || window.attachedSheet != nil }
     #expect(window.attachedSheet == nil, "sheet: \(sheetText(window))")
     pipeline.releaseHeader()
-    deadline = ContinuousClock.now + .seconds(8)
-    while controller.session.imageLoader.fileURL != nil && window.attachedSheet == nil &&
-          ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.imageLoader.fileURL == nil || window.attachedSheet != nil }
     #expect(pipeline.moves == 1)
     #expect(controller.session.imageLoader.fileURL == nil)
     #expect(window.representedURL == nil)
@@ -225,15 +201,12 @@ private func raceFixture() -> URL {
 
 /// A read that fails for a real access loss still asks to reconnect.
 @MainActor private func expectReconnectSheet(_ window: NSWindow, _ pipeline: MoveDuringRequestPipeline) async throws {
-    let deadline = ContinuousClock.now + .seconds(8)
-    while window.attachedSheet == nil && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { window.attachedSheet != nil }
     #expect(pipeline.moves == 1)
     #expect(window.attachedSheet is NSPanel, "sheet: \(sheetText(window))")
 }
 
-@Test @MainActor func issue273RemovalDuringReconcileReadStillShowsReconnectSheet() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue273RemovalDuringReconcileReadStillShowsReconnectSheet() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -251,7 +224,7 @@ private func raceFixture() -> URL {
     try await expectReconnectSheet(window, pipeline)
 }
 
-@Test @MainActor func issue273FailedReresolutionDuringReconcileReadStillShowsReconnectSheet() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue273FailedReresolutionDuringReconcileReadStillShowsReconnectSheet() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)

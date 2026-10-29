@@ -29,7 +29,7 @@ private func round2Fixture(_ name: String) -> URL {
         .appendingPathComponent("TestAssets/synthetic/\(name)")
 }
 
-@Test @MainActor func issue140NativeOrdinaryDotTrashMoveKeepsViewerLive() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140NativeOrdinaryDotTrashMoveKeepsViewerLive() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let ordinaryTrash = base.appendingPathComponent(".Trash")
@@ -42,24 +42,20 @@ private func round2Fixture(_ name: String) -> URL {
     let window = try #require(controller.window)
     defer { window.close() }
     controller.open(original, accessRequest: .fileGrant(original))
-    let openedDeadline = ContinuousClock.now + .seconds(8)
-    while controller.session.imageLoader.presented == nil && ContinuousClock.now < openedDeadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.imageLoader.presented != nil }
     #expect(controller.session.imageLoader.presented != nil)
     try fm.moveItem(at: original, to: moved)
-    let reconcileDeadline = ContinuousClock.now + .seconds(8)
-    while controller.session.imageLoader.presented?.fileURL.standardizedFileURL != moved.standardizedFileURL &&
-          ContinuousClock.now < reconcileDeadline {
+    await waitUntil {
+        if controller.session.imageLoader.presented?.fileURL.standardizedFileURL == moved.standardizedFileURL { return true }
         controller.reconcileStandaloneImage()
-        try await Task.sleep(for: .milliseconds(10))
+        return false
     }
     #expect(controller.session.imageLoader.presented?.fileURL.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.representedURL?.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.attachedSheet == nil, "sheet: \(sheetText(window))")
 }
 
-@Test @MainActor func issue140NativeTrashThenSamePathReplacementShowsNewRevision() async throws {
+@Test(.timeLimit(.minutes(3))) @MainActor func issue140NativeTrashThenSamePathReplacementShowsNewRevision() async throws {
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -70,22 +66,18 @@ private func round2Fixture(_ name: String) -> URL {
     let window = try #require(controller.window)
     defer { window.close() }
     controller.open(file, accessRequest: .fileGrant(file))
-    let openedDeadline = ContinuousClock.now + .seconds(8)
-    while controller.session.imageLoader.presented == nil && ContinuousClock.now < openedDeadline {
-        try await Task.sleep(for: .milliseconds(10))
-    }
+    await waitUntil { controller.session.imageLoader.presented != nil }
     let original = try #require(controller.session.imageLoader.presented)
     var trashed: NSURL?
     try fm.trashItem(at: file, resultingItemURL: &trashed)
     defer { if let trashed { try? fm.removeItem(at: trashed as URL) } }
     try fm.copyItem(at: round2Fixture("portrait-2x3.png"), to: file)
-    let reconcileDeadline = ContinuousClock.now + .seconds(8)
-    while ContinuousClock.now < reconcileDeadline {
+    await waitUntil {
         if let presented = controller.session.imageLoader.presented,
            presented.key.revision != original.key.revision,
-           presented.fileURL.standardizedFileURL == file.standardizedFileURL { break }
+           presented.fileURL.standardizedFileURL == file.standardizedFileURL { return true }
         controller.reconcileStandaloneImage()
-        try await Task.sleep(for: .milliseconds(10))
+        return false
     }
     #expect(controller.session.imageLoader.presented?.key.revision != original.key.revision)
     #expect(controller.session.imageLoader.presented?.fileURL.standardizedFileURL == file.standardizedFileURL)
