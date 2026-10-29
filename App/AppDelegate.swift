@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var appearanceAdapter = WindowAppearanceAdapter(preferencesStore: displayPreferences)
     private lazy var motionPolicy = MotionPolicy(source: UntestedNativeReduceMotionSource())
     private var commandMenu: CommandMenu?
-    private var cacheSettingsWindow: CacheSettingsWindow?
+    private var settingsWindow: SettingsPanelWindow?
     private var diagnosticsWindow: DiagnosticsWindow?
     private var windowController: CanvasWindowController?
     #if DEBUG && PICSEE_UI_TEST_FIXTURE
@@ -171,10 +171,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSettings() {
-        if cacheSettingsWindow == nil {
-            cacheSettingsWindow = CacheSettingsWindow(cache: thumbnailCache, appearanceAdapter: appearanceAdapter)
+        if settingsWindow == nil {
+            settingsWindow = SettingsPanelWindow(cache: thumbnailCache, appearanceAdapter: appearanceAdapter,
+                                                 preferencesStore: displayPreferences, defaults: .standard)
         }
-        cacheSettingsWindow?.show()
+        settingsWindow?.show()
     }
 
     private func showDiagnostics() {
