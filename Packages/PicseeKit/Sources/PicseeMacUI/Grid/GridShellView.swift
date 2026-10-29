@@ -236,6 +236,15 @@ import PicseeCore
         emptyFolderRequest = isEmpty ? (recents, now) : nil
         refreshEmptyFolder()
     }
+    /// Page 22 replacing the Reading State takes focus from the content it covers (the hidden collection view).
+    private func focusAppearingEmptyFolder() {
+        guard let window, !emptyFolderView.isHiddenOrHasHiddenAncestor, let first = emptyFolderView.keyViews.first
+        else { return }
+        let responder = window.firstResponder
+        if responder === window || (responder as? NSView)?.isDescendant(of: mainContent) == true {
+            window.makeFirstResponder(first)
+        }
+    }
     private weak var emptyFolderMirror: ViewerStateHost?
     /// Owner decision C (#137): the viewer's state host shows this same page 22, and its actions route as here.
     public func mirrorEmptyFolderPage(to host: ViewerStateHost) {
@@ -250,10 +259,11 @@ import PicseeCore
     }
     private func refreshEmptyFolder() {
         let subfolders = folderTree.isHidden ? [] : folderTree.children.map(\.url)
-        let content = emptyFolderRequest.flatMap {
-            EmptyFolderContent.make(isEmptyFolder: true, subfolders: subfolders, recents: $0.recents, now: $0.now,
+        let content = emptyFolderRequest.map {
+            EmptyFolderContent.make(subfolders: subfolders, recents: $0.recents, now: $0.now,
                                     locale: .current, calendar: .current)
         }
+        let appearing = emptyFolderView.isHidden && content != nil
         emptyFolderView.isHidden = content == nil
         var page: EmptyFolderPage?
         if let content {
@@ -266,6 +276,7 @@ import PicseeCore
             emptyFolderView.display(subfolders: shown.subfolders, recents: shown.recents,
                                     includeSubfoldersAvailable: shown.includeSubfoldersAvailable)
             page = shown
+            if appearing { focusAppearingEmptyFolder() }
         }
         emptyFolderMirror?.setEmptyFolderPage(page)
         applyFooterState()

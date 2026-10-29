@@ -284,7 +284,7 @@ private func designColor(_ light: PinnedDesign, _ dark: PinnedDesign, darkMode: 
             let page = try page22Shell(size, name, children: []).emptyFolderView
             let board = NSPasteboard.withUniqueName()
             defer { board.releaseGlobally() }
-            #expect(board.writeObjects([URL(fileURLWithPath: "/photos/Trip") as NSURL]))
+            #expect(board.writeObjects([URL(fileURLWithPath: "/photos/Trip", isDirectory: true) as NSURL]))
             #expect(page.draggingEntered(Page22DesignDropInfo(board)) == .copy)
             let inset = try light.lengthValue(light.raw(".drop-outline", "inset", viewport: width), viewport: width)
             #expect(page.dropOutline.frame == page.bounds.insetBy(dx: inset, dy: inset), "\(label): inset")

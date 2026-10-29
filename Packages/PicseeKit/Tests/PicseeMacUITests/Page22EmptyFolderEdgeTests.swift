@@ -68,7 +68,7 @@ import PicseeApplication
     #expect(page.draggingEntered(EdgeDropInfo(board)) == [])
     #expect(!page.isDragOver && page.dropOutline.isHidden)
     #expect(!page.performDragOperation(EdgeDropInfo(board)))
-    #expect(board.writeObjects([URL(fileURLWithPath: "/photos/Trip") as NSURL]))
+    #expect(board.writeObjects([URL(fileURLWithPath: "/photos/Trip", isDirectory: true) as NSURL]))
     #expect(page.draggingEntered(EdgeDropInfo(board)) == .copy && !page.dropOutline.isHidden)
     page.draggingEnded(EdgeDropInfo(board))
     #expect(!page.isDragOver && page.dropOutline.isHidden)

@@ -10,9 +10,8 @@ public struct EmptyFolderRecentRow: Equatable, Sendable {
 public enum EmptyFolderContent: Equatable, Sendable {
     case subfolders([String])
     case recents([EmptyFolderRecentRow])
-    public static func make(isEmptyFolder: Bool, subfolders: [URL], recents: [RecentFolder], now: Date,
-                            locale: Locale, calendar: Calendar) -> EmptyFolderContent? {
-        guard isEmptyFolder else { return nil }
+    public static func make(subfolders: [URL], recents: [RecentFolder], now: Date,
+                            locale: Locale, calendar: Calendar) -> EmptyFolderContent {
         guard subfolders.isEmpty else { return .subfolders(subfolders.map(\.lastPathComponent)) }
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = locale; formatter.calendar = calendar

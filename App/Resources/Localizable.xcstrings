@@ -588,6 +588,24 @@
         }
       }
     },
+    "%1$@, %2$@": {
+      "comment": "Recent folder row: name, opened time",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@，%2$@"
+          }
+        }
+      }
+    },
     "Content area: drop a folder to open it": {
       "extractionState": "manual",
       "localizations": {
