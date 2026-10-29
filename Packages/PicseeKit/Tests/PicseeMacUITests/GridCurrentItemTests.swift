@@ -156,3 +156,74 @@ import PicseeApplication
         itemForRepresentedObjectAt: IndexPath(item: 0, section: 0)) as? GridPhotoItem)
     #expect(madeCurrent.isCurrent && !madeCurrent.currentRingLayer.isHidden)
 }
+
+private func gridCellAccessibilityValue(selected: Bool, current: Bool) -> String {
+    switch (selected, current) {
+    case (true, true): String(localized: "Selected, Current")
+    case (true, false): String(localized: "Selected")
+    case (false, true): String(localized: "Current")
+    case (false, false): ""
+    }
+}
+
+@Test @MainActor func gridCellAccessibilityValueIsAFunctionOfFinalState() {
+    _ = NSApplication.shared
+    let scene = CurrentItemScene()
+    let states = [(false, false), (true, false), (false, true), (true, true)]
+    for start in states {
+        for target in states {
+            for selectedFirst in [true, false] {
+                let cell = GridPhotoItem()
+                _ = cell.view
+                cell.configure(scene.entry("A.jpg"))
+                cell.isSelected = start.0; cell.isCurrent = start.1
+                if selectedFirst { cell.isSelected = target.0; cell.isCurrent = target.1 }
+                else { cell.isCurrent = target.1; cell.isSelected = target.0 }
+                #expect(cell.view.accessibilityValue() as? String
+                    == gridCellAccessibilityValue(selected: target.0, current: target.1),
+                    "from \(start) to \(target)")
+                #expect(cell.currentRingLayer.isHidden == !target.1)
+            }
+        }
+    }
+}
+
+@Test @MainActor func gridCellAccessibilityValueMovesWithCurrentItem() throws {
+    _ = NSApplication.shared
+    let scene = CurrentItemScene(), grid = scene.grid
+    let a = scene.entry("A.jpg"), b = scene.entry("B.jpg"), c = scene.entry("C.jpg")
+    func announcedCurrent() -> [String] {
+        grid.layoutSubtreeIfNeeded()
+        grid.collectionView.layoutSubtreeIfNeeded()
+        let items = grid.collectionView.visibleItems().compactMap { $0 as? GridPhotoItem }
+        #expect(items.count == 3)
+        for item in items {
+            #expect(item.view.accessibilityValue() as? String
+                == gridCellAccessibilityValue(selected: item.isSelected, current: item.isCurrent), "\(item.filename)")
+        }
+        let current = String(localized: "Current")
+        return items.filter { ($0.view.accessibilityValue() as? String)?.hasSuffix(current) == true }
+            .map(\.filename).sorted()
+    }
+    grid.display(scene.snapshot([a, b, c]), selectedItemID: nil)
+    grid.activate()
+    #expect(announcedCurrent() == ["A.jpg"])
+    grid.activate(currentItemID: b.itemID)
+    #expect(announcedCurrent() == ["B.jpg"])
+    let right = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: 0, windowNumber: scene.window.windowNumber, context: nil,
+        characters: "\u{F703}", charactersIgnoringModifiers: "\u{F703}", isARepeat: false, keyCode: 124))
+    grid.collectionView.keyDown(with: right)
+    #expect(announcedCurrent() == ["C.jpg"])
+    grid.collectionView(grid.collectionView, didSelectItemsAt: [IndexPath(item: 0, section: 0)])
+    #expect(announcedCurrent() == ["A.jpg"])
+}
+
+@Test func gridCellAccessibilityValueUsesWholeStringKey() throws {
+    let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Sources/PicseeMacUI/Grid/GridBrowserView.swift"), encoding: .utf8)
+    // zh-Hans needs the full-width comma of 「已选中，当前」, so the pair is one catalog key, never a join.
+    #expect(source.contains("String(localized: \"Selected, Current\")"))
+    #expect(!source.contains(".joined(separator: \", \")"))
+}
