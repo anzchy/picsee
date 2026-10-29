@@ -33,7 +33,8 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     private var recoveryObservers: [UUID: @MainActor (AccessRecoveryAttempt) -> Void] = [:]
     private var reauthorizationRequests: [AccessRootID: UUID] = [:]
     private var volumeNames: [String: String] = [:]
-    private var announcementPhase: [AccessRootID: Bool] = [:]
+    /// The loss counter that opened each root's announcement episode, and whether it announced recovery.
+    private var announcementEpisodes: [AccessRootID: (lossCounter: UInt64, recovered: Bool)] = [:]
     private var waitingWindows: [AccessRootID: Set<ObjectIdentifier>] = [:]
     private var recoveryTasks: [AccessRootID: Task<Void, Never>] = [:]
     private var recoveryRequests: [AccessRootID: UUID] = [:]
@@ -48,17 +49,24 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         waitingWindows[rootID]?.remove(window)
         if waitingWindows[rootID]?.isEmpty == true {
             waitingWindows.removeValue(forKey: rootID)
-            announcementPhase.removeValue(forKey: rootID)
+            announcementEpisodes.removeValue(forKey: rootID)
         }
     }
     func volumeName(for rootID: AccessRootID) -> String? {
         state.snapshot(for: rootID)?.volumeUUID.flatMap { volumeNames[$0] }
     }
-    /// One notification per root and waiting episode, even with several windows.
+    /// One loss and one recovery notification per root and loss episode, even with
+    /// several windows. Only a newer loss opens a new episode; redisplaying a waiting
+    /// window cannot move an episode back from recovered to lost.
     func claimAnnouncement(for rootID: AccessRootID, recovered: Bool) -> Bool {
-        guard announcementPhase[rootID] != recovered else { return false }
-        if recovered && announcementPhase[rootID] == nil { return false }
-        announcementPhase[rootID] = recovered
+        if recovered {
+            guard announcementEpisodes[rootID]?.recovered == false else { return false }
+            announcementEpisodes[rootID]?.recovered = true
+            return true
+        }
+        guard let snapshot = state.snapshot(for: rootID), case .lost = snapshot.availability,
+              announcementEpisodes[rootID].map({ snapshot.counter > $0.lossCounter }) ?? true else { return false }
+        announcementEpisodes[rootID] = (snapshot.counter, false)
         return true
     }
 

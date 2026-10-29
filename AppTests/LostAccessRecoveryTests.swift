@@ -482,3 +482,40 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     #expect(controller.session.selection.currentItemID == selected.itemID)
     #expect(controller.window?.representedURL == f.childOne)
 }
+
+// Audit gpt F2 (round 2): one loss episode announces loss once and recovery
+// once. Window B leaves Choose Another Folder open while A recovers; cancelling
+// B's panel afterwards must not announce loss again, nor a second recovery.
+@MainActor @Test func t229Fix2PanelLeftOpenDuringRecoveryAnnouncesLossAndRecoveryOnce() async throws {
+    let f = try await RecoveryFixture()
+    let first = f.controller(), second = f.controller()
+    let window = try #require(second.window)
+    defer {
+        if let sheet = window.attachedSheet { window.endSheet(sheet, returnCode: .cancel) }
+        first.window?.close(); window.close(); f.remove()
+    }
+    second.showWindow(nil)
+    first.browseRecoveredFolder(f.childOne, rootID: f.rootA)
+    second.browseRecoveredFolder(f.childTwo, rootID: f.rootA)
+    try await f.ready(first, folder: f.childOne, count: 2)
+    try await f.ready(second, folder: f.childTwo, count: 2)
+    var announcements: [String] = []
+    first.accessAnnouncementObserver = { announcements.append($0) }
+    second.accessAnnouncementObserver = { announcements.append($0) }
+    await f.eject()
+    try await recoveryWait { recoveryPage(first) != nil && recoveryPage(second) != nil && announcements.count == 1 }
+    let page = try #require(recoveryPage(second))
+    page.chooseOtherButton.performClick(nil)
+    try await recoveryWait { window.attachedSheet is NSOpenPanel }
+    await f.mount()
+    try await f.ready(first, folder: f.childOne, count: 2)
+    try await recoveryWait { announcements.count == 2 }
+    #expect(recoveryPage(second) != nil)
+    let panel = try #require(window.attachedSheet as? NSOpenPanel)
+    window.endSheet(panel, returnCode: .cancel)
+    try await recoveryWait { window.attachedSheet == nil }
+    try await f.ready(second, folder: f.childTwo, count: 2)
+    try await Task.sleep(for: .milliseconds(300))
+    let loss = try #require(announcements.first)
+    #expect(announcements == [loss, String(localized: "Folder Access Restored")])
+}
