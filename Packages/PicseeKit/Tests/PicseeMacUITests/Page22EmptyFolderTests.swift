@@ -521,7 +521,10 @@ private func recentFolders(_ count: Int) -> [RecentFolder] {
     }
 }
 
-@Test @MainActor func filterEmptyingFolderShowsNoMatchesNotPage22() async throws {
+/// AC-3 at model level only: a filter that empties a non-empty folder is `.noMatches`, never page 22. It does not prove
+/// a visible message: the grid surface hides the state host and shows nothing for this case until #125 adds the
+/// grid-owned No Images Match page (FOLDER-08 limit).
+@Test @MainActor func filterEmptyingFolderIsNoMatchesStatusWithoutPage22() async throws {
     let scene = Page22Scene()
     scene.tree(["sub"])
     try await scene.open(["a.jpg", "b.jpg"])
