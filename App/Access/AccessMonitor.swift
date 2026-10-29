@@ -38,6 +38,9 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     private var recoveryTasks: [AccessRootID: Task<Void, Never>] = [:]
     private var recoveryRequests: [AccessRootID: UUID] = [:]
     private var readinessObservers: [UUID: @MainActor (AccessRootID) -> Void] = [:]
+    /// At most one real root check runs per root and access counter.
+    private var rootChecks: [AccessRootID: (counter: UInt64?, task: Task<AccessLossCause?, Never>)] = [:]
+    private var recheck: Task<Void, Never>?
     func beginWaiting(_ rootID: AccessRootID, window: ObjectIdentifier) {
         waitingWindows[rootID, default: []].insert(window)
     }
@@ -85,10 +88,10 @@ private final class AccessMonitorNotification: @unchecked Sendable {
             for record in await files.records() { await registerEntry(record.id) }
             notifications = [
                 AccessMonitorNotification(center: .default, name: NSApplication.didBecomeActiveNotification) { [weak self] _ in
-                    Task { @MainActor [weak self] in await self?.recheckRoots() }
+                    Task { @MainActor [weak self] in self?.requestRecheck() }
                 },
                 AccessMonitorNotification(center: NSWorkspace.shared.notificationCenter, name: NSWorkspace.didWakeNotification) { [weak self] _ in
-                    Task { @MainActor [weak self] in await self?.recheckRoots() }
+                    Task { @MainActor [weak self] in self?.requestRecheck() }
                 }
             ]
         }
@@ -218,13 +221,28 @@ private final class AccessMonitorNotification: @unchecked Sendable {
 
     /// A descendant's failure is only evidence to check the root, never proof
     /// that the whole root lost access. The captured counter survives every await.
-    func reportReadFailure(_ id: AccessRootID, from stamp: AccessWorkStamp) async {
+    /// Decode and format failures say nothing about access and start no check.
+    func reportReadFailure(_ id: AccessRootID, from stamp: AccessWorkStamp, error: (any Error)? = nil) async {
         guard stamp.rootID == id, !Task.isCancelled else { return }
+        if let error, Self.isContentFailure(error) { return }
         await start()
         guard !Task.isCancelled, state.mayDeliver(stamp) else { return }
-        let cause = await rootReadFailure(id)
+        let cause = await sharedRootCheck(id)
         guard !Task.isCancelled, let cause, state.mayDeliver(stamp) else { return }
         _ = state.reportRootFailure(id, cause: cause, from: stamp)
+    }
+    static func isContentFailure(_ error: any Error) -> Bool {
+        error is ImageLoadError || error is ImageDecodeError || error is FolderScanLimitError
+    }
+    /// Callers re-check their own cancellation and stamp after awaiting the shared result.
+    private func sharedRootCheck(_ id: AccessRootID) async -> AccessLossCause? {
+        let counter = state.snapshot(for: id)?.counter
+        if let check = rootChecks[id], check.counter == counter { return await check.task.value }
+        let task = Task { @MainActor [self] in await rootReadFailure(id) }
+        rootChecks[id] = (counter, task)
+        let cause = await task.value
+        if rootChecks[id]?.task == task { rootChecks.removeValue(forKey: id) }
+        return cause
     }
     private func rootReadFailure(_ id: AccessRootID) async -> AccessLossCause? {
         guard !Task.isCancelled else { return nil }
@@ -248,6 +266,14 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         // A remembered mount must not mask a later missed unmount on foreground.
         if let latest = latestMountEvents[uuid], latest.revision != revision { return latest.mounted }
         return mounted.contains { $0.uuid == uuid }
+    }
+    /// Repeated activation or wake while a recheck runs joins that recheck.
+    private func requestRecheck() {
+        guard recheck == nil else { return }
+        recheck = Task { @MainActor [weak self] in
+            await self?.recheckRoots()
+            self?.recheck = nil
+        }
     }
     private func recheckRoots() async {
         for record in await files.records() {

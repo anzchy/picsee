@@ -221,7 +221,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     return result
                 } catch { await source.close(); throw error }
             } catch {
-                if !Task.isCancelled, !(error is CancellationError) { await services.monitor.reportReadFailure(rootID, from: context.stamp) }
+                if !Task.isCancelled, !(error is CancellationError) {
+                    await services.monitor.reportReadFailure(rootID, from: context.stamp, error: error)
+                }
                 throw error
             }
         }
@@ -781,7 +783,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     accessPermit: context?.permit)
             } catch {
                 if let context, !Task.isCancelled, case .root(let id, _) = request, !(error is CancellationError) {
-                    await services.monitor.reportReadFailure(id, from: context.stamp)
+                    await services.monitor.reportReadFailure(id, from: context.stamp, error: error)
                 }
                 throw error
             }
@@ -1151,7 +1153,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 self.sidebarWatchSubscription = watch
             } catch {
                 if let failureContext, !Task.isCancelled, !(error is CancellationError) {
-                    await monitor?.reportReadFailure(rootID, from: failureContext.stamp)
+                    await monitor?.reportReadFailure(rootID, from: failureContext.stamp, error: error)
                 }
             }
         }
@@ -1709,7 +1711,7 @@ extension CanvasWindowController: ViewerImageHost {
         if let root = presentationRootID, let context = presentationReadContext, let monitor = accessMonitor {
             let operation = accessIntent.current
             Task { @MainActor [weak self] in
-                await monitor.reportReadFailure(root, from: context.stamp)
+                await monitor.reportReadFailure(root, from: context.stamp, error: error)
                 guard operation.isCurrent, let self else { return }
                 if error is FileAccessError { self.showAccessError(error) }
             }
@@ -1975,8 +1977,8 @@ extension CanvasWindowController: FolderScanHost {
     func folderScanDidEnd() {
         chromeOverlay.refresh(session: session)
         if let context = scanReadContext, let root = presentationRootID,
-           session.folderScan?.failure != nil, let monitor = accessMonitor {
-            Task { await monitor.reportReadFailure(root, from: context.stamp) }
+           let failure = session.folderScan?.failure, let monitor = accessMonitor {
+            Task { await monitor.reportReadFailure(root, from: context.stamp, error: failure) }
         }
         guard let scan = session.folderScan, scan.failure != nil, scan.sourceSnapshot?.isComplete == true,
               let source = scan.sourceSnapshot else { return }

@@ -27,7 +27,7 @@ struct WindowInspectorReader: InspectorMetadataReading {
                 return metadata
             } catch {
                 if let context, !Task.isCancelled, !(error is CancellationError), case .root(let id, _) = request {
-                    await services.monitor.reportReadFailure(id, from: context.stamp)
+                    await services.monitor.reportReadFailure(id, from: context.stamp, error: error)
                 }
                 throw error
             }
