@@ -116,3 +116,14 @@ private actor RootCheckMounts: DiskMountPort {
     #expect(await f.mounts.enumerations - before == 1)
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
 }
+
+// Audit M4: the wake path shares the foreground recheck.
+@MainActor @Test func t229FixWakeRechecksSavedRootsOnce() async throws {
+    let f = try await RootCheckFixture(); defer { f.remove() }
+    let before = await f.mounts.enumerations
+    NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: NSWorkspace.shared)
+    try await rootCheckWait { await f.mounts.enumerations - before == 1 }
+    try await Task.sleep(for: .milliseconds(200))
+    #expect(await f.mounts.enumerations - before == 1)
+    #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
+}
