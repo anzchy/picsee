@@ -10,6 +10,9 @@ import PicseeApplication
 @Test func issue215EntryPointModelCoversEveryReleaseSurfaceEntry() {
     let expectedComingSoon: Set<EntryPoint> = [
         .keyboardShortcuts, .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay,
+        .settingsDisplayThumbnailSize, .settingsDisplayFileNames, .settingsDisplayFitMode,
+        .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow,
+        .settingsAboutPrivacyNote, .settingsAboutSourceCode,
     ]
     #expect(Set(EntryPoint.allCases) == expectedComingSoon.union([.reportIssue, .diagnostics]))
     #expect(Set(EntryPoint.allCases.map(\.rawValue)).count == EntryPoint.allCases.count)

@@ -30,11 +30,21 @@ public enum EntryPoint: String, CaseIterable, Sendable {
     case recents
     case footerInfo
     case footerDisplay
+    case settingsDisplayThumbnailSize
+    case settingsDisplayFileNames
+    case settingsDisplayFitMode
+    case settingsUpdatesAutomaticCheck
+    case settingsUpdatesCheckNow
+    case settingsAboutPrivacyNote
+    case settingsAboutSourceCode
 
     public var state: EntryPointState {
         switch self {
         case .reportIssue, .diagnostics: .implemented
-        case .keyboardShortcuts, .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay: .comingSoon
+        case .keyboardShortcuts, .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay,
+             .settingsDisplayThumbnailSize, .settingsDisplayFileNames, .settingsDisplayFitMode,
+             .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow,
+             .settingsAboutPrivacyNote, .settingsAboutSourceCode: .comingSoon
         }
     }
     public var isEnabled: Bool { state == .implemented }

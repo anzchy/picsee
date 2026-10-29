@@ -25,9 +25,11 @@ enum SettingsSection: String, CaseIterable {
     private let defaults: UserDefaults
     private let model: CacheSettingsModel
     private let confirmClear: (NSWindow, @escaping (Bool) -> Void) -> Void
+    private let openURL: (URL) -> Void
     private var panes: [SettingsSection: NSView] = [:]
     private var sidebarButtons: [SettingsSection: NSButton] = [:]
     private var appearanceButtons: [DisplayAppearance: NSButton] = [:]
+    private var entryPoints: [ObjectIdentifier: EntryPoint] = [:]
     private var toolsButton: NSButton!
     private var cacheSize: NSTextField!
     private var cacheDiagnostic: NSTextField!
@@ -35,13 +37,15 @@ enum SettingsSection: String, CaseIterable {
 
     init(cache: ThumbnailDiskCache, appearanceAdapter: WindowAppearanceAdapter,
          preferencesStore: any DisplayPreferencesStore, defaults: UserDefaults,
-         confirmClear: ((NSWindow, @escaping (Bool) -> Void) -> Void)? = nil) {
+         confirmClear: ((NSWindow, @escaping (Bool) -> Void) -> Void)? = nil,
+         openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         self.appearanceAdapter = appearanceAdapter
         self.preferencesStore = preferencesStore
         self.defaults = defaults
         self.model = CacheSettingsModel(cache: cache)
         self.selectedSection = SettingsSection(rawValue: defaults.string(forKey: Self.sectionKey) ?? "") ?? .general
         self.confirmClear = confirmClear ?? Self.presentClearConfirmation
+        self.openURL = openURL
         self.window = SettingsPanelNativeWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 482),
                                                 styleMask: [.titled, .closable, .miniaturizable],
                                                 backing: .buffered, defer: false)
@@ -182,11 +186,21 @@ enum SettingsSection: String, CaseIterable {
         pane.addSubview(language)
     }
 
-    private func future(_ control: NSControl, id: String, title: String) {
+    func entryPoint(for control: NSControl) -> EntryPoint? {
+        entryPoints[ObjectIdentifier(control)]
+    }
+
+    private func configure(_ control: NSControl, entry: EntryPoint, id: String, title: String) {
         control.font = DesignMetrics.font("ui")
-        control.isEnabled = false
+        control.isEnabled = entry.isEnabled
         control.setAccessibilityIdentifier(id)
-        control.setAccessibilityLabel(title + ", " + String(localized: "Coming Soon"))
+        let marker = entry.accessibilityLabel(for: .preferred)
+        control.setAccessibilityLabel(marker.isEmpty ? title : "\(title) · \(marker)")
+        if let button = control as? NSButton {
+            button.refusesFirstResponder = !entry.isFocusable
+            button.keyEquivalent = entry.keyEquivalent ?? ""
+        }
+        entryPoints[ObjectIdentifier(control)] = entry
     }
 
     private func soon(_ x: CGFloat, _ y: CGFloat, in pane: NSView) {
@@ -200,14 +214,14 @@ enum SettingsSection: String, CaseIterable {
         rowLabel(String(localized: "Thumbnail Size"), y: 397, in: pane)
         let size = NSSlider(value: 220, minValue: 140, maxValue: 280, target: nil, action: nil)
         size.frame = NSRect(x: 162, y: 397, width: 220, height: 24)
-        future(size, id: "settings.display.size", title: String(localized: "Thumbnail Size"))
+        configure(size, entry: .settingsDisplayThumbnailSize, id: "settings.display.size", title: String(localized: "Thumbnail Size"))
         pane.addSubview(size)
         soon(390, 397, in: pane)
         rowLabel(String(localized: "Show File Names"), y: 352, in: pane)
         let names = NSButton(checkboxWithTitle: String(localized: "Show names below thumbnails"), target: nil, action: nil)
         names.font = DesignMetrics.font("ui")
         names.frame = NSRect(x: 162, y: 352, width: names.intrinsicContentSize.width, height: 24)
-        future(names, id: "settings.display.names", title: String(localized: "Show File Names"))
+        configure(names, entry: .settingsDisplayFileNames, id: "settings.display.names", title: String(localized: "Show File Names"))
         pane.addSubview(names)
         soon(450, 352, in: pane)
         rowLabel(String(localized: "Thumbnails"), y: 307, in: pane)
@@ -217,7 +231,7 @@ enum SettingsSection: String, CaseIterable {
             button.font = DesignMetrics.font("ui")
             let width = button.intrinsicContentSize.width
             button.frame = NSRect(x: fitX, y: 307, width: width, height: 24)
-            future(button, id: "settings.display.fit.\(index)", title: title)
+            configure(button, entry: .settingsDisplayFitMode, id: "settings.display.fit.\(index)", title: title)
             pane.addSubview(button)
             fitX += width + 8
         }
@@ -266,7 +280,7 @@ enum SettingsSection: String, CaseIterable {
         let automatic = NSButton(checkboxWithTitle: String(localized: "Check for updates automatically"), target: nil, action: nil)
         automatic.font = DesignMetrics.font("ui")
         automatic.frame = NSRect(x: 162, y: 352, width: automatic.intrinsicContentSize.width, height: 24)
-        future(automatic, id: "settings.update.automatic", title: automatic.title)
+        configure(automatic, entry: .settingsUpdatesAutomaticCheck, id: "settings.update.automatic", title: automatic.title)
         pane.addSubview(automatic)
         soon(450, 352, in: pane)
         let privacy = label(String(localized: "picsee contacts GitHub only to check for updates and sends no system information."), role: "uiSmall", muted: true)
@@ -275,7 +289,7 @@ enum SettingsSection: String, CaseIterable {
         let check = NSButton(title: String(localized: "Check Now"), target: nil, action: nil)
         check.font = DesignMetrics.font("ui")
         check.frame = NSRect(x: 162, y: 275, width: check.intrinsicContentSize.width, height: 26)
-        future(check, id: "settings.update.now", title: check.title)
+        configure(check, entry: .settingsUpdatesCheckNow, id: "settings.update.now", title: check.title)
         pane.addSubview(check)
         soon(290, 275, in: pane)
         let last = label(String(localized: "Last checked: Unknown"), role: "uiSmall", muted: true)
@@ -297,13 +311,20 @@ enum SettingsSection: String, CaseIterable {
         let privacy = label(String(localized: "A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."), role: "uiSmall", muted: true)
         privacy.frame = NSRect(x: 108, y: 327, width: 440, height: 54)
         pane.addSubview(privacy)
+        let links: [(title: String, entry: EntryPoint)] = [
+            (String(localized: "Report a Problem…"), .reportIssue),
+            (String(localized: "Privacy Note"), .settingsAboutPrivacyNote),
+            (String(localized: "Source Code"), .settingsAboutSourceCode),
+        ]
         var linkX: CGFloat = 108
-        for (index, title) in [String(localized: "Report a Problem…"), String(localized: "Privacy Note"), String(localized: "Source Code")].enumerated() {
-            let button = NSButton(title: title, target: nil, action: nil)
+        for (index, link) in links.enumerated() {
+            let isReport = link.entry == .reportIssue
+            let button = NSButton(title: link.title, target: isReport ? self : nil,
+                                  action: isReport ? #selector(reportIssue(_:)) : nil)
             button.font = DesignMetrics.font("ui")
             let width = button.intrinsicContentSize.width
             button.frame = NSRect(x: linkX, y: 291, width: width, height: 26)
-            future(button, id: "settings.about.link.\(index)", title: title)
+            configure(button, entry: link.entry, id: "settings.about.link.\(index)", title: link.title)
             pane.addSubview(button)
             linkX += width + 8
         }
@@ -364,6 +385,10 @@ enum SettingsSection: String, CaseIterable {
         let appearance: DisplayAppearance = [.system, .light, .dark][sender.tag]
         preferencesStore.value.appearance = appearance
         preferencesDidChange(preferencesStore.value)
+    }
+
+    @objc private func reportIssue(_ sender: NSButton) {
+        openURL(EntryPoint.reportIssueURL)
     }
 
     @objc private func changeTools(_ sender: NSButton) {
