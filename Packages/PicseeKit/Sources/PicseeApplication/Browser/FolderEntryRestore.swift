@@ -12,6 +12,7 @@ struct FolderEntryRestorePoint {
     let target: FolderEntryRestoreTarget
     let browsing: ViewerSession.BrowsingState
     let scan: FolderScanRestorePoint?
+    let filePreviewSet: FilePreviewSet?
 }
 
 extension ViewerSession {
@@ -20,12 +21,18 @@ extension ViewerSession {
         guard folderEntryRestore == nil else { return }
         // A shown image wins, including one previewed from a grid; the grid's state is restored with it.
         let target: FolderEntryRestoreTarget = shownImage.map { .viewer($0) } ?? (hasCompleteGrid ? .grid : .empty)
-        folderEntryRestore = FolderEntryRestorePoint(target: target, browsing: browsingState, scan: folderScan?.restorePoint)
+        folderEntryRestore = FolderEntryRestorePoint(target: target, browsing: browsingState,
+            scan: folderScan?.restorePoint, filePreviewSet: filePreviewSet)
+        // The folder entry owns navigation while it reads; Cancel puts the File Preview Set back.
+        endFilePreviewSet()
     }
-    /// Stops the reading scan once and puts back the browsing state and folder source; nil when no entry is reading.
+    /// Stops the reading scan once and puts back the browsing state, folder source and File Preview Set; nil when no
+    /// entry is reading. An incomplete source has no restore point, so only the shown image comes back.
     public func cancelFolderEntry() -> FolderEntryRestoreTarget? {
         guard let point = folderEntryRestore else { return nil }
         folderEntryRestore = nil
+        // Back first, so the restored folder source cannot present over the File Preview Set.
+        filePreviewSet = point.filePreviewSet
         // restore() stops the reading scan itself and keeps the restored folder's watch on the same stream.
         if let scan = point.scan, let folderScan {
             folderScan.restore(scan, sort: displayPreferences.folderSort,

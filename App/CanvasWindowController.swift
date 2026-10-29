@@ -481,7 +481,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func openRecent(_ folder: RecentFolder) {
-        endInput()
+        // A folder entry records the File Preview Set before ending it, so Cancel Reading can walk it again.
+        inputIntent.invalidate()
         let operation = accessIntent.begin()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
@@ -498,7 +499,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func openGrantedFolder(_ folder: URL) {
-        endInput()
+        inputIntent.invalidate()
         let operation = accessIntent.begin()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
@@ -664,7 +665,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                         } else {
                             promptForFolder(folder, currentImage: currentImage, direction: direction, mismatch: true)
                         }
-                    } else { endInput(); openFolder(chosen, rootID: id) }
+                    } else { inputIntent.invalidate(); openFolder(chosen, rootID: id) }
                 } catch { if operation.isCurrent { showAccessError(error) } }
             }
         }
