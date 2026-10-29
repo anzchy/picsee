@@ -55,7 +55,8 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    Every open issue has exactly one milestone; a release ticket also has a parent spec (sub-issue). After `/to-tickets`,
    link the new spec under its parent and set the milestone on the spec and every ticket (`/to-tickets` doesn't touch
    parents). **Ready now** is the query `milestone:v0.0.1 -is:blocked label:ready-for-agent -has:sub-issue`, never a
-   stored list; then drop items already in flight or overlapping files. Why: `docs/knowledge/owner-questions.md`.
+   stored list; then drop items already in flight or overlapping files, and pick by journey order (plan §1.6,
+   ADR-013) within the in-flight cap and auditor capacity. Why: `docs/knowledge/owner-questions.md`.
 2. **Brief** — copy [templates/brief-template.md](references/templates/brief-template.md) to
    `~/.picsee/herdr/<impl>/<item>-brief.md`. For UI work, fill the per-state design and evidence fields in
    [the C design parity contract](../../../docs/agents/ui-parity-contract.md) before dispatch, including the

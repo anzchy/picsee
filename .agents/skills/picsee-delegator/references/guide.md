@@ -486,8 +486,9 @@ Never pipe `git rebase`; check its exit status. Write logs to `$(git rev-parse -
 - **`docs/feature-ledger.md` row conflicts.** `.agents/skills/picsee-delegator/scripts/resolve_rows.py` does a three-way merge
   by row key (stage 1/2/3). It keeps main's text and appends the commit's added suffix. It stops on rows that need
   manual merging, for example when both sides rewrote the same 限制 clause; merge those by hand.
-- **Part 3 area-review conflicts.** Use `.agents/skills/picsee-delegator/scripts/resolve_part3.py <file>`. It keeps main's row and appends only the branch's
-  note sentences main lacks, so main's notes and dates are never dropped (the old "take theirs" rule silently dropped them on #243, 2026-10-28).
+- **Part 3 area-review conflicts.** Use `.agents/skills/picsee-delegator/scripts/resolve_part3.py <file>`. It keeps main's row and appends each whole 。-ended
+  branch entry main's note lacks verbatim (never a substring match), and keeps the newer review date with its reviewer,
+  so main's notes are never dropped (the old "take theirs" rule silently dropped them on #243, 2026-10-28).
 - **Any other conflict** (Swift, `CanvasWindowController`, xcstrings): stop and resolve deliberately, or send it back
   to the implementer.
 - The script runs git with `core.commentChar=';'`. The default message cleanup on `--continue` deletes every body
@@ -646,8 +647,8 @@ Driving tools (all synthetic input, which must be disclosed in the record):
   ⌘O = `31 command`, ⌘W = `13 command`, ⌘Q = `12 command`, ⌘⇧G = `5 command shift`. `key.sh` types exactly one
   printable character and nothing else.
 - `.agents/skills/picsee-delegator/scripts/panel-choose.sh RUN PATH`: in an open NSOpenPanel or powerbox of the run's
-  Picsee (needs `RUN/picsee.pid`), press ⌘⇧G, write the path into the Go-to field **through accessibility**, read it back,
-  press Return, check the sheet closed, then press Return for Open. Any mismatch fails before Open. It prints
+  Picsee (needs `RUN/picsee.pid`; the ⌘O AXDialog window, or the reconnect sheet of window 1, not yet driven live), press ⌘⇧G, write the path into the Go-to field **through accessibility**, read it back,
+  press Return, check the sheet closed, then press Return for Open and check the panel closed. Any mismatch fails before Open. It prints
   `input-source: <id>` (read-only) for the record and doesn't touch the pasteboard. The old ⌘A ⌘V paste never reached
   the field (run probe-228, 2026-10-28): every pick silently took the panel's remembered folder.
 - `.agents/skills/picsee-delegator/scripts/drag2.sh X0 Y0 X1 Y1`: a CGEvent drag from a Finder list-view row with a press-hold. Finder starts a real
@@ -750,11 +751,9 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 | `log show` failed with "too many arguments" | zsh builtin `log` shadows `/usr/bin/log` | call `/usr/bin/log` |
 | Coverage awk printed `lines /` | wrong lcov path | `swift-lcov.sh` writes `coverage/lcov.info` |
 | `key.sh` typed letters instead of Tab/Esc | `key.sh` is single-character only | `kc.sh` with keycodes |
-| Open panel path couldn't be typed | `key.sh` is one character | `.agents/skills/picsee-delegator/scripts/panel-choose.sh` (pasteboard paste; disclose it) |
+| Open panel path couldn't be typed | `key.sh` is one character | `.agents/skills/picsee-delegator/scripts/panel-choose.sh` (AX value write, read back; disclose it) |
 | Probe picks all landed in one folder; the helper reported success | the synthetic ⌘V never reached the Go-to field, so Return confirmed the remembered folder | `panel-choose.sh` now writes the path via AX and reads it back; check the probe's own output before trusting a matrix |
-| Open panel showed `…095720-跑01-grid-explore、fixtures、grid` and never navigated (2026-10-25) | `panel-choose.sh` typed the path with `keystroke` under a Chinese IME (Doubao Pinyin) | Fixed in #119: the helper pastes via the pasteboard and restores it; never switch the user's input source |
-| `panel-choose.sh` refused: `holds public.png …` | non-text pasteboard contents cannot be restored from text | copy plain text (or ask the user) and rerun |
-| `panel-choose.sh` failed: `pasteboard changed by someone else during the run; not restored` | a copy landed while the path was on the pasteboard | nothing to undo (their copy is kept); record it, check the panel went where intended, rerun the step if not |
+| Open panel showed `…095720-跑01-grid-explore、fixtures、grid` and never navigated (2026-10-25) | `panel-choose.sh` typed the path with `keystroke` under a Chinese IME (Doubao Pinyin) | Fixed in #119 by a pasteboard paste, which itself never reached the field (probe-228); since 2026-10-28 the helper writes the AX value. Never switch the user's input source |
 | `launch.sh` failed in a relaunch dir | missing `bundle.path`/`build.json` | copy both from the first run dir |
 | Doctor `window` FAIL at end of run | title is a non-fixture file name | disclose; doctor only knows fixture names |
 | Doctor `fixtures` FAIL | files added after hashing, or `.DS_Store` from Finder | hash after copying; keep Finder-touched files outside `fixtures/` |

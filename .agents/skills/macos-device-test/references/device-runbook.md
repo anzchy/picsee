@@ -321,12 +321,11 @@ Every run produces one row per criterion and entry point, keyed by ledger row ID
   Keep the direct computer-use `key escape` path distinct and unverified; use the proven key-code helper.
 - **Input method:** switch to ABC before key checks; an IME can swallow keys. Never switch it from a script:
   on 2026-10-25 a Chinese IME (Doubao Pinyin) turned a typed open-panel path into
-  `…095720-跑01-grid-explore、fixtures、grid` and the panel never navigated. `panel-choose.sh` now pastes the path through
-  the pasteboard (⌘A ⌘V) instead of typing it, prints the active `input-source:` read-only for the record, refuses a
-  pasteboard that holds non-text types, and restores the previous text byte-for-byte on every exit except SIGKILL (non-zero
-  otherwise). A copy made by someone else during the run is kept, not restored over; the helper then exits non-zero with
-  `not restored`, and the run record must say so. The path passes through the general pasteboard, so clipboard-history tools
-  and Universal Clipboard may record it, and an empty pasteboard comes back as an empty plain-text item.
+  `…095720-跑01-grid-explore、fixtures、grid` and the panel never navigated. `panel-choose.sh` now writes the path
+  into the Go-to field through accessibility (AX `set value`), reads it back, and fails before Open on any mismatch; it
+  prints the active `input-source:` read-only for the record and doesn't touch the pasteboard or type the path. After
+  Open it checks the panel closed, else fails. It finds the ⌘O panel as an AXDialog window and the reconnect panel as
+  the canvas window's sheet (the sheet form not yet driven live). The record must disclose this synthetic input.
 
 ## 14. Proving this skill (do once, then after big changes)
 
