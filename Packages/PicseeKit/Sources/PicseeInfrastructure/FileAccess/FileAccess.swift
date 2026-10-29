@@ -231,10 +231,10 @@ public actor FileAccess: AccessLeasing {
                   (try resourceReader.identity(for: folder)) == reference.folderIdentity else { return nil }
             _ = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             guard (try resourceReader.identity(for: folder)) == reference.folderIdentity else { return nil }
-            guard let grant = savedGrantSnapshot(reference.rootID) else {
-                throw FileAccessError.needsReconnection(reference.rootID)
+            // The lease above proved the saved record exists; no await separates it from here.
+            return savedGrantSnapshot(reference.rootID).map {
+                AccessFolderRecoveryLocation(rootURL: root, folderURL: folder, grant: $0)
             }
-            return AccessFolderRecoveryLocation(rootURL: root, folderURL: folder, grant: grant)
         } catch where Self.isMissingRecoveryFolder(error) { return nil }
     }
     private static func isMissingRecoveryFolder(_ error: Error) -> Bool {
