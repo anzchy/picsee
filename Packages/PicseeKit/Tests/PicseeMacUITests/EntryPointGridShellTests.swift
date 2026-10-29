@@ -33,8 +33,9 @@ import PicseeInfrastructure
         #expect(!button.canBecomeKeyView)
         #expect(button.action == nil)
         #expect(button.keyEquivalent.isEmpty)
-        #expect(button.toolTip?.contains("Coming Soon") == true)
-        #expect(button.accessibilityLabel()?.contains("Coming Soon") == true)
+        let marker = entry.accessibilityLabel(for: .preferred)
+        #expect(button.toolTip?.contains(marker) == true)
+        #expect(button.accessibilityLabel()?.contains(marker) == true)
         expectComingSoonContentFits(button)
     }
     #expect(shell.infoButton.title.isEmpty)
@@ -111,7 +112,8 @@ import PicseeInfrastructure
         let entry = try #require(shell.entryPoint(for: control),
                                  "Undeclared coming-soon control: \(control.accessibilityIdentifier())")
         #expect(entry.state == .comingSoon)
-        #expect(control.toolTip?.contains(entry.accessibilityLabel(for: .english)) == true)
-        #expect(control.accessibilityLabel()?.contains(entry.accessibilityLabel(for: .english)) == true)
+        let marker = entry.accessibilityLabel(for: .preferred)
+        #expect(control.toolTip?.contains(marker) == true)
+        #expect(control.accessibilityLabel()?.contains(marker) == true)
     }
 }

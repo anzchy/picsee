@@ -9,8 +9,12 @@ public enum EntryPointLanguage: Sendable {
     case english
     case simplifiedChinese
 
+    public init(preferredLocalization: String?) {
+        self = preferredLocalization?.hasPrefix("zh") == true ? .simplifiedChinese : .english
+    }
+
     public static var preferred: EntryPointLanguage {
-        Locale.preferredLanguages.first?.hasPrefix("zh") == true ? .simplifiedChinese : .english
+        EntryPointLanguage(preferredLocalization: Bundle.main.preferredLocalizations.first)
     }
 }
 
