@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Darwin
 import PicseeCore
 import PicseeApplication
 import PicseeInfrastructure
@@ -24,6 +25,13 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     let state: AccessState
     let files: FileAccess
     let mounts: (any DiskMountPort)?
+    private let sourceExists: @Sendable (URL) throws -> Bool
+    private struct SourceCheckKey: Hashable {
+        let stamp: AccessWorkStamp
+        let file: URL
+    }
+    /// Same-source failures join the same scoped stat; distinct evidence stays independent.
+    private var sourceChecks: [SourceCheckKey: Task<Bool, Never>] = [:]
     private var port: (any DiskMountPort)?
     private var startup: Task<Void, Never>?
     private var events: Task<Void, Never>?
@@ -49,7 +57,6 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         waitingWindows[rootID]?.remove(window)
         if waitingWindows[rootID]?.isEmpty == true {
             waitingWindows.removeValue(forKey: rootID)
-            announcementEpisodes.removeValue(forKey: rootID)
         }
     }
     func volumeName(for rootID: AccessRootID) -> String? {
@@ -59,20 +66,26 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     /// several windows. Only a newer loss opens a new episode; redisplaying a waiting
     /// window cannot move an episode back from recovered to lost.
     func claimAnnouncement(for rootID: AccessRootID, recovered: Bool) -> Bool {
+        guard let snapshot = state.snapshot(for: rootID) else {
+            announcementEpisodes.removeValue(forKey: rootID)
+            return false
+        }
         if recovered {
             guard announcementEpisodes[rootID]?.recovered == false else { return false }
             announcementEpisodes[rootID]?.recovered = true
             return true
         }
-        guard let snapshot = state.snapshot(for: rootID), case .lost = snapshot.availability,
+        guard case .lost = snapshot.availability,
               announcementEpisodes[rootID].map({ snapshot.counter > $0.lossCounter }) ?? true else { return false }
         announcementEpisodes[rootID] = (snapshot.counter, false)
         return true
     }
 
-    nonisolated init(files: FileAccess, mounts: (any DiskMountPort)? = nil) {
+    nonisolated init(files: FileAccess, mounts: (any DiskMountPort)? = nil,
+                     sourceExists: @escaping @Sendable (URL) throws -> Bool = AccessMonitor.probeSourceExists) {
         self.files = files
         self.mounts = mounts
+        self.sourceExists = sourceExists
         self.state = AccessState()
     }
     deinit { events?.cancel() }
@@ -233,36 +246,71 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     /// unless the failed file itself is gone.
     func reportReadFailure(_ id: AccessRootID, from stamp: AccessWorkStamp, error: (any Error)? = nil,
                            file: URL? = nil) async {
-        guard stamp.rootID == id, !Task.isCancelled else { return }
-        if let error, Self.isContentFailure(error, file: file) { return }
+        guard stamp.rootID == id, !Task.isCancelled, state.mayDeliver(stamp) else { return }
+        if let error {
+            switch Self.failureEvidence(error) {
+            case .content: return
+            case .undecodable:
+                guard let file, await sharedSourceIsMissing(file, from: stamp),
+                      !Task.isCancelled, state.mayDeliver(stamp) else { return }
+            case .access: break
+            }
+        }
         await start()
         guard !Task.isCancelled, state.mayDeliver(stamp) else { return }
         let cause = await sharedRootCheck(id)
         guard !Task.isCancelled, let cause, state.mayDeliver(stamp) else { return }
         _ = state.reportRootFailure(id, cause: cause, from: stamp)
     }
-    /// A missing source (`sourceChanged`) is access evidence. A decoder can't tell a
-    /// vanished file from a damaged one, so those count as content only while the file exists.
-    static func isContentFailure(_ error: any Error, file: URL? = nil) -> Bool {
-        let undecodable: Bool
+    private enum FailureEvidence { case content, undecodable, access }
+    /// This classification is pure; only undecodable sources need filesystem evidence.
+    private static func failureEvidence(_ error: any Error) -> FailureEvidence {
         switch error {
-        case is FolderScanLimitError: return true
+        case is FolderScanLimitError: return .content
         case let failure as ImageLoadError:
             switch failure.kind {
-            case .sourceChanged: return false
-            case .resourceLimit, .cancelled: return true
-            case .corruptImage, .unsupportedFormat: undecodable = true
+            case .sourceChanged: return .access
+            case .resourceLimit, .cancelled: return .content
+            case .corruptImage, .unsupportedFormat: return .undecodable
             }
         case let failure as ImageDecodeError:
             switch failure {
-            case .budgetExceeded: return true
-            case .invalidRequest: return false
-            case .unreadableImage: undecodable = true
+            case .budgetExceeded: return .content
+            case .invalidRequest: return .access
+            case .unreadableImage: return .undecodable
             }
-        default: return false
+        default: return .access
         }
-        guard undecodable, let file else { return undecodable }
-        return FileManager.default.fileExists(atPath: file.path)
+    }
+    /// Only ENOENT proves absence. EPERM, EACCES and other indeterminate failures
+    /// cannot turn an ordinary damaged image into evidence that its root failed.
+    nonisolated private static func probeSourceExists(_ file: URL) throws -> Bool {
+        var info = stat()
+        let (result, code) = file.path.withCString { path in
+            let result = Darwin.fstatat(AT_FDCWD, path, &info, 0)
+            return (result, errno)
+        }
+        if result == 0 { return true }
+        if code == ENOENT { return false }
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
+    }
+    private func sharedSourceIsMissing(_ file: URL, from stamp: AccessWorkStamp) async -> Bool {
+        let key = SourceCheckKey(stamp: stamp, file: file)
+        if let task = sourceChecks[key] { return await task.value }
+        let task = Task { [files, sourceExists] in
+            do {
+                // The lease validates containment and keeps the root scope live until
+                // the detached stat has really returned, including when a caller cancels.
+                let exists = try await files.withLease(.root(stamp.rootID, file: file)) { _ in
+                    try await Task.detached { try sourceExists(file) }.value
+                }
+                return !exists
+            } catch { return false }
+        }
+        sourceChecks[key] = task
+        let missing = await task.value
+        if sourceChecks[key] == task { sourceChecks.removeValue(forKey: key) }
+        return missing
     }
     /// Callers re-check their own cancellation and stamp after awaiting the shared result.
     private func sharedRootCheck(_ id: AccessRootID) async -> AccessLossCause? {

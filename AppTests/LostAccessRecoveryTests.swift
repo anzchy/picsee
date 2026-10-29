@@ -351,10 +351,13 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
 @MainActor @Test func t229RecoveryCancelReadingAnotherRootRestoresWaitingPosition() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let controller = f.controller(); defer { controller.window?.close(); f.gate.release() }
+    var announcements: [String] = []
+    controller.accessAnnouncementObserver = { announcements.append($0) }
     controller.browseRecoveredFolder(f.childOne, rootID: f.rootA)
     try await f.ready(controller, folder: f.childOne)
     await f.eject()
     try await recoveryWait { recoveryPage(controller) != nil }
+    let loss = try #require(announcements.first)
     let position = try #require(controller.waitingAccessPosition)
     f.gate.arm(f.b)
     controller.browseRecoveredFolder(f.b, rootID: f.rootB)
@@ -369,6 +372,7 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     f.gate.release()
     await f.mount()
     try await f.ready(controller, folder: f.childOne, count: 2)
+    #expect(announcements == [loss, "Folder Access Restored"])
 }
 
 @MainActor @Test func t229RecoveryAnnouncementBudgetRestartsAfterNavigationAway() async throws {
