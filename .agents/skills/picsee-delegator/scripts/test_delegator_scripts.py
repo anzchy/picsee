@@ -193,6 +193,32 @@ class ResolvePart3Tests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn('| 乙 | 2026-10-28 | g | 乙注。 |', out)
 
+    def test_branch_entry_sharing_a_clause_with_main_is_kept_whole(self):
+        # audit F1: 「待 owner 确认。」 already in main must not swallow the branch's new entry
+        text = ('<<<<<<< HEAD\n| 网格 | 2026-10-28 | g | 甲（a..b）：待 owner 确认。 |\n=======\n'
+                '| 网格 | 2026-10-28 | g | 甲（a..b）：待 owner 确认。乙（c..d）：GRID-02 升为 Partial；未追溯；待 owner 确认。 |\n'
+                '>>>>>>> x\n')
+        out, ok = self.run_resolve(text)
+        self.assertTrue(ok)
+        self.assertIn('| 网格 | 2026-10-28 | g | 甲（a..b）：待 owner 确认。乙（c..d）：GRID-02 升为 Partial；未追溯；待 owner 确认。 |', out)
+
+    def test_branch_sentence_repeated_in_its_own_entry_is_kept(self):
+        text = '<<<<<<< HEAD\n| 甲 | 2026-10-28 | g | 主注。 |\n=======\n| 甲 | 2026-10-28 | g | 主注。无行为变化。无行为变化。 |\n>>>>>>> x\n'
+        out, ok = self.run_resolve(text)
+        self.assertIn('| 甲 | 2026-10-28 | g | 主注。无行为变化。无行为变化。 |', out)
+
+    def test_newer_branch_review_date_and_reviewer_win(self):
+        # audit M1
+        text = '<<<<<<< HEAD\n| 网格 | 2026-10-20 | g | A。 |\n=======\n| 网格 | 2026-10-29 | h | A。B。 |\n>>>>>>> x\n'
+        out, ok = self.run_resolve(text)
+        self.assertIn('| 网格 | 2026-10-29 | h | A。B。 |', out)
+
+    def test_unterminated_branch_tail_and_crlf_are_preserved(self):
+        # audit L1
+        text = '<<<<<<< HEAD\r\n| 甲 | 2026-10-28 | g | A。 |\r\n=======\r\n| 甲 | 2026-10-28 | g | A。B 待 owner |\r\n>>>>>>> x\r\n'
+        out, ok = self.run_resolve(text)
+        self.assertEqual(out, '| 甲 | 2026-10-28 | g | A。B 待 owner |\r\n')
+
     def test_non_row_conflict_is_left_unresolved(self):
         text = '<<<<<<< HEAD\nprose A\n=======\nprose B\n>>>>>>> x\n'
         out, ok = self.run_resolve(text)
