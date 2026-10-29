@@ -146,7 +146,7 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
     let gate: RecoveryReadGate
     let watchSource: RecoveryWatchSource
     let services: AccessServices
-    init() async throws {
+    init(diagnostics: AccessDiagnostics = AccessDiagnostics()) async throws {
         _ = NSApplication.shared
         let fm = FileManager.default
         let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
@@ -164,6 +164,7 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
         let bookmarks = RecoveryBookmarks()
         let files = try FileAccess(scope: bookmarks, bookmarks: bookmarks,
             store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "T229-recovery",
+            diagnostics: diagnostics,
             bookmarkVolume: { data in AccessProbeVolume(uuid: String(decoding: data, as: UTF8.self).hasSuffix("RootB") ? "222" : "111", url: nil, name: "Disk") },
             resolvedVolumeUUID: { url in url.path.contains("RootB") ? "222" : "111" },
             bookmarkIdentity: { bookmarks.identity($0) })
@@ -522,4 +523,56 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     try await Task.sleep(for: .milliseconds(300))
     let loss = try #require(announcements.first)
     #expect(announcements == [loss, String(localized: "Folder Access Restored")])
+}
+
+
+private final class RecoveryDiagnosticTrace: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String] = []
+    var messages: [String] { lock.withLock { stored } }
+    var diagnostics: AccessDiagnostics { AccessDiagnostics { [self] message, _ in lock.withLock { stored.append(message) } } }
+}
+
+@MainActor @Test func t229DiagnosticsAppRefusalThenRecoveryPublishesTruthfulState() async throws {
+    let trace = RecoveryDiagnosticTrace(), f = try await RecoveryFixture(diagnostics: trace.diagnostics)
+    defer { f.remove() }
+    await f.services.monitor.start()
+    await f.eject()
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.diskNotConnected) }
+    f.bookmarks.fail(f.a, true)
+    await f.mount()
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.unknown) }
+    #expect(trace.messages.contains { $0.contains("AccessRootLost") && $0.contains("cause=diskNotConnected") })
+    #expect(trace.messages.contains { $0.contains("AccessRecovery") && $0.contains("outcome=refused") })
+    #expect(!trace.messages.contains { $0.contains("AccessRecovery outcome=published") })
+    f.bookmarks.fail(f.a, false)
+    await f.eject()
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.diskNotConnected) }
+    await f.mount()
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .readable }
+    #expect(trace.messages.contains { $0.contains("AccessRecovery outcome=published") })
+    #expect(!trace.messages.joined().contains(f.base.path))
+}
+
+
+@MainActor @Test func t229DiagnosticsSupersededRecoveryRefusesPublication() async throws {
+    let trace = RecoveryDiagnosticTrace(), f = try await RecoveryFixture(diagnostics: trace.diagnostics)
+    defer { f.remove(); Task { await f.mounts.release() } }
+    await f.services.monitor.start()
+    await f.eject()
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.diskNotConnected) }
+    let lossCounter = try #require(f.services.monitor.state.snapshot(for: f.rootA)?.counter)
+    await f.mounts.pauseEnumeration()
+    await f.mount()
+    try await recoveryWaitAsync { await f.mounts.paused }
+    await f.eject()
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.diskNotConnected) }
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.counter == lossCounter + 1 }
+    await f.mounts.release()
+    try await recoveryWait { trace.messages.contains { $0.contains("AccessRecovery outcome=refused") } }
+    #expect(!trace.messages.contains { $0.contains("AccessRecovery outcome=published") })
+    #expect(f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.diskNotConnected))
+    await f.mount()
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .readable }
+    #expect(trace.messages.contains { $0.contains("AccessRecovery outcome=published") })
 }

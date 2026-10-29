@@ -13,6 +13,7 @@ public protocol DiskMountPort: Sendable {
 }
 
 @MainActor public final class SystemDiskMountPort: DiskMountPort {
+    private let diagnostics: AccessDiagnostics
     private let center: NotificationCenter
     private let provider: @Sendable () -> [AccessProbeVolume]
     private var knownByPath: [String: AccessProbeVolume]
@@ -24,7 +25,8 @@ public protocol DiskMountPort: Sendable {
                     AccessProbeFactGatherer.mountedVolumes(at: FileManager.default.mountedVolumeURLs(
                         includingResourceValuesForKeys: [.volumeUUIDStringKey, .volumeNameKey, .volumeURLKey],
                         options: []))
-                }) {
+                }, diagnostics: AccessDiagnostics = AccessDiagnostics()) {
+        self.diagnostics = diagnostics
         self.center = center
         provider = mountedVolumes
         let streamPair = AsyncStream<DiskMountEvent>.makeStream()
@@ -47,6 +49,9 @@ public protocol DiskMountPort: Sendable {
     public func mountedVolumes() async -> [AccessProbeVolume] { provider() }
     public func events() async -> AsyncStream<DiskMountEvent> { stream }
     private func receiveUnmount(path: String?) {
+        let uuid = path.flatMap { knownByPath[$0]?.uuid }
+        diagnostics.emit("AccessVolume event=unmount outcome=received volume=\(uuid ?? "unknown")",
+                         path: path.map { URL(fileURLWithPath: $0) })
         if let path, let removed = knownByPath.removeValue(forKey: path) {
             if removed.uuid != nil { continuation.yield(.unmounted(removed)) }
             return
@@ -61,6 +66,9 @@ public protocol DiskMountPort: Sendable {
     }
     private func receiveMount(path: String?) {
         let current = provider()
+        let received = path.flatMap { path in current.first { $0.url?.standardizedFileURL.path == path } }
+        diagnostics.emit("AccessVolume event=mount outcome=received volume=\(received?.uuid ?? "unknown")",
+                         path: path.map { URL(fileURLWithPath: $0) })
         let arrivals = current.filter { volume in
             guard let volumePath = volume.url?.standardizedFileURL.path else { return false }
             return (path == nil || path == volumePath) && knownByPath[volumePath]?.uuid != volume.uuid
