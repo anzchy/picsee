@@ -137,10 +137,10 @@ import PicseeCore
         sortButton.toolTip = String(localized: "Sort images")
         sortButton.setAccessibilityLabel(String(localized: "Sort images"))
         sortButton.setAccessibilityIdentifier("grid.sort.button")
-        configureComingSoon(favoritesButton, entry: .favorites, title: String(localized: "Personal Favorites"), identifier: "grid.favorites.row")
-        configureComingSoon(recentsButton, entry: .recents, title: String(localized: "Recently Viewed"), identifier: "grid.recents.row")
-        configureComingSoon(infoButton, entry: .footerInfo, title: String(localized: "Info"), identifier: "grid.info.button")
-        configureComingSoon(displayButton, entry: .footerDisplay, title: String(localized: "Display"), identifier: "grid.display.button")
+        configureComingSoon(favoritesButton, entry: .favorites, title: String(localized: "Personal Favorites"), identifier: "grid.favorites.row", systemImage: "heart")
+        configureComingSoon(recentsButton, entry: .recents, title: String(localized: "Recently Viewed"), identifier: "grid.recents.row", systemImage: "clock")
+        configureComingSoon(infoButton, entry: .footerInfo, title: String(localized: "Show Image Information"), identifier: "grid.info.button", systemImage: "info.circle", iconOnly: true)
+        configureComingSoon(displayButton, entry: .footerDisplay, title: String(localized: "Display and Appearance"), identifier: "grid.display.button", systemImage: "square.grid.2x2", iconOnly: true)
         favoritesButton.alignment = .left
         recentsButton.alignment = .left
         sidebar.addSubview(folderName)
@@ -236,14 +236,20 @@ import PicseeCore
         // toolbar gap 6pt, reduced to 2pt through 800pt.
         let trailingInset: CGFloat = footer.bounds.width <= 480 ? 7 : 12
         let toolGap: CGFloat = footer.bounds.width <= 800 ? 2 : 6
-        sortButton.frame = NSRect(x: max(48, footer.bounds.width - trailingInset - 30), y: 6, width: 30, height: 28)
-        searchButton.frame = NSRect(x: sortButton.frame.minX - 30 - toolGap, y: 6, width: 30, height: 28)
-        let searchWidth = min(190, max(0, sortButton.frame.minX - 58))
+        let buttonWidth: CGFloat = footer.bounds.width <= 480 ? 26 : 30
+        displayButton.frame = NSRect(x: footer.bounds.width - trailingInset - buttonWidth, y: 6,
+                                     width: buttonWidth, height: 28)
+        infoButton.frame = NSRect(x: displayButton.frame.minX - buttonWidth - toolGap, y: 6,
+                                  width: buttonWidth, height: 28)
+        sortButton.frame = NSRect(x: infoButton.frame.minX - buttonWidth - toolGap, y: 6,
+                                  width: buttonWidth, height: 28)
+        searchButton.frame = NSRect(x: sortButton.frame.minX - buttonWidth - toolGap, y: 6,
+                                    width: buttonWidth, height: 28)
+        let statusReserve: CGFloat = 48 + 60 + 8
+        let searchWidth = min(190, max(0, sortButton.frame.minX - statusReserve - toolGap))
         searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - toolGap, y: 6,
                                    width: searchWidth, height: 28)
-        displayButton.frame = NSRect(x: searchField.frame.minX - 110 - toolGap, y: 6, width: 110, height: 28)
-        infoButton.frame = NSRect(x: displayButton.frame.minX - 90 - toolGap, y: 6, width: 90, height: 28)
-        searchStatus.frame = NSRect(x: 48, y: 6, width: max(0, infoButton.frame.minX - 56), height: 28)
+        searchStatus.frame = NSRect(x: 48, y: 6, width: max(0, (searchField.isHidden ? searchButton.frame.minX : searchField.frame.minX) - 56), height: 28)
         emptyState.frame = mainContent.bounds
         let centerX = emptyState.bounds.midX
         let centerY = emptyState.bounds.midY
@@ -269,10 +275,10 @@ import PicseeCore
         clearSearchButton.frame = NSRect(x: max(0, centerX - 65),
                                          y: emptyDetail.frame.minY - actionGap - clearHeight,
                                          width: 130, height: clearHeight)
-        favoritesButton.frame = NSRect(x: 14, y: max(0, sidebar.bounds.height - 32),
-                                       width: max(0, sidebar.bounds.width - 28), height: 28)
-        recentsButton.frame = NSRect(x: 14, y: max(0, favoritesButton.frame.minY - 28),
-                                     width: max(0, sidebar.bounds.width - 28), height: 28)
+        favoritesButton.frame = NSRect(x: 12, y: max(0, sidebar.bounds.height - 54),
+                                       width: max(0, sidebar.bounds.width - 24), height: 32)
+        recentsButton.frame = NSRect(x: 12, y: max(0, favoritesButton.frame.minY - 35),
+                                     width: max(0, sidebar.bounds.width - 24), height: 32)
         folderName.frame = NSRect(x: 14, y: max(0, recentsButton.frame.minY - 25),
                                   width: max(0, sidebar.bounds.width - 28), height: 20)
         folderTree.frame = NSRect(x: 0, y: 0, width: sidebar.bounds.width,
@@ -477,15 +483,20 @@ import PicseeCore
         guard let action = item.representedObject as? FolderMenuAction else { return }
         onSort?(action)
     }
-    private func configureComingSoon(_ button: NSButton, entry: EntryPoint, title: String, identifier: String) {
+    private func configureComingSoon(_ button: NSButton, entry: EntryPoint, title: String, identifier: String,
+                                     systemImage: String, iconOnly: Bool = false) {
         let label = "\(title) · \(String(localized: "Coming Soon"))"
-        button.title = label
+        button.title = iconOnly ? "" : title
         button.font = .systemFont(ofSize: 12)
+        button.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil)
+        button.imagePosition = iconOnly ? .imageOnly : .imageLeading
+        button.imageScaling = .scaleProportionallyDown
         button.isBordered = false
         button.contentTintColor = .secondaryLabelColor
         button.isEnabled = entry.isEnabled
         button.refusesFirstResponder = !entry.isFocusable
         button.keyEquivalent = entry.keyEquivalent ?? ""
+        button.toolTip = label
         button.setAccessibilityLabel(label)
         button.setAccessibilityIdentifier(identifier)
     }
