@@ -57,7 +57,7 @@ import PicseeCore
     public let icon = NSImageView()
     public let nameLabel = NSTextField(labelWithString: "")
     public let metaLabel = NSTextField(labelWithString: String(localized: "Subfolder"))
-    let url: URL
+    public let url: URL
     init(url: URL) {
         self.url = url
         super.init(frame: .zero)
@@ -123,6 +123,16 @@ import PicseeCore
     }
 }
 
+/// What page 22 shows: subfolder tiles (with 「包含子文件夹浏览」 when available), else recents.
+public struct EmptyFolderPage: Equatable, Sendable {
+    public let subfolders: [URL]
+    public let recents: [EmptyFolderRecentRow]
+    public let includeSubfoldersAvailable: Bool
+    public init(subfolders: [URL], recents: [EmptyFolderRecentRow], includeSubfoldersAvailable: Bool) {
+        self.subfolders = subfolders; self.recents = recents; self.includeSubfoldersAvailable = includeSubfoldersAvailable
+    }
+}
+
 @MainActor private final class FlippedView: NSView { override var isFlipped: Bool { true } }
 
 /// Page 22 (22-BD): the grid shell's content after a complete scan found no images (ADR-014).
@@ -148,10 +158,7 @@ import PicseeCore
     public var onChooseFolder: (() -> Void)?
     public var onDropFolders: (([URL]) -> Void)?
     private let document = FlippedView()
-    private struct DisplayRequest: Equatable {
-        let subfolders: [URL]; let recents: [EmptyFolderRecentRow]; let includeSubfolders: Bool
-    }
-    private var displayedRequest: DisplayRequest?
+    private var displayedRequest: EmptyFolderPage?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -199,7 +206,8 @@ import PicseeCore
     /// Subfolder tiles (with 「包含子文件夹浏览」 when `includeSubfoldersAvailable`), else the recents list.
     public func display(subfolders: [URL], recents: [EmptyFolderRecentRow], includeSubfoldersAvailable: Bool) {
         // A repeated request (watched refresh, recents reload) keeps the controls so keyboard focus stays put.
-        let request = DisplayRequest(subfolders: subfolders, recents: recents, includeSubfolders: includeSubfoldersAvailable)
+        let request = EmptyFolderPage(subfolders: subfolders, recents: recents,
+                                      includeSubfoldersAvailable: includeSubfoldersAvailable)
         guard request != displayedRequest else { return }
         displayedRequest = request
         tiles.forEach { $0.removeFromSuperview() }; recentRows.forEach { $0.removeFromSuperview() }

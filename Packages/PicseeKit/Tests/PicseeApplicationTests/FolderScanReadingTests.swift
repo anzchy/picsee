@@ -125,7 +125,7 @@ import PicseeCore
         await fixture.scanner.finish(); try await task.value
         #expect(fixture.coordinator.isEmptyFolder)
         #expect(host.opens.isEmpty && host.remembered.isEmpty)
-        #expect(session.imageStatus == .empty)
+        #expect(session.imageStatus == .emptyFolder)
         #expect(await fixture.access.balance == [1, 1])
     }
 }

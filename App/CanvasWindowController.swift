@@ -56,6 +56,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var presentation: GridViewerPresentation!
     private var gridFolderRoot: AccessRootID?
     private var latestRecents: [RecentFolder] = []
+    private var viewerEmptyFolderChildren: URL?
     private var gridFolderURL: URL?
     private var gridPreviewScrollOffset: NSPoint?
     private var folderEntryRestore: ((FolderEntryRestoreTarget) -> Void)?
@@ -153,12 +154,15 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         gridShell.isHidden = true
         gridShell.onSearchChange = { [weak self] term in self?.updateGridSearch(term) }
         gridShell.onSelectFolder = { [weak self] folder in
-            guard let self, let rootID = self.gridFolderRoot else { return }
+            // A viewer page-22 tile has no grid root yet; the empty folder's scan root covers its children.
+            guard let self, let rootID = self.gridFolderRoot ?? self.session.folderScan?.sourceSnapshot?.version.rootID
+            else { return }
             self.openFolder(folder, rootID: rootID)
         }
         gridShell.session = session
         gridShell.onOpenRecent = { [weak self] folder in self?.openRecent(folder) }
         gridShell.onDropFolders = { [weak self] urls in self?.openInput(urls) }
+        gridShell.mirrorEmptyFolderPage(to: stateHost)
         gridShell.onSort = { [weak self] action in self?.applyGridSort(action) }
         gridShell.onOpenSortMenu = { button, menu in
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
@@ -1303,6 +1307,24 @@ extension CanvasWindowController: FolderScanHost {
     /// Page 22 (ADR-014) replaces the empty-folder alert once a complete scan finds no images.
     private func updateEmptyFolderState() {
         gridShell.setEmptyFolderState(session.isEmptyFolder, recents: latestRecents, now: Date())
+        loadViewerEmptyFolderChildren()
+    }
+    /// Owner decision C (#137): a viewer folder session never loaded the sidebar tree, so page 22 on the viewer
+    /// lists the empty folder's children itself.
+    private func loadViewerEmptyFolderChildren() {
+        guard session.isEmptyFolder, gridFolderRoot == nil,
+              let version = session.folderScan?.sourceSnapshot?.version else { viewerEmptyFolderChildren = nil; return }
+        guard viewerEmptyFolderChildren != version.folder else { return }
+        viewerEmptyFolderChildren = version.folder
+        Task { [weak self, accessServices] in
+            guard let services = try? await accessServices.value, let self else { return }
+            let browser = self.sidebarBrowserOverride ?? SidebarFolderBrowser(
+                access: services.files, enumerator: SystemSidebarFolderEnumerator())
+            guard let children = try? await browser.children(in: version.folder, rootID: version.rootID),
+                  self.gridFolderRoot == nil, self.viewerEmptyFolderChildren == version.folder else { return }
+            self.gridShell.showFolderTree(current: GridSidebarFolder(url: version.folder), parent: nil,
+                                          children: children.map { GridSidebarFolder(url: $0) })
+        }
     }
     func folderScanDidComplete(count: Int) { chromeOverlay.refresh(session: session) }
     func folderScanDidStart() {

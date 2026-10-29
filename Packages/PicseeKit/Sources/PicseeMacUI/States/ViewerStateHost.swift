@@ -44,6 +44,21 @@ public final class ViewerStateHost: NSView {
     /// Which window surface this host sits on; GridViewerPresentation owns it. The grid surface never shows a state.
     public enum Surface: Sendable { case viewer, gridReading, grid }
     public var surface: Surface = .viewer { didSet { applyVisibility() } }
+    /// Page 22 on the viewer surface (owner decision C, #137); GridShellView mirrors its page here.
+    public let emptyFolderView = EmptyFolderStateView()
+    private var emptyFolderPage: EmptyFolderPage?
+    public func setEmptyFolderPage(_ page: EmptyFolderPage?) {
+        emptyFolderPage = page
+        if displayedStatus == .emptyFolder { showEmptyFolderPage() }
+    }
+    /// Shows the bare page until its content arrives, so the generic state never covers an open empty folder.
+    private func showEmptyFolderPage() {
+        let page = emptyFolderPage ?? EmptyFolderPage(subfolders: [], recents: [], includeSubfoldersAvailable: false)
+        emptyFolderView.display(subfolders: page.subfolders, recents: page.recents,
+                                includeSubfoldersAvailable: page.includeSubfoldersAvailable)
+        buttons = emptyFolderView.keyViews.compactMap { $0 as? NSButton }
+        if let keyCanvas, let keyChrome { ViewerStateFocus.link(canvas: keyCanvas, state: self, chrome: keyChrome) }
+    }
     private func applyVisibility() {
         isHidden = surface == .grid || displayedStatus == .showing
         setAccessibilityHidden(isHidden)
@@ -148,6 +163,14 @@ public final class ViewerStateHost: NSView {
             actions = [(String(localized: "Retry"), "state.retry")]
             if nextEnabled { actions.append((String(localized: "Next"), "state.next")) }
         case .detailLimited: textLines = [String(localized: "Showing reduced detail")]
+        case .emptyFolder:
+            emptyFolderView.frame = bounds
+            emptyFolderView.autoresizingMask = [.width, .height]
+            emptyFolderView.isHidden = false; emptyFolderView.setAccessibilityHidden(false)
+            addSubview(emptyFolderView)
+            setAccessibilityChildren([emptyFolderView])
+            showEmptyFolderPage()
+            return
         case .showing: return
         }
         if case .empty = status {
@@ -341,6 +364,7 @@ public final class ViewerStateHost: NSView {
     public override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHiddenOrHasHiddenAncestor else { return nil }
         let local = convert(point, from: superview)
+        if emptyFolderView.superview === self { return emptyFolderView.hitTest(local) }
         return buttons.first { !$0.isHidden && $0.frame.contains(local) }
     }
 }

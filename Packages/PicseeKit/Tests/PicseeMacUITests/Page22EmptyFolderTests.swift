@@ -131,6 +131,7 @@ let page22Now = Date(timeIntervalSince1970: 1_615_809_600) // 2021-03-15T12:00:0
         shell.onSelectFolder = { [unowned self] in selected.append($0) }
         shell.onOpenRecent = { [unowned self] in opened.append($0) }
         shell.onDropFolders = { [unowned self] in dropped.append($0) }
+        shell.mirrorEmptyFolderPage(to: state)
         presentation.showViewer()
     }
     var page: EmptyFolderStateView { shell.emptyFolderView }
@@ -625,4 +626,42 @@ private func recentFolders(_ count: Int) -> [RecentFolder] {
     #expect(form("one") == "This level has no images, but has %lld subfolder")
     #expect(form("other") == "This level has no images, but has %lld subfolders")
     #expect(strings["No Images in This Folder"] == nil)
+}
+
+/// Owner decision C (#137): the viewer surface renders page 22's content for an empty folder session, never the
+/// generic first-launch state, and its actions route exactly as on the grid page.
+@Test @MainActor func viewerEmptyFolderSessionShowsPage22AndRoutesLikeTheGrid() async throws {
+    let scene = Page22Scene()
+    let recents = recentFolders(2)
+    scene.recents = recents
+    scene.tree(["sub"])
+    try await scene.open([])
+    scene.presentation.showViewer()
+    scene.state.refresh()
+    let page = scene.state.emptyFolderView
+    #expect(scene.session.imageStatus == .emptyFolder)
+    #expect(!scene.state.isHidden && !page.isHiddenOrHasHiddenAncestor && scene.shell.isHidden)
+    #expect(!scene.state.textLines.contains(String(localized: "Open a folder to start browsing")))
+    #expect(!textLabels(of: scene.state).contains(String(localized: "Open a folder to start browsing")))
+    #expect(page.heading.stringValue == "This level has no images, but has 1 subfolders")
+    let tile = try #require(page.tiles.first)
+    #expect(tile.url == scene.folder.appendingPathComponent("sub"))
+    tile.performClick(nil)
+    #expect(scene.selected == [scene.folder.appendingPathComponent("sub")])
+    let opens = scene.host.opens
+    page.chooseButton.performClick(nil)
+    #expect(scene.host.opens == opens + 1)
+    let board = NSPasteboard.withUniqueName()
+    defer { board.releaseGlobally() }
+    let dropped = URL(fileURLWithPath: "/photos/Trip", isDirectory: true)
+    #expect(board.writeObjects([dropped as NSURL]))
+    #expect(page.performDragOperation(Page22DropInfo(board)) && scene.dropped == [[dropped]])
+    scene.tree([])
+    let row = try #require(page.recentRows.first)
+    row.performClick(nil)
+    #expect(scene.opened == [recents[1]])
+    scene.tree(["sub"])
+    page.primaryButton.performClick(nil)
+    #expect(scene.session.folderRecursiveEnabled)
+    await scene.close()
 }

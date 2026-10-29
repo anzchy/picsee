@@ -236,6 +236,18 @@ import PicseeCore
         emptyFolderRequest = isEmpty ? (recents, now) : nil
         refreshEmptyFolder()
     }
+    private weak var emptyFolderMirror: ViewerStateHost?
+    /// Owner decision C (#137): the viewer's state host shows this same page 22, and its actions route as here.
+    public func mirrorEmptyFolderPage(to host: ViewerStateHost) {
+        emptyFolderMirror = host
+        let mirror = host.emptyFolderView, source = emptyFolderView
+        mirror.onSelectSubfolder = { [weak source] in source?.onSelectSubfolder?($0) }
+        mirror.onOpenRecent = { [weak source] in source?.onOpenRecent?($0) }
+        mirror.onDropFolders = { [weak source] in source?.onDropFolders?($0) }
+        mirror.onIncludeSubfolders = { [weak source] in source?.onIncludeSubfolders?() }
+        mirror.onChooseFolder = { [weak source] in source?.onChooseFolder?() }
+        refreshEmptyFolder()
+    }
     private func refreshEmptyFolder() {
         let subfolders = folderTree.isHidden ? [] : folderTree.children.map(\.url)
         let content = emptyFolderRequest.flatMap {
@@ -243,14 +255,19 @@ import PicseeCore
                                     locale: .current, calendar: .current)
         }
         emptyFolderView.isHidden = content == nil
+        var page: EmptyFolderPage?
         if let content {
             var rows: [EmptyFolderRecentRow] = []
             if case .recents(let recents) = content { rows = recents }
+            let shown = EmptyFolderPage(subfolders: subfolders, recents: rows,
+                                        includeSubfoldersAvailable: session?.folderRecursiveEnabled != true)
             mainContent.addSubview(emptyFolderView, positioned: .above, relativeTo: nil)
             emptyFolderView.frame = mainContent.bounds
-            emptyFolderView.display(subfolders: subfolders, recents: rows,
-                                    includeSubfoldersAvailable: session?.folderRecursiveEnabled != true)
+            emptyFolderView.display(subfolders: shown.subfolders, recents: shown.recents,
+                                    includeSubfoldersAvailable: shown.includeSubfoldersAvailable)
+            page = shown
         }
+        emptyFolderMirror?.setEmptyFolderPage(page)
         applyFooterState()
     }
     public func updateFolderCount(_ count: Int?, for url: URL) {
