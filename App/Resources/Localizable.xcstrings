@@ -1,6 +1,14 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Coming Soon": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Coming Soon"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "即将推出"}}}},
+    "Personal Favorites": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Personal Favorites"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "个人收藏"}}}},
+    "Recently Viewed": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Recently Viewed"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "最近查看"}}}},
+    "Info": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Info"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "信息"}}}},
+    "Display": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Display"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "显示"}}}},
+    "Help": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Help"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "帮助"}}}},
+    "Report a Problem…": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Report a Problem…"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "报告问题…"}}}},
+    "Keyboard Shortcuts": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Keyboard Shortcuts"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "键盘快捷键"}}}},
     "Choose File Again…": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Choose File Again…"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "重新选择文件…"}}}},
     "Choose this image again to reconnect access.": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Choose this image again to reconnect access."}},"zh-Hans": {"stringUnit": {"state": "translated","value": "请重新选择这张图片以恢复访问。"}}}},
     "No matching images": {
@@ -3148,7 +3156,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "诊断"
+            "value": "诊断信息"
           }
         }
       }

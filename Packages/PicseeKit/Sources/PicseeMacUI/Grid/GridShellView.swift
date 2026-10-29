@@ -44,6 +44,10 @@ import PicseeCore
     public var emptyStateTitle: NSTextField? { emptyTitle }
     public var emptyStateDetail: NSTextField? { emptyDetail }
     public let sortButton: NSButton = GridSidebarToggleButton()
+    public let favoritesButton: NSButton = GridSidebarToggleButton()
+    public let recentsButton: NSButton = GridSidebarToggleButton()
+    public let infoButton: NSButton = GridSidebarToggleButton()
+    public let displayButton: NSButton = GridSidebarToggleButton()
     public let searchStatus = NSTextField(labelWithString: "")
     public var onSearchChange: ((String) -> Void)?
     public var onClearSearch: (() -> Void)?
@@ -80,7 +84,11 @@ import PicseeCore
         footer.addSubview(searchButton)
         footer.addSubview(searchStatus)
         footer.addSubview(sortButton)
+        footer.addSubview(infoButton)
+        footer.addSubview(displayButton)
         footer.addSubview(footerRule)
+        sidebar.addSubview(favoritesButton)
+        sidebar.addSubview(recentsButton)
         mainContent.addSubview(emptyState)
         emptyState.addSubview(emptyTitle)
         emptyState.addSubview(emptyIcon)
@@ -129,6 +137,12 @@ import PicseeCore
         sortButton.toolTip = String(localized: "Sort images")
         sortButton.setAccessibilityLabel(String(localized: "Sort images"))
         sortButton.setAccessibilityIdentifier("grid.sort.button")
+        configureComingSoon(favoritesButton, entry: .favorites, title: String(localized: "Personal Favorites"), identifier: "grid.favorites.row")
+        configureComingSoon(recentsButton, entry: .recents, title: String(localized: "Recently Viewed"), identifier: "grid.recents.row")
+        configureComingSoon(infoButton, entry: .footerInfo, title: String(localized: "Info"), identifier: "grid.info.button")
+        configureComingSoon(displayButton, entry: .footerDisplay, title: String(localized: "Display"), identifier: "grid.display.button")
+        favoritesButton.alignment = .left
+        recentsButton.alignment = .left
         sidebar.addSubview(folderName)
         sidebar.addSubview(folderTree)
         sidebar.addSubview(divider)
@@ -227,7 +241,9 @@ import PicseeCore
         let searchWidth = min(190, max(0, sortButton.frame.minX - 58))
         searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - toolGap, y: 6,
                                    width: searchWidth, height: 28)
-        searchStatus.frame = NSRect(x: 48, y: 6, width: max(0, (searchField.isHidden ? searchButton.frame.minX : searchField.frame.minX) - 56), height: 28)
+        displayButton.frame = NSRect(x: searchField.frame.minX - 110 - toolGap, y: 6, width: 110, height: 28)
+        infoButton.frame = NSRect(x: displayButton.frame.minX - 90 - toolGap, y: 6, width: 90, height: 28)
+        searchStatus.frame = NSRect(x: 48, y: 6, width: max(0, infoButton.frame.minX - 56), height: 28)
         emptyState.frame = mainContent.bounds
         let centerX = emptyState.bounds.midX
         let centerY = emptyState.bounds.midY
@@ -253,9 +269,14 @@ import PicseeCore
         clearSearchButton.frame = NSRect(x: max(0, centerX - 65),
                                          y: emptyDetail.frame.minY - actionGap - clearHeight,
                                          width: 130, height: clearHeight)
-        folderName.frame = NSRect(x: 14, y: max(0, sidebar.bounds.height - 53),
+        favoritesButton.frame = NSRect(x: 14, y: max(0, sidebar.bounds.height - 32),
+                                       width: max(0, sidebar.bounds.width - 28), height: 28)
+        recentsButton.frame = NSRect(x: 14, y: max(0, favoritesButton.frame.minY - 28),
+                                     width: max(0, sidebar.bounds.width - 28), height: 28)
+        folderName.frame = NSRect(x: 14, y: max(0, recentsButton.frame.minY - 25),
                                   width: max(0, sidebar.bounds.width - 28), height: 20)
-        folderTree.frame = sidebar.bounds
+        folderTree.frame = NSRect(x: 0, y: 0, width: sidebar.bounds.width,
+                                  height: max(0, recentsButton.frame.minY - 4))
         folderTree.viewportWidth = bounds.width
         divider.frame = NSRect(x: max(0, sidebar.bounds.width - 5), y: 0, width: 5,
                                height: sidebar.bounds.height)
@@ -455,6 +476,18 @@ import PicseeCore
     @objc private func selectSort(_ item: NSMenuItem) {
         guard let action = item.representedObject as? FolderMenuAction else { return }
         onSort?(action)
+    }
+    private func configureComingSoon(_ button: NSButton, entry: EntryPoint, title: String, identifier: String) {
+        let label = "\(title) · \(String(localized: "Coming Soon"))"
+        button.title = label
+        button.font = .systemFont(ofSize: 12)
+        button.isBordered = false
+        button.contentTintColor = .secondaryLabelColor
+        button.isEnabled = entry.isEnabled
+        button.refusesFirstResponder = !entry.isFocusable
+        button.keyEquivalent = entry.keyEquivalent ?? ""
+        button.setAccessibilityLabel(label)
+        button.setAccessibilityIdentifier(identifier)
     }
     private func refreshToggleLabel() {
         let label = String(localized: preferencesStore.value.gridSidebarVisible ? "Hide sidebar" : "Show sidebar")
