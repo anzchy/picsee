@@ -150,6 +150,121 @@ private func issue219Length(_ design: PinnedDesign, _ selector: String, _ proper
     }
 }
 
+private struct Issue219PaintedText {
+    let inkCount: Int
+    let inkBounds: CGRect?
+}
+
+@MainActor private func issue219PaintedText(_ field: NSTextField) throws -> Issue219PaintedText {
+    let width = Int(ceil(field.bounds.width))
+    let height = Int(ceil(field.bounds.height))
+    try #require(width > 0 && height > 0)
+    let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+        bytesPerRow: 0, bitsPerPixel: 0))
+    bitmap.size = field.bounds.size
+    field.cacheDisplay(in: field.bounds, to: bitmap)
+    var inkCount = 0
+    var minX = width
+    var minY = height
+    var maxX = -1
+    var maxY = -1
+    for y in 0..<height {
+        for x in 0..<width {
+            let color = try #require(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+            guard color.alphaComponent > 0.1 else { continue }
+            inkCount += 1
+            minX = min(minX, x)
+            minY = min(minY, y)
+            maxX = max(maxX, x)
+            maxY = max(maxY, y)
+        }
+    }
+    let inkBounds = maxX >= 0 ? CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1) : nil
+    return Issue219PaintedText(inkCount: inkCount, inkBounds: inkBounds)
+}
+
+@MainActor private func issue219UnclippedTextReference(_ field: NSTextField) throws -> NSTextField {
+    let font = try #require(field.font)
+    let textSize = (field.stringValue as NSString).size(withAttributes: [.font: font])
+    let reference = NSTextField(labelWithString: field.stringValue)
+    reference.font = font
+    reference.textColor = field.textColor
+    reference.alignment = field.alignment
+    reference.lineBreakMode = .byClipping
+    reference.appearance = field.effectiveAppearance
+    reference.frame = NSRect(x: 0, y: 0, width: ceil(textSize.width) + 16, height: field.bounds.height)
+    reference.layoutSubtreeIfNeeded()
+    return reference
+}
+
+@Test @MainActor func issue219ShortcutRenderedKeycapsPaintCompleteGlyphs() throws {
+    let requiredGlyphs: Set<String> = ["Space", "Return", "Esc", "Tab", ",", "0", "1", "+", "−"]
+    var renderedGlyphs: Set<String> = []
+    for language in [EntryPointLanguage.english, .simplifiedChinese] {
+        for (appearance, theme) in issue219Appearances {
+            let design = try PinnedDesign.page("shortcuts", appearance: theme)
+            let padding = try design.edges("kbd", "padding", viewport: issue219Viewport)
+            let border = try issue219Length(design, "kbd", "border")
+            let view = try issue219View(language, appearance)
+            for card in view.cardViews {
+                for row in card.rowViews {
+                    #expect(abs(row.nameLabel.frame.midY - row.bounds.midY) <= 0.5)
+                    for key in row.keycapViews {
+                        let glyph = key.label.stringValue
+                        renderedGlyphs.insert(glyph)
+                        let font = try #require(key.label.font)
+                        let requiredSize = (glyph as NSString).size(withAttributes: [.font: font])
+                        let contentWidth = key.bounds.width - padding.left - padding.right - 2 * border
+                        #expect(requiredSize.width <= contentWidth + 0.5,
+                            "\(language) \(appearance.rawValue) \(glyph): required \(requiredSize.width), content \(contentWidth)")
+                        #expect(abs(key.frame.midY - row.bounds.midY) <= 0.5,
+                            "\(language) \(appearance.rawValue) \(glyph): keycap is not centred with its row")
+                        let actual = try issue219PaintedText(key.label)
+                        let reference = try issue219UnclippedTextReference(key.label)
+                        let expected = try issue219PaintedText(reference)
+                        #expect(expected.inkCount > 0, "reference did not paint \(glyph)")
+                        #expect(Double(actual.inkCount) >= Double(expected.inkCount) * 0.75,
+                            "\(language) \(appearance.rawValue) \(glyph): painted \(actual.inkCount) of \(expected.inkCount) reference pixels")
+                        let actualBounds = try #require(actual.inkBounds, "\(language) \(appearance.rawValue) \(glyph) is blank")
+                        let expectedBounds = try #require(expected.inkBounds)
+                        #expect(actualBounds.width + 1 >= expectedBounds.width,
+                            "\(language) \(appearance.rawValue) \(glyph): drawn width \(actualBounds.width), expected \(expectedBounds.width)")
+                        #expect(abs(actualBounds.midY - expectedBounds.midY) <= 1,
+                            "\(language) \(appearance.rawValue) \(glyph): glyphs are not vertically centred")
+                    }
+                }
+            }
+        }
+    }
+    #expect(requiredGlyphs.isSubset(of: renderedGlyphs))
+}
+
+@Test @MainActor func issue219ShortcutRenderedCardHeadersPaintCompleteSubtitles() throws {
+    for language in [EntryPointLanguage.english, .simplifiedChinese] {
+        for (appearance, _) in issue219Appearances {
+            let view = try issue219View(language, appearance)
+            for card in view.cardViews {
+                #expect(card.titleLabel.frame.maxX + 8 <= card.whenLabel.frame.minX + 0.5)
+                #expect(card.whenLabel.frame.maxX <= card.bounds.width - 1,
+                    "\(language) \(appearance.rawValue) \(card.whenLabel.stringValue): header escapes its card")
+                for label in [card.titleLabel, card.whenLabel] {
+                    let actual = try issue219PaintedText(label)
+                    let reference = try issue219UnclippedTextReference(label)
+                    let expected = try issue219PaintedText(reference)
+                    #expect(expected.inkCount > 0)
+                    #expect(Double(actual.inkCount) >= Double(expected.inkCount) * 0.75,
+                        "\(language) \(appearance.rawValue) \(label.stringValue): painted \(actual.inkCount) of \(expected.inkCount) reference pixels")
+                    let actualBounds = try #require(actual.inkBounds)
+                    let expectedBounds = try #require(expected.inkBounds)
+                    #expect(actualBounds.width + 1 >= expectedBounds.width,
+                        "\(language) \(appearance.rawValue) \(label.stringValue): drawn width \(actualBounds.width), expected \(expectedBounds.width)")
+                }
+            }
+        }
+    }
+}
+
 @Test @MainActor func issue219ShortcutVisibleCopyIsBilingualWithChineseMenuTitles() throws {
     for language in [EntryPointLanguage.english, .simplifiedChinese] {
         for (appearance, _) in issue219Appearances {
