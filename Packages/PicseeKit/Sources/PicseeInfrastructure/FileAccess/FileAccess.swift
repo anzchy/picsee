@@ -28,17 +28,40 @@ private struct ScopeSession {
     }
 }
 
+public struct AccessRecoveryVerification: Sendable {
+    public let classification: AccessProbeClassification
+    public let bookmarkVolume: AccessProbeVolume
+    public let rootURL: URL?
+    public let folderURL: URL?
+    public init(classification: AccessProbeClassification, bookmarkVolume: AccessProbeVolume,
+                rootURL: URL?, folderURL: URL?) {
+        self.classification = classification
+        self.bookmarkVolume = bookmarkVolume
+        self.rootURL = rootURL
+        self.folderURL = folderURL
+    }
+}
+
 /// Shared by the application. All persisted-grant I/O runs on this actor's executor.
 public actor FileAccess: AccessLeasing {
     private let scope: any SecurityScope
     private let bookmarks: any BookmarkCoding
     private let resourceReader: any FileIdentityResourceReading
+    private let bookmarkVolume: @Sendable (Data) -> AccessProbeVolume
+    private let resolvedVolumeUUID: @Sendable (URL) -> String?
+    private let bookmarkIdentity: @Sendable (Data) -> FileResourceIdentity?
+    private let mountedVolumesProvider: @Sendable () -> [AccessProbeVolume]
     private let store: BookmarkStore
     private let boundary: @Sendable (URL, URL) -> Bool
     private let buildSHA: String
     public let storeCorrupt: Bool
     private var saved: [AccessRootRecord]
     private var roots: [AccessRootID: URL] = [:]
+    /// Location memory only; never used as an access grant.
+    private var lastKnownRoots: [AccessRootID: URL] = [:]
+    /// Legacy bookmarks have no embedded root identity. This baseline is valid
+    /// only for roots verified as readable during this process lifetime.
+    private var legacyBaseline: [AccessRootID: FileResourceIdentity] = [:]
     private var previousRoots: [AccessRootID: [URL]] = [:]
     private var outcomes: [AccessRootID: String] = [:]
     private struct Active { let session: ScopeSession; var tokens: Set<UUID> }
@@ -51,10 +74,26 @@ public actor FileAccess: AccessLeasing {
 
     public init(scope: any SecurityScope, bookmarks: any BookmarkCoding, store: BookmarkStore, buildSHA: String,
                 resourceReader: any FileIdentityResourceReading = URLIdentityResourceReader(),
-                boundary: @escaping @Sendable (URL, URL) -> Bool = { AccessBoundary.contains($0, in: $1) }) throws {
+                boundary: @escaping @Sendable (URL, URL) -> Bool = { AccessBoundary.contains($0, in: $1) },
+                bookmarkVolume: @escaping @Sendable (Data) -> AccessProbeVolume = { AccessProbeFactGatherer.bookmarkVolume(in: $0) },
+                resolvedVolumeUUID: @escaping @Sendable (URL) -> String? = {
+                    (try? $0.resourceValues(forKeys: [.volumeUUIDStringKey]))?.volumeUUIDString
+                },
+                bookmarkIdentity: @escaping @Sendable (Data) -> FileResourceIdentity? = {
+                    AccessProbeFactGatherer.bookmarkIdentity(in: $0)
+                },
+                mountedVolumesProvider: @escaping @Sendable () -> [AccessProbeVolume] = {
+                    AccessProbeFactGatherer.mountedVolumes(at: FileManager.default.mountedVolumeURLs(
+                        includingResourceValuesForKeys: [.volumeUUIDStringKey, .volumeNameKey, .volumeURLKey],
+                        options: []))
+                }) throws {
         self.boundary = boundary
         self.scope = scope; self.bookmarks = bookmarks; self.buildSHA = buildSHA
         self.resourceReader = resourceReader
+        self.bookmarkVolume = bookmarkVolume
+        self.resolvedVolumeUUID = resolvedVolumeUUID
+        self.bookmarkIdentity = bookmarkIdentity
+        self.mountedVolumesProvider = mountedVolumesProvider
         do {
             saved = try store.load()
             self.store = store; storeCorrupt = false
@@ -70,10 +109,43 @@ public actor FileAccess: AccessLeasing {
             let record = saved[index]
             var outcome = "failed"
             do {
+                let volume = bookmarkVolume(record.bookmark)
+                if let uuid = volume.uuid {
+                    guard mountedVolumesProvider().contains(where: { $0.uuid == uuid }) else {
+                        // A no-mount resolve may recover the previous path for child rebasing.
+                        // It is a location hint, never a published access grant.
+                        lastKnownRoots[record.id] = try? bookmarks.resolve(record.bookmark).url
+                        throw FileAccessError.needsReconnection(record.id)
+                    }
+                } else if bookmarks is SystemSecurityScope {
+                    throw FileAccessError.needsReconnection(record.id)
+                }
                 let resolution = try bookmarks.resolve(record.bookmark)
-                if resolution.stale {
+                if let uuid = volume.uuid, resolvedVolumeUUID(resolution.url) != uuid {
+                    throw FileAccessError.needsReconnection(record.id)
+                }
+                let isLegacy = bookmarks is SystemSecurityScope && bookmarkIdentity(record.bookmark) == nil
+                if isLegacy {
                     let session = try ScopeSession(scope: scope, url: resolution.url, rootID: record.id)
                     defer { session.stop() }
+                    _ = try FileManager.default.contentsOfDirectory(at: resolution.url,
+                        includingPropertiesForKeys: nil)
+                    guard let identity = try resourceReader.identity(for: resolution.url) else {
+                        throw FileAccessError.needsReconnection(record.id)
+                    }
+                    legacyBaseline[record.id] = identity
+                    outcome = "resolved"
+                } else if resolution.stale {
+                    let session = try ScopeSession(scope: scope, url: resolution.url, rootID: record.id)
+                    defer { session.stop() }
+                    if let expected = bookmarkIdentity(record.bookmark),
+                       (try? resourceReader.identity(for: resolution.url)) != expected {
+                        throw FileAccessError.needsReconnection(record.id)
+                    }
+                    if volume.uuid != nil {
+                        _ = try FileManager.default.contentsOfDirectory(at: resolution.url,
+                            includingPropertiesForKeys: nil)
+                    }
                     var refreshed = saved
                     refreshed[index].bookmark = try bookmarks.create(for: resolution.url)
                     try self.store.save(refreshed)
@@ -81,6 +153,7 @@ public actor FileAccess: AccessLeasing {
                     outcome = "stale"
                 } else { outcome = "resolved" }
                 roots[record.id] = resolution.url
+                lastKnownRoots[record.id] = resolution.url
             } catch { outcome = "failed" }
             outcomes[record.id] = outcome
             logger.notice("AccessRoot root=\(record.id.rawValue.uuidString, privacy: .public) outcome=\(outcome, privacy: .public) creating=\(record.creatingBuildSHA, privacy: .public) current=\(buildSHA, privacy: .public)")
@@ -90,6 +163,96 @@ public actor FileAccess: AccessLeasing {
     public func launchOutcomes() -> [AccessRootID: String] { outcomes }
     /// Published location only; Recent queries never create or refresh authority.
     public func rootURL(_ id: AccessRootID) -> URL? { roots[id] }
+    public func savedVolume(_ id: AccessRootID) -> AccessProbeVolume? {
+        guard let bookmark = saved.first(where: { $0.id == id })?.bookmark else { return nil }
+        return bookmarkVolume(bookmark)
+    }
+    public func verifySavedRootForRecovery(_ id: AccessRootID, folder: URL,
+                                           mounts: any DiskMountPort) async -> AccessRecoveryVerification {
+        let empty = AccessProbeVolume(uuid: nil, url: nil, name: nil)
+        // Mount enumeration suspends this actor. Read the saved grant afterwards
+        // so an explicit reselection during that wait cannot be overwritten.
+        let mounted = await mounts.mountedVolumes()
+        guard let record = saved.first(where: { $0.id == id }) else {
+            return AccessRecoveryVerification(classification: .init(cause: .unknown, isInTrash: false),
+                                              bookmarkVolume: empty, rootURL: nil, folderURL: nil)
+        }
+        let volume = bookmarkVolume(record.bookmark)
+        func classified(_ resolution: AccessProbeResolution, scopeStarted: Bool? = nil,
+                        listing: AccessProbeDirectoryListing? = nil, isInTrash: Bool = false,
+                        rootURL: URL? = nil, folderURL: URL? = nil) -> AccessRecoveryVerification {
+            let facts = AccessProbeFacts(volume: volume, mountedVolumes: mounted, resolution: resolution,
+                                         scopeStarted: scopeStarted, listing: listing, isInTrash: isInTrash)
+            return AccessRecoveryVerification(classification: AccessCauseClassifier.classify(facts),
+                                              bookmarkVolume: volume, rootURL: rootURL, folderURL: folderURL)
+        }
+        // A bookmark can resolve to an empty abandoned mount point. Never use
+        // scope or listing to override a missing UUID.
+        guard let uuid = volume.uuid else {
+            return classified(.failed(domain: "PicseeAccess", code: 0))
+        }
+        guard mounted.contains(where: { $0.uuid == uuid }) else {
+            return classified(.failed(domain: "PicseeAccess", code: 0))
+        }
+        let resolution: ResolvedBookmark
+        do { resolution = try bookmarks.resolve(record.bookmark) }
+        catch { return classified(.failed(Self.probeError(error))) }
+        let root = resolution.url
+        let resolved = AccessProbeResolution.resolved(root, stale: resolution.stale)
+        guard resolvedVolumeUUID(root) == uuid, !Self.isTrashed(root) else {
+            return classified(resolved, isInTrash: Self.isTrashed(root))
+        }
+        let expectedIdentity = bookmarkIdentity(record.bookmark) ?? legacyBaseline[id]
+        guard expectedIdentity != nil || !(bookmarks is SystemSecurityScope) else {
+            return classified(resolved)
+        }
+        let session: ScopeSession
+        do { session = try ScopeSession(scope: scope, url: root, rootID: id) }
+        catch { return classified(resolved, scopeStarted: false) }
+        defer { session.stop() }
+        if let expectedIdentity,
+           (try? resourceReader.identity(for: root)) != expectedIdentity {
+            roots.removeValue(forKey: id)
+            return classified(resolved, scopeStarted: true)
+        }
+        let rootListing: AccessProbeDirectoryListing
+        do {
+            rootListing = .succeeded(entryCount: try FileManager.default.contentsOfDirectory(
+                at: root, includingPropertiesForKeys: nil).count)
+        } catch { return classified(resolved, scopeStarted: true,
+                                    listing: .failed(Self.probeError(error))) }
+        let candidate: URL
+        if let priorRoot = lastKnownRoots[id],
+           folder.standardizedFileURL.pathComponents.starts(with: priorRoot.standardizedFileURL.pathComponents),
+           priorRoot.standardizedFileURL != root.standardizedFileURL {
+            let suffix = folder.standardizedFileURL.pathComponents.dropFirst(priorRoot.standardizedFileURL.pathComponents.count)
+            candidate = suffix.reduce(root) { $0.appendingPathComponent($1) }
+        } else { candidate = folder }
+        // Only a genuinely readable saved bookmark restores the published root.
+        publishRoot(id, url: root)
+        guard boundary(candidate, root) else {
+            return classified(resolved, scopeStarted: true, rootURL: root)
+        }
+        if candidate.standardizedFileURL == root.standardizedFileURL {
+            return classified(resolved, scopeStarted: true, listing: rootListing,
+                              rootURL: root, folderURL: root)
+        }
+        do {
+            let listing = AccessProbeDirectoryListing.succeeded(entryCount: try FileManager.default.contentsOfDirectory(
+                at: candidate, includingPropertiesForKeys: nil).count)
+            return classified(resolved, scopeStarted: true, listing: listing,
+                              rootURL: root, folderURL: candidate)
+        } catch {
+            return classified(resolved, scopeStarted: true,
+                              listing: .failed(Self.probeError(error)), rootURL: root)
+        }
+    }
+    private static func probeError(_ error: Error) -> AccessProbeError {
+        let nsError = error as NSError
+        let underlying = (nsError.userInfo[NSUnderlyingErrorKey] as? NSError).map { probeError($0) }
+        return AccessProbeError(domain: nsError.domain, code: nsError.code,
+                                underlyingErrors: underlying.map { [$0] } ?? [])
+    }
     private func publishRoot(_ id: AccessRootID, url: URL) {
         if let old = roots[id], old.standardizedFileURL != url.standardizedFileURL {
             var history = previousRoots[id] ?? []
@@ -98,6 +261,7 @@ public actor FileAccess: AccessLeasing {
             previousRoots[id] = history
         }
         roots[id] = url
+        lastKnownRoots[id] = url
     }
     public func resolveFileGrant(_ file: URL) throws -> URL {
         let key = file.standardizedFileURL
@@ -208,7 +372,9 @@ public actor FileAccess: AccessLeasing {
             else { replacement.append(record) }
             phase = "store"
             try store.save(replacement)
-            saved = replacement; publishRoot(id, url: folder)
+            saved = replacement
+            legacyBaseline.removeValue(forKey: id)
+            publishRoot(id, url: folder)
             logger.notice("AccessReconnect root=\(id.rawValue.uuidString, privacy: .public) outcome=reconnected error=none path=\(folder.path, privacy: .private)")
             return folder
         } catch {
@@ -269,7 +435,9 @@ public actor FileAccess: AccessLeasing {
             }
             phase = "store"
             try store.save(replacement)
-            saved = replacement; publishRoot(id, url: folder)
+            saved = replacement
+            legacyBaseline.removeValue(forKey: id)
+            publishRoot(id, url: folder)
             logger.notice("AccessGrant kind=panelFolder scopeStarted=true root=\(id.rawValue.uuidString, privacy: .public) existing=\(existing, privacy: .public) outcome=granted path=\(folder.path, privacy: .private)")
             return id
         } catch {
@@ -293,7 +461,7 @@ public actor FileAccess: AccessLeasing {
                 let resolution = try bookmarks.resolve(record.bookmark)
                 key = .root(id, resolution.url)
                 url = active[key]?.session.url ?? resolution.url
-                if resolution.stale { staleRecord = record }
+                if resolution.stale && legacyBaseline[id] == nil { staleRecord = record }
             }
             catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
             if active[key] != nil, !boundary(file, url) { throw FileAccessError.outsideRoot }
@@ -303,6 +471,7 @@ public actor FileAccess: AccessLeasing {
         }
         let lease = AccessLease(url: url, rootID: rootID, resolvedFileURL: rootID == nil ? url : nil)
         if var entry = active[key] {
+            if let rootID { try validateLegacyRoot(rootID, at: url) }
             if let record = staleRecord, roots[record.id] != url {
                 do { try refreshBookmark(record, for: url) }
                 catch {
@@ -319,6 +488,10 @@ public actor FileAccess: AccessLeasing {
                     throw FileAccessError.needsFileReconnection(file)
                 }
                 throw error
+            }
+            if let rootID {
+                do { try validateLegacyRoot(rootID, at: url) }
+                catch { session.stop(); throw error }
             }
             if case .root(_, let file) = request, !boundary(file, url) {
                 session.stop()
@@ -346,7 +519,26 @@ public actor FileAccess: AccessLeasing {
         return lease
     }
     /// The caller holds either a newly started or an existing live session scope.
+    private func validateLegacyRoot(_ id: AccessRootID, at url: URL) throws {
+        guard let expected = legacyBaseline[id] else { return }
+        guard (try? resourceReader.identity(for: url)) == expected else {
+            roots.removeValue(forKey: id)
+            throw FileAccessError.needsReconnection(id)
+        }
+    }
+    /// The caller holds either a newly started or an existing live session scope.
     private func refreshBookmark(_ record: AccessRootRecord, for url: URL) throws {
+        let volume = bookmarkVolume(record.bookmark)
+        if volume.uuid != nil || bookmarks is SystemSecurityScope {
+            guard let uuid = volume.uuid,
+                  mountedVolumesProvider().contains(where: { $0.uuid == uuid }),
+                  resolvedVolumeUUID(url) == uuid,
+                  let expected = bookmarkIdentity(record.bookmark),
+                  (try? resourceReader.identity(for: url)) == expected else {
+                throw FileAccessError.needsReconnection(record.id)
+            }
+            _ = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+        }
         var replacement = record
         replacement.bookmark = try bookmarks.create(for: url)
         let refreshed = saved.map { $0.id == record.id ? replacement : $0 }
