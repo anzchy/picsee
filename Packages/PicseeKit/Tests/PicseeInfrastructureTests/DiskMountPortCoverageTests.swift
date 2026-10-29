@@ -47,21 +47,16 @@ private final class DiskPortVolumeSnapshot: @unchecked Sendable {
 
 @MainActor private func diskPortWaitForEvents(_ count: Int, in sink: DiskPortEventSink) async {
     // Notification delivery and consumption share MainActor with the full native
-    // test suite. Await receipt; this timeout only bounds a missing event, not
-    // adapter latency or scheduler responsiveness.
-    let received = await withTaskGroup(of: Bool.self) { group in
-        group.addTask { await sink.receipt(of: count) }
-        group.addTask { try? await Task.sleep(for: .seconds(15)); return false }
-        let result = await group.next() ?? false
-        group.cancelAll()
-        return result
-    }
+    // test suite. Await receipt without racing scheduler latency against a timer;
+    // the enclosing test's time limit still bounds a truly missing event.
+    let received = await sink.receipt(of: count)
     #expect(received)
 }
 
 @MainActor private func diskPortWait(_ condition: @MainActor () -> Bool) async {
-    let deadline = ContinuousClock.now + .seconds(15)
-    while !condition(), ContinuousClock.now < deadline {
+    // This acknowledgement can also be delayed behind MainActor work. Use the
+    // enclosing test's cancellation rather than another wall-clock deadline.
+    while !condition(), !Task.isCancelled {
         try? await Task.sleep(for: .milliseconds(5))
     }
     #expect(condition())
@@ -82,7 +77,8 @@ private func diskPortVolume(_ uuid: String?, path: String, name: String = "Photo
     #expect(mounted.filter { $0.uuid == temporaryVolumeUUID }.allSatisfy { $0.url?.isFileURL == true })
 }
 
-@MainActor @Test func t229DiskPortMissingURLDiffEmitsOnlyRemovedUUIDsAndDoesNotRepeatThem() async {
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t229DiskPortMissingURLDiffEmitsOnlyRemovedUUIDsAndDoesNotRepeatThem() async {
     let removed = diskPortVolume("removed", path: "/Volumes/Removed")
     let retained = diskPortVolume("retained", path: "/Volumes/Retained")
     let unidentified = diskPortVolume(nil, path: "/Volumes/NoIdentity")
@@ -106,7 +102,8 @@ private func diskPortVolume(_ uuid: String?, path: String, name: String = "Photo
     #expect(await port.mountedVolumes() == [retained])
 }
 
-@MainActor @Test func t229DiskPortUnknownUnmountURLUsesUUIDDiffAndStopFinishesBufferedEvents() async {
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t229DiskPortUnknownUnmountURLUsesUUIDDiffAndStopFinishesBufferedEvents() async {
     let first = diskPortVolume("first", path: "/Volumes/First")
     let second = diskPortVolume("second", path: "/Volumes/Second")
     let snapshot = DiskPortVolumeSnapshot([first, second])
