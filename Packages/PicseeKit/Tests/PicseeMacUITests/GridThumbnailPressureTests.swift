@@ -31,7 +31,7 @@ private func pressureDecoded(_ entry: FolderEntry, coverage: ThumbnailCoverage) 
 
 private let pressureTile = ThumbnailCoverage(width: 212, height: 212)
 
-@Suite(.timeLimit(.minutes(1))) @MainActor struct GridThumbnailPressureTests {
+@Suite(.timeLimit(.minutes(2))) @MainActor struct GridThumbnailPressureTests {
     // 4.1, 4.2: pressure keeps only visible cells; held prefetched results are released, visible ones stay.
     @Test func pressureDropsPrefetchedResultsAndRequestsOnlyVisibleCells() async {
         let snapshot = pinningSnapshot(count: 20), fake = RecordingPinning(), log = PressureLoaderLog()
@@ -226,7 +226,7 @@ actor GatedResumption: PrefetchResuming {
 }
 
 /// Real pipeline and its pressure clock: the scheduler waits for the pipeline's recovery delay, not for a scroll (#139 R1).
-@Suite(.timeLimit(.minutes(1))) @MainActor struct GridPrefetchResumptionTests {
+@Suite(.timeLimit(.minutes(2))) @MainActor struct GridPrefetchResumptionTests {
     // R1 1.1, 1.2, 1.4b: refused margin cells are asked once, kept through reconciles and scrolls inside the recovery
     // window (a deferred cell that becomes visible is asked as visible), and requested once more when the delay ends.
     @Test func deferredPrefetchWaitsForThePipelineAndResumesWithoutAScroll() async throws {

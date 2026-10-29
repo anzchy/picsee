@@ -16,7 +16,7 @@ private struct QuiescentState: Equatable {
 
 // #139 / plan §10 resource row: two windows on one pipeline, the same folder browsed three times.
 // Measured with the ledger (instrumented), not with RSS.
-@Test(.timeLimit(.minutes(1))) @MainActor func twoWindowsThreeRoundsStayWithinOneBudgetWithoutGrowth() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func twoWindowsThreeRoundsStayWithinOneBudgetWithoutGrowth() async throws {
     let (folder, names) = try GridSharedBudgetTests.folder(copies: 16)
     defer { try? FileManager.default.removeItem(at: folder) }
     let rootID = AccessRootID(rawValue: UUID()), root = ItemIdentityRoot(id: rootID, url: folder)

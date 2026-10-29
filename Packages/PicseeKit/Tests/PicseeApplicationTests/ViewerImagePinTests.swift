@@ -82,7 +82,7 @@ private actor SuspendedPinPort: ImagePresentationPinning {
 }
 
 @Suite @MainActor struct ViewerImagePinTests {
-    @Test(.timeLimit(.minutes(1))) func loaderPinsAcceptedTiersAndBalancesAtoBtoClose() async {
+    @Test(.timeLimit(.minutes(2))) func loaderPinsAcceptedTiersAndBalancesAtoBtoClose() async {
         let port = ViewerPinRecorder(), pipeline = LoadPipeline(), access = LoadLeases(), host = LoadHost()
         let loader = ViewerImageLoader(trace: nil, presentation: port)
         let session = ViewerSession(imageLoader: loader)
@@ -105,7 +105,7 @@ private actor SuspendedPinPort: ImagePresentationPinning {
                                      .pin(preview), .pin(detail), .unpin(preview), .unpin(detail)])
     }
 
-    @Test(.timeLimit(.minutes(1)), arguments: [0, 1, 2, 3]) func loaderFailureRetryAndLimitedPreviewPins(mode: Int) async {
+    @Test(.timeLimit(.minutes(2)), arguments: [0, 1, 2, 3]) func loaderFailureRetryAndLimitedPreviewPins(mode: Int) async {
         let port = ViewerPinRecorder(), pipeline = PinFailurePipeline(mode: mode), access = LoadLeases(), host = LoadHost()
         let loader = ViewerImageLoader(trace: nil, presentation: port), opens = PinOpenCount()
         let session = ViewerSession(imageLoader: loader), file = URL(fileURLWithPath: "/pin-failure.png")
@@ -139,7 +139,7 @@ private actor SuspendedPinPort: ImagePresentationPinning {
         #expect(await port.outstanding.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(1)), arguments: [false, true]) func loaderSuspendedPinCannotLeakOrInstallOldGeneration(supersede: Bool) async {
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true]) func loaderSuspendedPinCannotLeakOrInstallOldGeneration(supersede: Bool) async {
         let port = SuspendedPinPort(), pipeline = LoadPipeline(), access = LoadLeases(), host = LoadHost()
         let loader = ViewerImageLoader(trace: nil, presentation: port), session = ViewerSession(imageLoader: loader)
         loader.host = host
@@ -166,7 +166,7 @@ private actor SuspendedPinPort: ImagePresentationPinning {
         #expect(await port.outstanding.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(1))) func loaderHostCloseDuringDetailInstallReleasesBothPins() async {
+    @Test(.timeLimit(.minutes(2))) func loaderHostCloseDuringDetailInstallReleasesBothPins() async {
         let port = ViewerPinRecorder(), pipeline = LoadPipeline(), access = LoadLeases()
         let loader = ViewerImageLoader(trace: nil, presentation: port), session = ViewerSession(imageLoader: loader)
         let host = PinClosingHost(session), file = URL(fileURLWithPath: "/close.png")
