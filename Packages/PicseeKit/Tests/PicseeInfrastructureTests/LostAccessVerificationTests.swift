@@ -476,7 +476,7 @@ private actor T229PausedMounts: DiskMountPort {
     func resume() { waiting?.resume(returning: [volume("111")]); waiting = nil }
 }
 
-@Test func t229PendingVerificationCannotOverwriteExplicitReselection() async throws {
+@Test(.timeLimit(.minutes(3))) func t229PendingVerificationCannotOverwriteExplicitReselection() async throws {
     let fixture = try T229Fixture(); defer { fixture.remove() }
     let access = try FileAccess(scope: T229Scope(), bookmarks: T229BookmarkCodec(),
         store: fixture.store, buildSHA: "T229", bookmarkVolume: { _ in volume("111") },
@@ -484,7 +484,7 @@ private actor T229PausedMounts: DiskMountPort {
     let id = try await access.grant(folder: fixture.root)
     let mounts = T229PausedMounts()
     let pending = Task { await access.verifySavedRootForRecovery(id, folder: fixture.root, mounts: mounts) }
-    while !(await mounts.started) { await Task.yield() }
+    while !(await mounts.started) { try Task.checkCancellation(); await Task.yield() }
     let selected = fixture.base.appendingPathComponent("Selected", isDirectory: true)
     try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
     _ = try await access.reconnect(id, folder: selected)

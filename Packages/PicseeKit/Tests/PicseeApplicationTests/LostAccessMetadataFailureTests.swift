@@ -19,7 +19,7 @@ private final class T229HeldFailingMetadataReader: FolderMetadataReading, @unche
     func release() { gate.signal() }
 }
 
-@MainActor @Test func t229MetadataFailureReportsCurrentGenerationAndCallbackEndCannotRepublish() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229MetadataFailureReportsCurrentGenerationAndCallbackEndCannotRepublish() async throws {
     let fixture = FolderScanFixture()
     let scan = FolderScanCoordinator(access: fixture.access, scanner: fixture.scanner,
         metadataReader: T229FailingMetadataReader())
@@ -31,7 +31,7 @@ private final class T229HeldFailingMetadataReader: FolderMetadataReading, @unche
     try await fixture.scanner.deliver(["a.jpg"])
     await fixture.scanner.finish(); try await pending.value
     scan.setConditions(.init(sort: .captureDate))
-    for _ in 0..<100 where failures.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+    while failures.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
     #expect(failures.count == 1)
     #expect(failures.first?.0 == fixture.id)
     #expect(failures.first?.1 == fixture.folder.appendingPathComponent("a.jpg"))
@@ -48,11 +48,12 @@ private final class T229HeldFailingMetadataReader: FolderMetadataReading, @unche
     try await staleFixture.scanner.deliver(["old.jpg"])
     await staleFixture.scanner.finish(); try await old.value
     staleScan.setConditions(.init(sort: .captureDate))
-    for _ in 0..<100 where !reader.started { try await Task.sleep(for: .milliseconds(5)) }
+    while !reader.started { try await Task.sleep(for: .milliseconds(5)) }
     #expect(reader.started)
     staleScan.end()
     reader.release()
-    for _ in 0..<100 {
+    while true {
+        try Task.checkCancellation()
         let balance = await staleFixture.access.balance
         if balance[0] == balance[1] { break }
         try await Task.sleep(for: .milliseconds(5))

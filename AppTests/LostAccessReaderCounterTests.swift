@@ -18,7 +18,7 @@ private actor T229CounterMounts: DiskMountPort {
     func events() -> AsyncStream<DiskMountEvent> { AsyncStream { _ in } }
 }
 
-@MainActor @Test func t229StaleReaderFailureCannotLoseExplicitReplacementGrant() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229StaleReaderFailureCannotLoseExplicitReplacementGrant() async throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let old = base.appendingPathComponent("Old", isDirectory: true)
     let selected = base.appendingPathComponent("Selected", isDirectory: true)
@@ -43,7 +43,7 @@ private actor T229CounterMounts: DiskMountPort {
     #expect(monitor.state.snapshot(for: id)?.counter == 2)
 }
 
-@MainActor @Test func t229CancelledReaderRootCheckDoesNotRevokeReadableGrant() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229CancelledReaderRootCheckDoesNotRevokeReadableGrant() async throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("Root", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -73,7 +73,7 @@ private actor T229ChangingCounterMounts: DiskMountPort {
     }
 }
 
-@MainActor @Test func t229ExplicitGrantCompletionCannotMaskNewerUnmount() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229ExplicitGrantCompletionCannotMaskNewerUnmount() async throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("Root", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -88,7 +88,7 @@ private actor T229ChangingCounterMounts: DiskMountPort {
     let monitor = AccessMonitor(files: files, mounts: mounts)
     await monitor.start()
     await mounts.unmount()
-    for _ in 0..<100 where monitor.state.snapshot(for: id)?.availability != .lost(.diskNotConnected) {
+    while monitor.state.snapshot(for: id)?.availability != .lost(.diskNotConnected) {
         try await Task.sleep(for: .milliseconds(5))
     }
     #expect(monitor.state.snapshot(for: id)?.availability == .lost(.diskNotConnected))
@@ -130,7 +130,7 @@ private actor T229PausedGrantMounts: DiskMountPort {
     func resume() { pauseNext = false; waiting?.resume(returning: volumes); waiting = nil }
 }
 
-@MainActor @Test func t229ReauthorizationCannotBindOldUUIDToNewlyVerifiedReplacementGrant() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229ReauthorizationCannotBindOldUUIDToNewlyVerifiedReplacementGrant() async throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("SameMountPath", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -148,7 +148,7 @@ private actor T229PausedGrantMounts: DiskMountPort {
     await monitor.start()
     await mounts.pause()
     let pending = Task { await monitor.reauthorize(id) }
-    for _ in 0..<100 where !(await mounts.paused) { try await Task.sleep(for: .milliseconds(5)) }
+    while !(await mounts.paused) { try await Task.sleep(for: .milliseconds(5)) }
     #expect(await mounts.paused)
     adapter.replaceVolume()
     _ = try await files.reconnect(id, folder: root)
@@ -208,7 +208,7 @@ private actor T229FinalEnumerationMounts: DiskMountPort {
     defer { monitor.state.removeObserver(observer) }
     await mounts.pauseFinalEnumeration()
     let pending = Task { await monitor.reauthorize(id) }
-    for _ in 0..<100 where !(await mounts.paused) { try await Task.sleep(for: .milliseconds(5)) }
+    while !(await mounts.paused) { try await Task.sleep(for: .milliseconds(5)) }
     #expect(await mounts.paused)
     adapter.replaceVolume()
     _ = try await files.reconnect(id, folder: root)
@@ -219,15 +219,15 @@ private actor T229FinalEnumerationMounts: DiskMountPort {
     #expect(recoveryEvents.isEmpty)
 }
 
-@MainActor @Test func t229FinalMountAwaitCannotRecoverSupersededLostGrant() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229FinalMountAwaitCannotRecoverSupersededLostGrant() async throws {
     try await t229CheckFinalGrantEnumerationRace(startingLost: true)
 }
 
-@MainActor @Test func t229FinalMountAwaitCannotKeepSupersededReadableGrant() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229FinalMountAwaitCannotKeepSupersededReadableGrant() async throws {
     try await t229CheckFinalGrantEnumerationRace(startingLost: false)
 }
 
-@MainActor @Test func t229CancelledExplicitNoUUIDReauthorizationStillVerifiesUnreadableRoot() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229CancelledExplicitNoUUIDReauthorizationStillVerifiesUnreadableRoot() async throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("Root", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

@@ -42,8 +42,7 @@ private struct T229AppInspector: InspectorMetadataReading {
 }
 
 @MainActor private func t229Wait(_ predicate: @MainActor () -> Bool) async throws {
-    let limit = ContinuousClock.now + .seconds(8)
-    while !predicate(), ContinuousClock.now < limit { try await Task.sleep(for: .milliseconds(10)) }
+    while !predicate() { try await Task.sleep(for: .milliseconds(10)) }
     #expect(predicate())
 }
 
@@ -53,7 +52,7 @@ private struct T229AppInspector: InspectorMetadataReading {
     try await t229Wait { !grid.isHidden && grid.displayedItemIDs.count == 1 }
 }
 
-@MainActor @Test func t229LossClearsBothWindowsAndKeepsUnrelatedRootReadable() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229LossClearsBothWindowsAndKeepsUnrelatedRootReadable() async throws {
     _ = NSApplication.shared
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let folder = base.appendingPathComponent("PrivatePhotos", isDirectory: true)
@@ -118,7 +117,7 @@ private struct T229AppInspector: InspectorMetadataReading {
 }
 
 
-@MainActor @Test func t229ReaderFailureChecksRootInsteadOfLosingReadableRootForMissingChild() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229ReaderFailureChecksRootInsteadOfLosingReadableRootForMissingChild() async throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let rootURL = base.appendingPathComponent("Root", isDirectory: true)
     let child = rootURL.appendingPathComponent("MissingChild", isDirectory: true)
@@ -142,7 +141,7 @@ private struct T229AppInspector: InspectorMetadataReading {
     #expect(monitor.state.snapshot(for: id)?.counter == 1)
 }
 
-@MainActor @Test func t229RootCoveredStandaloneViewerClearsPixelsAndPrivateIdentityOnUnmount() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229RootCoveredStandaloneViewerClearsPixelsAndPrivateIdentityOnUnmount() async throws {
     _ = NSApplication.shared
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let folder = base.appendingPathComponent("PrivatePhotos", isDirectory: true)
@@ -179,7 +178,7 @@ private struct T229AppInspector: InspectorMetadataReading {
     #expect(controller.gridShellVisible && controller.window?.attachedSheet == nil)
 }
 
-@MainActor @Test func t229ClosedControllerCannotReopenDetachedPrivateGridWithoutRootAssociation() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229ClosedControllerCannotReopenDetachedPrivateGridWithoutRootAssociation() async throws {
     _ = NSApplication.shared
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let folder = base.appendingPathComponent("PrivatePhotos", isDirectory: true)
@@ -217,7 +216,7 @@ private struct T229AppInspector: InspectorMetadataReading {
     #expect(!controller.hasImage)
 }
 
-@MainActor @Test func t229CancelReadingRestoresRootAssociationBeforeUnrelatedDiskLoss() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229CancelReadingRestoresRootAssociationBeforeUnrelatedDiskLoss() async throws {
     _ = NSApplication.shared
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let a = base.appendingPathComponent("A", isDirectory: true), b = base.appendingPathComponent("B", isDirectory: true)
@@ -298,7 +297,7 @@ private struct T229AppInspector: InspectorMetadataReading {
         .mainContent.subviews.compactMap { $0 as? LostAccessStateView }.first { !$0.isHidden }
 }
 
-@MainActor @Test func t229FormerReconnectRouteShowsUnknownPageAndPanelsCancelWithoutLeavingIt() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229FormerReconnectRouteShowsUnknownPageAndPanelsCancelWithoutLeavingIt() async throws {
     _ = NSApplication.shared
     let fixture = try await T229PageFixture(); defer { fixture.remove() }
     let controller = fixture.controller(), window = try #require(controller.window)
@@ -345,7 +344,7 @@ private struct T229AppInspector: InspectorMetadataReading {
     #expect(controller.waitingAccessPosition?.rootID == fixture.root)
 }
 
-@MainActor @Test func t229VolumePageFocusAndOneAnnouncementAcrossWindowsAndDuplicateLoss() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229VolumePageFocusAndOneAnnouncementAcrossWindowsAndDuplicateLoss() async throws {
     _ = NSApplication.shared
     let fixture = try await T229PageFixture(); defer { fixture.remove() }
     let controllers = [fixture.controller(), fixture.controller()]
@@ -373,11 +372,12 @@ private struct T229AppInspector: InspectorMetadataReading {
     #expect(announcements.count == 1)
     #expect(announcements.first?.contains(String(localized: "Choose Another Folder…")) == true)
     await fixture.mounts.emit(loss)
+    // The first announcement was awaited above; observe only duplicate delivery.
     try await Task.sleep(for: .milliseconds(20))
     #expect(announcements.count == 1)
 }
 
-@MainActor @Test func t229UnavailableChildPageCannotRevokeReadableRootOrOtherWindow() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229UnavailableChildPageCannotRevokeReadableRootOrOtherWindow() async throws {
     _ = NSApplication.shared
     let fixture = try await T229PageFixture(); defer { fixture.remove() }
     let child = fixture.folder.appendingPathComponent("Child", isDirectory: true)
@@ -393,8 +393,10 @@ private struct T229AppInspector: InspectorMetadataReading {
     try FileManager.default.removeItem(at: child)
     controllers[0].requestFolderReconnection(rootID: fixture.root, lastKnownFolder: child, displayName: "Child")
     try await t229Wait { t229LostPage(controllers[0]) != nil }
-    // Let the actual asynchronous root check finish; a child failure is never
-    // evidence to clear the other window's complete readable-root presentation.
+    // Await a real scoped root check instead of assuming it finishes within a
+    // sleep. Then observe that no late child-failure callback revokes the root.
+    await fixture.services.monitor.reportReadFailure(fixture.root,
+        from: fixture.services.monitor.state.stamp(for: fixture.root))
     try await Task.sleep(for: .milliseconds(100))
     #expect(fixture.services.monitor.state.snapshot(for: fixture.root)?.availability == .readable)
     #expect(fixture.services.monitor.state.permit(for: fixture.root)?.isCurrent == true)
@@ -404,7 +406,7 @@ private struct T229AppInspector: InspectorMetadataReading {
     #expect(t229LostPage(controllers[0])?.buttons.count == 2)
 }
 
-@MainActor @Test func t229WaitingPulseFollowsLiveApplicationReduceMotionPolicy() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229WaitingPulseFollowsLiveApplicationReduceMotionPolicy() async throws {
     _ = NSApplication.shared
     let fixture = try await T229PageFixture(); defer { fixture.remove() }
     let source = T229AppMotion()

@@ -78,12 +78,11 @@ private actor RootCheckMounts: DiskMountPort {
     func remove() { try? FileManager.default.removeItem(at: base) }
 }
 @MainActor private func rootCheckWait(_ predicate: @MainActor () async -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(8)
-    while !(await predicate()), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    while !(await predicate()) { try await Task.sleep(for: .milliseconds(10)) }
     #expect(await predicate())
 }
 
-@MainActor @Test func t229FixDecodeFailuresNeverStartRootChecks() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229FixDecodeFailuresNeverStartRootChecks() async throws {
     let f = try await RootCheckFixture(); defer { f.remove() }
     let before = await f.mounts.enumerations
     let stamp = f.monitor.state.stamp(for: f.root)
@@ -96,7 +95,7 @@ private actor RootCheckMounts: DiskMountPort {
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
 }
 
-@MainActor @Test func t229FixConcurrentAccessFailuresShareOneRootCheck() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229FixConcurrentAccessFailuresShareOneRootCheck() async throws {
     let f = try await RootCheckFixture(); defer { f.remove() }
     let before = await f.mounts.enumerations
     let stamp = f.monitor.state.stamp(for: f.root)
@@ -106,6 +105,7 @@ private actor RootCheckMounts: DiskMountPort {
         Task { @MainActor in await f.monitor.reportReadFailure(f.root, from: stamp, error: denied) }
     }
     try await rootCheckWait { await f.mounts.paused }
+    // Negative observation only after the first root check is known to be held.
     try await Task.sleep(for: .milliseconds(200))
     await f.mounts.release()
     for report in reports { await report.value }
@@ -113,27 +113,35 @@ private actor RootCheckMounts: DiskMountPort {
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
 }
 
-@MainActor @Test func t229FixRepeatedActivationChecksEachRootOnce() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229FixRepeatedActivationChecksEachRootOnce() async throws {
     let f = try await RootCheckFixture(); defer { f.remove() }
     let before = await f.mounts.enumerations
+    var completed = false
+    let readiness = f.monitor.observeReadiness { if $0 == f.root { completed = true } }
+    defer { f.monitor.removeReadinessObserver(readiness) }
     await f.mounts.pauseEnumeration()
     for _ in 0..<5 {
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApplication.shared)
     }
     try await rootCheckWait { await f.mounts.paused }
+    // Observe duplicate activation while the positive check remains held.
     try await Task.sleep(for: .milliseconds(200))
     await f.mounts.release()
-    try await Task.sleep(for: .milliseconds(300))
+    try await rootCheckWait { completed }
     #expect(await f.mounts.enumerations - before == 1)
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
 }
 
 // Audit M4: the wake path shares the foreground recheck.
-@MainActor @Test func t229FixWakeRechecksSavedRootsOnce() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229FixWakeRechecksSavedRootsOnce() async throws {
     let f = try await RootCheckFixture(); defer { f.remove() }
     let before = await f.mounts.enumerations
+    var completed = false
+    let readiness = f.monitor.observeReadiness { if $0 == f.root { completed = true } }
+    defer { f.monitor.removeReadinessObserver(readiness) }
     NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: NSWorkspace.shared)
-    try await rootCheckWait { await f.mounts.enumerations - before == 1 }
+    try await rootCheckWait { completed }
+    // After completion, watch for an unwanted duplicate root check.
     try await Task.sleep(for: .milliseconds(200))
     #expect(await f.mounts.enumerations - before == 1)
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
@@ -143,7 +151,7 @@ private actor RootCheckMounts: DiskMountPort {
 // ENOENT maps to sourceChanged; a decoder failure on a file that no longer
 // exists can't be told from damage. Each starts exactly one root check; a
 // damaged file that is still there starts none.
-@MainActor @Test func t229Fix2MissingSourceFailuresStartOneRootCheck() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229Fix2MissingSourceFailuresStartOneRootCheck() async throws {
     let f = try await RootCheckFixture(); defer { f.remove() }
     let stamp = f.monitor.state.stamp(for: f.root)
     let gone = f.base.appendingPathComponent("Root/gone.jpg")
@@ -166,8 +174,8 @@ private actor RootCheckMounts: DiskMountPort {
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
 }
 
-// A stalled filesystem boundary must not occupy the UI actor. The watchdog only
-// bounds a broken synchronous implementation so its RED assertions can finish.
+// A stalled filesystem boundary must not occupy the UI actor. A wrong MainActor
+// call returns immediately so ranOnMain fails without deadlocking that actor.
 private final class RootCheckProbeGate: @unchecked Sendable {
     private let condition = NSCondition()
     private var released = false
@@ -184,17 +192,16 @@ private final class RootCheckProbeGate: @unchecked Sendable {
         total += 1; blocked += 1
         onMain = onMain || Thread.isMainThread
         unscoped = unscoped || codec.activeScopes == 0
-        let deadline = Date().addingTimeInterval(2)
-        while !released {
-            if !condition.wait(until: deadline) { released = true }
-        }
+        // Keep a correct background probe held until explicit release.
+        // The test already asserts !ranOnMain; never block the UI on a regression.
+        while !released && !Thread.isMainThread { condition.wait() }
         blocked -= 1
         return false
     }
     func release() { condition.lock(); released = true; condition.broadcast(); condition.unlock() }
 }
 
-@MainActor @Test(arguments: [Int(EPERM), Int(EACCES), Int(EIO)])
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: [Int(EPERM), Int(EACCES), Int(EIO)])
 func t229Fix3DeniedOrIndeterminateSourceIsNotMissing(_ code: Int) async throws {
     let f = try await RootCheckFixture(sourceExists: { _, _ in throw NSError(domain: NSPOSIXErrorDomain, code: code) })
     defer { f.remove() }
@@ -210,7 +217,7 @@ func t229Fix3DeniedOrIndeterminateSourceIsNotMissing(_ code: Int) async throws {
     #expect(f.codec.activeScopes == 0)
 }
 
-@MainActor @Test(arguments: [false, true])
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: [false, true])
 func t229Fix3BlockedSourceProbeIsScopedResponsiveAndRejectsLateResult(_ stale: Bool) async throws {
     let gate = RootCheckProbeGate()
     let f = try await RootCheckFixture(sourceExists: { gate.probe($0, codec: $1) })
@@ -238,7 +245,7 @@ func t229Fix3BlockedSourceProbeIsScopedResponsiveAndRejectsLateResult(_ stale: B
     #expect(f.codec.activeScopes == 0)
 }
 
-@MainActor @Test func t229Fix3StaleAndCancelledReportsNeverProbe() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229Fix3StaleAndCancelledReportsNeverProbe() async throws {
     let gate = RootCheckProbeGate(); gate.release()
     let f = try await RootCheckFixture(sourceExists: { gate.probe($0, codec: $1) })
     defer { f.remove() }
@@ -256,7 +263,7 @@ func t229Fix3BlockedSourceProbeIsScopedResponsiveAndRejectsLateResult(_ stale: B
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
 }
 
-@MainActor @Test func t229Fix3ConcurrentSourceReportsCoalesceAndCancellationIsPerCaller() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229Fix3ConcurrentSourceReportsCoalesceAndCancellationIsPerCaller() async throws {
     let gate = RootCheckProbeGate()
     let f = try await RootCheckFixture(sourceExists: { gate.probe($0, codec: $1) })
     defer { gate.release(); f.remove(); Task { await f.mounts.release() } }
@@ -268,6 +275,7 @@ func t229Fix3BlockedSourceProbeIsScopedResponsiveAndRejectsLateResult(_ stale: B
                                          file: f.base.appendingPathComponent("Root/broken.jpg"))
     } }
     try await rootCheckWait { gate.calls > 0 }
+    // The probe is held; this window only observes unwanted duplicate probes.
     try await Task.sleep(for: .milliseconds(100))
     #expect(gate.waiting)
     #expect(gate.calls == 1)
@@ -282,7 +290,7 @@ func t229Fix3BlockedSourceProbeIsScopedResponsiveAndRejectsLateResult(_ stale: B
     #expect(f.codec.activeScopes == 0)
 }
 
-@MainActor @Test func t229Fix3ContentProbeDoesNotSwallowOtherSourcesOrAccessEvidence() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229Fix3ContentProbeDoesNotSwallowOtherSourcesOrAccessEvidence() async throws {
     let gate = RootCheckProbeGate()
     let f = try await RootCheckFixture(sourceExists: { url, codec in
         if url.lastPathComponent == "broken.jpg" { _ = gate.probe(url, codec: codec); return true }

@@ -95,7 +95,7 @@ func t229DiagnosticsVerificationStages(mode: String) async throws {
     if good { #expect(result.folderURL == child && trace.paths.contains { $0.standardizedFileURL.path == root.standardizedFileURL.path }) }
 }
 
-@MainActor @Test func t229DiagnosticsMountNotificationReceipts() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229DiagnosticsMountNotificationReceipts() async throws {
     let center = NotificationCenter(), trace = DiagnosticTrace()
     let url = URL(fileURLWithPath: "/Volumes/SecretName")
     let port = SystemDiskMountPort(center: center, mountedVolumes: { [.init(uuid: "111", url: url, name: nil)] }, diagnostics: trace.diagnostics)
@@ -106,13 +106,13 @@ func t229DiagnosticsVerificationStages(mode: String) async throws {
     center.post(name: NSWorkspace.didMountNotification, object: nil, userInfo: [NSWorkspace.volumeURLUserInfoKey: url])
     center.post(name: NSWorkspace.didMountNotification, object: nil, userInfo: [NSWorkspace.volumeURLUserInfoKey: URL(fileURLWithPath: "/Volumes/Unknown")])
     center.post(name: NSWorkspace.didMountNotification, object: nil)
-    for _ in 0..<100 where trace.messages.count < 3 { try await Task.sleep(for: .milliseconds(10)) }
+    while trace.messages.count < 3 { try await Task.sleep(for: .milliseconds(10)) }
     #expect(trace.messages.contains { $0.contains("event=unmount") && $0.contains("volume=111") })
     #expect(trace.messages.contains { $0.contains("event=mount") && $0.contains("volume=111") })
     #expect(trace.messages.contains { $0.contains("event=mount") && $0.contains("volume=unknown") })
     #expect(await iterator.next() == .unmounted(.init(uuid: "111", url: url, name: nil)))
     #expect(await iterator.next() == .mounted(.init(uuid: "111", url: url, name: nil)))
-    for _ in 0..<100 where trace.messages.count < 4 { try await Task.sleep(for: .milliseconds(10)) }
+    while trace.messages.count < 4 { try await Task.sleep(for: .milliseconds(10)) }
     #expect(trace.messages.count == 4)
     #expect(!trace.messages.joined().contains("SecretName"))
 }

@@ -38,7 +38,7 @@ private actor T229SidebarFailures: SidebarFolderEnumerating {
     func releaseFailure() { pending?.resume(throwing: T229SidebarError.denied); pending = nil }
 }
 
-@MainActor @Test func t229SidebarReaderFailuresReportCurrentWorkAndIgnoreCancelledOldWork() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229SidebarReaderFailuresReportCurrentWorkAndIgnoreCancelledOldWork() async throws {
     let root = URL(fileURLWithPath: "/tmp/T229-sidebar")
     for mode in [T229SidebarFailures.Mode.listing, .count] {
         let access = T229SidebarLeases(root: root)
@@ -47,7 +47,7 @@ private actor T229SidebarFailures: SidebarFolderEnumerating {
         var failures: [URL] = []
         session.start(folder: root, rootID: AccessRootID(), onRows: { _, _ in }, onCount: { _, _ in },
             onFailure: { failures.append($0) })
-        for _ in 0..<100 where failures.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        while failures.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
         #expect(failures == [root])
         #expect(await access.balanced)
         session.cancel()
@@ -59,15 +59,16 @@ private actor T229SidebarFailures: SidebarFolderEnumerating {
     let old = root.appendingPathComponent("Old"), new = root.appendingPathComponent("New")
     session.start(folder: old, rootID: AccessRootID(), onRows: { _, _ in }, onCount: { _, _ in },
         onFailure: { failures.append($0) })
-    for _ in 0..<100 where !(await enumerator.started) { try await Task.sleep(for: .milliseconds(5)) }
+    while !(await enumerator.started) { try await Task.sleep(for: .milliseconds(5)) }
     #expect(await enumerator.started)
     session.start(folder: new, rootID: AccessRootID(), onRows: { _, _ in },
         onCount: { url, _ in newCounts.append(url) }, onFailure: { failures.append($0) })
-    for _ in 0..<100 where newCounts.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+    while newCounts.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
     #expect(newCounts.contains(new))
     await enumerator.releaseFailure()
-    for _ in 0..<100 where !(await access.balanced) { try await Task.sleep(for: .milliseconds(5)) }
+    while !(await access.balanced) { try await Task.sleep(for: .milliseconds(5)) }
     #expect(await access.balanced)
+    // Both the new count and old lease release completed; observe only a late failure.
     try await Task.sleep(for: .milliseconds(20))
     #expect(failures.isEmpty)
     session.cancel()
@@ -86,7 +87,7 @@ private actor T229ParentFailureLeases: AccessLeasing {
     var balanced: Bool { acquisitions - 1 == releases }
 }
 
-@MainActor @Test func t229SidebarParentFailureReportsFailureAndKeepsKnownRows() async throws {
+@MainActor @Test(.timeLimit(.minutes(3))) func t229SidebarParentFailureReportsFailureAndKeepsKnownRows() async throws {
     let root = URL(fileURLWithPath: "/tmp/T229-parent")
     let access = T229ParentFailureLeases(root: root)
     let session = SidebarFolderLoadSession(browser: SidebarFolderBrowser(access: access,
@@ -95,10 +96,9 @@ private actor T229ParentFailureLeases: AccessLeasing {
     session.start(folder: root, rootID: AccessRootID(), onRows: { children, parent in
         rows.append(children); parents.append(parent)
     }, onCount: { _, count in counts.append(count) }, onFailure: { failures.append($0) })
-    // Utility work shares MainActor with the entire native test suite. This bounds
-    // missing completion, not a product latency requirement.
-    let limit = ContinuousClock.now + .seconds(15)
-    while failures.count < 2, ContinuousClock.now < limit { try await Task.sleep(for: .milliseconds(5)) }
+    // Await completion even when the native suite delays MainActor work. The
+    // enclosing test limit bounds missing callbacks, not a product latency.
+    while failures.count < 2 { try await Task.sleep(for: .milliseconds(5)) }
     #expect(rows == [[]])
     #expect(parents.count == 1 && parents[0] == nil)
     #expect(failures == [root, root])
