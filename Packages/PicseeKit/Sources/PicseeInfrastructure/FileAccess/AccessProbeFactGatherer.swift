@@ -103,6 +103,20 @@ public struct AccessProbeFactGatherer: Sendable {
     private let lister: @Sendable (URL) throws -> Int
     private let trashCheck: @Sendable (URL) -> Bool
 
+    /// Reads the bookmark's saved volume identity without resolving or mounting it.
+    public static func bookmarkVolume(in data: Data) -> AccessProbeVolume {
+        (try? SystemAccessProbeBookmarkCoding().volumeProperties(in: data)) ??
+            AccessProbeVolume(uuid: nil, url: nil, name: nil)
+    }
+
+    public static func bookmarkIdentity(in data: Data) -> FileResourceIdentity? {
+        let keys: Set<URLResourceKey> = [.volumeUUIDStringKey, .fileResourceIdentifierKey]
+        guard let values = URL.resourceValues(forKeys: keys, fromBookmarkData: data),
+              let uuid = values.volumeUUIDString,
+              let identifier = values.fileResourceIdentifier as? Data else { return nil }
+        return FileResourceIdentity(volumeUUID: uuid, fileIdentifier: identifier.base64EncodedString())
+    }
+
     public init() {
         bookmarks = SystemAccessProbeBookmarkCoding()
         scope = SystemSecurityScope()
@@ -251,7 +265,7 @@ public struct AccessProbeFactGatherer: Sendable {
         )
     }
 
-    static func mountedVolumes(at urls: [URL]?) -> [AccessProbeVolume] {
+    public static func mountedVolumes(at urls: [URL]?) -> [AccessProbeVolume] {
         (urls ?? []).map { url in
             let values = try? url.resourceValues(forKeys: Set(volumeKeys))
             return AccessProbeVolume(
