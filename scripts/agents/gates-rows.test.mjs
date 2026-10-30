@@ -93,7 +93,7 @@ test('gates-rows rejects a missing summary without emitting PASS', t => {
   assert.doesNotMatch(result.stdout, /\| PASS \|/);
 });
 
-test('PR-body workflow lints edits with the trusted base lint and PR-head data', async () => {
+test('PR-body workflow isolates PR tests from the trusted body-gates runner', async () => {
   const { readFileSync } = await import('node:fs');
   const workflow = readFileSync(new URL('../../.github/workflows/pr-body.yml', import.meta.url), 'utf8');
   const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
@@ -101,22 +101,30 @@ test('PR-body workflow lints edits with the trusted base lint and PR-head data',
   assert.match(workflow, /permissions:\n  contents: read/);
   assert.match(workflow, /concurrency:\n  group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.event\.pull_request\.number \}\}\n  cancel-in-progress: true/);
   assert.doesNotMatch(ci, /^  pr-body-lint:/m);
-  const job = workflow.match(/^  pr-body-lint:\n([\s\S]*?)(?=^  [a-z][a-z-]*:\n|$(?![\s\S]))/m)?.[1];
-  assert.ok(job, 'missing pr-body-lint job');
-  assert.match(job, /if: github\.event_name == 'pull_request'/);
-  assert.match(job, /- name: Checkout trusted base[\s\S]*?ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*?path: trusted/);
-  assert.match(job, /- name: Checkout PR head[\s\S]*?ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}[\s\S]*?path: pr-head/);
-  assert.match(job, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\.4\.0/);
-  assert.match(job, /- name: Test agent tooling\n        working-directory: pr-head\n        run: node --test scripts\/agents\/\*\.test\.mjs/);
-  assert.match(job, /- name: Check PR body gates\n        working-directory: pr-head/);
-  assert.match(job, /PR_BODY: \$\{\{ github\.event\.pull_request\.body \}\}/);
-  assert.match(job, /grep -q '\^export function checkGates' \.\.\/trusted\/scripts\/agents\/ui-parity-pr-body-lint\.mjs/);
-  assert.match(job, /trusted PR-body lint lacks checkGates/);
-  assert.match(job, /printf '%s' "\$PR_BODY" > "\$RUNNER_TEMP\/pr-body\.md"/);
-  assert.match(job, /node \.\.\/trusted\/scripts\/agents\/ui-parity-pr-body-lint\.mjs --base origin\/main --body-file "\$RUNNER_TEMP\/pr-body\.md"/);
-  const shell = [...job.matchAll(/run: \|\n((?:        .*\n?)+)/g)].map(match => match[1]).join('\n');
+  assert.doesNotMatch(workflow, /^\s+needs:/m);
+  const agentJob = workflow.match(/^  agent-tests:\n([\s\S]*?)(?=^  [a-z][a-z-]*:\n|$(?![\s\S]))/m)?.[1];
+  const gatesJob = workflow.match(/^  pr-body-gates:\n([\s\S]*?)(?=^  [a-z][a-z-]*:\n|$(?![\s\S]))/m)?.[1];
+  assert.ok(agentJob, 'missing agent-tests job');
+  assert.ok(gatesJob, 'missing independent pr-body-gates job');
+  assert.match(agentJob, /- name: Checkout PR head[\s\S]*?ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}[\s\S]*?path: pr-head/);
+  assert.match(agentJob, /- name: Test agent tooling\n        working-directory: pr-head\n        run: node --test scripts\/agents\/\*\.test\.mjs/);
+  assert.match(gatesJob, /if: github\.event_name == 'pull_request'/);
+  assert.match(gatesJob, /- name: Checkout trusted base[\s\S]*?ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*?path: trusted/);
+  assert.match(gatesJob, /- name: Checkout PR head[\s\S]*?ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}[\s\S]*?path: pr-head/);
+  assert.match(gatesJob, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\.4\.0/);
+  assert.doesNotMatch(gatesJob, /node --test/);
+  for (const line of gatesJob.split('\n').filter(line => /\bnode\s+/.test(line))) {
+    assert.match(line, /\bnode\s+(?:\.\.\/)?trusted\//, line);
+  }
+  assert.match(gatesJob, /- name: Check PR body gates\n        working-directory: pr-head/);
+  assert.match(gatesJob, /PR_BODY: \$\{\{ github\.event\.pull_request\.body \}\}/);
+  assert.match(gatesJob, /grep -q '\^export function checkGates' \.\.\/trusted\/scripts\/agents\/ui-parity-pr-body-lint\.mjs/);
+  assert.match(gatesJob, /trusted PR-body lint lacks checkGates/);
+  assert.match(gatesJob, /printf '%s' "\$PR_BODY" > "\$RUNNER_TEMP\/pr-body\.md"/);
+  assert.match(gatesJob, /node \.\.\/trusted\/scripts\/agents\/ui-parity-pr-body-lint\.mjs --base origin\/main --body-file "\$RUNNER_TEMP\/pr-body\.md"/);
+  const shell = [...gatesJob.matchAll(/run: \|\n((?:        .*\n?)+)/g)].map(match => match[1]).join('\n');
   assert.doesNotMatch(shell, /\$\{\{\s*github\.event\.pull_request\.body/);
-  assert.doesNotMatch(job, /xcode/i);
+  assert.doesNotMatch(gatesJob, /xcode/i);
 });
 
 test('pre-Gates baseline lint fails the trusted guard', async t => {
