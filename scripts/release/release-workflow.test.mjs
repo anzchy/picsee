@@ -54,8 +54,9 @@ test("secrets come only from secrets.*, only through env, and never echo", () =>
 test("the private Sparkle key only reaches sign_update on stdin", () => {
   const sign = step(/appcast/i).text;
   assert.match(sign, /printf '%s' "\$SPARKLE_ED_PRIVATE_KEY" \| "\$SPARKLE_TOOLS\/bin\/sign_update" -p --ed-key-file - /);
-  // The env mapping names it twice (`NAME: ${{ secrets.NAME }}`); the only other use is the stdin pipe.
-  assert.equal((workflow.match(/SPARKLE_ED_PRIVATE_KEY/g) ?? []).length, 3, "one env mapping, one stdin pipe");
+  // The env mapping names it twice (`NAME: ${{ secrets.NAME }}`); the other uses are the stdin pipe and its unset.
+  assert.equal((workflow.match(/SPARKLE_ED_PRIVATE_KEY/g) ?? []).length, 4, "one env mapping, one stdin pipe, one unset");
+  assert.match(sign, /--ed-key-file - "\$DMG"\)\n\s*unset SPARKLE_ED_PRIVATE_KEY\n/);
 });
 
 test("the release is a draft and nothing is published or merged", () => {
@@ -175,5 +176,17 @@ test("the runbook documents the argv boundary for the notary and keychain passwo
   assert.match(readme, /single-tenant[^\n]*ephemeral|ephemeral[^\n]*single-tenant/);
   for (const name of [/import the developer id certificate/i, /notarise the app/i, /notarise the dmg/i]) {
     assert.match(step(name).text, /^\s+umask 077$/m, String(name));
+  }
+});
+
+test("the runbook counts the passwords in argv and names where each secret is unset, and the workflow does it", () => {
+  const readme = readFileSync(new URL("docs/release/README.md", root), "utf8");
+  assert.match(readme, /Four of them, the Apple ID and three passwords, still appear as \*\*process arguments\*\*/);
+  assert.doesNotMatch(readme, /Two of them/);
+  const unsetLine = readme.split("\n").find((line) => /unset right after its last use/.test(line)) ?? "";
+  for (const name of ["DEVELOPER_ID_P12_BASE64", "DEVELOPER_ID_P12_PASSWORD", "KEYCHAIN_PASSWORD", "APPLE_ID",
+    "APPLE_APP_SPECIFIC_PASSWORD", "SPARKLE_ED_PRIVATE_KEY"]) {
+    assert.ok(unsetLine.includes(`\`${name}\``), `${name} missing from: ${unsetLine}`);
+    assert.match(workflow, new RegExp(`^\\s+unset( \\w+)* ${name}( |$)`, "m"), `the workflow never unsets ${name}`);
   }
 });

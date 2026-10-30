@@ -147,14 +147,26 @@ function appcastWorld() {
   return { dir, origin, work, tools, dmg, signature, git };
 }
 
+/** A fake-command prologue that fails the command if any of `names` is still in its environment. */
+const refuseSecrets = (...names) => `for v in ${names.join(" ")}; do
+  if [[ -n "\${!v+x}" ]]; then printf '%s still set for %s\\n' "$v" "$(basename "$0") $*" >&2; exit 97; fi
+done
+`;
+
 function runAppcast(world, { openPR = "" } = {}) {
   const ghLog = join(world.dir, "gh-calls");
+  const guard = refuseSecrets("SPARKLE_ED_PRIVATE_KEY");
   return runStep("Sign the update and open the appcast PR", {
     cwd: world.work,
     env: { TAG: "v0.0.1", VERSION: "0.0.1", BUILD: "312", DMG: world.dmg, SPARKLE_TOOLS: world.tools,
       GITHUB_REPOSITORY: "anzchy/picsee", GH_TOKEN: "token", SPARKLE_ED_PRIVATE_KEY: "private-key-material",
       GIT_CONFIG_GLOBAL: "/dev/null" },
-    fakes: { gh: `printf '%s\\n' "$*" >> "${ghLog}"\nif [[ "$1 $2" == "pr list" ]]; then printf '%s' '${openPR}'; fi\n` },
+    // Everything after sign_update runs without the Sparkle key in its environment.
+    fakes: {
+      gh: `${guard}printf '%s\\n' "$*" >> "${ghLog}"\nif [[ "$1 $2" == "pr list" ]]; then printf '%s' '${openPR}'; fi\n`,
+      git: `${guard}exec /usr/bin/git "$@"\n`,
+      node: `${guard}exec "${process.execPath}" "$@"\n`,
+    },
   });
 }
 const ghCalls = (world) => { try { return readFileSync(join(world.dir, "gh-calls"), "utf8").trim().split("\n"); } catch { return []; } };
@@ -220,6 +232,32 @@ test("the appcast PR body says that merging offers the build to every installed 
     assert.match(create, /Merge only after publishing the draft release v0\.0\.1/);
   } finally { rmSync(world.dir, { recursive: true, force: true }); }
 });
+
+for (const [name, target] of [["Notarise the app", "APP"], ["Notarise the DMG", "DMG"]]) {
+  test(`"${name}" unsets the Apple ID and app-specific password after notarisation, before stapling`, () => {
+    const dir = mkdtempSync(join(tmpdir(), "picsee-notary-"));
+    try {
+      mkdirSync(join(dir, "scripts/release"), { recursive: true });
+      // The helper itself must still receive the credentials.
+      writeFileSync(join(dir, "scripts/release/notarize.sh"),
+        `#!/bin/bash\nprintf 'notarize %s %s\\n' "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" >> "$RUNNER_TEMP/calls"\n`);
+      chmodSync(join(dir, "scripts/release/notarize.sh"), 0o755);
+      const guard = refuseSecrets("APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD");
+      const log = (command) => `${guard}printf '${command} %s\\n' "$*" >> "$RUNNER_TEMP/calls"\n`;
+      writeFileSync(join(dir, "artifact"), "x");
+      const step = runStep(name, { cwd: dir,
+        env: { [target]: join(dir, "artifact"), APP: join(dir, "artifact"), APPLE_ID: "owner@example.com",
+          APPLE_APP_SPECIFIC_PASSWORD: "abcd-efgh-ijkl-mnop", DEVELOPMENT_TEAM: "GRT84NAK4T" },
+        fakes: { xcrun: log("xcrun"), spctl: log("spctl"), ditto: `printf 'ditto\\n' >> "$RUNNER_TEMP/calls"\n` } });
+      try {
+        assert.equal(step.status, 0, step.stderr);
+        const calls = readFileSync(join(step.dir, "calls"), "utf8").trim().split("\n");
+        assert.ok(calls.includes("notarize owner@example.com abcd-efgh-ijkl-mnop"), calls.join("\n"));
+        assert.ok(calls.some((c) => c.startsWith("xcrun stapler staple")), calls.join("\n"));
+      } finally { step.cleanup(); }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
 
 /** A fake `security` that logs each call and the mode of any file it imports. */
 const fakeSecurity = (team) => `log="$RUNNER_TEMP/security-calls"

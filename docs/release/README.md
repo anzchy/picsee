@@ -25,8 +25,8 @@ The build number is the tag commit's commit count (`git rev-list --count`), so b
 
 ## Credentials on the runner
 
-The six secrets reach only the steps that use them, through step environment variables. GitHub masks their values in logs. Two of them still appear as **process arguments** while a command runs, because the tools take them no other way in a non-interactive job:
-- The app-specific password reaches the process arguments of `xcrun notarytool submit` and `notarytool log`. That is the Apple ID + app-specific password contract chosen for #222. Without `--password`, notarytool prompts on a terminal, which a runner doesn't have. A keychain profile would need the same password on the command line to create it.
+The six secrets reach only the steps that use them, through step environment variables. GitHub masks their values in logs. Four of them, the Apple ID and three passwords, still appear as **process arguments** while a command runs, because the tools take them no other way in a non-interactive job:
+- The Apple ID and the app-specific password reach the process arguments of `xcrun notarytool submit` and `notarytool log`. That is the Apple ID + app-specific password contract chosen for #222. Without `--password`, notarytool prompts on a terminal, which a runner doesn't have. A keychain profile would need the same password on the command line to create it.
 - The keychain password and the .p12 password reach the process arguments of `security create-keychain`, `unlock-keychain`, `import` and `set-key-partition-list`.
 
 Another process on the same machine could read them from the process list while those commands run. The GitHub-hosted macOS runner is single-tenant and ephemeral: one job per fresh virtual machine, discarded afterwards. So the exposure is limited to this job's own processes, and the workflow runs only on tags pushed to this repository, never on pull requests.
@@ -34,7 +34,8 @@ Another process on the same machine could read them from the process list while 
 Other measures:
 - The Sparkle EdDSA key never appears in arguments: `sign_update` reads it on standard input.
 - Temporary files (the decoded .p12, the keychain, the notarisation zip) are created with `umask 077`.
-- The .p12 is deleted right after import, and the secret variables are unset after their last use in the step.
+- The .p12 is deleted right after import.
+- Each secret variable is unset right after its last use, so later commands in its step don't inherit it: `DEVELOPER_ID_P12_BASE64` after decoding, `DEVELOPER_ID_P12_PASSWORD` after import, `KEYCHAIN_PASSWORD` after `set-key-partition-list`, `APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD` after `notarize.sh` (before stapling and `spctl`), and `SPARKLE_ED_PRIVATE_KEY` after `sign_update` (before git, node and gh).
 - The last step deletes the keychain and fails the run if it can't.
 - A runner that is killed outright skips that step; its virtual machine is discarded anyway.
 
