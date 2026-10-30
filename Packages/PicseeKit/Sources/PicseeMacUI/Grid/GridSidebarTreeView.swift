@@ -1,9 +1,13 @@
 import AppKit
+import PicseeApplication
 
 public struct GridSidebarFolder: Sendable, Equatable {
     public let url: URL
     public let count: Int?
-    public init(url: URL, count: Int? = nil) { self.url = url; self.count = count }
+    public let accessLossCause: AccessLossCause?
+    public init(url: URL, count: Int? = nil, accessLossCause: AccessLossCause? = nil) {
+        self.url = url; self.count = count; self.accessLossCause = accessLossCause
+    }
 }
 
 @MainActor public final class GridSidebarFolderButton: NSButton {
@@ -11,8 +15,11 @@ public struct GridSidebarFolder: Sendable, Equatable {
     public let nameLabel = NSTextField(labelWithString: "")
     public let countLabel = NSTextField(labelWithString: "")
     public let glyph = NSImageView()
+    public let warningGlyph = NSImageView()
+    public let disclosureGlyph = NSImageView()
     public let depth: Int
     public let current: Bool
+    public let accessLossCause: AccessLossCause?
     public var compact = false {
         didSet {
             nameLabel.font = .systemFont(ofSize: compact ? 12 : 13)
@@ -21,26 +28,34 @@ public struct GridSidebarFolder: Sendable, Equatable {
     }
     public init(folder: GridSidebarFolder, depth: Int, current: Bool) {
         self.folderURL = folder.url; self.depth = depth; self.current = current
+        self.accessLossCause = folder.accessLossCause
         super.init(frame: .zero)
         isBordered = false
         title = ""
         wantsLayer = true
         layer?.cornerRadius = 6
-        addSubview(glyph)
-        addSubview(nameLabel)
-        addSubview(countLabel)
+        for view in [glyph, nameLabel, countLabel, warningGlyph, disclosureGlyph] { addSubview(view) }
         nameLabel.stringValue = folder.url.lastPathComponent
         nameLabel.font = .systemFont(ofSize: 13)
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.maximumNumberOfLines = 1
         glyph.image = current ? Self.openFolderImage() : NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
         glyph.imageScaling = .scaleProportionallyDown
-        glyph.contentTintColor = current ? DesignColor.selectionText.nsColor : DesignColor.textSecondary.nsColor
+        glyph.setAccessibilityElement(false)
+        warningGlyph.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
+        warningGlyph.imageScaling = .scaleProportionallyDown
+        warningGlyph.isHidden = folder.accessLossCause == nil
+        warningGlyph.setAccessibilityElement(true)
+        warningGlyph.setAccessibilityLabel(String(localized: "Unavailable"))
+        disclosureGlyph.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)
+        disclosureGlyph.imageScaling = .scaleProportionallyDown
+        disclosureGlyph.isHidden = folder.accessLossCause == nil
+        disclosureGlyph.setAccessibilityElement(false)
         countLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         setCount(folder.count)
         setAccessibilityRole(.button)
-        if current { setAccessibilityValue(String(localized: "Selected")) }
         setAccessibilityIdentifier("grid.sidebar.folder.\(folder.url.lastPathComponent)")
+        refreshAccessibility()
         refreshAppearance()
     }
     public required init?(coder: NSCoder) { nil }
@@ -78,24 +93,50 @@ public struct GridSidebarFolder: Sendable, Equatable {
     }
     public func setCount(_ count: Int?) {
         countLabel.stringValue = count.map(String.init) ?? ""
-        countLabel.isHidden = count == nil
+        countLabel.isHidden = accessLossCause != nil || count == nil
         let name = folderURL.lastPathComponent
-        if let count {
+        if accessLossCause == nil, let count {
             let images = String(format: String(localized: "%lld images"), Int64(count))
             setAccessibilityLabel("\(name), \(images)")
         } else { setAccessibilityLabel(name) }
         needsLayout = true
+    }
+    private func refreshAccessibility() {
+        guard let accessLossCause else {
+            setAccessibilityValue(current ? String(localized: "Selected") : nil)
+            setAccessibilityHelp(nil)
+            return
+        }
+        let cause: String
+        switch accessLossCause {
+        case .accessExpired: cause = String(localized: "Access Has Expired")
+        case .diskNotConnected: cause = String(localized: "External Disk Is Not Connected")
+        case .notFound: cause = String(localized: "Not Found")
+        case .unknown: cause = String(localized: "Unable to Access This Folder")
+        }
+        let value = "\(String(localized: "Unavailable")), \(cause)"
+        setAccessibilityValue(value)
+        setAccessibilityHelp(value)
     }
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         refreshAppearance()
     }
     private func refreshAppearance() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = current ? DesignColor.selectionFill.nsColor.cgColor : NSColor.clear.cgColor
-            nameLabel.textColor = current ? DesignColor.selectionText.nsColor : DesignColor.textPrimary.nsColor
-            countLabel.textColor = DesignColor.textSecondary.nsColor
+        func resolved(_ designColor: DesignColor) -> NSColor {
+            let theme: DesignTheme = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+            let components = designColor.components(theme)
+            return NSColor(srgbRed: components[0], green: components[1], blue: components[2], alpha: components[3])
         }
+        layer?.backgroundColor = accessLossCause != nil ? resolved(.hoverBackground).cgColor
+            : current ? resolved(.selectionFill).cgColor : NSColor.clear.cgColor
+        nameLabel.textColor = accessLossCause != nil ? resolved(.textSecondary)
+            : current ? resolved(.selectionText) : resolved(.textPrimary)
+        countLabel.textColor = resolved(.textSecondary)
+        glyph.contentTintColor = accessLossCause != nil ? resolved(.textSecondary)
+            : current ? resolved(.selectionText) : resolved(.textSecondary)
+        warningGlyph.contentTintColor = current ? resolved(.waitingIndicator) : resolved(.textSecondary)
+        disclosureGlyph.contentTintColor = resolved(.textSecondary)
     }
     public override func layout() {
         super.layout()
@@ -104,8 +145,12 @@ public struct GridSidebarFolder: Sendable, Equatable {
             width: depth > 0 && !current ? 16 : 17, height: depth > 0 && !current ? 16 : 17)
         let countWidth: CGFloat = countLabel.isHidden ? 0 : max(13, countLabel.intrinsicContentSize.width)
         countLabel.frame = NSRect(x: bounds.width - padding - countWidth, y: 7, width: countWidth, height: 18)
+        disclosureGlyph.frame = NSRect(x: bounds.width - padding - 12, y: 10, width: 12, height: 12)
+        warningGlyph.frame = NSRect(x: disclosureGlyph.frame.minX - 11 - 14, y: 9, width: 14, height: 14)
         let labelX = glyph.frame.maxX + (compact ? 6 : 9)
-        nameLabel.frame = NSRect(x: labelX, y: 6, width: max(0, countLabel.frame.minX - labelX - (countLabel.isHidden ? 0 : 8)), height: 20)
+        let trailing = accessLossCause == nil ? countLabel.frame.minX - (countLabel.isHidden ? 0 : 8)
+            : warningGlyph.frame.minX - 9
+        nameLabel.frame = NSRect(x: labelX, y: 6, width: max(0, trailing - labelX), height: 20)
     }
 }
 
@@ -178,13 +223,14 @@ public struct GridSidebarFolder: Sendable, Equatable {
         }
     }
     public func show(current: GridSidebarFolder, parent: GridSidebarFolder?, children: [GridSidebarFolder]) {
-        self.parent = parent; currentFolder = current; self.children = children
+        let visibleChildren = current.accessLossCause == nil ? children : []
+        self.parent = parent; currentFolder = current; self.children = visibleChildren
         for row in rows { row.removeFromSuperview() }
         rows = []
         if let parent { append(parent, depth: 0, current: false) }
         let depth = parent == nil ? 0 : 1
         append(current, depth: depth, current: true)
-        for child in children { append(child, depth: depth + 1, current: false) }
+        for child in visibleChildren { append(child, depth: depth + 1, current: false) }
         needsLayout = true
         layoutSubtreeIfNeeded()
         scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
@@ -208,7 +254,8 @@ public struct GridSidebarFolder: Sendable, Equatable {
     }
     private func append(_ folder: GridSidebarFolder, depth: Int, current: Bool) {
         let row = GridSidebarFolderButton(folder: GridSidebarFolder(url: folder.url,
-            count: shownCount(folder.count, current: current)), depth: depth, current: current)
+            count: shownCount(folder.count, current: current), accessLossCause: folder.accessLossCause),
+            depth: depth, current: current)
         if depth > 0 && !current { row.countLabel.alphaValue = 0.8 }
         row.target = self
         row.action = #selector(selectFolder(_:))
@@ -220,9 +267,13 @@ public struct GridSidebarFolder: Sendable, Equatable {
         onSelectFolder?(sender.folderURL)
     }
     public func updateCount(_ count: Int?, for url: URL) {
-        if currentFolder?.url == url { currentFolder = GridSidebarFolder(url: url, count: count) }
-        if parent?.url == url { parent = GridSidebarFolder(url: url, count: count) }
-        if let index = children.firstIndex(where: { $0.url == url }) { children[index] = GridSidebarFolder(url: url, count: count) }
+        if currentFolder?.url == url {
+            currentFolder = GridSidebarFolder(url: url, count: count, accessLossCause: currentFolder?.accessLossCause)
+        }
+        if parent?.url == url { parent = GridSidebarFolder(url: url, count: count, accessLossCause: parent?.accessLossCause) }
+        if let index = children.firstIndex(where: { $0.url == url }) {
+            children[index] = GridSidebarFolder(url: url, count: count, accessLossCause: children[index].accessLossCause)
+        }
         if let row = rows.first(where: { $0.folderURL == url }) { row.setCount(shownCount(count, current: row.current)) }
     }
     public override func layout() {
