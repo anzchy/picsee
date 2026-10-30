@@ -16,7 +16,8 @@ private struct Issue221AboutViews {
 
 @MainActor private func issue221Panel(
     info: [String: Any]? = nil,
-    openURL: @escaping (URL) -> Void = { _ in }
+    openURL: @escaping (URL) -> Void = { _ in },
+    localized: @escaping (String) -> String = { String(localized: String.LocalizationValue($0)) }
 ) -> SettingsPanelWindow {
     let preferences = InMemoryDisplayPreferencesStore()
     return SettingsPanelWindow(
@@ -25,7 +26,8 @@ private struct Issue221AboutViews {
         preferencesStore: preferences,
         defaults: UserDefaults(suiteName: "issue221-about-\(UUID().uuidString)")!,
         openURL: openURL,
-        aboutInfoDictionary: info)
+        aboutInfoDictionary: info,
+        aboutLocalizedString: localized)
 }
 
 @MainActor private func issue221View(_ id: String, in root: NSView) -> NSView? {
@@ -36,7 +38,10 @@ private struct Issue221AboutViews {
     return nil
 }
 
-@MainActor private func issue221AboutViews(in panel: SettingsPanelWindow) throws -> Issue221AboutViews {
+@MainActor private func issue221AboutViews(
+    in panel: SettingsPanelWindow,
+    localized: @escaping (String) -> String = { String(localized: String.LocalizationValue($0)) }
+) throws -> Issue221AboutViews {
     panel.select(.about)
     let root = try #require(panel.window.contentView)
     root.layoutSubtreeIfNeeded()
@@ -45,11 +50,11 @@ private struct Issue221AboutViews {
     let fields = pane.subviews.compactMap { $0 as? NSTextField }
     let icon = try #require(pane.subviews.compactMap { $0 as? NSImageView }.first)
     let name = try #require(fields.first { $0.stringValue == "picsee" })
-    let version = try #require(fields.first { $0.stringValue.hasPrefix(String(localized: "Version") + " ") })
+    let version = try #require(fields.first { $0.stringValue.hasPrefix(localized("Version") + " ") })
     let privacyKey = "A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."
-    let privacy = try #require(fields.first { $0.stringValue == String(localized: String.LocalizationValue(privacyKey)) })
+    let privacy = try #require(fields.first { $0.stringValue == localized(privacyKey) })
     let licenceKey = "picsee is released under the MIT License.\nThird party: Sparkle (MIT) · Welcome sample images from Unsplash (Unsplash License)."
-    let licences = try #require(fields.first { $0.stringValue == String(localized: String.LocalizationValue(licenceKey)) })
+    let licences = try #require(fields.first { $0.stringValue == localized(licenceKey) })
     let links = try (0...2).map { try #require(issue221View("settings.about.link.\($0)", in: pane) as? NSButton) }
     return Issue221AboutViews(pane: pane, icon: icon, name: name, version: version,
                               privacy: privacy, links: links, licences: licences)
@@ -171,32 +176,53 @@ private func issue221CatalogValue(_ key: String, _ language: String) throws -> S
     }
 }
 
-@MainActor @Test(.timeLimit(.minutes(3))) func issue221LongestAboutLabelsFitRenderedFramesInEnglishAndChinese() throws {
-    let panel = issue221Panel(info: ["CFBundleShortVersionString": "9.8.7", "CFBundleVersion": "654"])
-    defer { panel.window.close() }
-    let views = try issue221AboutViews(in: panel)
-    let textCases: [(NSTextField, String)] = [
-        (views.privacy, "A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."),
-        (views.licences, "picsee is released under the MIT License.\nThird party: Sparkle (MIT) · Welcome sample images from Unsplash (Unsplash License)."),
-    ]
-    for (field, key) in textCases {
-        for language in ["en", "zh-Hans"] {
-            let value = try issue221CatalogValue(key, language)
-            let text = NSAttributedString(string: value, attributes: [.font: try #require(field.font)])
-            let needed = text.boundingRect(with: NSSize(width: field.frame.width, height: 1000),
-                options: [.usesLineFragmentOrigin, .usesFontLeading]).height
-            #expect(needed <= field.frame.height + 2, "\(language) clipped: \(key)")
-            #expect(field.lineBreakMode == .byWordWrapping)
-            #expect(field.maximumNumberOfLines == 0)
+@MainActor @Test(.timeLimit(.minutes(3))) func issue221LocalizedAboutControlsFitPaneInEnglishChineseLightAndDark() throws {
+    let privacyKey = "A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."
+    let licenceKey = "picsee is released under the MIT License.\nThird party: Sparkle (MIT) · Welcome sample images from Unsplash (Unsplash License)."
+    for language in ["en", "zh-Hans"] {
+        let localized: (String) -> String = { key in
+            (try? issue221CatalogValue(key, language)) ?? key
         }
-    }
-    for (button, key) in zip(views.links, ["Report a Problem…", "Privacy Note", "Source Code"]) {
-        for language in ["en", "zh-Hans"] {
-            let translated = NSButton(title: try issue221CatalogValue(key, language), target: nil, action: nil)
-            translated.isBordered = false
-            translated.font = button.font
-            #expect(translated.intrinsicContentSize.width <= button.frame.width + 1,
-                    "\(language) link truncated: \(key)")
+        let panel = issue221Panel(
+            info: ["CFBundleShortVersionString": "9.8.7", "CFBundleVersion": "654"],
+            localized: localized)
+        defer { panel.window.close() }
+        let views = try issue221AboutViews(in: panel, localized: localized)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            panel.window.appearance = NSAppearance(named: appearance)
+            views.pane.layoutSubtreeIfNeeded()
+            let versionFormat = String(format: localized("%@ (build %@)"), "9.8.7", "654")
+            #expect(views.name.stringValue == "picsee", "\(language) app name")
+            #expect(views.version.stringValue == localized("Version") + " " + versionFormat, "\(language) version")
+            #expect(views.privacy.stringValue == localized(privacyKey), "\(language) privacy")
+            #expect(views.licences.stringValue == localized(licenceKey), "\(language) licences")
+            let linkKeys = ["Report a Problem…", "Privacy Note", "Source Code"]
+            #expect(views.links.map(\.title) == linkKeys.map(localized), "\(language) links")
+
+            let controls: [NSView] = [views.icon, views.name, views.version, views.privacy]
+                + views.links + [views.licences]
+            for control in controls {
+                #expect(control.superview === views.pane, "\(language) control is not in the real About pane")
+                #expect(NSContainsRect(views.pane.bounds, control.frame),
+                        "\(language) \(appearance.rawValue) control outside pane: \(control.frame)")
+            }
+            for first in controls.indices {
+                for second in controls.indices where second > first {
+                    #expect(!NSIntersectsRect(controls[first].frame, controls[second].frame),
+                            "\(language) \(appearance.rawValue) overlap: \(controls[first].frame) / \(controls[second].frame)")
+                }
+            }
+            for field in [views.name, views.version, views.privacy, views.licences] {
+                let needed = field.attributedStringValue.boundingRect(
+                    with: NSSize(width: field.frame.width, height: 1000),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading]).height
+                #expect(needed <= field.frame.height + 2,
+                        "\(language) \(appearance.rawValue) clipped text: \(field.stringValue)")
+            }
+            for button in views.links {
+                #expect(button.attributedTitle.size().width <= button.frame.width + 1,
+                        "\(language) \(appearance.rawValue) clipped link: \(button.title)")
+            }
         }
     }
 }
