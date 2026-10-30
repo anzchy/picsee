@@ -11,10 +11,16 @@ import PicseeApplication
     let expectedComingSoon: Set<EntryPoint> = [
         .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay,
         .settingsDisplayThumbnailSize, .settingsDisplayFileNames, .settingsDisplayFitMode,
-        .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow,
         .settingsAboutPrivacyNote, .settingsAboutSourceCode,
     ]
-    #expect(Set(EntryPoint.allCases) == expectedComingSoon.union([.reportIssue, .diagnostics, .keyboardShortcuts]))
+    // #220 / ADR-015: the two Settings → Updates controls are real now.
+    let implemented: Set<EntryPoint> = [
+        .reportIssue, .diagnostics, .keyboardShortcuts, .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow,
+    ]
+    #expect(Set(EntryPoint.allCases) == expectedComingSoon.union(implemented))
+    #expect(Set(EntryPoint.allCases.filter { $0.state == .comingSoon }) == expectedComingSoon)
+    #expect(EntryPoint.settingsUpdatesAutomaticCheck.rawValue == "settingsUpdatesAutomaticCheck")
+    #expect(EntryPoint.settingsUpdatesCheckNow.rawValue == "settingsUpdatesCheckNow")
     #expect(Set(EntryPoint.allCases.map(\.rawValue)).count == EntryPoint.allCases.count)
     #expect(EntryPoint.reportIssueURL.absoluteString == "https://github.com/anzchy/picsee/issues/new?template=bug_report.yml")
 
@@ -31,6 +37,8 @@ import PicseeApplication
             #expect(entry.state == .implemented)
             #expect(entry.isEnabled)
             #expect(entry.isFocusable)
+            #expect(entry.accessibilityLabel(for: .english) == "")
+            #expect(entry.accessibilityLabel(for: .simplifiedChinese) == "")
         }
     }
 }

@@ -28,6 +28,7 @@ enum SettingsSection: String, CaseIterable {
     private let openURL: (URL) -> Void
     private let aboutInfoDictionary: [String: Any]?
     private let aboutLocalizedString: (String) -> String
+    private let updates: (any AppUpdatePort)?
     private var panes: [SettingsSection: NSView] = [:]
     private var sidebarButtons: [SettingsSection: NSButton] = [:]
     private var appearanceButtons: [DisplayAppearance: NSButton] = [:]
@@ -36,9 +37,13 @@ enum SettingsSection: String, CaseIterable {
     private var cacheSize: NSTextField!
     private var cacheDiagnostic: NSTextField!
     private var cacheClear: NSButton!
+    private var updateVersion: NSTextField!
+    private var updateAutomatic: NSButton!
+    private var updateLastChecked: NSTextField!
 
     init(cache: ThumbnailDiskCache, appearanceAdapter: WindowAppearanceAdapter,
          preferencesStore: any DisplayPreferencesStore, defaults: UserDefaults,
+         updates: (any AppUpdatePort)? = nil,
          confirmClear: ((NSWindow, @escaping (Bool) -> Void) -> Void)? = nil,
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
          aboutInfoDictionary: [String: Any]? = nil,
@@ -52,6 +57,7 @@ enum SettingsSection: String, CaseIterable {
         self.openURL = openURL
         self.aboutInfoDictionary = aboutInfoDictionary
         self.aboutLocalizedString = aboutLocalizedString
+        self.updates = updates
         self.window = SettingsPanelNativeWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 482),
                                                 styleMask: [.titled, .closable, .miniaturizable],
                                                 backing: .buffered, defer: false)
@@ -60,6 +66,7 @@ enum SettingsSection: String, CaseIterable {
         window.center()
         buildViews()
         preferencesStore.observe(self)
+        updates?.observe { [weak self] in self?.refreshUpdates() }
         preferencesDidChange(preferencesStore.value)
         select(selectedSection)
     }
@@ -87,6 +94,7 @@ enum SettingsSection: String, CaseIterable {
             button.needsDisplay = true
         }
         if section == .cache { refreshCache() }
+        if section == .update { refreshUpdates() }
     }
 
     func preferencesDidChange(_ preferences: DisplayPreferences) {
@@ -285,28 +293,56 @@ enum SettingsSection: String, CaseIterable {
     private func buildUpdates() {
         let pane = panes[.update]!
         rowLabel(String(localized: "Current Version"), y: 397, in: pane)
-        let version = label(Self.versionDescription, role: "uiSmall")
-        version.frame = NSRect(x: 162, y: 397, width: 350, height: 24)
-        pane.addSubview(version)
+        updateVersion = label(Self.versionDescription, role: "uiSmall")
+        updateVersion.frame = NSRect(x: 162, y: 397, width: 350, height: 24)
+        updateVersion.setAccessibilityIdentifier("settings.update.version")
+        pane.addSubview(updateVersion)
         rowLabel(String(localized: "Auto Check"), y: 352, in: pane)
-        let automatic = NSButton(checkboxWithTitle: String(localized: "Check for updates automatically"), target: nil, action: nil)
-        automatic.font = DesignMetrics.font("ui")
-        automatic.frame = NSRect(x: 162, y: 352, width: automatic.intrinsicContentSize.width, height: 24)
-        configure(automatic, entry: .settingsUpdatesAutomaticCheck, id: "settings.update.automatic", title: automatic.title)
-        pane.addSubview(automatic)
-        soon(450, 352, in: pane)
+        updateAutomatic = NSButton(checkboxWithTitle: String(localized: "Check for updates automatically"),
+                                   target: self, action: #selector(changeAutomaticUpdates(_:)))
+        updateAutomatic.font = DesignMetrics.font("ui")
+        updateAutomatic.frame = NSRect(x: 162, y: 352, width: updateAutomatic.intrinsicContentSize.width, height: 24)
+        configure(updateAutomatic, entry: .settingsUpdatesAutomaticCheck, id: "settings.update.automatic", title: updateAutomatic.title)
+        pane.addSubview(updateAutomatic)
         let privacy = label(String(localized: "picsee contacts GitHub only to check for updates and sends no system information."), role: "uiSmall", muted: true)
         privacy.frame = NSRect(x: 162, y: 310, width: 390, height: 36)
         pane.addSubview(privacy)
-        let check = NSButton(title: String(localized: "Check Now"), target: nil, action: nil)
+        let check = NSButton(title: String(localized: "Check Now"), target: self, action: #selector(checkForUpdates(_:)))
         check.font = DesignMetrics.font("ui")
         check.frame = NSRect(x: 162, y: 275, width: check.intrinsicContentSize.width, height: 26)
         configure(check, entry: .settingsUpdatesCheckNow, id: "settings.update.now", title: check.title)
         pane.addSubview(check)
-        soon(290, 275, in: pane)
-        let last = label(String(localized: "Last checked: Unknown"), role: "uiSmall", muted: true)
-        last.frame = NSRect(x: 162, y: 247, width: 390, height: 24)
-        pane.addSubview(last)
+        updateLastChecked = label(String(localized: "Last checked: Unknown"), role: "uiSmall", muted: true)
+        updateLastChecked.frame = NSRect(x: 162, y: 247, width: 390, height: 24)
+        updateLastChecked.setAccessibilityIdentifier("settings.update.last-checked")
+        pane.addSubview(updateLastChecked)
+        if updates == nil {
+            // No updater (UI-fixture builds): the controls stay visible but inert, without a Coming Soon marker.
+            updateAutomatic.isEnabled = false
+            check.isEnabled = false
+        }
+        refreshUpdates()
+    }
+
+    private func refreshUpdates() {
+        guard let updates else { return }
+        let unknown = String(localized: "Unknown")
+        updateVersion.stringValue = String(format: String(localized: "%@ (build %@)"),
+                                           updates.versionInfo.version ?? unknown, updates.versionInfo.build ?? unknown)
+        updateAutomatic.state = updates.automaticallyChecksForUpdates ? .on : .off
+        updateLastChecked.stringValue = updates.lastUpdateCheckDate.map {
+            String(format: String(localized: "Last checked: %@"), $0.formatted(date: .abbreviated, time: .shortened))
+        } ?? String(localized: "Last checked: Unknown")
+    }
+
+    @objc private func changeAutomaticUpdates(_ sender: NSButton) {
+        updates?.automaticallyChecksForUpdates = sender.state == .on
+        refreshUpdates()
+    }
+
+    @objc private func checkForUpdates(_ sender: NSButton) {
+        updates?.checkForUpdates()
+        refreshUpdates()
     }
 
     private func buildAbout() {
