@@ -1,0 +1,82 @@
+[
+  {
+    "id": "P2-08c-T4-WI-3",
+    "ok": true,
+    "verdict": "SEPARATION-HELD",
+    "findings": [
+      {
+        "severity": "medium",
+        "code": "implementation-already-present",
+        "message": "9 non-test file(s) were already modified when the red was recorded (App/Access/AccessMonitor.swift, App/Access/AccessRebindStripView.swift, Packages/PicseeKit/Sources/PicseeApplication/Access/AccessState.swift, Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/AccessCauseClassifier.swift, Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/AccessRebind.swift, …). The tests may have been written against an implementation that already existed, which is the contamination the receipt exists to detect."
+      },
+      {
+        "severity": "info",
+        "code": "spec-extended",
+        "message": "2 specification file(s) gained lines with every recorded line intact: AppTests/LostAccessRecoveryTests.swift, AppTests/AccessRebindStripTests.swift. Additions are healthy; only edits to recorded lines are a finding."
+      }
+    ]
+  },
+  {
+    "id": "P2-08c-T4-WI-3-AutomaticTrash",
+    "ok": true,
+    "verdict": "SEPARATION-HELD",
+    "findings": [
+      {
+        "severity": "medium",
+        "code": "implementation-already-present",
+        "message": "12 non-test file(s) were already modified when the red was recorded (App/Access/AccessMonitor.swift, App/Access/AccessRebindStripView.swift, App/Access/AccessServices.swift, App/CanvasWindowController.swift, App/Resources/Localizable.xcstrings, …). The tests may have been written against an implementation that already existed, which is the contamination the receipt exists to detect."
+      }
+    ]
+  },
+  {
+    "id": "P2-08c-T4-WI-1",
+    "ok": false,
+    "verdict": "SEPARATION-BROKEN",
+    "findings": [
+      {
+        "severity": "high",
+        "code": "spec-changed-under-green",
+        "message": "1 specification file(s) had a recorded line changed or removed between red and green: Packages/PicseeKit/Tests/PicseeInfrastructureTests/AccessNotFoundTests.swift. The implementation edited its own acceptance criteria. Either restore the assertions, or state explicitly why the original specification was wrong."
+      },
+      {
+        "severity": "info",
+        "code": "spec-extended",
+        "message": "1 specification file(s) gained lines with every recorded line intact: Packages/PicseeKit/Tests/PicseeInfrastructureTests/AccessProbeFactGathererTests.swift. Additions are healthy; only edits to recorded lines are a finding."
+      }
+    ]
+  },
+  {
+    "id": "P2-08c-T4-WI-2",
+    "ok": false,
+    "verdict": "SEPARATION-BROKEN",
+    "findings": [
+      {
+        "severity": "medium",
+        "code": "implementation-already-present",
+        "message": "7 non-test file(s) were already modified when the red was recorded (App/Access/AccessMonitor.swift, Packages/PicseeKit/Sources/PicseeApplication/Access/AccessState.swift, Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/AccessCauseClassifier.swift, Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/AccessRebind.swift, Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/FileAccess.swift, …). The tests may have been written against an implementation that already existed, which is the contamination the receipt exists to detect."
+      },
+      {
+        "severity": "high",
+        "code": "spec-changed-under-green",
+        "message": "1 specification file(s) had a recorded line changed or removed between red and green: Packages/PicseeKit/Tests/PicseeInfrastructureTests/AccessRebindTransactionTests.swift. The implementation edited its own acceptance criteria. Either restore the assertions, or state explicitly why the original specification was wrong."
+      }
+    ]
+  },
+  {
+    "id": "P2-08c-T4-WI-1-App",
+    "ok": false,
+    "verdict": "SEPARATION-BROKEN",
+    "findings": [
+      {
+        "severity": "medium",
+        "code": "implementation-already-present",
+        "message": "3 non-test file(s) were already modified when the red was recorded (Packages/PicseeKit/Sources/PicseeApplication/Access/AccessState.swift, Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/AccessCauseClassifier.swift, Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/FileAccess.swift). The tests may have been written against an implementation that already existed, which is the contamination the receipt exists to detect."
+      },
+      {
+        "severity": "high",
+        "code": "spec-changed-under-green",
+        "message": "1 specification file(s) had a recorded line changed or removed between red and green: AppTests/LostAccessRecoveryTests.swift. The implementation edited its own acceptance criteria. Either restore the assertions, or state explicitly why the original specification was wrong."
+      }
+    ]
+  }
+]

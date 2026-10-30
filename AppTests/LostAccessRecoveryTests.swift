@@ -782,3 +782,306 @@ func t230DifferentIdentitySelectionOpensNormallyPreservingLostRoot(_ kind: Strin
         }
     }
 }
+
+
+@MainActor private func t231Lose(_ f: RecoveryFixture, _ c: CanvasWindowController) async throws {
+    _ = try await t230OpenPositionBeforeLoss(f, c)
+    f.bookmarks.fail(f.a, true)
+    _ = f.services.monitor.state.reportRootFailure(f.rootA, cause: .notFound, from: f.services.monitor.state.stamp(for: f.rootA))
+    try await recoveryWait { recoveryPage(c) != nil }
+}
+@MainActor private func t231Strip(_ c: CanvasWindowController) throws -> AccessRebindStripView {
+    try #require(try recoveryShell(c).mainContent.subviews.compactMap { $0 as? AccessRebindStripView }.first { !$0.isHidden })
+}
+@MainActor @Test(.timeLimit(.minutes(3))) func t231NotFoundCopyAndCancelLeaveRecoveryActions() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    try await t231Lose(f, c)
+    let records = await f.services.files.records(), recent = try await f.services.recent.load()
+    let page = try #require(recoveryPage(c))
+    #expect(page.titleLabel.stringValue == String(localized: "Not Found"))
+    #expect(page.buttons.map(\.title) == [String(localized: "Choose at New Location…"), String(localized: "Choose Another Folder…")])
+    #expect(!page.detailLabel.stringValue.lowercased().contains("moved"))
+    c.completeAccessFolderSelection(nil, reselect: true)
+    #expect(c.accessLossCause == .notFound && c.waitingAccessPosition?.rootID == f.rootA)
+    #expect(page.buttons.count == 2 && page.buttons.allSatisfy(\.isEnabled))
+    #expect(await f.services.files.records() == records)
+    #expect(try await f.services.recent.load() == recent)
+    #expect(c.window?.firstResponder === page.reselectButton)
+}
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: [false, true])
+func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    try await t231Lose(f, c)
+    let old = try #require(c.waitingAccessPosition)
+    let records = await f.services.files.records(), recent = try await f.services.recent.load()
+    let target = merge ? f.b : f.base.appendingPathComponent("New", isDirectory: true)
+    if !merge { try FileManager.default.copyItem(at: f.b, to: target) }
+    c.completeAccessFolderSelection(target, reselect: true)
+    try await recoveryWait { c.waitingAccessPosition == nil && c.session.folderScan?.snapshot?.isComplete == true }
+    #expect(await f.services.files.records().allSatisfy { $0.id != f.rootA })
+    #expect(c.session.folderScan?.snapshot?.version.folder == target)
+    let expectedID = merge ? f.rootB : await f.services.files.records().first { $0.id != f.rootB }?.id
+    #expect(c.session.folderScan?.snapshot?.version.rootID == expectedID)
+    #expect(!c.hasImage && c.session.currentItemID != old.currentItemID)
+    let strip = try t231Strip(c), grid = try recoveryGrid(c)
+    #expect(strip.messageLabel.stringValue == String(format: String(localized: "Updated to %@"), target.path))
+    #expect(strip.frame.minY >= grid.frame.maxY)
+    strip.undoButton.performClick(nil)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA }
+    #expect(c.accessLossCause == .notFound)
+    #expect(c.waitingAccessPosition?.folderURL == old.folderURL)
+    #expect(c.waitingAccessPosition?.currentItemID == old.currentItemID)
+    #expect(c.waitingAccessPosition?.conditions == old.conditions)
+    #expect(c.waitingAccessPosition?.counter != old.counter)
+    #expect(await f.services.files.records() == records)
+    #expect(try await f.services.recent.load() == recent)
+    #expect(!c.hasImage && c.inspector.name == nil && c.window?.representedURL == nil)
+    #expect(strip.superview == nil && !strip.undoButton.isEnabled)
+}
+@MainActor @Test(.timeLimit(.minutes(3))) func t231OtherFolderOpensNormallyAndOriginalRemainsLost() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    try await t231Lose(f, c)
+    c.completeAccessFolderSelection(f.b, reselect: false)
+    try await f.ready(c, folder: f.b)
+    #expect(await f.services.files.records().contains { $0.id == f.rootA })
+    #expect(f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.notFound))
+    #expect(try recoveryShell(c).mainContent.subviews.allSatisfy { !($0 is AccessRebindStripView) })
+}
+@MainActor @Test(.timeLimit(.minutes(3))) func t231StripPerWindowDismissAndUndoRetiresLaterGrantAuthority() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(), other = f.controller(); defer { c.window?.close(); other.window?.close() }
+    try await t231Lose(f, c)
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    try await f.ready(c, folder: f.b)
+    let strip = try t231Strip(c)
+    #expect(try recoveryShell(other).mainContent.subviews.allSatisfy { !($0 is AccessRebindStripView) })
+    let later = f.base.appendingPathComponent("Later", isDirectory: true)
+    try FileManager.default.copyItem(at: f.b, to: later)
+    other.openGrantedFolder(later)
+    try await f.ready(other, folder: later)
+    let id = try #require(other.session.folderScan?.snapshot?.version.rootID)
+    let permit = try #require(f.services.monitor.state.permit(for: id))
+    strip.undoButton.performClick(nil)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA }
+    #expect(!permit.isCurrent)
+    #expect(other.waitingAccessPosition?.rootID == id && !other.hasImage)
+    #expect(await f.services.files.records().allSatisfy { $0.id != id })
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func t231RebindFailureAndUndoFailureRemainRecoverable() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    try await t231Lose(f, c)
+    let marker = f.base.appendingPathComponent("recent.json.schema")
+    let originalMarker = try? Data(contentsOf: marker)
+    try Data("{\"schemaVersion\":999}".utf8).write(to: marker)
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    // Await the actual FileAccess actor's completion, then the controller's main actor continuation.
+    await Task.yield()
+    try await recoveryWait { recoveryPage(c)?.buttons.allSatisfy(\.isEnabled) == true }
+    #expect(c.waitingAccessPosition?.rootID == f.rootA)
+    #expect(await f.services.files.records().contains { $0.id == f.rootA })
+    #expect(try recoveryShell(c).mainContent.subviews.allSatisfy { !($0 is AccessRebindStripView) })
+    if let originalMarker { try originalMarker.write(to: marker) }
+    else { try FileManager.default.removeItem(at: marker) }
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    try await f.ready(c, folder: f.b)
+    let strip = try t231Strip(c)
+    let rootsMarker = f.base.appendingPathComponent("roots.json.schema")
+    let rootMarker = try? Data(contentsOf: rootsMarker)
+    try Data("{\"schemaVersion\":999}".utf8).write(to: rootsMarker)
+    strip.undoButton.performClick(nil)
+    try await recoveryWait { strip.undoButton.isEnabled }
+    #expect(c.waitingAccessPosition == nil)
+    let reboundRecords = await f.services.files.records()
+    #expect(strip.superview != nil && reboundRecords.allSatisfy { $0.id != f.rootA })
+    if let rootMarker { try rootMarker.write(to: rootsMarker) }
+    else { try FileManager.default.removeItem(at: rootsMarker) }
+    strip.undoButton.performClick(nil)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA }
+    #expect(c.accessLossCause == .notFound && strip.superview == nil)
+}
+@MainActor @Test(.timeLimit(.minutes(3))) func t231StripSurvivesResizeAndCloseRetiresControls() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    try await t231Lose(f, c)
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    try await f.ready(c, folder: f.b)
+    let strip = try t231Strip(c)
+    c.window?.setContentSize(NSSize(width: 800, height: 680))
+    c.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+    #expect(try t231Strip(c) === strip)
+    #expect(strip.frame.minY >= (try recoveryGrid(c)).frame.maxY)
+    #expect(c.window?.makeFirstResponder(strip.undoButton) == true)
+    c.window?.selectNextKeyView(strip.undoButton)
+    #expect(c.window?.firstResponder === strip.closeButton)
+    #expect(c.window?.makeFirstResponder(strip.closeButton) == true)
+    strip.closeButton.performClick(nil)
+    #expect(strip.superview == nil && !strip.undoButton.isEnabled && !strip.closeButton.isEnabled)
+    #expect(strip.undoButton.nextKeyView == nil && strip.closeButton.nextKeyView == nil)
+    #expect(c.window?.firstResponder !== strip.closeButton)
+    #expect(try recoveryShell(c).sortButton.nextKeyView !== strip.undoButton)
+    #expect(await f.services.files.records().allSatisfy { $0.id != f.rootA })
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func t231NotFoundRealShellFramesAndLanguages() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    for size in [NSSize(width: 1280, height: 800), NSSize(width: 800, height: 680)] {
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            for chinese in [false, true] {
+                let c = f.controller(); defer { c.window?.close() }
+                f.bookmarks.fail(f.a, false)
+                await f.services.monitor.reauthorize(f.rootA)
+                // Open the original authorized root, rather than creating a child Access Root.
+                c.browseRecoveredFolder(f.childOne, rootID: f.rootA)
+                try await f.ready(c, folder: f.childOne)
+                _ = f.services.monitor.state.reportRootFailure(f.rootA, cause: .notFound, from: f.services.monitor.state.stamp(for: f.rootA))
+                try await recoveryWait { recoveryPage(c) != nil }
+                c.window?.setContentSize(size)
+                c.window?.appearance = NSAppearance(named: appearance)
+                c.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+                let page = try #require(recoveryPage(c))
+                page.display(cause: .notFound, text: .init(title: chinese ? "找不到" : "Not Found",
+                    detail: chinese ? "picsee 找不到“RootA”。请在新位置选择，或选择其他文件夹以继续。" : "picsee can’t find “RootA”. Choose its location, or choose another folder to continue.", waiting: "",
+                    reselect: chinese ? "在新位置选择…" : "Choose at New Location…", chooseOther: chinese ? "选择其他文件夹…" : "Choose Another Folder…"))
+                page.layoutSubtreeIfNeeded()
+                let shell = try recoveryShell(c)
+                #expect(page.frame == shell.mainContent.bounds)
+                // #230 page26 .empty-state: centered block +19px visual offset.
+                let union = [page.iconView, page.titleLabel, page.detailLabel, page.reselectButton, page.chooseOtherButton].reduce(NSRect.null) { $0.union($1.frame) }
+                #expect(abs(union.midY - (page.bounds.midY + 19)) < 1)
+                #expect(page.bounds.contains(union))
+                // .empty-state h2 margin-top:18; p margin-top:9; .mock-actions margin-top:18/gap:16.
+                #expect(page.iconView.frame.minY - page.titleLabel.frame.maxY == 18)
+                #expect(page.titleLabel.frame.minY - page.detailLabel.frame.maxY == 9)
+                #expect(page.detailLabel.frame.minY - page.reselectButton.frame.maxY == 18)
+                #expect(page.chooseOtherButton.frame.minX - page.reselectButton.frame.maxX == 16)
+                // .recovery-state p max-width:460; icon32; h2 16 medium; p13/22.1.
+                #expect(page.detailLabel.frame.width == 460 && page.iconView.frame.width == 32)
+                #expect(page.titleLabel.font == NSFont.systemFont(ofSize: 16, weight: .medium))
+                let paragraph = try #require(page.detailLabel.attributedStringValue.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)
+                #expect(paragraph.minimumLineHeight == 22.1 && paragraph.maximumLineHeight == 22.1)
+                #expect(page.titleLabel.textColor == DesignColor.textPrimary.nsColor)
+                #expect(page.waitingLabel.superview == nil && page.buttons.count == 2)
+            }
+        }
+    }
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func t231StaleSelectionNavigationAndClosedWindowCannotCommit() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    try await t231Lose(f, c)
+    let later = f.base.appendingPathComponent("Later", isDirectory: true)
+    try FileManager.default.copyItem(at: f.b, to: later)
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    c.openGrantedFolder(later)
+    try await f.ready(c, folder: later)
+    #expect(await f.services.files.records().contains { $0.id == f.rootA })
+    #expect(c.session.folderScan?.snapshot?.version.folder == later)
+    #expect(try recoveryShell(c).mainContent.subviews.allSatisfy { !($0 is AccessRebindStripView) })
+    let second = f.controller()
+    second.requestFolderReconnection(rootID: f.rootA, lastKnownFolder: f.childOne, displayName: "RootA")
+    try await recoveryWait { recoveryPage(second) != nil }
+    second.completeAccessFolderSelection(f.b, reselect: true, replacing: true)
+    second.window?.close()
+    await Task.yield()
+    #expect(await f.services.files.records().contains { $0.id == f.rootA })
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func t231MergeKeepsReadableDestinationWindowAuthority() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(), other = f.controller(); defer { c.window?.close(); other.window?.close() }
+    other.browseRecoveredFolder(f.b, rootID: f.rootB)
+    try await f.ready(other, folder: f.b)
+    let context = try await f.services.monitor.readContext(for: f.rootB)
+    try await t231Lose(f, c)
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    try await f.ready(c, folder: f.b)
+    #expect(context.permit.isCurrent)
+    #expect(f.services.monitor.state.mayDeliver(context.stamp))
+    #expect(other.waitingAccessPosition == nil && other.session.folderScan?.snapshot?.version.rootID == f.rootB)
+}
+@MainActor @Test(.timeLimit(.minutes(3))) func t231ExplicitTrashGrantAdmitsButAutomaticCheckRejects() async throws {
+    _ = NSApplication.shared
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let folder = base.appendingPathComponent("ExplicitTrash", isDirectory: true)
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    var trashed: NSURL?
+    try fm.trashItem(at: folder, resultingItemURL: &trashed)
+    let selected = try #require(trashed as URL?)
+    defer { try? fm.removeItem(at: selected) }
+    let boundary = RecoveryBookmarks()
+    let files = try FileAccess(scope: boundary, bookmarks: boundary, store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "T231-AppTrash")
+    let services = AccessServices(files: files, recent: RecentFolderStore(url: base.appendingPathComponent("recents.json")), browser: FolderBrowser(),
+        watch: WatchHub(access: files, source: RecoveryWatchSource(), scheduler: DispatchWatchScheduler()), mounts: RecoveryMounts(), selectionScope: boundary)
+    let id = try await services.grant(selected)
+    #expect(services.monitor.state.snapshot(for: id)?.availability == .readable)
+    let lease = try await files.acquire(.root(id, file: selected))
+    #expect(lease.url.standardizedFileURL == selected.standardizedFileURL)
+    await files.release(lease)
+    await services.monitor.reauthorize(id)
+    #expect(services.monitor.state.snapshot(for: id)?.availability == .lost(.notFound))
+    #expect(services.monitor.state.permit(for: id) == nil)
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func t231CommittedDestinationReadFailureKeepsUndo() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close(); f.bookmarks.fail(f.b, false) }
+    try await t231Lose(f, c)
+    await f.mounts.pauseEnumeration()
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    try await recoveryWaitAsync { await f.mounts.paused }
+    // Persistence has committed; a subsequent reader failure cannot erase Undo.
+    #expect(await f.services.files.records().allSatisfy { $0.id != f.rootA })
+    f.bookmarks.fail(f.b, true)
+    await f.mounts.release()
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootB }
+    let strip = try t231Strip(c)
+    #expect(strip.undoButton.isEnabled && !c.hasImage)
+    strip.undoButton.performClick(nil)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA }
+    #expect(c.accessLossCause == .notFound)
+    #expect(await f.services.files.records().contains { $0.id == f.rootA })
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func t231ExplicitTrashRebindOpensGridThenForegroundLosesAndUndoRestores() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    try await t231Lose(f, c)
+    let folder = f.base.appendingPathComponent("Explicit-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.copyItem(at: f.b, to: folder)
+    var trashed: NSURL?
+    try FileManager.default.trashItem(at: folder, resultingItemURL: &trashed)
+    let selected = try #require(trashed as URL?)
+    defer { try? FileManager.default.removeItem(at: selected) }
+    c.completeAccessFolderSelection(selected, reselect: true)
+    try await recoveryWait { c.session.folderScan?.snapshot?.isComplete == true || (c.waitingAccessPosition != nil && c.waitingAccessPosition?.rootID != f.rootA) }
+    #expect(c.waitingAccessPosition == nil, "explicit selected Trash should open; cause=\(String(describing: c.accessLossCause))")
+    let snapshot = try #require(c.session.folderScan?.snapshot)
+    #expect(snapshot.version.folder.path == selected.path)
+    #expect(try recoveryGrid(c).isHiddenOrHasHiddenAncestor == false)
+    print("t231 explicit-trash stage=grid actualDirectory=\(snapshot.version.folder.hasDirectoryPath) selectedDirectory=\(selected.hasDirectoryPath)")
+    let id = try #require(c.session.folderScan?.snapshot?.version.rootID)
+    let strip = try t231Strip(c)
+    #expect(c.waitingAccessPosition == nil && !c.hasImage)
+    #expect(try recoveryGrid(c).displayedItemIDs.count == 1)
+    #expect(f.services.monitor.state.snapshot(for: id)?.availability == .readable)
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApplication.shared)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == id }
+    print("t231 explicit-trash stage=foregroundLost")
+    #expect(c.accessLossCause == .notFound && !c.hasImage && c.inspector.name == nil)
+    #expect(strip.superview != nil && strip.undoButton.isEnabled)
+    #expect(c.window?.makeFirstResponder(strip.closeButton) == true)
+    strip.undoButton.performClick(nil)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA }
+    print("t231 explicit-trash stage=undo")
+    #expect(c.accessLossCause == .notFound)
+    #expect(await f.services.files.records().contains { $0.id == f.rootA })
+    #expect(strip.superview == nil)
+}

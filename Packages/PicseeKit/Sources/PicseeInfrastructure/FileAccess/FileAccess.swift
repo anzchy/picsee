@@ -663,6 +663,9 @@ public actor FileAccess: AccessLeasing {
         let current: URL
         do { current = try bookmarks.resolve(record.bookmark).url }
         catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
+        // This is automatic admission (recent/foreground), even when an explicit
+        // selection currently authorizes readers of this Trash directory.
+        guard !Self.isTrashed(current) else { throw FileAccessError.needsReconnection(id) }
         // A cached path may be obsolete after a move. Probe the resolved root itself;
         // acquire still validates scope and refreshes stale bookmarks as usual.
         let lease = try acquire(.root(id, file: current))

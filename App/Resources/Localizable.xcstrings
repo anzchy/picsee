@@ -1,6 +1,11 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Not Found":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"Not Found"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"找不到"}}}},
+    "Choose at New Location…":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"Choose at New Location…"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"在新位置选择…"}}}},
+    "picsee can’t find “%@”. Choose its location, or choose another folder to continue.":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"picsee can’t find “%@”. Choose its location, or choose another folder to continue."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"picsee 找不到“%@”。请在新位置选择，或选择其他文件夹以继续。"}}}},
+    "Updated to %@":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"Updated to %@"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已更新到 %@"}}}},
+    "Dismiss Location Update":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"Dismiss Location Update"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"关闭位置更新提示"}}}},
     "Access Has Expired": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Access Has Expired"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"授权失效"}}}},
     "Access has expired. Choose this folder again to restore access; picsee will return to where you left off.": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Access has expired. Choose this folder again to restore access; picsee will return to where you left off."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"访问权限已失效。重新选择这个文件夹即可恢复，picsee 会回到你刚才的位置。"}}}},
     "Coming Soon": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Coming Soon"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "即将推出"}}}},

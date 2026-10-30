@@ -440,3 +440,20 @@ func t231RebindUndoRetiresProofForRootGrantedAfterSnapshot() async throws {
     await f.access.release(held)
     #expect(f.scope.balanced)
 }
+
+@Test(.timeLimit(.minutes(2)))
+func t231ExplicitTrashStillRefusesAutomaticRootProbe() async throws {
+    let f = try RebindFixture(); defer { f.remove() }
+    let access = try FileAccess(scope: f.scope, bookmarks: SystemSecurityScope(), store: f.roots, buildSHA: "automatic-trash")
+    var trashed: NSURL?
+    try FileManager.default.trashItem(at: f.chosen, resultingItemURL: &trashed)
+    let selected = try #require(trashed as URL?)
+    defer { try? FileManager.default.removeItem(at: selected) }
+    let id = try await access.grant(folder: selected)
+    #expect(try await access.verifyExplicitSelection(id).standardizedFileURL == selected.standardizedFileURL)
+    await #expect(throws: FileAccessError.needsReconnection(id)) { try await access.probeRootURL(id) }
+    // Automatic rejection never consumes the user's still-valid explicit reader authority.
+    let lease = try await access.acquire(.root(id, file: selected))
+    #expect(lease.rootID == id)
+    await access.release(lease)
+}

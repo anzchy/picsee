@@ -51,6 +51,8 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     /// At most one real root check runs per root and access counter.
     private var rootChecks: [AccessRootID: (counter: UInt64?, task: Task<AccessLossCause?, Never>)] = [:]
     private var recheck: Task<Void, Never>?
+    private var trackedRoots: Set<AccessRootID> = []
+    private var admittedURLs: [AccessRootID: URL] = [:]
     func beginWaiting(_ rootID: AccessRootID, window: ObjectIdentifier) {
         waitingWindows[rootID, default: []].insert(window)
     }
@@ -153,6 +155,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         await registerEntry(id)
     }
     private func registerEntry(_ id: AccessRootID) async {
+        trackedRoots.insert(id)
         guard state.snapshot(for: id) == nil else { return }
         let volume = await files.savedVolume(id)
         if let uuid = volume?.uuid, let name = volume?.name { volumeNames[uuid] = name }
@@ -162,6 +165,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         else { mounted = true }
         guard state.snapshot(for: id) == nil else { return }
         state.register(id, volumeUUID: volume?.uuid)
+        admittedURLs[id] = root?.standardizedFileURL.resolvingSymlinksInPath()
         if let uuid = volume?.uuid, !mounted {
             state.diskUnmounted(volumeUUID: uuid)
         } else if root == nil, let port {
@@ -174,7 +178,8 @@ private final class AccessMonitorNotification: @unchecked Sendable {
             }
         }
     }
-    func reauthorize(_ id: AccessRootID) async {
+    func reauthorize(_ id: AccessRootID, explicitSelection: Bool = false, preservingReadableAuthority: Bool = false) async {
+        trackedRoots.insert(id)
         cancelRecovery(id)
         let request = UUID()
         reauthorizationRequests[id] = request
@@ -195,7 +200,11 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         let counter = state.snapshot(for: id)?.counter
         let verificationRevision = volume.uuid.flatMap { latestMountEvents[$0]?.revision }
         let failure: AccessLossCause?
-        if volume.uuid != nil, let port, let root = grant.rootURL {
+        if explicitSelection {
+            do { _ = try await files.verifyExplicitSelection(id); failure = nil }
+            catch { failure = .unknown }
+            guard ownsReauthorization(id, request: request, counter: counter) else { return }
+        } else if volume.uuid != nil, let port, let root = grant.rootURL {
             let result = await files.verifySavedRootForRecovery(id, folder: root, mounts: port)
             guard ownsReauthorization(id, request: request, counter: counter) else { return }
             guard result.bookmarkVolume.uuid == volume.uuid else {
@@ -224,11 +233,17 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         }
         if let failure { markUnavailable(id, volumeUUID: volume.uuid, cause: failure); return }
         do {
+            if preservingReadableAuthority, state.snapshot(for: id)?.availability == .readable,
+               let root = grant.rootURL, admittedURLs[id] == root.standardizedFileURL.resolvingSymlinksInPath() {
+                try grant.admitting { }
+                return
+            }
             // No suspension separates this generation proof from the state
             // mutation. State observers run after the grant fence is released.
             try state.reauthorize(id, volumeUUID: volume.uuid, admitting: { update in
                 try grant.admitting(update)
             })
+            admittedURLs[id] = grant.rootURL?.standardizedFileURL.resolvingSymlinksInPath()
         } catch {
             guard ownsReauthorization(id, request: request, counter: counter) else { return }
             markUnavailable(id, volumeUUID: volume.uuid, cause: .unknown)
@@ -477,6 +492,36 @@ private final class AccessMonitorNotification: @unchecked Sendable {
     }
     private func ownsRecovery(_ attempt: AccessRecoveryAttempt, request: UUID) -> Bool {
         !Task.isCancelled && recoveryRequests[attempt.rootID] == request && state.recoveryAttempt(for: attempt.rootID) == attempt
+    }
+    /// Replacement must retire automatic recovery before its persistent grant changes.
+    func beginReplacement(_ id: AccessRootID) {
+        cancelRecovery(id)
+        reauthorizationRequests.removeValue(forKey: id)
+    }
+    /// Undo may remove grants created by another window after the snapshot. Notify
+    /// those windows before forgetting authority, so pixels and AX clear together.
+    func reconcilePersistedRoots() async {
+        let captured = Dictionary(uniqueKeysWithValues: trackedRoots.compactMap { id in
+            state.snapshot(for: id).map { (id, $0) }
+        })
+        let persisted = Set(await files.records().map(\.id))
+        for (id, snapshot) in captured where !persisted.contains(id) && state.snapshot(for: id) == snapshot {
+            beginReplacement(id)
+            if snapshot.availability == .readable {
+                _ = state.reportRootFailure(id, cause: .notFound, from: state.stamp(for: id))
+            }
+            state.forget(id)
+            trackedRoots.remove(id)
+            admittedURLs.removeValue(forKey: id)
+        }
+    }
+    /// Restoring storage restores no reader authority from the previous episode.
+    func restoreLostRoot(_ id: AccessRootID, volumeUUID: String?, cause: AccessLossCause) {
+        beginReplacement(id)
+        trackedRoots.insert(id)
+        state.forget(id)
+        state.register(id, volumeUUID: volumeUUID)
+        _ = state.reportRootFailure(id, cause: cause, from: state.stamp(for: id))
     }
     private func cancelRecovery(_ id: AccessRootID) {
         recoveryTasks.removeValue(forKey: id)?.cancel()
