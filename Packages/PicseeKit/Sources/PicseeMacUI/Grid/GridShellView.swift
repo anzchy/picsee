@@ -68,6 +68,7 @@ import PicseeCore
     private let divider = GridSidebarDivider()
     private let folderName = NSTextField(labelWithString: "")
     public let folderTree = GridSidebarTreeView(frame: .zero)
+    private let sidebarRule = NSView()
     private let footerRule = NSView()
     private let emptyState = NSView()
     private let emptyIcon = NSImageView()
@@ -164,7 +165,10 @@ import PicseeCore
         recentsButton.alignment = .left
         sidebar.addSubview(folderName)
         sidebar.addSubview(folderTree)
+        sidebar.addSubview(sidebarRule)
         sidebar.addSubview(divider)
+        sidebarRule.setAccessibilityIdentifier("grid.sidebar.divider")
+        sidebarRule.wantsLayer = true
         sidebar.setAccessibilityIdentifier("grid.sidebar")
         footer.setAccessibilityIdentifier("grid.footer")
         mainContent.setAccessibilityIdentifier("grid.main")
@@ -215,6 +219,7 @@ import PicseeCore
     private func refreshAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             sidebar.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
+            sidebarRule.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
             footer.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
             footerRule.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
         }
@@ -355,6 +360,8 @@ import PicseeCore
         folderTree.frame = NSRect(x: 0, y: 0, width: sidebar.bounds.width,
                                   height: max(0, recentsButton.frame.minY - 4))
         folderTree.viewportWidth = bounds.width
+        sidebarRule.frame = NSRect(x: max(0, sidebar.bounds.width - 1), y: 0, width: 1,
+                                   height: sidebar.bounds.height)
         divider.frame = NSRect(x: max(0, sidebar.bounds.width - 5), y: 0, width: 5,
                                height: sidebar.bounds.height)
         divider.setAccessibilityValue(NSNumber(value: Double(main.minX)))

@@ -117,6 +117,9 @@ public struct GridSidebarFolder: Sendable, Equatable {
     public var onSelectFolder: ((URL) -> Void)?
     private let scroll = NSScrollView()
     private let document = NSView()
+    private let addFolderButton = NSButton()
+    private let addFolderPlusButton = NSButton()
+    private let addFolderBorder = CAShapeLayer()
     private var parent: GridSidebarFolder?
     private var currentFolder: GridSidebarFolder?
     public private(set) var children: [GridSidebarFolder] = []
@@ -137,6 +140,30 @@ public struct GridSidebarFolder: Sendable, Equatable {
         guide.wantsLayer = true
         guide.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
         guide.isHidden = true
+        addFolderPlusButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)
+        addFolderPlusButton.isBordered = false
+        addFolderPlusButton.isEnabled = false
+        addFolderPlusButton.refusesFirstResponder = true
+        addFolderPlusButton.setAccessibilityIdentifier("grid.sidebar.add-folder-plus")
+        document.addSubview(addFolderPlusButton)
+        addFolderButton.title = String(localized: "Add Folder")
+        addFolderButton.font = .systemFont(ofSize: 12)
+        addFolderButton.attributedTitle = NSAttributedString(string: addFolderButton.title, attributes: [
+            .font: addFolderButton.font!, .foregroundColor: DesignColor.textSecondary.nsColor,
+        ])
+        addFolderButton.isBordered = false
+        addFolderButton.isEnabled = false
+        addFolderButton.refusesFirstResponder = true
+        addFolderButton.setAccessibilityIdentifier("grid.sidebar.add-folder")
+        addFolderButton.setAccessibilityLabel("\(addFolderButton.title) · \(String(localized: "Coming Soon"))")
+        addFolderButton.wantsLayer = true
+        addFolderButton.layer?.cornerRadius = DesignMetrics.radii["control"]!
+        addFolderBorder.fillColor = NSColor.clear.cgColor
+        addFolderBorder.strokeColor = DesignColor.divider.nsColor.cgColor
+        addFolderBorder.lineWidth = 1
+        addFolderBorder.lineDashPattern = [4, 3]
+        addFolderButton.layer?.addSublayer(addFolderBorder)
+        document.addSubview(addFolderButton)
     }
     public required init?(coder: NSCoder) { nil }
     public override func viewDidChangeEffectiveAppearance() {
@@ -144,6 +171,8 @@ public struct GridSidebarFolder: Sendable, Equatable {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             heading.textColor = DesignColor.textSecondary.nsColor
             guide.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
+            addFolderBorder.strokeColor = DesignColor.divider.nsColor.cgColor
+            addFolderPlusButton.contentTintColor = DesignColor.textSecondary.nsColor
         }
     }
     public func show(current: GridSidebarFolder, parent: GridSidebarFolder?, children: [GridSidebarFolder]) {
@@ -187,22 +216,32 @@ public struct GridSidebarFolder: Sendable, Equatable {
         super.layout()
         scroll.frame = bounds
         let rowHeight: CGFloat = 32
-        let rowGap: CGFloat = 3
         let compact = viewportWidth <= 720
         let headerTop: CGFloat = compact ? 44 : 50 // sidebar padding + folder heading 28pt margin
         let headerHeight: CGFloat = 14
         let firstRowTop = headerTop + headerHeight + 8
-        let documentHeight = max(bounds.height, firstRowTop + CGFloat(rows.count) * (rowHeight + rowGap) + 16)
+        func gapBefore(_ index: Int) -> CGFloat {
+            index > 0 && rows[index].depth > rows[index - 1].depth ? 3 : 0
+        }
+        let rowsHeight = rows.indices.reduce(CGFloat(0)) { $0 + rowHeight + gapBefore($1) }
+        let documentHeight = max(bounds.height, firstRowTop + rowsHeight + 12 + 30 + 16)
         document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: documentHeight)
         heading.frame = NSRect(x: compact ? 20 : 22, y: documentHeight - headerTop - headerHeight,
-            width: max(0, bounds.width - 44), height: headerHeight)
+            width: max(0, bounds.width - 66), height: headerHeight)
+        addFolderPlusButton.frame = NSRect(x: max(0, bounds.width - 38), y: heading.frame.minY - 3,
+            width: 20, height: 20)
+        var rowY = documentHeight - firstRowTop
         for (index, row) in rows.enumerated() {
             row.compact = compact
             let x: CGFloat = 12 + CGFloat(row.depth) * (compact ? 8 : 19)
-            row.frame = NSRect(x: x, y: documentHeight - firstRowTop - CGFloat(index + 1) * rowHeight - CGFloat(index) * rowGap,
-                width: max(0, bounds.width - x - 12), height: rowHeight)
+            rowY -= gapBefore(index) + rowHeight
+            row.frame = NSRect(x: x, y: rowY, width: max(0, bounds.width - x - 12), height: rowHeight)
             row.layoutSubtreeIfNeeded()
         }
+        addFolderButton.frame = NSRect(x: 4, y: rowY - 12 - 30, width: max(0, bounds.width - 8), height: 30)
+        addFolderBorder.frame = addFolderButton.bounds
+        addFolderBorder.path = NSBezierPath(roundedRect: addFolderButton.bounds.insetBy(dx: 0.5, dy: 0.5),
+            xRadius: DesignMetrics.radii["control"]!, yRadius: DesignMetrics.radii["control"]!).cgPath
         if let firstChild = rows.firstIndex(where: { $0.depth > (parent == nil ? 0 : 1) }) {
             guide.isHidden = false
             let lastRowY = rows[rows.count - 1].frame.minY
