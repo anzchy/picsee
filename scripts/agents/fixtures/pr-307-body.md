@@ -52,4 +52,3 @@ ACCESS-04 限制 drops 「侧栏失效标记待 #232」 and says what the automa
 Ledger-Gardener: CLEAN 4a13df5..7ac5e01 (0 applied, 0 proposed)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
