@@ -27,6 +27,7 @@ enum SettingsSection: String, CaseIterable {
     private let confirmClear: (NSWindow, @escaping (Bool) -> Void) -> Void
     private let openURL: (URL) -> Void
     private let aboutInfoDictionary: [String: Any]?
+    private let aboutLocalizedString: (String) -> String
     private var panes: [SettingsSection: NSView] = [:]
     private var sidebarButtons: [SettingsSection: NSButton] = [:]
     private var appearanceButtons: [DisplayAppearance: NSButton] = [:]
@@ -40,7 +41,8 @@ enum SettingsSection: String, CaseIterable {
          preferencesStore: any DisplayPreferencesStore, defaults: UserDefaults,
          confirmClear: ((NSWindow, @escaping (Bool) -> Void) -> Void)? = nil,
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
-         aboutInfoDictionary: [String: Any]? = nil) {
+         aboutInfoDictionary: [String: Any]? = nil,
+         aboutLocalizedString: @escaping (String) -> String = { String(localized: String.LocalizationValue($0)) }) {
         self.appearanceAdapter = appearanceAdapter
         self.preferencesStore = preferencesStore
         self.defaults = defaults
@@ -49,6 +51,7 @@ enum SettingsSection: String, CaseIterable {
         self.confirmClear = confirmClear ?? Self.presentClearConfirmation
         self.openURL = openURL
         self.aboutInfoDictionary = aboutInfoDictionary
+        self.aboutLocalizedString = aboutLocalizedString
         self.window = SettingsPanelNativeWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 482),
                                                 styleMask: [.titled, .closable, .miniaturizable],
                                                 backing: .buffered, defer: false)
@@ -270,10 +273,13 @@ enum SettingsSection: String, CaseIterable {
         versionDescription(info: Bundle.main.infoDictionary ?? [:])
     }
 
-    private static func versionDescription(info: [String: Any]) -> String {
-        let version = info["CFBundleShortVersionString"] as? String ?? String(localized: "Unknown")
-        let build = info["CFBundleVersion"] as? String ?? String(localized: "Unknown")
-        return String(format: String(localized: "%@ (build %@)"), version, build)
+    private static func versionDescription(
+        info: [String: Any],
+        localized: @escaping (String) -> String = { String(localized: String.LocalizationValue($0)) }
+    ) -> String {
+        let version = info["CFBundleShortVersionString"] as? String ?? localized("Unknown")
+        let build = info["CFBundleVersion"] as? String ?? localized("Unknown")
+        return String(format: localized("%@ (build %@)"), version, build)
     }
 
     private func buildUpdates() {
@@ -312,18 +318,19 @@ enum SettingsSection: String, CaseIterable {
         name.frame = NSRect(x: 108, y: 406, width: 380, height: 20)
         pane.addSubview(name)
         let info = aboutInfoDictionary ?? Bundle.main.infoDictionary ?? [:]
-        let version = label(String(localized: "Version") + " " + Self.versionDescription(info: info), role: "uiSmall", muted: true)
+        let description = Self.versionDescription(info: info, localized: aboutLocalizedString)
+        let version = label(aboutLocalizedString("Version") + " " + description, role: "uiSmall", muted: true)
         version.textColor = DesignColor.textSecondary.nsColor
         version.frame = NSRect(x: 108, y: 383, width: 390, height: 20)
         pane.addSubview(version)
-        let privacy = label(String(localized: "A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."), role: "uiSmall", muted: true)
+        let privacy = label(aboutLocalizedString("A macOS image viewer for files on your disk. picsee collects no data and uploads no images; the sandbox reads only folders you authorize."), role: "uiSmall", muted: true)
         privacy.textColor = DesignColor.textSecondary.nsColor
         privacy.frame = NSRect(x: 108, y: 319, width: 446, height: 54)
         pane.addSubview(privacy)
         let links: [(title: String, entry: EntryPoint)] = [
-            (String(localized: "Report a Problem…"), .reportIssue),
-            (String(localized: "Privacy Note"), .settingsAboutPrivacyNote),
-            (String(localized: "Source Code"), .settingsAboutSourceCode),
+            (aboutLocalizedString("Report a Problem…"), .reportIssue),
+            (aboutLocalizedString("Privacy Note"), .settingsAboutPrivacyNote),
+            (aboutLocalizedString("Source Code"), .settingsAboutSourceCode),
         ]
         var linkX: CGFloat = 108
         for (index, link) in links.enumerated() {
@@ -344,7 +351,7 @@ enum SettingsSection: String, CaseIterable {
             pane.addSubview(button)
             linkX += width + 14
         }
-        let licences = label(String(localized: "picsee is released under the MIT License.\nThird party: Sparkle (MIT) · Welcome sample images from Unsplash (Unsplash License)."), role: "uiSmall", muted: true)
+        let licences = label(aboutLocalizedString("picsee is released under the MIT License.\nThird party: Sparkle (MIT) · Welcome sample images from Unsplash (Unsplash License)."), role: "uiSmall", muted: true)
         licences.textColor = DesignColor.textSecondary.nsColor
         licences.frame = NSRect(x: 108, y: 219, width: 446, height: 52)
         pane.addSubview(licences)
