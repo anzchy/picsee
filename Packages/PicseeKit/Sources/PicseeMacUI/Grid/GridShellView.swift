@@ -56,6 +56,9 @@ import PicseeCore
     public var onOpenSortMenu: ((NSButton, NSMenu) -> Void)?
     public var sortConditions: (() -> FolderViewConditions)?
     public var onMainFrameChange: ((NSRect) -> Void)?
+    /// Runs after every layout pass, which resets each main-content view to the full main bounds; owners that carve
+    /// the main area (the rebind strip) re-place their views here.
+    public var onMainContentLayout: (() -> Void)?
     public var onOpenRecent: ((RecentFolder) -> Void)?
     public var onDropFolders: (([URL]) -> Void)?
     public weak var session: ViewerSession?
@@ -450,6 +453,7 @@ import PicseeCore
             lastMainFrame = main
             onMainFrameChange?(main)
         }
+        onMainContentLayout?()
     }
     /// The width an NSTextField needs to draw its string untruncated: its text plus the cell's padding.
     private static func cellWidth(_ field: NSTextField) -> CGFloat {

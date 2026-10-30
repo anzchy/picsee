@@ -260,3 +260,30 @@ import PicseeInfrastructure
     #expect(grid.frame == shell.mainContent.bounds)
     #expect(grid.frame.width == 516)
 }
+
+/// PR #304 CI: footer status updates re-run the shell's layout without moving the main frame. The shell resets every
+/// main-content view on that pass, so it must tell the owner each time, after the reset, or a carved strip is lost.
+@Test @MainActor func gridShellReportsEveryMainContentLayoutAfterResettingContentFrames() throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 1280, height: 772),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    let carved = NSView()
+    shell.mainContent.addSubview(carved)
+    var frameChanges = 0, contentLayouts: [NSRect] = []
+    shell.onMainFrameChange = { _ in frameChanges += 1 }
+    shell.onMainContentLayout = {
+        contentLayouts.append(carved.frame)
+        carved.frame = NSRect(x: 0, y: shell.mainContent.bounds.maxY - 44, width: shell.mainContent.bounds.width, height: 44)
+    }
+    shell.layoutSubtreeIfNeeded()
+    #expect(frameChanges == 1 && contentLayouts == [shell.mainContent.bounds])
+    for update in [{ shell.setCurrentFile("DSC_0001.jpg") }, { shell.setSearchStatus(resultCount: 3, term: "") },
+                   { shell.setReadingStatus(true) }] {
+        update()
+        shell.layoutSubtreeIfNeeded()
+    }
+    #expect(frameChanges == 1, "the main frame never moved")
+    #expect(contentLayouts.count == 4)
+    #expect(contentLayouts.allSatisfy { $0 == shell.mainContent.bounds }, "each report follows the content reset")
+    #expect(carved.frame == NSRect(x: 0, y: shell.mainContent.bounds.maxY - 44, width: shell.mainContent.bounds.width, height: 44))
+}
