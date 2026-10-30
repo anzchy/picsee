@@ -1,14 +1,128 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkUIParity } from './ui-parity-pr-body-lint.mjs';
+import { checkGates, checkUIParity } from './ui-parity-pr-body-lint.mjs';
 
 const uiFiles = ['App/UI/InspectorPlaceholder.swift', 'App/Commands/CommandMenu.swift', 'Packages/PicseeKit/Sources/PicseeMacUI/States/ViewerStateHost.swift'];
 const table = '## UI-Parity\n\n| State | Design | Assertion | Status |\n|---|---|---|---|\n| Empty | abc | test | AUTO-PASS |\n';
+const head = '3de39c6012345678901234567890123456789012';
+const oldHead = 'a'.repeat(40);
+const codeSame = 'b'.repeat(40);
+const gatesTable = rows => `## Gates\n\n| Lane | Status | SHA | Source |\n|---|---|---|---|\n${rows.join('\n')}\n`;
+const completeGates = (currentHead = head) => {
+  const sha = currentHead.slice(0, 8);
+  return gatesTable([
+    `| package-tests | PASS | ${sha} | owner-gates swift=0 |`,
+    `| package-coverage | PASS | ${sha} | owner-gates lcov=0 |`,
+    `| app-tests | PASS | ${sha} | CI App tests |`,
+    `| unsigned-build | PASS | ${sha} | CI Walking skeleton |`,
+    `| node-tooling | PASS | ${sha} | owner-gates node=0 |`,
+    `| ledger | PASS | ${sha} | owner-gates ledger=0 |`,
+    `| diff-check | PASS | ${sha} | owner-gates diffcheck=0 |`,
+    '| audit | N/A | — | tooling-only change |',
+    '| device-smoke | N/A | — | no user-visible change |',
+  ]);
+};
+
+test('Gates accepts a complete table', () => {
+  assert.equal(checkGates(completeGates(), head).ok, true);
+});
+
+test('Gates rejects a missing table', () => {
+  const result = checkGates('## Summary\n\nNo gate evidence.\n', head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /missing ## Gates table/);
+});
+
+test('Gates rejects a missing app-tests lane', () => {
+  const body = completeGates().split('\n').filter(line => !line.startsWith('| app-tests |')).join('\n');
+  const result = checkGates(body, head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /missing app-tests/);
+});
+
+test('Gates rejects a duplicate lane', () => {
+  const result = checkGates(completeGates() + '| ledger | N/A | — | duplicate |\n', head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /duplicate ledger/);
+});
+
+test('Gates rejects an invalid status', () => {
+  const result = checkGates(completeGates().replace('| package-tests | PASS |', '| package-tests | UNKNOWN |'), head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /invalid status/);
+});
+
+test('Gates rejects PASS without a SHA', () => {
+  const result = checkGates(completeGates().replace(`| package-tests | PASS | ${head.slice(0, 8)} |`, '| package-tests | PASS | — |'), head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /package-tests.*SHA/);
+});
+
+test('Gates rejects N/A without a reason', () => {
+  const result = checkGates(completeGates().replace('| audit | N/A | — | tooling-only change |', '| audit | N/A | — | — |'), head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /audit.*reason/);
+});
+
+test('Gates rejects stale-head PASS without CODE same and accepts exact rebase evidence', () => {
+  const stale = completeGates().replace(`| package-tests | PASS | ${head.slice(0, 8)} |`, `| package-tests | PASS | ${oldHead} |`);
+  const rejected = checkGates(stale, head);
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.reason, /stale head/);
+  assert.equal(checkGates(stale.replace('owner-gates swift=0', `owner-gates swift=0; CODE same ${codeSame}`), head).ok, true);
+});
+
+test('Gates rejects any FAIL row', () => {
+  const result = checkGates(completeGates().replace('| node-tooling | PASS |', '| node-tooling | FAIL |'), head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /FAIL row/);
+});
+
+test('Gates accepts app-tests NOT RUN with a reason', () => {
+  const body = completeGates().replace(`| app-tests | PASS | ${head.slice(0, 8)} | CI App tests |`, '| app-tests | NOT RUN | — | manual CI run with app_tests=false |');
+  assert.equal(checkGates(body, head).ok, true);
+});
+
+test('Gates rejects Device-Smoke PASS when its row is N/A', () => {
+  const body = completeGates() + `\nDevice-Smoke: PASS ${head.slice(0, 8)} run=device — changed path\n`;
+  const result = checkGates(body, head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /Device-Smoke/);
+});
+
+test('Gates rejects a Device-Smoke SHA mismatch', () => {
+  const body = completeGates()
+    .replace('| device-smoke | N/A | — | no user-visible change |', `| device-smoke | PASS | ${head.slice(0, 8)} | device run |`)
+    + `\nDevice-Smoke: PASS ${head.slice(0, 7)} run=device — changed path\n`;
+  const result = checkGates(body, head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /Device-Smoke.*SHA/);
+});
+
+test('Gates rejects PR 307 historical prose and accepts its fail-closed transcription', () => {
+  const original = readFileSync(new URL('./fixtures/pr-307-body.md', import.meta.url), 'utf8');
+  const historicalHead = '7ac5e013e7946afc4a563893e08223066375b4f1';
+  const missing = checkGates(original, historicalHead);
+  assert.equal(missing.ok, false);
+  assert.match(missing.reason, /missing ## Gates table/);
+  const transcribed = gatesTable([
+    '| package-tests | NOT VERIFIED | 639588e7 | original reports 1319 tests on an older head; no CODE same evidence |',
+    '| package-coverage | NOT VERIFIED | 639588e7 | original reports 14550/14550 lines on an older head; no CODE same evidence |',
+    '| app-tests | NOT VERIFIED | 639588e7 | original reports 167 tests on an older head; no CODE same evidence |',
+    '| unsigned-build | NOT VERIFIED | 639588e7 | original reports CI unsigned build on an older head; no CODE same evidence |',
+    '| node-tooling | NOT VERIFIED | 639588e7 | original reports Node tests on an older head; no CODE same evidence |',
+    '| ledger | NOT VERIFIED | 639588e7 | original reports ledger check on an older head; no CODE same evidence |',
+    '| diff-check | NOT VERIFIED | 639588e7 | original reports diff check on an older head; no CODE same evidence |',
+    '| audit | NOT VERIFIED | 639588e7 | original audit confirmed an older head; no CODE same evidence |',
+    '| device-smoke | NOT VERIFIED | 639588e7 | original smoke passed on an older head; no CODE same evidence |',
+  ]);
+  assert.equal(checkGates(transcribed, historicalHead).ok, true);
+});
 
 test('UI changes require a populated UI-Parity table', () => {
   for (const file of uiFiles) {
@@ -52,6 +166,7 @@ test('deletion-only UI diff requires a table through the CLI', t => {
   const body = join(repo, 'body.md');
   writeFileSync(body, '## Summary\n\nDeleted old view.\n');
   const script = fileURLToPath(new URL('./ui-parity-pr-body-lint.mjs', import.meta.url));
+  const currentGates = () => completeGates(git('rev-parse', 'HEAD').trim());
   const result = spawnSync(process.execPath, [script, '--base', 'base', '--body-file', body],
     { cwd: repo, encoding: 'utf8' });
   assert.equal(result.status, 1, result.stdout + result.stderr);
@@ -61,23 +176,25 @@ test('deletion-only UI diff requires a table through the CLI', t => {
     { cwd: repo, encoding: 'utf8' });
   assert.equal(withoutSmoke.status, 1, withoutSmoke.stdout + withoutSmoke.stderr);
   assert.match(withoutSmoke.stderr, /Device-Smoke/);
-  writeFileSync(body, table + '\nDevice-Smoke: n/a — test only\n');
+  writeFileSync(body, table + '\n' + currentGates() + '\nDevice-Smoke: n/a — test only\n');
   const validExemption = spawnSync(process.execPath, [script, '--base', 'base', '--body-file', body],
     { cwd: repo, encoding: 'utf8' });
   assert.equal(validExemption.status, 0, validExemption.stdout + validExemption.stderr);
   for (const smoke of ['Device-Smoke: n/a —   ', 'Device-Smoke: FAIL abc1234 run=offline — broken path',
     'Device-Smoke: PASS abc1234 run=offline — path\nDevice-Smoke: FAIL abc1234 run=offline — broken path',
     'Device-Smoke: PASS abc1234 run=offline — path\nDevice-Smoke: n/a —   ']) {
-    writeFileSync(body, table + '\n' + smoke + '\n');
+    writeFileSync(body, table + '\n' + currentGates() + '\n' + smoke + '\n');
     const rejected = spawnSync(process.execPath, [script, '--base', 'base', '--body-file', body],
       { cwd: repo, encoding: 'utf8' });
     assert.equal(rejected.status, 1, smoke + rejected.stdout + rejected.stderr);
   }
-  writeFileSync(body, table + '\nDevice-Smoke: n/a — no user-visible behavior changed\n');
+  writeFileSync(body, table + '\n' + currentGates() + '\nDevice-Smoke: n/a — no user-visible behavior changed\n');
   const exempt = spawnSync(process.execPath, [script, '--base', 'base', '--body-file', body],
     { cwd: repo, encoding: 'utf8' });
   assert.equal(exempt.status, 0, exempt.stdout + exempt.stderr);
-  writeFileSync(body, table + '\nDevice-Smoke: NOT VERIFIED abc1234 run=offline — delegated device run pending\n');
+  const notVerifiedGates = currentGates().replace('| device-smoke | N/A | — | no user-visible change |',
+    '| device-smoke | NOT VERIFIED | abc1234 | delegated device run pending |');
+  writeFileSync(body, table + '\n' + notVerifiedGates + '\nDevice-Smoke: NOT VERIFIED abc1234 run=offline — delegated device run pending\n');
   const valid = spawnSync(process.execPath, [script, '--base', 'base', '--body-file', body],
     { cwd: repo, encoding: 'utf8' });
   assert.equal(valid.status, 0, valid.stdout + valid.stderr);
@@ -86,11 +203,11 @@ test('deletion-only UI diff requires a table through the CLI', t => {
   writeFileSync(join(repo, 'scripts/check.py'), 'print("ok")\n');
   git('add', 'scripts/check.py');
   git('commit', '-qm', 'add non-App script');
-  writeFileSync(body, 'Device-Smoke: n/a — non-App script only\n');
+  writeFileSync(body, currentGates() + '\nDevice-Smoke: n/a — non-App script only\n');
   const nonApp = spawnSync(process.execPath, [script, '--base', 'after-ui', '--body-file', body],
     { cwd: repo, encoding: 'utf8' });
   assert.equal(nonApp.status, 0, nonApp.stdout + nonApp.stderr);
-  writeFileSync(body, 'Device-Smoke: n/a —   \n');
+  writeFileSync(body, currentGates() + '\nDevice-Smoke: n/a —   \n');
   const nonAppMissingReason = spawnSync(process.execPath, [script, '--base', 'after-ui', '--body-file', body],
     { cwd: repo, encoding: 'utf8' });
   assert.equal(nonAppMissingReason.status, 1, nonAppMissingReason.stdout + nonAppMissingReason.stderr);
