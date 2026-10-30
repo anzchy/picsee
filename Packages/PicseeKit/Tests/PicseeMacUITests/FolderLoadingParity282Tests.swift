@@ -1,5 +1,7 @@
 import AppKit
 import Testing
+import PicseeApplication
+import PicseeInfrastructure
 @testable import PicseeMacUI
 
 @MainActor private func issue282StateView(_ id: String, in root: NSView) -> NSView? {
@@ -94,6 +96,59 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
     }
 }
 
+/// Device parity-281-282-10301650 FAIL-4b: the ring drew 21pt left of the centred heading. The spin must pivot on the
+/// ring's centre after the late frame changes (host moved onto the main frame, window resized, sidebar toggled).
+@Test @MainActor func issue282ReadingRingSpinsAroundTheHeadingCentreAfterLateFrames() throws {
+    _ = NSApplication.shared
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
+        styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let host = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
+    window.contentView = host
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 1280, height: 772),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    let state = ViewerStateHost(frame: host.bounds, session: ViewerSession())
+    let canvas = NSView(), chrome = NSView(), grid = NSView()
+    host.addSubview(canvas)
+    host.addSubview(shell)
+    host.addSubview(state, positioned: .above, relativeTo: shell)
+    host.addSubview(chrome, positioned: .above, relativeTo: state)
+    let presentation = GridViewerPresentation(canvas: canvas, chrome: chrome, state: state,
+        grid: grid, inspector: NSView(), shell: shell)
+    presentation.showGrid(reading: false)
+    #expect(presentation.showReadingOverGrid(true))
+    state.display(.readingFolder)
+    window.displayIfNeeded()
+    let ring = try #require(issue282StateView("state.folder-progress", in: state) as? ReadingProgressView)
+    let heading = try #require(issue282StateView("state.folder-title", in: state) as? NSTextField)
+
+    func expectCentred(_ step: String) throws {
+        host.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        let spin = try #require(ring.rotationLayer)
+        let base = try #require(ring.layer)
+        let pivot = CGPoint(x: spin.bounds.minX + spin.anchorPoint.x * spin.bounds.width,
+                            y: spin.bounds.minY + spin.anchorPoint.y * spin.bounds.height)
+        let pivotInWindow = ring.convert(spin.convert(pivot, to: base), to: nil)
+        let ringCentre = ring.convert(NSPoint(x: ring.bounds.midX, y: ring.bounds.midY), to: nil)
+        let headingCentre = heading.convert(NSPoint(x: heading.bounds.midX, y: heading.bounds.midY), to: nil)
+        #expect(abs(ringCentre.x - headingCentre.x) <= 1, "\(step): ring frame centre")
+        #expect(abs(pivotInWindow.x - headingCentre.x) <= 1, "\(step): spin pivot x \(pivotInWindow.x) vs \(headingCentre.x)")
+        #expect(abs(pivotInWindow.y - ringCentre.y) <= 1, "\(step): spin pivot y \(pivotInWindow.y) vs \(ringCentre.y)")
+        #expect(spin.animation(forKey: "picsee.reading.rotation") != nil, "\(step): ring spins")
+    }
+    try expectCentred("display")
+    window.setContentSize(NSSize(width: 1100, height: 760))
+    presentation.layoutInspector(visible: false)
+    try expectCentred("window resize")
+    shell.toggleSidebar()
+    try expectCentred("sidebar hidden")
+    shell.toggleSidebar()
+    shell.resizeSidebar(to: 280)
+    try expectCentred("sidebar shown and resized")
+}
+
 @Test @MainActor func issue282ReadingProgressViewIsNotDecodable() {
     #expect(ReadingProgressView(coder: NSCoder()) == nil)
 }
@@ -138,10 +193,10 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
         #expect(abs(accent.redComponent - expectedAccent.red) < 0.01)
         #expect(abs(accent.greenComponent - expectedAccent.green) < 0.01)
         #expect(abs(accent.blueComponent - expectedAccent.blue) < 0.01)
-        #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
+        #expect(view.rotationLayer?.animation(forKey: "picsee.reading.rotation") != nil)
         view.reduceMotion = { true }
         view.start()
-        #expect(view.layer?.animation(forKey: "picsee.reading.rotation") == nil)
+        #expect(view.rotationLayer?.animation(forKey: "picsee.reading.rotation") == nil)
         #expect(view.accessibilityRole() == .progressIndicator)
     }
 }
@@ -152,21 +207,21 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
     var reduceMotion = false
     view.reduceMotion = { reduceMotion }
     view.start()
-    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
+    #expect(view.rotationLayer?.animation(forKey: "picsee.reading.rotation") != nil)
 
     reduceMotion = true
     NotificationCenter.default.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                     object: NSWorkspace.shared)
-    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
+    #expect(view.rotationLayer?.animation(forKey: "picsee.reading.rotation") != nil)
     view.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                  object: NSWorkspace.shared)
-    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") == nil)
+    #expect(view.rotationLayer?.animation(forKey: "picsee.reading.rotation") == nil)
 
     reduceMotion = false
     NotificationCenter.default.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                     object: NSWorkspace.shared)
-    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") == nil)
+    #expect(view.rotationLayer?.animation(forKey: "picsee.reading.rotation") == nil)
     view.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                  object: NSWorkspace.shared)
-    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
+    #expect(view.rotationLayer?.animation(forKey: "picsee.reading.rotation") != nil)
 }

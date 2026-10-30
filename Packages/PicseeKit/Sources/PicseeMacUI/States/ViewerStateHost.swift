@@ -7,6 +7,8 @@ import PicseeApplication
 @MainActor final class ReadingProgressView: NSView {
     let dividerLayer = CAShapeLayer()
     let accentLayer = CAShapeLayer()
+    /// Spins around the ring's centre. The view's own layer pivots on its corner and AppKit resets its geometry.
+    private let spinLayer = CALayer()
     let notificationCenter: NotificationCenter
     var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     nonisolated(unsafe) private var reduceMotionObserver: NSObjectProtocol?
@@ -20,8 +22,9 @@ import PicseeApplication
         dividerLayer.lineWidth = 2
         accentLayer.lineWidth = 2
         accentLayer.lineCap = .butt
-        layer?.addSublayer(dividerLayer)
-        layer?.addSublayer(accentLayer)
+        layer?.addSublayer(spinLayer)
+        spinLayer.addSublayer(dividerLayer)
+        spinLayer.addSublayer(accentLayer)
         setAccessibilityRole(.progressIndicator)
         refreshAppearance()
         reduceMotionObserver = notificationCenter.addObserver(
@@ -38,6 +41,7 @@ import PicseeApplication
         }
     }
     required init?(coder: NSCoder) { nil }
+    var rotationLayer: CALayer? { spinLayer }
 
     override func layout() {
         super.layout()
@@ -48,8 +52,13 @@ import PicseeApplication
         let segment = CGMutablePath()
         segment.addArc(center: center, radius: radius, startAngle: .pi / 4, endAngle: 3 * .pi / 4, clockwise: false)
         accentLayer.path = segment
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        spinLayer.bounds = bounds
+        spinLayer.position = center
         dividerLayer.frame = bounds
         accentLayer.frame = bounds
+        CATransaction.commit()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -66,14 +75,14 @@ import PicseeApplication
 
     func start() {
         layout()
-        layer?.removeAnimation(forKey: "picsee.reading.rotation")
+        spinLayer.removeAnimation(forKey: "picsee.reading.rotation")
         guard !reduceMotion() else { return }
         let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
         rotation.fromValue = 0
         rotation.toValue = CGFloat.pi * 2
         rotation.duration = 1
         rotation.repeatCount = .infinity
-        layer?.add(rotation, forKey: "picsee.reading.rotation")
+        spinLayer.add(rotation, forKey: "picsee.reading.rotation")
     }
 }
 
