@@ -18,6 +18,27 @@ function runRows(t, summary, args = []) {
   return spawnSync(process.execPath, [script, file, ...args], { encoding: 'utf8' });
 }
 
+function assertAmbiguous(t, summary) {
+  const result = runRows(t, summary, ['--head', head]);
+  assert.equal(result.status, 0, result.stderr);
+  const rows = result.stdout.trim().split('\n');
+  assert.equal(rows.length, 6);
+  for (const row of rows) assert.match(row, new RegExp(`\\| NOT VERIFIED \\| ${head} \\| owner-gates summary ambiguous \\|$`));
+  assert.doesNotMatch(result.stdout, /\| PASS \|/);
+}
+
+test('gates-rows rejects duplicate lane keys as ambiguous', t => {
+  assertAmbiguous(t, complete.replace('node=0\n', 'node=0\nnode=1\n'));
+});
+
+test('gates-rows rejects two concatenated runs as ambiguous', t => {
+  assertAmbiguous(t, complete + complete.replaceAll(head, 'b'.repeat(40)));
+});
+
+test('gates-rows rejects DONE followed by another record as ambiguous', t => {
+  assertAmbiguous(t, complete + 'late=1\n');
+});
+
 test('gates-rows converts a complete owner-gates summary to six PASS rows', t => {
   const result = runRows(t, complete, ['--head', head]);
   assert.equal(result.status, 0, result.stderr);
