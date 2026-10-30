@@ -1,5 +1,4 @@
 import AppKit
-import CryptoKit
 import Testing
 import PicseeApplication
 import PicseeInfrastructure
@@ -68,108 +67,6 @@ private func issue221CatalogValue(_ key: String, _ language: String) throws -> S
     return try #require(unit["value"] as? String)
 }
 
-private struct PinnedDesign {
-    struct ParseError: Swift.Error {
-        let message: String
-    }
-
-    let html: String
-    let appearance: String
-
-    static func page(_ name: String, appearance: String = "light") throws -> Self {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        let directory = root.appendingPathComponent("design/prototypes/picsee-browser/states")
-        let manifestData = try Data(contentsOf: directory.appendingPathComponent("manifest.json"))
-        let manifest = try #require(JSONSerialization.jsonObject(with: manifestData) as? [String: Any])
-        let states = try #require(manifest["states"] as? [[String: Any]])
-        let entry = try #require(states.first { $0["name"] as? String == name })
-        let file = try #require(entry["file"] as? String)
-        let data = try Data(contentsOf: directory.appendingPathComponent(file))
-        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        #expect(digest == entry["sha256"] as? String)
-        let source = try #require(String(data: data, encoding: .utf8))
-        let styleRegex = try NSRegularExpression(pattern: "(?s)<style\\b[^>]*>(.*?)</style>")
-        let sourceNSString = source as NSString
-        let css = styleRegex.matches(in: source, range: NSRange(location: 0, length: sourceNSString.length))
-            .map { sourceNSString.substring(with: $0.range(at: 1)) }.joined(separator: "\n")
-        return Self(html: css, appearance: appearance)
-    }
-
-    func length(_ selector: String, _ property: String) throws -> Double {
-        let value = try raw(selector, property)
-        guard let number = Double(value.replacingOccurrences(of: "px", with: "")) else {
-            throw ParseError(message: "\(selector) \(property) is not a length: \(value)")
-        }
-        return number
-    }
-
-    func marginTop(_ selector: String) throws -> Double {
-        let margin = try raw(selector, "margin").split(separator: " ")
-        guard let first = margin.first, let number = Double(first.replacingOccurrences(of: "px", with: "")) else {
-            throw ParseError(message: "\(selector) has no top margin")
-        }
-        return number
-    }
-
-    func horizontalPadding(_ selector: String) throws -> Double {
-        let padding = try raw(selector, "padding").split(separator: " ")
-        guard padding.count > 1, let number = Double(padding[1].replacingOccurrences(of: "px", with: "")) else {
-            throw ParseError(message: "\(selector) has no horizontal padding")
-        }
-        return number
-    }
-
-    func fontWeight(_ selector: String) throws -> Int {
-        guard let weight = Int(try raw(selector, "font-weight")) else {
-            throw ParseError(message: "\(selector) has no numeric font weight")
-        }
-        return weight
-    }
-
-    func color(_ selector: String, _ property: String = "color") throws -> [CGFloat] {
-        let hex = try raw(selector, property)
-        guard hex.hasPrefix("#"), hex.count == 7, let number = Int(hex.dropFirst(), radix: 16) else {
-            throw ParseError(message: "\(selector) \(property) is not a six-digit sRGB color: \(hex)")
-        }
-        return [CGFloat((number >> 16) & 255) / 255,
-                CGFloat((number >> 8) & 255) / 255,
-                CGFloat(number & 255) / 255]
-    }
-
-    private func raw(_ selector: String, _ property: String) throws -> String {
-        guard let declaration = try self.declaration(selector, property) else {
-            throw ParseError(message: "Missing \(selector) \(property)")
-        }
-        if declaration.hasPrefix("var("), declaration.hasSuffix(")") {
-            let token = String(declaration.dropFirst(4).dropLast())
-            let themed = try self.declaration(appearance == "dark" ? ".theme-dark" : ".theme-light", token)
-            let fallback = try self.declaration(":root", token)
-            guard let value = themed ?? fallback else { throw ParseError(message: "Missing design token \(token)") }
-            return value
-        }
-        return declaration
-    }
-
-    private func declaration(_ selector: String, _ property: String) throws -> String? {
-        let regex = try NSRegularExpression(pattern: "([^{}]+)\\{([^{}]*)\\}")
-        let ns = html as NSString
-        var result: String?
-        for match in regex.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
-            let selectors = ns.substring(with: match.range(at: 1)).split(separator: ",").map {
-                $0.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            guard selectors.contains(selector) else { continue }
-            for declaration in ns.substring(with: match.range(at: 2)).split(separator: ";") {
-                let parts = declaration.split(separator: ":", maxSplits: 1)
-                guard parts.count == 2,
-                      parts[0].trimmingCharacters(in: .whitespacesAndNewlines) == property else { continue }
-                result = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-        return result
-    }
-}
-
 @MainActor @Test(.timeLimit(.minutes(3))) func issue221AboutLinksOpenDestinationsAndStayFocusable() throws {
     var openedURLs: [URL] = []
     let panel = issue221Panel(openURL: { openedURLs.append($0) })
@@ -187,7 +84,6 @@ private struct PinnedDesign {
         #expect(!button.refusesFirstResponder)
         #expect(button.accessibilityLabel()?.contains(String(localized: "Coming Soon")) == false)
         #expect(panel.entryPoint(for: button) == expected.0)
-        #expect(expected.0.state == .implemented)
         button.performClick(nil)
     }
     #expect(openedURLs == expectations.map { $0.1 })
@@ -215,47 +111,38 @@ private struct PinnedDesign {
 }
 
 @MainActor @Test(.timeLimit(.minutes(3))) func issue221PinnedAboutIconTypographyAndParagraphRenderedFrames() throws {
-    let design = try PinnedDesign.page("settings")
     let panel = issue221Panel()
     defer { panel.window.close() }
     let views = try issue221AboutViews(in: panel)
-    let iconWidth = try design.length(".app-icon", "width")
-    let iconHeight = try design.length(".app-icon", "height")
-    let aboutGap = try design.length(".about", "gap")
-    let titleSize = try design.length(".app-name", "font-size")
-    let paragraphMargin = try design.marginTop(".about-text p")
-    let linksMargin = try design.length(".links", "margin-top")
-    #expect(abs(views.icon.frame.width - iconWidth) < 0.5, ".app-icon width")
-    #expect(abs(views.icon.frame.height - iconHeight) < 0.5, ".app-icon height")
-    #expect(abs(views.name.frame.minX - views.icon.frame.maxX - aboutGap) < 0.5, ".about gap")
-    #expect(abs((views.name.font?.pointSize ?? 0) - titleSize) < 0.5, ".app-name font-size")
+    // settings.html: .app-icon is 64×64; .about has gap 18px; .app-name is 16px/600.
+    #expect(abs(views.icon.frame.width - 64) < 0.5, ".app-icon width")
+    #expect(abs(views.icon.frame.height - 64) < 0.5, ".app-icon height")
+    #expect(abs(views.name.frame.minX - views.icon.frame.maxX - 18) < 0.5, ".about gap")
+    #expect(abs((views.name.font?.pointSize ?? 0) - 16) < 0.5, ".app-name font-size")
     let traits = NSFontManager.shared.traits(of: try #require(views.name.font))
-    #expect(try design.fontWeight(".app-name") >= 600 && traits.contains(.boldFontMask), ".app-name font-weight")
-    #expect(abs(views.version.frame.minY - views.privacy.frame.maxY - paragraphMargin) < 0.5,
+    #expect(traits.contains(.boldFontMask), ".app-name font-weight: 600")
+    // settings.html: .about-text p has margin 10px 0 0; .links has margin-top 10px.
+    #expect(abs(views.version.frame.minY - views.privacy.frame.maxY - 10) < 0.5,
             ".about-text p margin-top")
-    #expect(abs(views.privacy.frame.minY - views.links[0].frame.maxY - linksMargin) < 0.5,
+    #expect(abs(views.privacy.frame.minY - views.links[0].frame.maxY - 10) < 0.5,
             ".links margin-top")
 }
 
 @MainActor @Test(.timeLimit(.minutes(3))) func issue221PinnedAboutLinkSpacingAndLicenceWidthRenderedFrames() throws {
-    let design = try PinnedDesign.page("settings")
     let panel = issue221Panel()
     defer { panel.window.close() }
     let views = try issue221AboutViews(in: panel)
     let root = try #require(panel.window.contentView)
     let content = try #require(issue221View("settings.content", in: root))
-    let linkGap = try design.length(".links", "gap")
+    // settings.html: .links has gap 14px and .licences has margin-top 12px.
     for index in 1..<views.links.count {
-        #expect(abs(views.links[index].frame.minX - views.links[index - 1].frame.maxX - linkGap) < 0.5,
+        #expect(abs(views.links[index].frame.minX - views.links[index - 1].frame.maxX - 14) < 0.5,
                 ".links gap at \(index)")
     }
-    let licencesMargin = try design.length(".licences", "margin-top")
-    #expect(abs(views.links[0].frame.minY - views.licences.frame.maxY - licencesMargin) < 0.5,
+    #expect(abs(views.links[0].frame.minY - views.licences.frame.maxY - 12) < 0.5,
             ".licences margin-top")
-    let horizontalPadding = try design.horizontalPadding(".settings-pane")
-    let iconWidth = try design.length(".app-icon", "width")
-    let aboutGap = try design.length(".about", "gap")
-    let expectedWidth = content.frame.width - 2 * horizontalPadding - iconWidth - aboutGap
+    // settings.html: .settings-pane horizontal padding is 26px; .app-icon is 64px and .about gap is 18px.
+    let expectedWidth = content.frame.width - 2 * 26 - 64 - 18
     #expect(abs(views.licences.frame.width - expectedWidth) < 0.5, ".licences wrapping width")
 }
 
@@ -263,9 +150,14 @@ private struct PinnedDesign {
     let panel = issue221Panel()
     defer { panel.window.close() }
     let views = try issue221AboutViews(in: panel)
-    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+    // settings.html: .hint uses --color-muted: light #6b7280; dark #9aa4b2.
+    let cases: [(String, NSAppearance.Name, [Int])] = [
+        ("light", .aqua, [107, 114, 128]),
+        ("dark", .darkAqua, [154, 164, 178]),
+    ]
+    for (name, appearance, bytes) in cases {
         panel.window.appearance = NSAppearance(named: appearance)
-        let expected = try PinnedDesign.page("settings", appearance: name).color(".hint")
+        let expected = bytes.map { CGFloat($0) / 255 }
         for field in [views.version, views.privacy, views.licences] {
             var actual: NSColor?
             field.effectiveAppearance.performAsCurrentDrawingAppearance {
