@@ -8,6 +8,16 @@ import SwiftUI
 import Observation
 import Darwin
 
+/// The file-grant subscription owns its wake token, including the foreground-only vnode fallback.
+private final class FileGrantWakeObservation: @unchecked Sendable {
+    private let center = NSWorkspace.shared.notificationCenter
+    private let token: any NSObjectProtocol
+    init(handler: @escaping @Sendable () -> Void) {
+        token = center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: nil) { _ in handler() }
+    }
+    deinit { center.removeObserver(token) }
+}
+
 /// Window intent is isolated; decode admission and buffers are shared by the pipeline.
 @MainActor
 final class CanvasWindowController: NSWindowController, NSWindowDelegate {
@@ -121,6 +131,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private let accessServices: Task<AccessServices, Error>
     private var navigationTask: Task<Void, Never>?
     private var standaloneGrantURL: URL?
+    private var standaloneWake: FileGrantWakeObservation?
+    private var fileReconnectionContext: (original: URL, access: AccessOperation, input: AccessOperation)?
     private var standaloneWatch: (any DispatchSourceFileSystemObject)?
     private var standaloneWatchTask: Task<Void, Never>?
     private let standaloneWatchFallback = FileGrantWatchFallback()
@@ -948,6 +960,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             scanReadContext = nil
             presentationReadContext = nil
             searchProjection.cancel()
+            standaloneWake = nil
             standaloneWatch?.cancel(); standaloneWatch = nil
             standaloneWatchTask?.cancel(); standaloneWatchTask = nil
             standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
@@ -1047,10 +1060,17 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func watchStandaloneFile(at url: URL) {
+        standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel()
         guard let grant = standaloneGrantURL else { return }
         let operation = accessIntent.current
+        standaloneWake = FileGrantWakeObservation { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, operation.isCurrent, self.standaloneGrantURL == grant else { return }
+                self.reconcileStandaloneImage()
+            }
+        }
         standaloneWatchTask = Task { [weak self, accessServices] in
             guard let self, let services = try? await accessServices.value else { return }
             let descriptor: Int32
@@ -1104,7 +1124,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 let scale = self.window?.backingScaleFactor ?? 1
                 let maximum = max(1, Int(ceil(max(self.canvas.bounds.width, self.canvas.bounds.height) * scale)))
                 let prepared = try await services.files.withLease(.fileGrant(grant)) { lease in
-                    try await pipeline.request(for: lease.url, maximumPixelSize: maximum)
+                    // A held scope/lease does not prove the file is still readable. Preserve the
+                    // real open/read error before ImageIO can turn it into a generic decode error.
+                    let handle = try FileHandle(forReadingFrom: lease.url)
+                    defer { try? handle.close() }
+                    _ = try handle.read(upToCount: 1)
+                    return try await pipeline.request(for: lease.url, maximumPixelSize: maximum)
                 }
                 guard operation.isCurrent else { return }
                 let opening = switch self.session.imageLoader.phase {
@@ -1142,8 +1167,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 }
                 if let accessError = error as? FileAccessError, case .fileDeleted = accessError {
                     self.clearFolderImageForNoMatches()
-                } else if error is FileAccessError || !FileManager.default.fileExists(atPath: checkedURL.path) {
-                    self.clearFolderImageForNoMatches()
+                } else if error is FileAccessError || AccessReadFailure.isPermissionDenied(error)
+                    || !FileManager.default.fileExists(atPath: checkedURL.path) {
                     self.requestFileReconnection(grant)
                 } else {
                     self.open(checkedURL, accessRequest: .fileGrant(grant), fromFolderScan: true)
@@ -1153,22 +1178,57 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func requestFileReconnection(_ original: URL) {
+        // The presentation boundary is synchronous and precedes even an already-attached sheet.
+        // Closing the loader/Inspector also advances their generations before old work can return.
+        clearFolderImageForNoMatches()
+        inspectorHost.isHidden = true
+        chromeOverlay.refresh(session: session)
+        stateHost.refresh()
+        accessIntent.invalidate()
+        endInput()
+        navigationTask?.cancel()
+        standaloneWake = nil
+        standaloneWatch?.cancel(); standaloneWatch = nil
+        standaloneWatchTask?.cancel(); standaloneWatchTask = nil
+        standaloneReconcileTask?.cancel()
+        standaloneGrantURL = nil
+        standaloneReconcilePending = false
+        standaloneRecheckAfterOpen = false
+        fileReconnectionContext = nil
         guard let window, window.attachedSheet == nil else { return }
+        let operation = accessIntent.current
+        let inputOperation = inputIntent.current
+        fileReconnectionContext = (original, operation, inputOperation)
         let alert = NSAlert()
         alert.messageText = String(localized: "This File Can’t Be Opened")
         alert.informativeText = String(localized: "Choose this image again to reconnect access.")
         alert.addButton(withTitle: String(localized: "Choose File Again…"))
         alert.addButton(withTitle: String(localized: "Cancel"))
         alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }
+            guard operation.isCurrent, inputOperation.isCurrent else { return }
+            guard response == .alertFirstButtonReturn else {
+                self?.completeFileReconnection(nil, original: original)
+                return
+            }
             let panel = NSOpenPanel()
+            panel.canChooseFiles = true
             panel.canChooseDirectories = false
             panel.allowsMultipleSelection = false
             panel.directoryURL = original.deletingLastPathComponent()
-            panel.beginSheetModal(for: window) { result in
-                if result == .OK, let url = panel.url { self?.openInput([url]) }
+            panel.beginSheetModal(for: window) { [weak self] result in
+                guard operation.isCurrent, inputOperation.isCurrent else { return }
+                self?.completeFileReconnection(result == .OK ? panel.url : nil, original: original)
             }
         }
+    }
+
+    /// The file panel and native tests share the accepted-selection/cancellation continuation.
+    func completeFileReconnection(_ url: URL?, original: URL) {
+        guard let context = fileReconnectionContext, context.original == original,
+              context.access.isCurrent, context.input.isCurrent else { return }
+        fileReconnectionContext = nil
+        guard let url else { return }
+        openInput([url])
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -1183,6 +1243,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         presentationRootID = nil; scanReadContext = nil; presentationReadContext = nil
         cancelSidebarTree()
         gridShell.showFolder(nil)
+        standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel(); standaloneWatchTask = nil
         standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
@@ -1265,6 +1326,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func openFolder(_ folder: URL, rootID: AccessRootID, currentItemID: ItemID? = nil) {
+        standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel(); standaloneWatchTask = nil
         standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
@@ -2199,6 +2261,7 @@ extension CanvasWindowController: FolderScanHost {
     }
     func folderScanDidComplete(count: Int) { chromeOverlay.refresh(session: session) }
     func folderScanDidStart() {
+        standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel(); standaloneWatchTask = nil
         standaloneReconcileTask?.cancel(); standaloneGrantURL = nil
