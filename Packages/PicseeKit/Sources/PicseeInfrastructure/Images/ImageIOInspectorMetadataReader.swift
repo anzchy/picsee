@@ -78,7 +78,11 @@ public struct ImageIOInspectorMetadataReader: InspectorMetadataReading {
             let decoded = try await pipeline.image(for: request)
             // The cache accounts for resident pixels while PNG encoding consumes them.
             let pinning = pipeline as? any ImagePresentationPinning
-            if let key = request.renderKey { await pinning?.pin(key, image: decoded) }
+            let acquiredKey: RenderKey?
+            if let key = request.renderKey, let pinning {
+                guard await pinning.pin(key, image: decoded) else { throw CancellationError() }
+                acquiredKey = key
+            } else { acquiredKey = nil }
             let data = NSMutableData()
             let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)
             let thumbnail: Data?
@@ -86,7 +90,7 @@ public struct ImageIOInspectorMetadataReader: InspectorMetadataReading {
                 CGImageDestinationAddImage(destination, decoded.image, nil)
                 thumbnail = CGImageDestinationFinalize(destination) ? data as Data : nil
             } else { thumbnail = nil }
-            if let key = request.renderKey { await pinning?.unpin(key) }
+            if let acquiredKey { await pinning?.unpin(acquiredKey) }
             try Task.checkCancellation()
             try accessPermit?.check()
             return thumbnail
