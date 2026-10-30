@@ -172,10 +172,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return controller
     }
 
+    /// Set before the app runs; read once when the Settings window is first built.
+    var updates: (any AppUpdatePort)?
+
+    func makeSettingsWindow(defaults: UserDefaults = .standard) -> SettingsPanelWindow {
+        SettingsPanelWindow(cache: thumbnailCache, appearanceAdapter: appearanceAdapter,
+                            preferencesStore: displayPreferences, defaults: defaults, updates: updates)
+    }
+
     private func showSettings() {
         if settingsWindow == nil {
-            settingsWindow = SettingsPanelWindow(cache: thumbnailCache, appearanceAdapter: appearanceAdapter,
-                                                 preferencesStore: displayPreferences, defaults: .standard)
+            settingsWindow = makeSettingsWindow()
         }
         settingsWindow?.show()
     }
