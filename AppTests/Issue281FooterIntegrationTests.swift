@@ -112,6 +112,10 @@ private final class Issue281Scanner: FolderScanning, @unchecked Sendable {
     // open may attach is dismissed first.
     controller.openGrantedFolder(try #require(folders["Retry"]))
     try await waitUntil { controller.session.folderScan?.failure != nil }
+    // Fix round 5: a failed read must not keep the reading footer.
+    window.contentView?.layoutSubtreeIfNeeded()
+    #expect(try footer().name.stringValue != "–", "failure: name")
+    #expect(try footer().count.stringValue != String(localized: "Reading…"), "failure: count")
     if let sheet = window.attachedSheet { window.endSheet(sheet, returnCode: .alertSecondButtonReturn) }
     scanner.allowRetry()
     controller.session.retryFolderScan()

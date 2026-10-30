@@ -47,6 +47,7 @@ import PicseeCore
     }
     public func showViewer() {
         shell?.isHidden = true
+        shell?.setReadingStatus(false)
         state.autoresizingMask = [.width, .height]
         if let parent = state.superview { state.frame = parent.bounds }
         (grid as? GridBrowserView)?.setThumbnailsActive(false)
