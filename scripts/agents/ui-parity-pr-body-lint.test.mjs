@@ -54,6 +54,31 @@ function assertGatesRejectedByAPIAndCLI(t, fixture, reason) {
   assert.match(cli.stderr, reason);
 }
 
+function assertGatesAcceptedByAPIAndCLI(t, fixture) {
+  const direct = checkGates(fixture(head), head);
+  const repo = mkdtempSync(join(tmpdir(), 'picsee-gates-layout-'));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'Test');
+  mkdirSync(join(repo, 'scripts'), { recursive: true });
+  writeFileSync(join(repo, 'scripts/check.py'), 'print("base")\n');
+  git('add', 'scripts/check.py');
+  git('commit', '-qm', 'base');
+  git('branch', 'base');
+  writeFileSync(join(repo, 'scripts/check.py'), 'print("head")\n');
+  git('add', 'scripts/check.py');
+  git('commit', '-qm', 'head');
+  const body = join(repo, 'body.md');
+  writeFileSync(body, fixture(git('rev-parse', 'HEAD').trim()));
+  const script = fileURLToPath(new URL('./ui-parity-pr-body-lint.mjs', import.meta.url));
+  const cli = spawnSync(process.execPath, [script, '--base', 'base', '--body-file', body], { cwd: repo, encoding: 'utf8' });
+  assert.equal(direct.ok, true, direct.reason);
+  assert.equal(cli.status, 0, cli.stdout + cli.stderr);
+  assert.match(cli.stdout, /UI-Parity PR body: PASS/);
+}
+
 test('Gates rejects a second Gates section through API and CLI', t => {
   assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead)
     + `\n## Gates\n\n| Lane | Status | SHA | Source |\n|---|---|---|---|\n| package-tests | FAIL | ${currentHead} | failed rerun |\n`,
@@ -75,6 +100,27 @@ test('Gates rejects a level-three Gates heading through API and CLI', t => {
 test('Gates rejects a lowercase gates heading through API and CLI', t => {
   assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead).replace('## Gates', '## gates'),
     /ambiguous Gates heading: ## gates/);
+});
+
+test('Gates rejects a setext Gates section after Summary through API and CLI', t => {
+  assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead)
+    + `\n## Summary\n\nGates\n---\n\n| package-tests | FAIL | ${currentHead} | failed rerun |\n`,
+  /ambiguous Gates heading: Gates/);
+});
+
+test('Gates rejects an equals-underlined setext Gates section through API and CLI', t => {
+  assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead)
+    + `\n## Summary\n\nGates\n===\n\n| package-tests | FAIL | ${currentHead} | failed rerun |\n`,
+  /ambiguous Gates heading: Gates/);
+});
+
+test('Gates accepts an ordinary setext section after the table through API and CLI', t => {
+  assertGatesAcceptedByAPIAndCLI(t, currentHead => completeGates(currentHead)
+    + '\nSummary\n---\n\nTooling-only change.\n');
+});
+
+test('Gates does not mistake its table separator for a setext underline through API and CLI', t => {
+  assertGatesAcceptedByAPIAndCLI(t, currentHead => completeGates(currentHead));
 });
 
 test('Gates rejects a prose-separated FAIL row through API and CLI', t => {
