@@ -172,7 +172,8 @@ import PicseeApplication
         tile.layer?.backgroundColor = surface
         currentRing.borderColor = ring
         currentRing.isHidden = !isCurrent
-        nameLabel.layer?.backgroundColor = isSelected ? fill : NSColor.clear.cgColor
+        // grid-light.html: the Current Item's name row carries the accent wash too, before anything is selected.
+        nameLabel.layer?.backgroundColor = isSelected || isCurrent ? fill : NSColor.clear.cgColor
         selectionBadge.layer?.backgroundColor = badgeFill
         selectionBadge.layer?.borderColor = NSColor(calibratedRed: 1, green: 1, blue: 1, alpha: 1).cgColor
         selectionBadge.isHidden = !isSelected
