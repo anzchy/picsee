@@ -167,7 +167,7 @@ import PicseeCore
     #expect(cell.view.layer?.borderWidth == 0)
     #expect(outline !== cell.currentRingLayer)
     #expect(outline.frame == tile.frame.insetBy(dx: -4, dy: -4))
-    #expect(cell.currentRingLayer.frame == tile.bounds.insetBy(dx: 3, dy: 3))
+    #expect(cell.currentRingLayer.frame == tile.frame.insetBy(dx: -2, dy: -2))
     #expect(!cell.currentRingLayer.isHidden)
     cell.isSelected = false
     #expect(outline.isHidden)
