@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation is App GREEN with current read-only SEPARATION-HELD audit. Targeted callback unit tests are GREEN. Root owns full package coverage (100% lines/functions), remaining final gates/review and per-WI commits. All WI-4 edits remain unstaged; this implementer ran no git/index/commit/push operation. WI-3 tests/reports and its staged snapshot were not edited.
+Implementation is complete with all executable gates PASS and final review APPROVED (zero findings). WI-3 and WI-4 were committed separately as directed; the tracked report convention is retained. The implementer left the WI-3 index snapshot intact; root made the commits. No push, PR, device run or status upgrade was performed.
 
 Authority: `/Users/jack/.picsee/herdr/gpt-imple-1/i233-amendment-approved.md`; new plan/matrix/adversary `*-20261030-i233-r2.md`, including approved additive reconciliation and rejected-input liveness cases. No Input, WindowInspectorReader, AppDelegate, folder-root handling, grid/footer/sidebar, ViewerStateHost, design, project.yml or entitlement change.
 
@@ -67,3 +67,16 @@ No owner scope decision remains open. Full coverage/final gates and independent 
 
 ## Root WI-4 completion gates before per-WI commit
 Fresh full package run: 1,294 tests in 36 suites PASS (.build/i233-r2-final-package.log); LCOV export PASS. Exact single report: 14,167/14,167 lines and 2,736/2,736 functions, statements 100%, branches unmeasured/threshold0. Independent coverage audit PASS in coverage-20261030-i233-r2.md. CVC/InspectorMetadata source hashes match the frozen implementation. WI-3 snapshot committed as 9b5fb4a0; this WI-4 commit follows before remaining native/tooling gates and final review, as directed by the amendment approval. Reports are included under the existing tracked repository convention.
+
+## Final root gates and review
+- Full package: 1,294 tests in36 suites PASS; .build/i233-r2-final-package.log.
+- Exact package LCOV:14,167/14,167 lines and2,736/2,736 functions, statements100%; branches unmeasured/threshold0. Independent coverage audit PASS.
+- xcodegen PASS; .build/i233-r2-gate-xcodegen.log.
+- Native build ** BUILD SUCCEEDED **; .build/i233-r2-gate-build.log.
+- Full App gate after per-WI commits:172tests,0failures/errors/skips; .build/i233-r2-gate-app.log.
+- Tooling:57tests,55pass,0fail,2documented skips (real mdpro script unset); .build/i233-r2-gate-node.log.
+- Ledger generated view --check PASS; .build/i233-r2-gate-ledger.log. Markdown only ACCESS-03 limitation changed; acceptance/status prefix preserved.
+- Committed-range whitespace check PASS. Forbidden folder-root handleAccessLoss body is byte-identical to the base.
+- Final review APPROVED:High0/Medium0/Low0; review-20261030-i233-r2.md. This supersedes the historical pre-amendment BLOCKED verdict.
+- Required commit-gate refresh:1,294tests/36suites PASS; .build/i233-r2-commit-unit.log; LCOV re-export unchanged100%L/F (.build/i233-r2-commit-lcov.log). No source/test changes followed these gates.
+- Mutation disabled; critical paths not configured; no push-trigger lanes configured. Actual powerbox accepted selection, signed-device parity/true TCC revocation and physical sleep/eject remain NOT VERIFIED/non-implementer follow-up.
