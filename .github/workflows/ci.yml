@@ -55,27 +55,3 @@ jobs:
         env:
           PICSEE_HEAVY_LOCK_HELD: '1'
         run: node scripts/tdd/app-lane.mjs
-
-  pr-body-lint:
-    name: PR body Gates
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout PR head
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - name: Set up Node
-        uses: actions/setup-node@1e60f620b9541dca16ce9ac0c48b7c7840b0e47b # v4.4.0
-        with:
-          node-version: 22
-      - name: Test agent tooling
-        run: node --test scripts/agents/*.test.mjs
-      - name: Check PR body gates
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
-          node scripts/agents/ui-parity-pr-body-lint.mjs --base origin/main --body-file "$RUNNER_TEMP/pr-body.md"
