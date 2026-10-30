@@ -23,7 +23,6 @@ import PicseeMacUI
     let root = try #require(panel.window.contentView)
     let futureIDs: [(SettingsSection, [String])] = [
         (.display, ["settings.display.size", "settings.display.names", "settings.display.fit.0", "settings.display.fit.1"]),
-        (.update, ["settings.update.automatic", "settings.update.now"]),
     ]
     for (section, ids) in futureIDs {
         panel.select(section)

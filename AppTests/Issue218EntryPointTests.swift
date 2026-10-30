@@ -13,6 +13,7 @@ import PicseeMacUI
         appearanceAdapter: WindowAppearanceAdapter(preferencesStore: preferences),
         preferencesStore: preferences,
         defaults: UserDefaults(suiteName: "issue218-entry-points-\(UUID().uuidString)")!,
+        updates: FakeUpdatePort(),
         openURL: openURL)
 }
 
@@ -38,8 +39,6 @@ import PicseeMacUI
         "settings.display.names": .settingsDisplayFileNames,
         "settings.display.fit.0": .settingsDisplayFitMode,
         "settings.display.fit.1": .settingsDisplayFitMode,
-        "settings.update.automatic": .settingsUpdatesAutomaticCheck,
-        "settings.update.now": .settingsUpdatesCheckNow,
     ]
 
     for (id, entry) in expected {

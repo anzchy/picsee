@@ -42,10 +42,10 @@ public enum EntryPoint: String, CaseIterable, Sendable {
 
     public var state: EntryPointState {
         switch self {
-        case .reportIssue, .diagnostics, .keyboardShortcuts: .implemented
+        case .reportIssue, .diagnostics, .keyboardShortcuts,
+             .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow: .implemented
         case .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay,
              .settingsDisplayThumbnailSize, .settingsDisplayFileNames, .settingsDisplayFitMode,
-             .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow,
              .settingsAboutPrivacyNote, .settingsAboutSourceCode: .comingSoon
         }
     }
