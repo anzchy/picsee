@@ -75,14 +75,9 @@ public struct ShortcutCatalog: Sendable {
                 keycaps: available.flatMap { shortcutKeycaps($0.defaultKey, command: $0.usesCommand) })
         }
         func menuRow(_ action: String, _ english: String, _ chinese: String,
-                     requiredCommand: CommandID? = nil, key: String? = nil,
-                     modifiers: NSEvent.ModifierFlags = []) -> ShortcutRow? {
-            guard let sourceID = shortcutMenuSourceIDs[action] else { return nil }
-            let candidates = menuKeys[action] ?? []
-            let matches = candidates.count > 1 ? candidates.filter {
-                (key == nil || $0.key == key) && (modifiers.isEmpty || $0.modifiers == modifiers)
-            } : candidates
-            guard let item = matches.first, !item.key.isEmpty else { return nil }
+                     requiredCommand: CommandID? = nil) -> ShortcutRow? {
+            guard let sourceID = shortcutMenuSourceIDs[action],
+                  let item = menuKeys[action]?.first else { return nil }
             if let requiredCommand, !implementedCommands.contains(requiredCommand) { return nil }
             return ShortcutRow(sources: [source("menu:\(sourceID)")], name: text(english, chinese),
                 keycaps: shortcutKeycaps(item.key, modifiers: item.modifiers))

@@ -143,3 +143,57 @@ let issue219ExpectedRows: [(String, [String], [String], [String], [String])] = [
     #expect(sources.filter { $0 == "menu:Enter Full Screen" }.count == 1)
     #expect(issue219Flatten(catalog).count == 20)
 }
+
+@Test @MainActor func issue284ShortcutCatalogNamesTheSurvivingHalfOfAPairedRow() {
+    let implemented = Set(CommandID.allCases).subtracting([.previous, .zoomIn])
+    for (language, names) in [(EntryPointLanguage.english, ["Next Image", "Zoom Out"]),
+                               (.simplifiedChinese, ["下一张", "缩小"])] {
+        let catalog = ShortcutCatalog(menu: issue219Menu(), implementedCommands: implemented, language: language)
+        let viewer = issue219Flatten(catalog).filter { $0.0 == "viewer" }
+        let next = viewer.first { $0.1.contains("command:next") }
+        let zoom = viewer.first { $0.1.contains("command:zoomOut") }
+        #expect(next?.1 == ["command:next"])
+        #expect(next?.2 == ["→"])
+        #expect(next?.3 == names[0])
+        #expect(zoom?.1 == ["command:zoomOut"])
+        #expect(zoom?.2 == ["−"])
+        #expect(zoom?.3 == names[1])
+        #expect(!viewer.flatMap(\.1).contains("command:previous"))
+        #expect(!viewer.flatMap(\.1).contains("command:zoomIn"))
+    }
+}
+
+@Test @MainActor func issue284ShortcutCatalogUsesTheFirstKeyedItemWhenAnActionRepeats() throws {
+    let menu = issue219Menu()
+    let file = try #require(menu.items.first { $0.title == "File" }?.submenu)
+    let closeTab = NSMenuItem(title: "Close Tab", action: NSSelectorFromString("performClose:"), keyEquivalent: "w")
+    closeTab.keyEquivalentModifierMask = [.shift, .command]
+    file.addItem(closeTab)
+    let catalog = ShortcutCatalog(menu: menu, language: .english)
+    let close = issue219Flatten(catalog).filter { $0.1 == ["menu:Close"] }
+    #expect(close.count == 1)
+    #expect(close.first?.2 == ["⌘", "W"])
+}
+
+@Test @MainActor func issue284ShortcutCatalogResolvesMenuItemsToListedSources() {
+    let catalog = ShortcutCatalog(menu: issue219Menu(), language: .english)
+    func item(_ action: String?, command: String? = nil) -> NSMenuItem {
+        let item = NSMenuItem(title: "", action: action.map(NSSelectorFromString), keyEquivalent: "")
+        item.representedObject = command
+        return item
+    }
+    #expect(catalog.source(for: item("invoke:", command: "open"))?.id == "command:open")
+    #expect(catalog.source(for: item("invoke:", command: "zoomOut"))?.id == "command:zoomOut")
+    #expect(catalog.source(for: item("toggleFullScreen:"))?.id == "menu:Enter Full Screen")
+    #expect(catalog.source(for: item("performClose:"))?.id == "menu:Close")
+    // `search` is a CommandID but the catalog lists it as a menu row, so the command source is not shown.
+    #expect(catalog.source(for: item("invoke:", command: "search")) == nil)
+    #expect(catalog.source(for: item("invoke:", command: "notACommand")) == nil)
+    #expect(catalog.source(for: item("undo:")) == nil)
+    #expect(catalog.source(for: item(nil)) == nil)
+
+    let withoutSearch = ShortcutCatalog(menu: issue219Menu(),
+        implementedCommands: Set(CommandID.allCases).subtracting([.search]), language: .english)
+    #expect(withoutSearch.source(for: item("focusGridSearch:")) == nil)
+    #expect(catalog.source(for: item("focusGridSearch:"))?.id == "menu:Search current folder")
+}

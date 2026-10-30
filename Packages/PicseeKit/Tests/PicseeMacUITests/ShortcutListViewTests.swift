@@ -324,3 +324,25 @@ private struct Issue219PaintedText {
         }
     }
 }
+
+@Test @MainActor func issue284ShortcutRowWithoutKeycapsGivesTheNameTheFullRow() {
+    let row = ShortcutRowView(row: ShortcutRow(sources: [], name: "Recall Tools", keycaps: []))
+    row.frame = NSRect(x: 0, y: 0, width: 240, height: 34)
+    row.layoutSubtreeIfNeeded()
+    #expect(row.keycapViews.isEmpty)
+    #expect(row.nameLabel.frame.minX == 0)
+    #expect(row.nameLabel.frame.width == 232)
+}
+
+@Test @MainActor func issue284ShortcutTextWithoutFontOrColorPaintsInTheSystemLabelStyle() throws {
+    _ = NSApplication.shared
+    let field = ShortcutTextField(labelWithString: "Recall Tools")
+    field.font = nil
+    field.textColor = nil
+    let system = NSAttributedString(string: "Recall Tools",
+        attributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize)]).size()
+    #expect(field.intrinsicContentSize == NSSize(width: system.width, height: ceil(system.height)))
+    field.frame = NSRect(origin: .zero, size: field.intrinsicContentSize)
+    let painted = try issue219PaintedText(field)
+    #expect(painted.inkCount > 0)
+}
