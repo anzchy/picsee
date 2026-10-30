@@ -5,7 +5,8 @@ import PicseeApplication
 import PicseeInfrastructure
 @testable import PicseeMacUI
 
-@MainActor private func issue281Grid(width: CGFloat, count: Int = 12) throws -> (GridBrowserView, GridShellView, NSWindow) {
+@MainActor private func issue281Grid(width: CGFloat, count: Int = 12,
+    scrollerStyle: NSScroller.Style = .overlay) throws -> (GridBrowserView, GridShellView, NSWindow) {
     _ = NSApplication.shared
     let store = InMemoryDisplayPreferencesStore()
     let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: width, height: 772), preferencesStore: store)
@@ -16,6 +17,10 @@ import PicseeInfrastructure
                           styleMask: [], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.contentView = shell
+    // Pin the scroller style: the system default differs between machines (the PR #304 CI runner lost 17pt to a legacy scroller).
+    let scrollView = try #require(grid.collectionView.enclosingScrollView)
+    scrollView.scrollerStyle = scrollerStyle
+    scrollView.tile()
     let folder = URL(fileURLWithPath: "/tmp/picsee-grid-281")
     let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
     let entries = (0..<count).map { FolderEntry(url: folder.appendingPathComponent("DSC_\($0).jpg"), root: root) }
@@ -28,7 +33,10 @@ import PicseeInfrastructure
     return (grid, shell, window)
 }
 
-@Test @MainActor func issue281ThumbnailFramesAndPitchUseWindowViewportAtBreakpoints() throws {
+/// grid-light.html is pinned with overlay scrollbars, which take no width. A legacy scroller sits beside the grid, as a
+/// browser's classic scrollbar does: tiles shrink to the narrower content width, breakpoints still follow the window.
+@Test(arguments: [NSScroller.Style.overlay, .legacy]) @MainActor
+func issue281ThumbnailFramesAndPitchUseWindowViewportAtBreakpoints(scrollerStyle: NSScroller.Style) throws {
     let design = try PinnedDesign.page("grid-light")
     let cases: [(width: CGFloat, height: CGFloat, columns: Int, inset: CGFloat, gap: CGFloat, rowGap: CGFloat)] = [
         (1600, 200, 5, 32, 22, 22), (1599, 225, 5, 24, 16, 18),
@@ -37,8 +45,14 @@ import PicseeInfrastructure
         (720, 150, 3, 16, 12, 12), (481, 150, 1, 16, 12, 12), (480, 150, 1, 16, 12, 12),
     ]
     for item in cases {
-        let (grid, shell, window) = try issue281Grid(width: item.width)
+        let (grid, shell, window) = try issue281Grid(width: item.width, scrollerStyle: scrollerStyle)
         defer { window.close() }
+        let scrollView = try #require(grid.collectionView.enclosingScrollView)
+        let scroller = try #require(scrollView.verticalScroller)
+        #expect(scrollView.scrollerStyle == scrollerStyle && scroller.scrollerStyle == scrollerStyle)
+        let scrollerWidth = scrollerStyle == .legacy
+            ? NSScroller.scrollerWidth(for: scroller.controlSize, scrollerStyle: .legacy) : 0
+        #expect(scrollerStyle == .overlay || scrollerWidth > 0, "a legacy scroller takes width")
         let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
         let cell = try #require(grid.collectionView.item(at: IndexPath(item: 0, section: 0)) as? GridPhotoItem)
         let tile = try #require(cell.tileLayer)
@@ -54,7 +68,8 @@ import PicseeInfrastructure
         let first = try #require(layout.layoutAttributesForItem(at: IndexPath(item: 0, section: 0)))
         let lastInRow = try #require(layout.layoutAttributesForItem(at: IndexPath(item: item.columns - 1, section: 0)))
         let nextRow = try #require(layout.layoutAttributesForItem(at: IndexPath(item: item.columns, section: 0)))
-        let contentWidth = shell.mainFrame.width
+        let contentWidth = shell.mainFrame.width - scrollerWidth
+        #expect(abs(scrollView.contentSize.width - contentWidth) <= 1, "content width beside the scroller at \(item.width)")
         let expectedWidth = (contentWidth - 2 * item.inset - CGFloat(item.columns - 1) * item.gap) / CGFloat(item.columns)
         #expect(abs(layout.itemSize.width - expectedWidth) <= 1, "columns at \(item.width)")
         #expect(abs(first.frame.minX - item.inset) <= 1, "first tile x at \(item.width)")
@@ -62,7 +77,7 @@ import PicseeInfrastructure
             - CGFloat(item.columns - 1) * (expectedWidth + item.gap)) <= 1, "last tile x at \(item.width)")
         #expect(abs(nextRow.frame.minY - first.frame.minY - layout.itemSize.height - item.rowGap) <= 1, "row pitch at \(item.width)")
         if item.width == 1280 {
-            #expect(abs(tile.frame.width - 239) <= 1, "1280 thumbnail width")
+            if scrollerStyle == .overlay { #expect(abs(tile.frame.width - 239) <= 1, "1280 thumbnail width") }
             #expect(abs(nextRow.frame.minY - first.frame.minY - 242.16) <= 1, "1280 row pitch")
             #expect(abs(shell.mainFrame.minX + first.frame.minX + 4 - 224) <= 1, "1280 first tile x")
         }

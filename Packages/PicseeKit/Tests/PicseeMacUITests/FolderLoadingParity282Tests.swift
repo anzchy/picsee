@@ -98,7 +98,10 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
 
 /// Device parity-281-282-10301650 FAIL-4b: the ring drew 21pt left of the centred heading. The spin must pivot on the
 /// ring's centre after the late frame changes (host moved onto the main frame, window resized, sidebar toggled).
-@Test @MainActor func issue282ReadingRingSpinsAroundTheHeadingCentreAfterLateFrames() throws {
+/// Reduce Motion is pinned per case; the machine's setting must not decide the result (the PR #304 CI
+/// runner reported no spin, the path taken only when Reduce Motion reads as on).
+@Test(arguments: [false, true]) @MainActor
+func issue282ReadingRingSpinsAroundTheHeadingCentreAfterLateFrames(reduceMotion: Bool) throws {
     _ = NSApplication.shared
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
         styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -122,6 +125,8 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
     window.displayIfNeeded()
     let ring = try #require(issue282StateView("state.folder-progress", in: state) as? ReadingProgressView)
     let heading = try #require(issue282StateView("state.folder-title", in: state) as? NSTextField)
+    ring.reduceMotion = { reduceMotion }
+    ring.start()
 
     func expectCentred(_ step: String) throws {
         host.layoutSubtreeIfNeeded()
@@ -136,7 +141,8 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
         #expect(abs(ringCentre.x - headingCentre.x) <= 1, "\(step): ring frame centre")
         #expect(abs(pivotInWindow.x - headingCentre.x) <= 1, "\(step): spin pivot x \(pivotInWindow.x) vs \(headingCentre.x)")
         #expect(abs(pivotInWindow.y - ringCentre.y) <= 1, "\(step): spin pivot y \(pivotInWindow.y) vs \(ringCentre.y)")
-        #expect(spin.animation(forKey: "picsee.reading.rotation") != nil, "\(step): ring spins")
+        #expect((spin.animation(forKey: "picsee.reading.rotation") != nil) == !reduceMotion,
+                "\(step): ring spins unless Reduce Motion is on")
     }
     try expectCentred("display")
     window.setContentSize(NSSize(width: 1100, height: 760))
