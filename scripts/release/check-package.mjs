@@ -7,8 +7,8 @@
  *
  * Fails closed: every file and symlink must belong to the enumerated 0.0.1 release layout, and each
  * offending path is listed (research or prototype material, credentials, photos, scripts, documents, or
- * anything unknown). Allowed files must not contain a private key or a build path; symlinks must resolve,
- * through the real filesystem, inside the bundle. Also checks the Sparkle keys in
+ * anything unknown). Allowed files must not contain a private key or a build path; symlinks must point at
+ * exactly the target Sparkle ships and resolve, as the OS resolves them, inside the bundle. Also checks the Sparkle keys in
  * the shipped Info.plist and, in release mode, that Sparkle's full licence is bundled (#220 M2).
  */
 import { execFileSync } from "node:child_process";
@@ -34,6 +34,12 @@ const LAYOUT_FILES = [
   new RegExp(`^${SPARKLE}/Versions/B/XPCServices/(Installer|Downloader)\\.xpc/Contents/MacOS/\\1$`),
 ];
 const LAYOUT_LINKS = [new RegExp(String.raw`^${SPARKLE}/(Sparkle|Resources|Autoupdate|Updater\.app|XPCServices|Versions/Current)$`)];
+// Each framework link's exact target, as Sparkle 2.10.0 ships it in a built Picsee.app.
+const LINK_TARGETS = new Map([
+  ...["Sparkle", "Resources", "Autoupdate", "Updater.app", "XPCServices"]
+    .map((name) => [`Contents/Frameworks/Sparkle.framework/${name}`, `Versions/Current/${name}`]),
+  ["Contents/Frameworks/Sparkle.framework/Versions/Current", "B"],
+]);
 
 // Denials give the specific reason; names, directories and extensions match in any case.
 const FORBIDDEN_DIRECTORIES = new Map([
@@ -87,10 +93,15 @@ function walk(root, directory, files, links) {
   return files;
 }
 
-/** Resolves a link with the real filesystem; it must land inside the bundle. Links are never followed while walking. */
+const inside = (base, resolved) => resolved === base || resolved.startsWith(base + sep);
+
+/**
+ * Resolves a link as the OS does (realpath(3); Node's own realpathSync folds ".." before following links);
+ * it must land inside the bundle. Links are never followed while walking.
+ */
 function linkProblem(base, root, link) {
   let resolved;
-  try { resolved = realpathSync(join(root, link)); } catch (error) {
+  try { resolved = realpathSync.native(join(root, link)); } catch (error) {
     if (error.code === "ELOOP") return "symlink cycle";
     if (error.code === "ENOENT") {
       const target = readlinkSync(join(root, link));
@@ -100,8 +111,15 @@ function linkProblem(base, root, link) {
     }
     return `unresolvable symlink (${error.code})`;
   }
-  if (resolved !== base && !resolved.startsWith(base + sep)) return `symlink resolves to ${resolved}, outside the bundle`;
+  if (!inside(base, resolved)) return `symlink resolves to ${resolved}, outside the bundle`;
   return null;
+}
+
+/** Framework links must point at exactly the target Sparkle ships, not merely somewhere inside the bundle. */
+function targetProblem(root, link) {
+  const expected = LINK_TARGETS.get(link);
+  const target = readlinkSync(join(root, link));
+  return expected === undefined || target === expected ? null : `symlink to ${target}, expected ${expected}`;
 }
 
 /** Every offending path with its reason; an empty list means the bundle may ship. */
@@ -109,18 +127,20 @@ export function checkPackage(root, { requireSparkleLicence = false } = {}) {
   let isDirectory = false;
   try { isDirectory = statSync(root).isDirectory(); } catch { isDirectory = false; }
   if (!isDirectory) throw new Error(`${root} is not a directory`);
-  const base = realpathSync(root);
+  const base = realpathSync.native(root);
   const problems = [];
   const links = [];
   const files = walk(root, root, [], links).sort();
   for (const link of links.sort()) {
-    const reason = linkProblem(base, root, link) ?? classifyPath(link, "link");
+    const reason = linkProblem(base, root, link) ?? classifyPath(link, "link") ?? targetProblem(root, link);
     if (reason) problems.push({ path: link, reason });
   }
   for (const path of files) {
     const reason = classifyPath(path, "file");
     if (reason) { problems.push({ path, reason }); continue; }
-    const text = readFileSync(join(root, path)).toString("latin1");
+    const real = realpathSync.native(join(root, path));
+    if (!inside(base, real)) { problems.push({ path, reason: `resolves to ${real}, outside the bundle` }); continue; }
+    const text = readFileSync(real).toString("latin1");
     if (PRIVATE_KEY.test(text)) { problems.push({ path, reason: "contains a private key" }); continue; }
     const leak = DEVELOPER_PATHS.map((pattern) => pattern.exec(text)).find(Boolean);
     if (leak) problems.push({ path, reason: `developer path ${leak[0]}…` });

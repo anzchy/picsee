@@ -244,7 +244,7 @@ function cli(edit = () => {}) {
     edit(root, framework);
     const result = spawnSync(process.execPath, [new URL("./check-package.mjs", import.meta.url).pathname, root,
       "--require-sparkle-licence", "--expect-version", "0.0.1", "--expect-build", "312"], { encoding: "utf8" });
-    return { status: result.status, stderr: result.stderr };
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
   } finally { rmSync(dirname(root), { recursive: true, force: true }); }
 }
 
@@ -270,6 +270,26 @@ test("the CLI fails closed on each auditor regression and names the path", () =>
       symlinkSync("../..", join(root, "Contents/Resources/alias"));
       symlinkSync("alias/../outside", join(root, "Contents/Resources/escape"));
     }, ["Contents/Resources/alias", "Contents/Resources/escape"]],
+    // The OS follows alias before "..", so escape reaches the outside sibling: it is an escape, not a broken link.
+    [(root) => {
+      writeFileSync(join(dirname(root), "outside"), "secret");
+      symlinkSync("../..", join(root, "Contents/Resources/alias"));
+      symlinkSync("alias/../outside", join(root, "Contents/Resources/escape"));
+    }, ["Contents/Resources/escape"], /outside the bundle/],
+    // Allowed names chained into an escape: Resources -> the app root, then Sparkle -> Resources/../… beside the app.
+    [(root, framework) => {
+      write(dirname(root), "Versions/B/Sparkle", "OUTSIDE");
+      rmSync(join(framework, "Resources")); symlinkSync("../../..", join(framework, "Resources"));
+      rmSync(join(framework, "Sparkle")); symlinkSync("Resources/../Versions/B/Sparkle", join(framework, "Sparkle"));
+    }, ["Contents/Frameworks/Sparkle.framework/Resources", "Contents/Frameworks/Sparkle.framework/Sparkle"],
+      [/expected Versions\/Current\/Resources/, /outside the bundle/]],
+    // Inside the bundle but not the target Sparkle ships: every framework link is pinned to its exact target.
+    [(root, framework) => { rmSync(join(framework, "Sparkle")); symlinkSync("Versions/B/Sparkle", join(framework, "Sparkle")); },
+      ["Contents/Frameworks/Sparkle.framework/Sparkle"], /expected Versions\/Current\/Sparkle/],
+    [(root, framework) => {
+      mkdirSync(join(framework, "Versions/C"));
+      rmSync(join(framework, "Versions/Current")); symlinkSync("C", join(framework, "Versions/Current"));
+    }, ["Contents/Frameworks/Sparkle.framework/Versions/Current"], /expected B/],
     [(root, framework) => {
       mkdirSync(join(dirname(root), "elsewhere"), { recursive: true });
       rmSync(join(framework, "Versions/Current"));
@@ -280,13 +300,16 @@ test("the CLI fails closed on each auditor regression and names the path", () =>
     [(root, framework) => { rmSync(join(framework, "Autoupdate")); symlinkSync("Autoupdate", join(framework, "Autoupdate")); },
       ["Contents/Frameworks/Sparkle.framework/Autoupdate"], /cycle/],
   ];
+  const failures = [];
   for (const [edit, paths, reason] of cases) {
     const result = cli(edit);
-    assert.equal(result.status, 1, `${paths}: ${result.stderr}`);
-    for (const path of paths) {
+    if (result.status !== 1) failures.push(`${paths}: exit ${result.status} ${result.stdout}${result.stderr}`);
+    paths.forEach((path, index) => {
       const line = result.stderr.split("\n").find((l) => l.startsWith(`FAIL ${path}: `));
-      assert.ok(line, `${path} not named in:\n${result.stderr}`);
-      if (reason) assert.match(line, reason);
-    }
+      const expected = Array.isArray(reason) ? reason[index] : reason;
+      if (!line) failures.push(`${path} not named`);
+      else if (expected && !expected.test(line)) failures.push(`${line} (expected ${expected})`);
+    });
   }
+  assert.deepEqual(failures, []);
 });
