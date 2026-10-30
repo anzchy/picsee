@@ -49,7 +49,7 @@ struct AccessServices: Sendable {
     #endif
     func grant(_ folder: URL) async throws -> AccessRootID {
         let id = try await files.grant(folder: folder)
-        await monitor.reauthorize(id)
+        await monitor.reauthorize(id, explicitSelection: true)
         try await recent.add(RecentFolder(rootID: id, url: folder, displayName: folder.lastPathComponent))
         return id
     }
@@ -69,7 +69,7 @@ struct AccessServices: Sendable {
             guard let held = await files.rootURL(other) else { throw FileAccessError.needsReconnection(other) }
             targetID = other; url = held
         }
-        await monitor.reauthorize(targetID)
+        await monitor.reauthorize(targetID, explicitSelection: true)
         try await recent.add(RecentFolder(rootID: targetID, url: url, displayName: url.lastPathComponent))
         return (targetID, url)
     }
@@ -97,7 +97,7 @@ struct AccessServices: Sendable {
                 return (rootID: target.rootID, url: target.url, restored: target.rootID == id)
             }
             let selected = try await files.grant(folder: folder, excludingRoot: id)
-            await monitor.reauthorize(selected)
+            await monitor.reauthorize(selected, explicitSelection: true)
             try await recent.add(RecentFolder(rootID: selected, url: folder, displayName: folder.lastPathComponent))
             return (rootID: selected, url: folder, restored: false)
         }

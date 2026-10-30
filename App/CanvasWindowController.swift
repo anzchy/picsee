@@ -56,6 +56,15 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var chromeOverlay: ViewerChromeOverlay!
     private var stateHost: ViewerStateHost!
     private var lostAccessView: LostAccessStateView!
+    private struct ReboundLocation {
+        let result: AccessRebindResult
+        let position: WaitingAccessPosition
+        let volumeUUID: String?
+    }
+    private var reboundLocation: ReboundLocation?
+    private var rebindStrip: AccessRebindStripView?
+    private var undoRebindBusy = false
+
     private var accessAnnouncementTask: Task<Void, Never>?
     private var retryIntent: ViewerRetryIntent?
     private var retryFromFolderScan = false
@@ -88,6 +97,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         if let current = gridView.currentItemID { session.focus(current) }
         gridShell.showSearchEmpty(!gridSearch.term.isEmpty && filtered.navigationEntries.isEmpty, term: gridSearch.term)
         gridShell.setSearchStatus(resultCount: filtered.navigationEntries.count, term: gridSearch.term)
+        layoutRebindStrip()
     }
     private var presentation: GridViewerPresentation!
     private var gridFolderRoot: AccessRootID?
@@ -272,6 +282,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         content.addSubview(chromeOverlay, positioned: .above, relativeTo: inspectorHost)
         presentation = GridViewerPresentation(canvas: canvas, chrome: chromeOverlay, state: stateHost,
             grid: gridView, inspector: inspectorHost, shell: gridShell)
+        let previousMainFrameChange = gridShell.onMainFrameChange
+        gridShell.onMainFrameChange = { [weak self] frame in
+            previousMainFrameChange?(frame)
+            self?.layoutRebindStrip()
+        }
         window.contentView = content
         chromeOverlay.linkKeyViews(to: canvas)
         stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
@@ -370,6 +385,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private func handleAccessLoss(_ rootID: AccessRootID, counter: UInt64,
                                   initialPosition: WaitingAccessPosition? = nil) {
         guard gridFolderRoot == rootID || presentationRootID == rootID || waitingAccessPosition?.rootID == rootID else { return }
+        if undoRebindBusy, reboundLocation?.result.rootID == rootID {
+            canvas.showFailure()
+            inspector.select(itemID: nil, url: nil, access: nil)
+            gridView.clearPresentation()
+            WindowImageTitle.apply(to: window, imageURL: nil)
+            return
+        }
         let cause: AccessLossCause
         if case .lost(let known)? = accessMonitor?.state.snapshot(for: rootID)?.availability { cause = known }
         else { cause = .unknown }
@@ -459,24 +481,29 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             gridShell.linkKeyViews(from: first, through: last)
             _ = window?.makeFirstResponder(first)
         }
+        layoutRebindStrip()
         announceAccessLoss(position.rootID, title: copy.title)
     }
     private func lostAccessCopy(_ position: WaitingAccessPosition) -> LostAccessStateText {
         let disk = accessLossCause == .diskNotConnected
         let expired = accessLossCause == .accessExpired
+        let notFound = accessLossCause == .notFound
         let title: String
-        if expired { title = String(localized: "Access Has Expired") }
+        if notFound { title = String(localized: "Not Found") }
+        else if expired { title = String(localized: "Access Has Expired") }
         else if disk, let name = accessMonitor?.volumeName(for: position.rootID) {
             title = String(format: String(localized: "External Disk “%@” Is Not Connected"), name)
         } else {
             title = disk ? String(localized: "External Disk Is Not Connected") : String(localized: "Unable to Access This Folder")
         }
-        let detail = expired
+        let detail = notFound
+            ? String(localized: "picsee can’t find “%@”. Choose its location, or choose another folder to continue.")
+            : expired
             ? String(localized: "Access has expired. Choose this folder again to restore access; picsee will return to where you left off.")
             : disk ? String(localized: "“%@” is on an external disk.\nConnect the disk and picsee will verify access before restoring your place.")
             : String(localized: "picsee can’t read “%@” right now. Choose this folder again, or choose another folder to continue.")
         return LostAccessStateText(title: title, detail: String(format: detail, position.folderURL.lastPathComponent),
-            waiting: String(localized: "Waiting for the disk…"), reselect: String(localized: "Choose Folder Again…"),
+            waiting: String(localized: "Waiting for the disk…"), reselect: notFound ? String(localized: "Choose at New Location…") : String(localized: "Choose Folder Again…"),
             chooseOther: String(localized: "Choose Another Folder…"))
     }
     private func announceAccessLoss(_ rootID: AccessRootID, title: String) {
@@ -502,9 +529,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private func chooseAccessFolder(reselect: Bool) {
         guard let position = waitingAccessPosition, let window, window.attachedSheet == nil else { return }
         let operation = accessIntent.current
+        let replacing = reselect && accessLossCause == .notFound
         let panel = NSOpenPanel()
         panel.title = String(localized: reselect ? "Reconnect Folder" : "Grant Folder Access")
-        panel.prompt = String(localized: reselect ? "Choose Folder Again…" : "Grant Folder")
+        panel.prompt = replacing ? String(localized: "Choose at New Location…") : String(localized: reselect ? "Choose Folder Again…" : "Grant Folder")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -513,13 +541,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             panel.orderOut(nil)
             DispatchQueue.main.async { [weak self] in
                 guard let self, operation.isCurrent, self.waitingAccessPosition?.rootID == position.rootID else { return }
-                self.completeAccessFolderSelection(response == .OK ? panel.url : nil, reselect: reselect)
+                self.completeAccessFolderSelection(response == .OK ? panel.url : nil, reselect: reselect, replacing: replacing)
             }
         }
     }
 
     /// Continuation of the system chooser; nil is cancellation, not a new grant.
-    func completeAccessFolderSelection(_ url: URL?, reselect: Bool) {
+    func completeAccessFolderSelection(_ url: URL?, reselect: Bool, replacing: Bool? = nil) {
         guard let position = waitingAccessPosition else { return }
         guard let url else {
             self.showWaitingAccessState()
@@ -529,6 +557,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             return
         }
         if !reselect { self.openGrantedFolder(url); return }
+        if replacing ?? (accessLossCause == .notFound) { rebindAccessFolder(url, position: position); return }
         let selectionOperation = self.accessIntent.begin()
         waitingAccessPosition?.wasViewing = false
         waitingAccessPosition?.automaticRecovery = true
@@ -554,6 +583,135 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             } catch {
                 guard let self, selectionOperation.isCurrent else { return }
                 self.showWaitingAccessState()
+            }
+        }
+    }
+
+    private func rebindAccessFolder(_ url: URL, position: WaitingAccessPosition) {
+        lostAccessView.buttons.forEach { $0.isEnabled = false }
+        let operation = accessIntent.begin()
+        pendingAccessRecovery = false
+        accessRecoveryID = nil
+        accessRecoveryTask?.cancel(); accessRecoveryTask = nil
+        accessRecoveryScan?.end(); accessRecoveryScan = nil
+        waitingAccessPosition?.automaticRecovery = false
+        accessMonitor?.beginReplacement(position.rootID)
+        navigationTask?.cancel()
+        navigationTask = Task { @MainActor [weak self, accessServices] in
+            do {
+                let services = try await operation.wait { try await accessServices.value }
+                let volume = services.monitor.state.snapshot(for: position.rootID)?.volumeUUID
+                services.monitor.beginReplacement(position.rootID)
+                try operation.check()
+                // FileAccess checks task cancellation immediately before its synchronous transaction.
+                let result = try await services.files.rebind(position.rootID, folder: url, recentStore: services.recent)
+                await services.monitor.reconcilePersistedRoots()
+                guard let self, operation.isCurrent else {
+                    await services.files.discardRebindUndo(result.undo)
+                    return
+                }
+                self.dismissRebindStrip()
+                self.reboundLocation = ReboundLocation(result: result, position: position, volumeUUID: volume)
+                self.installRebindStrip(path: result.rootURL.path)
+                self.refreshRecents()
+                // Keep committed result/Undo even if admission or the new read fails.
+                await services.monitor.reauthorize(result.rootID, explicitSelection: true, preservingReadableAuthority: true)
+                guard operation.isCurrent else { return }
+                self.openFolder(result.rootURL, rootID: result.rootID)
+                self.layoutRebindStrip()
+            } catch {
+                guard let self, operation.isCurrent else { return }
+                self.showWaitingAccessState()
+            }
+        }
+    }
+    private func installRebindStrip(path: String) {
+        let strip = AccessRebindStripView(frame: .zero)
+        strip.messageLabel.stringValue = String(format: String(localized: "Updated to %@"), path)
+        strip.messageLabel.setAccessibilityLabel(strip.messageLabel.stringValue)
+        strip.onUndo = { [weak self] in self?.undoReboundLocation() }
+        strip.onClose = { [weak self] in self?.dismissRebindStrip() }
+        gridShell.mainContent.addSubview(strip)
+        rebindStrip = strip
+        layoutRebindStrip()
+    }
+    private func layoutRebindStrip() {
+        guard let gridShell, let gridView, let lostAccessView else { return }
+        let bounds = gridShell.mainContent.bounds
+        guard bounds.width > 0, bounds.height > 44 else { return }
+        let height: CGFloat = rebindStrip == nil ? 0 : 44
+        let content = NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: max(0, bounds.height - height))
+        gridView.frame = content
+        lostAccessView.frame = content
+        if rebindStrip != nil, !gridShell.isHidden, !stateHost.isHidden, let parent = stateHost.superview {
+            stateHost.frame = gridShell.mainContent.convert(content, to: parent)
+        }
+        if let strip = rebindStrip {
+            strip.frame = NSRect(x: bounds.minX, y: bounds.maxY - height, width: bounds.width, height: height)
+            strip.autoresizingMask = [.width, .minYMargin]
+            strip.layoutSubtreeIfNeeded()
+            let contentFirst: NSView = waitingAccessPosition == nil ? gridView.collectionView : lostAccessView.buttons.first ?? gridView.collectionView
+            let contentLast: NSView = waitingAccessPosition == nil ? gridView.collectionView : lostAccessView.buttons.last ?? gridView.collectionView
+            strip.undoButton.nextKeyView = strip.closeButton
+            strip.closeButton.nextKeyView = contentFirst
+            gridShell.linkKeyViews(from: strip.undoButton, through: contentLast)
+        } else if let first = lostAccessView.buttons.first, let last = lostAccessView.buttons.last, waitingAccessPosition != nil {
+            gridShell.linkKeyViews(from: first, through: last)
+        } else {
+            gridShell.linkKeyViews(from: gridView.collectionView)
+        }
+    }
+    private func dismissRebindStrip(force: Bool = false) {
+        // Undo's committed completion still has to reconcile this window on close.
+        guard force || !undoRebindBusy else { return }
+        if let token = reboundLocation?.result.undo {
+            Task { [accessServices] in
+                if let services = try? await accessServices.value { await services.files.discardRebindUndo(token) }
+            }
+        }
+        let focused = window?.firstResponder as? NSView
+        let hadFocus = focused === rebindStrip?.undoButton || focused === rebindStrip?.closeButton
+        rebindStrip?.retire()
+        rebindStrip = nil; reboundLocation = nil
+        layoutRebindStrip()
+        if hadFocus {
+            let next: NSView = waitingAccessPosition == nil ? gridView.collectionView : lostAccessView.buttons.first ?? gridView.collectionView
+            window?.makeFirstResponder(next)
+        }
+    }
+    private func undoReboundLocation() {
+        guard let rebound = reboundLocation, !undoRebindBusy else { return }
+        undoRebindBusy = true
+        rebindStrip?.undoButton.isEnabled = false
+        rebindStrip?.closeButton.isEnabled = false
+        navigationTask?.cancel()
+        let operation = accessIntent.begin()
+        navigationTask = Task { @MainActor [weak self, accessServices] in
+            do {
+                let services = try await operation.wait { try await accessServices.value }
+                try operation.check()
+                try await services.files.undoRebind(rebound.result.undo)
+                await services.monitor.reconcilePersistedRoots()
+                services.monitor.restoreLostRoot(rebound.position.rootID, volumeUUID: rebound.volumeUUID, cause: .notFound)
+                guard let self else { return }
+                self.undoRebindBusy = false
+                self.reboundLocation = nil
+                self.dismissRebindStrip()
+                guard operation.isCurrent else { return }
+                self.leaveWaitingAccess()
+                self.presentationRootID = rebound.position.rootID
+                self.gridFolderRoot = rebound.position.rootID
+                self.gridFolderURL = rebound.position.folderURL
+                var restored = rebound.position
+                restored.counter = services.monitor.state.snapshot(for: restored.rootID)?.counter ?? restored.counter + 1
+                restored.automaticRecovery = false
+                self.handleAccessLoss(restored.rootID, counter: restored.counter, initialPosition: restored)
+                self.refreshRecents()
+            } catch {
+                guard let self else { return }
+                self.undoRebindBusy = false
+                self.rebindStrip?.undoButton.isEnabled = true
+                self.rebindStrip?.closeButton.isEnabled = true
             }
         }
     }
@@ -986,6 +1144,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        dismissRebindStrip(force: true)
         accessAttachmentGeneration = UUID()
         accessAttachmentTask?.cancel(); accessAttachmentTask = nil
         leaveWaitingAccess()
@@ -1418,6 +1577,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
             }
         }
         presentation.layoutInspector(visible: inspectorVisible && !inspectorHost.isHidden)
+        layoutRebindStrip()
         canvas.synchronizeViewport()
     }
     private func inspectorRootView(overlay: Bool) -> MotionPolicyContent<InspectorPanel> {
