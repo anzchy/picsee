@@ -93,7 +93,7 @@ test('gates-rows rejects a missing summary without emitting PASS', t => {
   assert.doesNotMatch(result.stdout, /\| PASS \|/);
 });
 
-test('PR-body workflow lints edits without interpolating the body into shell', async () => {
+test('PR-body workflow lints edits with the trusted base lint and PR-head data', async () => {
   const { readFileSync } = await import('node:fs');
   const workflow = readFileSync(new URL('../../.github/workflows/pr-body.yml', import.meta.url), 'utf8');
   const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
@@ -104,15 +104,48 @@ test('PR-body workflow lints edits without interpolating the body into shell', a
   const job = workflow.match(/^  pr-body-lint:\n([\s\S]*?)(?=^  [a-z][a-z-]*:\n|$(?![\s\S]))/m)?.[1];
   assert.ok(job, 'missing pr-body-lint job');
   assert.match(job, /if: github\.event_name == 'pull_request'/);
-  assert.match(job, /fetch-depth: 0/);
+  assert.match(job, /- name: Checkout trusted base[\s\S]*?ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*?path: trusted/);
+  assert.match(job, /- name: Checkout PR head[\s\S]*?ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}[\s\S]*?path: pr-head/);
   assert.match(job, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\.4\.0/);
-  assert.match(job, /node --test scripts\/agents\/\*\.test\.mjs/);
+  assert.match(job, /- name: Test agent tooling\n        working-directory: pr-head\n        run: node --test scripts\/agents\/\*\.test\.mjs/);
+  assert.match(job, /- name: Check PR body gates\n        working-directory: pr-head/);
   assert.match(job, /PR_BODY: \$\{\{ github\.event\.pull_request\.body \}\}/);
+  assert.match(job, /grep -q '\^export function checkGates' \.\.\/trusted\/scripts\/agents\/ui-parity-pr-body-lint\.mjs/);
+  assert.match(job, /trusted PR-body lint lacks checkGates/);
   assert.match(job, /printf '%s' "\$PR_BODY" > "\$RUNNER_TEMP\/pr-body\.md"/);
-  assert.match(job, /--base origin\/main --body-file "\$RUNNER_TEMP\/pr-body\.md"/);
+  assert.match(job, /node \.\.\/trusted\/scripts\/agents\/ui-parity-pr-body-lint\.mjs --base origin\/main --body-file "\$RUNNER_TEMP\/pr-body\.md"/);
   const shell = [...job.matchAll(/run: \|\n((?:        .*\n?)+)/g)].map(match => match[1]).join('\n');
   assert.doesNotMatch(shell, /\$\{\{\s*github\.event\.pull_request\.body/);
   assert.doesNotMatch(job, /xcode/i);
+});
+
+test('pre-Gates baseline lint fails the trusted guard', async t => {
+  const { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { execFileSync } = await import('node:child_process');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const workflow = readFileSync(new URL('../../.github/workflows/pr-body.yml', import.meta.url), 'utf8');
+  const checkStep = workflow.match(/- name: Check PR body gates\n([\s\S]*)$/)?.[1];
+  assert.ok(checkStep, 'missing Check PR body gates step');
+  const indentedShell = checkStep.match(/run: \|\n((?:          .*\n?)+)/)?.[1];
+  assert.ok(indentedShell, 'missing trusted lint shell');
+  const shell = indentedShell.split('\n').filter(Boolean).map(line => line.slice(10)).join('\n');
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const baseline = execFileSync('git', ['show', '3de39c60:scripts/agents/ui-parity-pr-body-lint.mjs'], { cwd: root, encoding: 'utf8' });
+  assert.doesNotMatch(baseline, /^export function checkGates/m);
+  const directory = mkdtempSync(join(tmpdir(), 'picsee-trusted-lint-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  mkdirSync(join(directory, 'trusted/scripts/agents'), { recursive: true });
+  mkdirSync(join(directory, 'pr-head'));
+  writeFileSync(join(directory, 'trusted/scripts/agents/ui-parity-pr-body-lint.mjs'), baseline);
+  const result = spawnSync('bash', ['-eu', '-c', shell], {
+    cwd: join(directory, 'pr-head'),
+    env: { ...process.env, PR_BODY: '## Summary\n', RUNNER_TEMP: directory },
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /trusted PR-body lint lacks checkGates/);
+  assert.doesNotMatch(result.stdout, /UI-Parity PR body: PASS/);
 });
 
 test('GitHub Actions pins every remote uses line to a SHA with a version comment', async () => {
