@@ -124,6 +124,8 @@ executable path and a birth time after launch began, then records the PID, execu
 readiness. Old, missing, ambiguous or retired ownership records are refused; use a fresh run directory. It never picks a PID by owner name or newest
 name match. A pre-existing Picsee blocks launch and is never recorded or stopped; cleanup signals only the recorded PID while its birth identity still matches. The P0 skeleton run opens no fixture; it has one empty window.
 
+To run the App in a given UI language without touching system settings, write a language tag to `$RUN_DIR/app-lang.txt` before launching (for example `zh-Hans` to match the Chinese pinned pages). The helper then passes `-AppleLanguages (<tag>)` to that launch only, and the file stays in the run folder as evidence. Anything that isn't a plain language tag is refused before launch.
+
 For a future file-opening recipe, pass the scratch fixture through the app's normal open entry point.
 Opening a file this way is a **File Grant**: the sandboxed app can read that file without a dialog. A folder
 must become an **Access Root** through the powerbox (`NSOpenPanel`), driven with computer use. Never work
