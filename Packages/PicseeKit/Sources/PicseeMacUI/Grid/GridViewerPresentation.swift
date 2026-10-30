@@ -100,8 +100,10 @@ import PicseeCore
                                   currentItemID: ItemID?, offset: NSPoint?) {
         guard let grid = grid as? GridBrowserView else { return }
         grid.display(snapshot, selection: selection)
-        shell?.setSearchStatus(resultCount: snapshot.navigationEntries.count,
-            term: shell?.searchField.stringValue ?? "")
+        if let shell {
+            shell.setSearchStatus(resultCount: snapshot.navigationEntries.count,
+                term: shell.searchField.stringValue)
+        }
         showGrid(reading: false)
         grid.activate(currentItemID: currentItemID)
         if let offset { grid.restoreContentOffset(offset) }

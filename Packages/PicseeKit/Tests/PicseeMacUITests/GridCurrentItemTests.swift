@@ -115,7 +115,7 @@ import PicseeApplication
     cell.isCurrent = true
     #expect(!cell.currentRingLayer.isHidden)
     #expect(cell.currentRingLayer.borderWidth == 2)
-    #expect(cell.currentRingLayer.frame == cell.tileLayer?.bounds.insetBy(dx: 3, dy: 3))
+    #expect(cell.currentRingLayer.frame == cell.tileLayer?.frame.insetBy(dx: -2, dy: -2))
     #expect(close(rgba(cell.currentRingLayer.borderColor), .focusRing, .light))
     #expect(outline?.isHidden == true, "Current Item alone keeps the Selection outline off")
     cell.isSelected = true

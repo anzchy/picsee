@@ -230,7 +230,7 @@ private actor HeldGridImagePort {
         .first { $0.stringValue == "Visible.jpg" })
     let tile = try #require(good.view.subviews.first { $0.layer === good.tileLayer })
     #expect(name.frame.maxY < tile.frame.minY)
-    #expect(good.currentRingLayer.superlayer === good.tileLayer)
+    #expect(good.currentRingLayer.superlayer === good.view.layer)
     for appearance in [NSAppearance.Name.aqua, .darkAqua] {
         good.view.appearance = NSAppearance(named: appearance)
         #expect(good.tileLayer?.contents != nil)

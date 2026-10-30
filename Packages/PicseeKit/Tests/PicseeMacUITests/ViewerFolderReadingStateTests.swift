@@ -74,12 +74,12 @@ private actor GenericFailureThenSuccessScanner: FolderScanning {
     #expect(scene.state.showsProgress)
     #expect(scene.state.textLines == ["Reading Folder…", "Looking for images to browse. Please wait."])
     #expect(scene.state.buttons.map { $0.identifier?.rawValue } == ["state.cancel-folder"])
-    let title = scene.state.subviews.first { $0.accessibilityIdentifier() == "state.folder-title" }
-    let subtitle = scene.state.subviews.compactMap { $0 as? NSTextField }.first
-    #expect(title?.accessibilityLabel() == "Reading Folder…")
+    let title = scene.state.subviews.first { $0.accessibilityIdentifier() == "state.folder-title" } as? NSTextField
+    let subtitle = scene.state.subviews.first { $0.accessibilityIdentifier() == "state.folder-subtitle" } as? NSTextField
+    #expect(title?.stringValue == "Reading Folder…")
     #expect(subtitle?.stringValue == "Looking for images to browse. Please wait.")
     let children = scene.state.accessibilityChildren() ?? []
-    #expect(children.count == 3)
+    #expect(children.count == 4)
     let cancel = try #require(scene.state.buttons.first)
     #expect(cancel.title == "Cancel Reading")
     #expect(cancel.acceptsFirstResponder && scene.canvas.nextKeyView === cancel)
