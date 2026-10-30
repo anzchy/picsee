@@ -135,26 +135,68 @@ public final class ViewerStateHost: NSView {
             showsProgress = true
             textLines = [String(localized: "Reading Folder…"),
                 String(localized: "Looking for images to browse. Please wait.")]
-            let center = max(160, bounds.midY)
-            let progress = NSHostingView(rootView: IndeterminateProgressRow(label: textLines[0]))
-            progress.frame = NSRect(x: 16, y: center, width: max(0, bounds.width - 32), height: 80)
-            progress.autoresizingMask = [.width, .minYMargin, .maxYMargin]
-            progress.setAccessibilityIdentifier("state.folder-title")
-            progress.setAccessibilityElement(true); progress.setAccessibilityLabel(textLines[0])
+            let progress = NSProgressIndicator()
+            progress.isIndeterminate = true
+            progress.style = .spinning
+            progress.controlSize = .small
+            progress.startAnimation(nil)
+            progress.wantsLayer = true
+            progress.layer?.borderWidth = 2
+            progress.layer?.cornerRadius = 14
+            progress.layer?.borderColor = DesignColor.divider.nsColor.cgColor
+            progress.setAccessibilityIdentifier("state.folder-progress")
+            progress.setAccessibilityElement(true)
+            progress.setAccessibilityLabel(textLines[0])
+            let heading = NSTextField(labelWithString: textLines[0])
+            heading.font = .systemFont(ofSize: 16, weight: .medium)
+            heading.textColor = DesignColor.textPrimary.nsColor
+            heading.alignment = .center
+            heading.setAccessibilityIdentifier("state.folder-title")
             let subtitle = NSTextField(labelWithString: textLines[1])
-            subtitle.font = DesignMetrics.font("ui"); subtitle.textColor = DesignColor.textSecondary.nsColor
+            subtitle.font = .systemFont(ofSize: 13)
+            subtitle.textColor = DesignColor.textSecondary.nsColor
             subtitle.alignment = .center
-            subtitle.frame = NSRect(x: 16, y: center + 2, width: max(0, bounds.width - 32), height: 24)
-            subtitle.autoresizingMask = [.width, .minYMargin, .maxYMargin]
             subtitle.setAccessibilityIdentifier("state.folder-subtitle")
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            paragraph.minimumLineHeight = 22.1
+            paragraph.maximumLineHeight = 22.1
+            subtitle.attributedStringValue = NSAttributedString(string: textLines[1], attributes: [
+                .font: subtitle.font!, .foregroundColor: DesignColor.textSecondary.nsColor,
+                .paragraphStyle: paragraph,
+            ])
             let cancel = ViewerStateButton(title: String(localized: "Cancel Reading"), target: self, action: #selector(activate(_:)))
-            cancel.session = session; cancel.bezelStyle = .rounded; cancel.focusRingType = .exterior
+            cancel.session = session
+            cancel.isBordered = false
+            cancel.focusRingType = .exterior
+            cancel.contentTintColor = DesignColor.selectionText.nsColor
+            cancel.attributedTitle = NSAttributedString(string: cancel.title, attributes: [
+                .font: NSFont.systemFont(ofSize: 13),
+                .foregroundColor: DesignColor.selectionText.nsColor,
+            ])
             cancel.identifier = NSUserInterfaceItemIdentifier("state.cancel-folder")
             cancel.setAccessibilityIdentifier("state.cancel-folder")
-            cancel.frame = NSRect(x: (bounds.width - 180) / 2, y: center - 44, width: 180, height: 32)
+            cancel.setAccessibilityLabel(String(localized: "Cancel Reading"))
+            let headingHeight: CGFloat = 20
+            let subtitleHeight: CGFloat = 22.1
+            let cancelHeight: CGFloat = 32
+            let contentHeight = 28 + 26 + headingHeight + 9 + subtitleHeight + 8 + cancelHeight
+            let center = max(160, bounds.midY)
+            let top = center + contentHeight / 2
+            progress.frame = NSRect(x: bounds.midX - 14, y: top - 28, width: 28, height: 28)
+            progress.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
+            heading.frame = NSRect(x: 16, y: progress.frame.minY - 26 - headingHeight,
+                width: max(0, bounds.width - 32), height: headingHeight)
+            heading.autoresizingMask = [.width, .minYMargin, .maxYMargin]
+            subtitle.frame = NSRect(x: 16, y: heading.frame.minY - 9 - subtitleHeight,
+                width: max(0, bounds.width - 32), height: subtitleHeight)
+            subtitle.autoresizingMask = [.width, .minYMargin, .maxYMargin]
+            let cancelWidth = max(32, ceil((cancel.intrinsicContentSize.width + 16) / 2) * 2)
+            cancel.frame = NSRect(x: bounds.midX - cancelWidth / 2, y: subtitle.frame.minY - 8 - cancelHeight,
+                width: cancelWidth, height: cancelHeight)
             cancel.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
-            [progress, subtitle, cancel].forEach { addSubview($0) }
-            buttons = [cancel]; setAccessibilityChildren([progress, subtitle, cancel])
+            [progress, heading, subtitle, cancel].forEach { addSubview($0) }
+            buttons = [cancel]; setAccessibilityChildren([progress, heading, subtitle, cancel])
             return
         case .folderScanFailed(let reason, let count):
             failure = true
