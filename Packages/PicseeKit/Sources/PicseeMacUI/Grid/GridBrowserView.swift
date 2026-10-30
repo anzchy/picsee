@@ -473,7 +473,8 @@ private struct GridGeometry: Equatable {
     }
 
     private func updateGeometry() {
-        let next = GridGeometry(viewportWidth: bounds.width, contentWidth: scrollView.contentSize.width)
+        let viewportWidth = window?.contentView?.bounds.width ?? bounds.width
+        let next = GridGeometry(viewportWidth: viewportWidth, contentWidth: scrollView.contentSize.width)
         guard next != geometry, let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
         geometry = next
         (collectionView as? GridCollectionView)?.columnStep = next.columns
