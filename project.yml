@@ -5,6 +5,9 @@ options:
 packages:
   PicseeKit:
     path: Packages/PicseeKit
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -30,6 +33,7 @@ targets:
         product: PicseeInfrastructure
       - package: PicseeKit
         product: PicseeMacUI
+      - package: Sparkle
     settings:
       base:
         PRODUCT_NAME: Picsee
@@ -67,6 +71,7 @@ targets:
       - path: App
         excludes:
           - PicseeApp.swift
+          - Updates/SparkleUpdatePort.swift
           - Info.plist
           - Resources
       - path: AppTests
