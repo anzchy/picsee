@@ -128,6 +128,33 @@ class LaunchContractTests(unittest.TestCase):
                 d.launch(self.run)
         self.assertFalse((self.run / 'process.json').exists())
 
+    def test_app_lang_file_passes_apple_languages_for_this_launch_only(self):
+        (self.run / 'app-lang.txt').write_text('zh-Hans\n')
+        seen = []
+        def fake_open(argv, **_):
+            seen.append(argv)
+            return OpenHelper()
+        with patch.object(d, 'running', side_effect=[[], [4242]]), \
+                patch.object(d, 'process_snapshot', return_value=self.record), \
+                patch.object(d, 'executable', return_value=Path(self.record['executable'])), \
+                patch.object(d, 'checked', return_value='12345'), \
+                patch.object(d, 'windows', return_value=[{'title': 'Picsee'}]), \
+                patch.object(d, 'logs', return_value='Picsee launch git=abcdefg'), \
+                patch.object(d.subprocess, 'Popen', side_effect=fake_open), \
+                patch.object(d.time, 'time', return_value=1793073600.0):
+            d.launch(self.run)
+        self.assertEqual(seen, [['/usr/bin/open', '-n', '-W', str(self.app),
+                                 '--args', '-AppleLanguages', '(zh-Hans)']])
+
+    def test_app_lang_file_rejects_values_that_are_not_a_language_tag(self):
+        (self.run / 'app-lang.txt').write_text('zh-Hans) -NSFoo (x\n')
+        with patch.object(d, 'running', return_value=[]), \
+                patch.object(d.subprocess, 'Popen') as opened:
+            with self.assertRaisesRegex(RuntimeError, 'app-lang'):
+                d.launch(self.run)
+        opened.assert_not_called()
+        self.assertFalse((self.run / 'process.json').exists())
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

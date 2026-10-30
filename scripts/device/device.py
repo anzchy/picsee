@@ -250,12 +250,19 @@ def launch(run):
         raise RuntimeError('another Picsee is running; ask its owner to quit it')
     app = Path((run / 'bundle.path').read_text().strip()).resolve()
     sha = json.loads((run / 'build.json').read_text())['sha']
+    argv = ['/usr/bin/open', '-n', '-W', str(app)]
+    # Optional per-run UI language (evidence stays in the run directory); no system setting changes.
+    if (run / 'app-lang.txt').exists():
+        lang = (run / 'app-lang.txt').read_text().strip()
+        if not re.fullmatch(r'[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*', lang):
+            raise RuntimeError('app-lang.txt is not a language tag')
+        argv += ['--args', '-AppleLanguages', f'({lang})']
     launch_time = time.time()
     (run / 'start.txt').write_text(datetime.datetime.fromtimestamp(launch_time).strftime('%Y-%m-%d %H:%M:%S'))
     # -W keeps the LaunchServices helper alive until the new app exits, so an
     # exit before our first PID sample is observable without launching the
     # bundle executable directly.
-    opener = subprocess.Popen(['/usr/bin/open', '-n', '-W', str(app)], text=True,
+    opener = subprocess.Popen(argv, text=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               env={**os.environ, 'LC_ALL': 'C'})
     deadline = time.monotonic() + 30
