@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -21,6 +22,7 @@ function cleanTree() {
     "Contents/Resources/zh-Hans.lproj/Localizable.strings": "\"a\" = \"乙\";",
     "Contents/Resources/en.lproj/Localizable.stringsdict": "<plist/>",
     "Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle": "bin",
+    "Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate": "bin",
     "Contents/Frameworks/Sparkle.framework/Versions/B/Resources/ReleaseNotesColorStyle.css": "body{}",
     "Contents/Frameworks/Sparkle.framework/Versions/B/Resources/SUUpdateAlert.nib": "nib",
     "Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer": "bin",
@@ -187,4 +189,104 @@ test("framework symlinks are checked as links, never read, and must stay inside 
       ["Contents/Resources/climb", "Contents/Resources/escape", "Contents/Resources/notes.md"]);
     assert.match(problems.find((p) => p.path.endsWith("escape")).reason, /outside the bundle/);
   } finally { rmSync(dirname(root), { recursive: true, force: true }); }
+});
+
+const layout = readFileSync(new URL("./fixtures/release-layout-0.0.1.txt", import.meta.url), "utf8")
+  .split("\n").filter((line) => line && !line.startsWith("#"));
+
+test("every entry of the real 0.0.1 release layout is allowed", () => {
+  assert.ok(layout.length > 70);
+  for (const path of layout) assert.equal(classifyPath(path), null, path);
+});
+
+test("anything outside the release layout fails, including look-alikes of allowed files", () => {
+  for (const path of [
+    "Contents/Resources/Unknown.bin", "Contents/MacOS/helper", "Contents/Frameworks/Other.framework/Other",
+    "Contents/Frameworks/Sparkle.framework/Versions/B/Resources/theme.css",
+    "Contents/Frameworks/Sparkle.framework/Versions/A/Sparkle",
+    "Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Downloader",
+    "Contents/Resources/fr.lproj/Localizable.strings", "Contents/Resources/en.lproj/Secrets.strings",
+    "Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/Resources/sub/alley.jpg",
+    "Contents/Resources/ThirdPartyNotices/other.txt", "Contents/Info.plist.bak",
+  ]) assert.notEqual(classifyPath(path), null, path);
+});
+
+test("denied names, directories and extensions match in any case", () => {
+  const cases = [
+    ["Contents/Resources/.ENV", /environment file/], ["Contents/Resources/.Env.Local", /environment file/],
+    ["Contents/Resources/Evidence/payload.bin", /evidence/i], ["Contents/Resources/DOCS/notes", /documentation/],
+    ["Contents/Resources/tool.BASH", /script/], ["Contents/Resources/tool.bash", /script/],
+    ["Contents/Resources/Key.P12", /certificate/], ["Contents/Resources/.ds_store", /Finder/],
+  ];
+  for (const [path, reason] of cases) assert.match(classifyPath(path) ?? "", reason, path);
+});
+
+const PEM = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIA==\n-----END PRIVATE KEY-----\n";
+const OPENSSH = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n";
+
+function infoXml(info) {
+  const value = (v) => typeof v === "boolean" ? `<${v}/>` : `<string>${v}</string>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>` +
+    Object.entries(info).map(([k, v]) => `<key>${k}</key>${value(v)}`).join("") + "</dict></plist>\n";
+}
+
+/** Runs the CLI on an otherwise valid release bundle with `edit` applied; returns exit code and stderr. */
+function cli(edit = () => {}) {
+  const tree = cleanTree();
+  tree["Contents/Info.plist"] = infoXml(goodInfo);
+  const root = materialise(tree);
+  try {
+    const framework = join(root, "Contents/Frameworks/Sparkle.framework");
+    symlinkSync("B", join(framework, "Versions/Current"));
+    for (const name of ["Sparkle", "Resources", "Autoupdate", "Updater.app", "XPCServices"]) {
+      symlinkSync(`Versions/Current/${name}`, join(framework, name));
+    }
+    edit(root, framework);
+    const result = spawnSync(process.execPath, [new URL("./check-package.mjs", import.meta.url).pathname, root,
+      "--require-sparkle-licence", "--expect-version", "0.0.1", "--expect-build", "312"], { encoding: "utf8" });
+    return { status: result.status, stderr: result.stderr };
+  } finally { rmSync(dirname(root), { recursive: true, force: true }); }
+}
+
+test("the CLI passes the clean fixture", () => {
+  const result = cli();
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("the CLI fails closed on each auditor regression and names the path", () => {
+  const write = (root, path, content = "x") => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), content); };
+  const cases = [
+    [(root) => write(root, "Contents/Resources/.ENV"), ["Contents/Resources/.ENV"]],
+    [(root) => write(root, "Contents/Resources/Evidence/payload.bin"), ["Contents/Resources/Evidence/payload.bin"]],
+    [(root) => write(root, "Contents/Resources/signing", PEM), ["Contents/Resources/signing"]],
+    [(root) => write(root, "Contents/Resources/tool.bash", "#!/bin/bash\n"), ["Contents/Resources/tool.bash"]],
+    [(root) => write(root, "Contents/Frameworks/Sparkle.framework/Versions/B/Resources/theme.css", "a{}"),
+      ["Contents/Frameworks/Sparkle.framework/Versions/B/Resources/theme.css"]],
+    [(root) => write(root, "Contents/Resources/en.lproj/Localizable.strings", `"a" = "b";\n${PEM}`),
+      ["Contents/Resources/en.lproj/Localizable.strings"], /private key/],
+    [(root) => write(root, "Contents/Resources/Assets.car", `car\u0000${OPENSSH}`), ["Contents/Resources/Assets.car"], /private key/],
+    [(root) => {
+      writeFileSync(join(dirname(root), "outside"), "secret");
+      symlinkSync("../..", join(root, "Contents/Resources/alias"));
+      symlinkSync("alias/../outside", join(root, "Contents/Resources/escape"));
+    }, ["Contents/Resources/alias", "Contents/Resources/escape"]],
+    [(root, framework) => {
+      mkdirSync(join(dirname(root), "elsewhere"), { recursive: true });
+      rmSync(join(framework, "Versions/Current"));
+      symlinkSync("../../../../../elsewhere", join(framework, "Versions/Current"));
+    }, ["Contents/Frameworks/Sparkle.framework/Versions/Current"], /outside the bundle/],
+    [(root, framework) => { rmSync(join(framework, "XPCServices")); symlinkSync("Versions/Current/Missing", join(framework, "XPCServices")); },
+      ["Contents/Frameworks/Sparkle.framework/XPCServices"], /broken/],
+    [(root, framework) => { rmSync(join(framework, "Autoupdate")); symlinkSync("Autoupdate", join(framework, "Autoupdate")); },
+      ["Contents/Frameworks/Sparkle.framework/Autoupdate"], /cycle/],
+  ];
+  for (const [edit, paths, reason] of cases) {
+    const result = cli(edit);
+    assert.equal(result.status, 1, `${paths}: ${result.stderr}`);
+    for (const path of paths) {
+      const line = result.stderr.split("\n").find((l) => l.startsWith(`FAIL ${path}: `));
+      assert.ok(line, `${path} not named in:\n${result.stderr}`);
+      if (reason) assert.match(line, reason);
+    }
+  }
 });

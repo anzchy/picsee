@@ -5,59 +5,75 @@
  *   node scripts/release/check-package.mjs <Picsee.app> [--require-sparkle-licence]
  *        [--expect-version 0.0.1] [--expect-build 312]
  *
- * Fails, listing every offending path, on research or prototype material, credentials, private photos,
- * stray scripts and documents, and build paths baked into any file. Also checks the Sparkle keys in
+ * Fails closed: every file and symlink must belong to the enumerated 0.0.1 release layout, and each
+ * offending path is listed (research or prototype material, credentials, photos, scripts, documents, or
+ * anything unknown). Allowed files must not contain a private key or a build path; symlinks must resolve,
+ * through the real filesystem, inside the bundle. Also checks the Sparkle keys in
  * the shipped Info.plist and, in release mode, that Sparkle's full licence is bundled (#220 M2).
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, readlinkSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const SPARKLE_LICENCE_PATH = "Contents/Resources/ThirdPartyNotices/Sparkle-2.10.0-LICENSE.txt";
-const SAMPLE_BUNDLE = "Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/Resources/";
-const SAMPLES = new Set(["alley", "gate", "hillside", "lakehouse", "lakeside", "temple"].map((name) => `${name}.jpg`));
-const SPARKLE = "Contents/Frameworks/Sparkle.framework/";
 const FEED = "https://raw.githubusercontent.com/anzchy/picsee/main/appcast.xml";
+const SPARKLE = String.raw`Contents/Frameworks/Sparkle\.framework`;
 
+// The 0.0.1 release layout (scripts/release/fixtures/release-layout-0.0.1.txt): anything else fails closed.
+const LAYOUT_FILES = [
+  /^Contents\/(Info\.plist|PkgInfo|MacOS\/Picsee|_CodeSignature\/CodeResources|CodeResources)$/,
+  /^Contents\/Resources\/(AppIcon\.icns|Assets\.car)$/,
+  /^Contents\/Resources\/(en|zh-Hans)\.lproj\/(Localizable\.strings|Localizable\.stringsdict)$/,
+  new RegExp(`^${SPARKLE_LICENCE_PATH.replace(/[.]/g, "\\.")}$`),
+  /^Contents\/Resources\/PicseeKit_PicseeMacUI\.bundle\/Contents\/(Info\.plist|Resources\/(alley|gate|hillside|lakehouse|lakeside|temple)\.jpg|Resources\/PROVENANCE\.md)$/,
+  new RegExp(`^${SPARKLE}/Versions/B/(Autoupdate|Sparkle|_CodeSignature/CodeResources|` +
+    String.raw`Resources/(Info\.plist|ReleaseNotesColorStyle\.css|SUUpdateAlert\.nib|SUUpdatePermissionPrompt\.nib|(Base|[a-z]{2,3}([_-][A-Za-z]{2,4})?)\.lproj/Sparkle\.strings)|` +
+    String.raw`Updater\.app/Contents/(Info\.plist|PkgInfo|MacOS/Updater|_CodeSignature/CodeResources)|` +
+    String.raw`XPCServices/(Installer|Downloader)\.xpc/Contents/(Info\.plist|_CodeSignature/CodeResources))$`),
+  new RegExp(`^${SPARKLE}/Versions/B/XPCServices/(Installer|Downloader)\\.xpc/Contents/MacOS/\\1$`),
+];
+const LAYOUT_LINKS = [new RegExp(String.raw`^${SPARKLE}/(Sparkle|Resources|Autoupdate|Updater\.app|XPCServices|Versions/Current)$`)];
+
+// Denials give the specific reason; names, directories and extensions match in any case.
 const FORBIDDEN_DIRECTORIES = new Map([
   ["evidence", "Picview research evidence"], ["docs", "repository documentation"], ["design", "design material"],
-  ["TestAssets", "test assets"], ["node_modules", "npm packages"], [".stitch", "Stitch workspace"],
+  ["testassets", "test assets"], ["node_modules", "npm packages"], [".stitch", "Stitch workspace"],
   [".stitch-cli", "Stitch credentials"], [".rea-cache", "REA cache"], [".npm", "npm cache"], [".git", "git metadata"],
   ["qa", "QA captures"], ["states", "prototype state pages"],
 ]);
 const FORBIDDEN_NAMES = [
-  [/^\.DS_Store$/, "Finder metadata"], [/^\.env(\..*)?$/, "environment file"],
-  [/^(strings\.txt|deep-.*\.(txt|json))$/, "reverse-engineering dump"], [/^PICVIEW_/i, "Picview research"],
-  [/^(analyze|deepen)_picview\.py$/, "research script"], [/private[-_]?key/i, "private key"],
-  [/^(id_rsa|id_ed25519)(\.pub)?$/, "SSH key"],
+  [/^\.ds_store$/i, "Finder metadata"], [/^\.env(\..*)?$/i, "environment file"],
+  [/^(strings\.txt|deep-.*\.(txt|json))$/i, "reverse-engineering dump"], [/^PICVIEW_/i, "Picview research"],
+  [/^(analyze|deepen)_picview\.py$/i, "research script"], [/private[-_]?key/i, "private key"],
+  [/^(id_rsa|id_ecdsa|id_ed25519)(\.pub)?$/i, "SSH key"],
 ];
 const FORBIDDEN_EXTENSIONS = new Map([
-  ["p12", "certificate bundle"], ["p8", "API private key"], ["pem", "key or certificate"], ["key", "private key"],
-  ["mobileprovision", "provisioning profile"], ["html", "HTML page"], ["htm", "HTML page"], ["css", "stylesheet"],
-  ["js", "script"], ["mjs", "script"], ["cjs", "script"], ["ts", "script"], ["py", "script"], ["sh", "script"],
+  ["p12", "certificate bundle"], ["pfx", "certificate bundle"], ["p8", "API private key"], ["pem", "key or certificate"],
+  ["key", "private key"], ["mobileprovision", "provisioning profile"], ["html", "HTML page"], ["htm", "HTML page"],
+  ["css", "stylesheet"], ["js", "script"], ["mjs", "script"], ["cjs", "script"], ["ts", "script"], ["py", "script"],
+  ["sh", "script"], ["bash", "script"], ["zsh", "script"], ["command", "script"], ["rb", "script"], ["pl", "script"],
   ["md", "document"], ["txt", "text file"], ["json", "data file"], ["zip", "archive"],
   ["jpg", "photo"], ["jpeg", "photo"], ["png", "image"], ["heic", "photo"], ["heif", "photo"], ["tif", "image"],
   ["tiff", "image"], ["gif", "image"], ["webp", "image"], ["dng", "raw photo"], ["raw", "raw photo"],
 ]);
 const DEVELOPER_PATHS = [/\/Users\/[^/\0]+\//, /\/home\/[^/\0]+\//, /\/private\/var\/folders\//];
+const PRIVATE_KEY = /-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY-----/;
 
-/** Returns why a bundle-relative path must not ship, or null when it may. */
-export function classifyPath(relativePath) {
+/** Returns why a bundle-relative path must not ship, or null when it is part of the release layout. */
+export function classifyPath(relativePath, kind = "any") {
   const parts = relativePath.split("/");
   const name = parts[parts.length - 1];
   for (const part of parts.slice(0, -1)) {
-    if (FORBIDDEN_DIRECTORIES.has(part)) return `${FORBIDDEN_DIRECTORIES.get(part)} (${part}/)`;
+    const reason = FORBIDDEN_DIRECTORIES.get(part.toLowerCase());
+    if (reason) return `${reason} (${part}/)`;
   }
   for (const [pattern, reason] of FORBIDDEN_NAMES) if (pattern.test(name)) return reason;
-  // Allowed exceptions: the six B4 sample photos and their provenance, Sparkle's own stylesheet, its licence.
-  if (relativePath.startsWith(SAMPLE_BUNDLE) && !relativePath.slice(SAMPLE_BUNDLE.length).includes("/") &&
-      (SAMPLES.has(name) || name === "PROVENANCE.md")) return null;
-  if (relativePath === SPARKLE_LICENCE_PATH) return null;
-  if (relativePath.startsWith(SPARKLE) && name.endsWith(".css")) return null;
+  const files = kind !== "link" && LAYOUT_FILES.some((pattern) => pattern.test(relativePath));
+  const links = kind !== "file" && LAYOUT_LINKS.some((pattern) => pattern.test(relativePath));
+  if (files || links) return null;
   const extension = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
-  if (FORBIDDEN_EXTENSIONS.has(extension)) return FORBIDDEN_EXTENSIONS.get(extension);
-  return null;
+  return FORBIDDEN_EXTENSIONS.get(extension) ?? "not part of the 0.0.1 release layout";
 }
 
 function walk(root, directory, files, links) {
@@ -71,11 +87,20 @@ function walk(root, directory, files, links) {
   return files;
 }
 
-/** Framework symlinks stay relative and inside the bundle; the files they reach are checked on their own. */
-function linkProblem(root, link) {
-  const target = readlinkSync(join(root, link));
-  const resolved = normalize(join(dirname(link), target));
-  if (isAbsolute(target) || resolved === ".." || resolved.startsWith("../")) return `symlink to ${target} points outside the bundle`;
+/** Resolves a link with the real filesystem; it must land inside the bundle. Links are never followed while walking. */
+function linkProblem(base, root, link) {
+  let resolved;
+  try { resolved = realpathSync(join(root, link)); } catch (error) {
+    if (error.code === "ELOOP") return "symlink cycle";
+    if (error.code === "ENOENT") {
+      const target = readlinkSync(join(root, link));
+      const lexical = normalize(join(dirname(link), target));
+      if (isAbsolute(target) || lexical === ".." || lexical.startsWith("../")) return `symlink to ${target} points outside the bundle`;
+      return `broken symlink to ${target}`;
+    }
+    return `unresolvable symlink (${error.code})`;
+  }
+  if (resolved !== base && !resolved.startsWith(base + sep)) return `symlink resolves to ${resolved}, outside the bundle`;
   return null;
 }
 
@@ -84,17 +109,19 @@ export function checkPackage(root, { requireSparkleLicence = false } = {}) {
   let isDirectory = false;
   try { isDirectory = statSync(root).isDirectory(); } catch { isDirectory = false; }
   if (!isDirectory) throw new Error(`${root} is not a directory`);
+  const base = realpathSync(root);
   const problems = [];
   const links = [];
   const files = walk(root, root, [], links).sort();
   for (const link of links.sort()) {
-    const reason = classifyPath(link) ?? linkProblem(root, link);
+    const reason = linkProblem(base, root, link) ?? classifyPath(link, "link");
     if (reason) problems.push({ path: link, reason });
   }
   for (const path of files) {
-    const reason = classifyPath(path);
+    const reason = classifyPath(path, "file");
     if (reason) { problems.push({ path, reason }); continue; }
     const text = readFileSync(join(root, path)).toString("latin1");
+    if (PRIVATE_KEY.test(text)) { problems.push({ path, reason: "contains a private key" }); continue; }
     const leak = DEVELOPER_PATHS.map((pattern) => pattern.exec(text)).find(Boolean);
     if (leak) problems.push({ path, reason: `developer path ${leak[0]}…` });
   }
