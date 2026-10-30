@@ -167,3 +167,13 @@ test("the runbook states what merging an appcast PR does, and the rc rule", () =
   assert.match(readme, /Merging an appcast PR offers that build to every installed copy that has update checks on/);
   assert.match(readme, /For a release candidate, close the appcast PR unless you mean a general rollout/);
 });
+
+test("the runbook documents the argv boundary for the notary and keychain passwords", () => {
+  const readme = readFileSync(new URL("docs/release/README.md", root), "utf8");
+  assert.match(readme, /## Credentials on the runner/);
+  assert.match(readme, /app-specific password[^\n]*process arguments/);
+  assert.match(readme, /single-tenant[^\n]*ephemeral|ephemeral[^\n]*single-tenant/);
+  for (const name of [/import the developer id certificate/i, /notarise the app/i, /notarise the dmg/i]) {
+    assert.match(step(name).text, /^\s+umask 077$/m, String(name));
+  }
+});
