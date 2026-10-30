@@ -4,6 +4,64 @@ import Observation
 import PicseeCore
 import PicseeApplication
 
+@MainActor final class ReadingProgressView: NSView {
+    let dividerLayer = CAShapeLayer()
+    let accentLayer = CAShapeLayer()
+    var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        dividerLayer.fillColor = NSColor.clear.cgColor
+        accentLayer.fillColor = NSColor.clear.cgColor
+        dividerLayer.lineWidth = 2
+        accentLayer.lineWidth = 2
+        accentLayer.lineCap = .round
+        layer?.addSublayer(dividerLayer)
+        layer?.addSublayer(accentLayer)
+        setAccessibilityRole(.progressIndicator)
+        refreshAppearance()
+    }
+    required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        let inset = bounds.insetBy(dx: 2, dy: 2)
+        dividerLayer.path = CGPath(ellipseIn: inset, transform: nil)
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let radius = min(bounds.width, bounds.height) / 2 - 1
+        let segment = CGMutablePath()
+        segment.addArc(center: center, radius: radius, startAngle: -.pi / 2, endAngle: 0, clockwise: false)
+        accentLayer.path = segment
+        dividerLayer.frame = bounds
+        accentLayer.frame = bounds
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshAppearance()
+    }
+
+    private func refreshAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            dividerLayer.strokeColor = DesignColor.divider.nsColor.cgColor
+            accentLayer.strokeColor = DesignColor.accent.nsColor.cgColor
+        }
+    }
+
+    func start() {
+        layout()
+        layer?.removeAnimation(forKey: "picsee.reading.rotation")
+        guard !reduceMotion() else { return }
+        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
+        rotation.fromValue = 0
+        rotation.toValue = CGFloat.pi * 2
+        rotation.duration = 1
+        rotation.repeatCount = .infinity
+        layer?.add(rotation, forKey: "picsee.reading.rotation")
+    }
+}
+
 private struct StateText: View {
     let lines: [String]
     let isLoading: Bool
@@ -135,15 +193,8 @@ public final class ViewerStateHost: NSView {
             showsProgress = true
             textLines = [String(localized: "Reading Folder…"),
                 String(localized: "Looking for images to browse. Please wait.")]
-            let progress = NSProgressIndicator()
-            progress.isIndeterminate = true
-            progress.style = .spinning
-            progress.controlSize = .small
-            progress.startAnimation(nil)
-            progress.wantsLayer = true
-            progress.layer?.borderWidth = 2
-            progress.layer?.cornerRadius = 14
-            progress.layer?.borderColor = DesignColor.divider.nsColor.cgColor
+            let progress = ReadingProgressView(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
+            progress.start()
             progress.setAccessibilityIdentifier("state.folder-progress")
             progress.setAccessibilityElement(true)
             progress.setAccessibilityLabel(textLines[0])
