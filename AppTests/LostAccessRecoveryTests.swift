@@ -126,6 +126,11 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
     }
 }
 
+extension FileAccess {
+    /// Runs `body` as one turn of the actor, so no lease can resolve a root between its steps.
+    fileprivate func runIsolated(_ body: @Sendable () throws -> Void) throws { try body() }
+}
+
 @MainActor private final class RecoveryMotion: ReduceMotionSource {
     var reduceMotion = true
     var onChange: (@MainActor () -> Void)?
@@ -207,6 +212,16 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
             (count.map { grid.displayedItemIDs.count == $0 } ?? !grid.displayedItemIDs.isEmpty)
         }
     }
+    /// A real bookmark resolves to the moved folder at once. Moving the folder and relocating the fake bookmark
+    /// in one FileAccess turn keeps a lease (a thumbnail or metadata read still in flight) from resolving the
+    /// old path after it is gone, which drops the root as needing reconnection (#290).
+    func moveRoot(to destination: URL) async throws {
+        let source = a, bookmarks = bookmarks
+        try await services.files.runIsolated {
+            try FileManager.default.moveItem(at: source, to: destination)
+            bookmarks.relocate(source, to: destination)
+        }
+    }
     func remove() { gate.release(); try? FileManager.default.removeItem(at: base) }
 }
 
@@ -237,8 +252,7 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
     try await recoveryWait { recoveryPage(viewer) != nil && recoveryPage(gridWindow) != nil }
     try await recoveryWait { announcements.count == 1 }
     let moved = f.base.appendingPathComponent("RemountedRoot", isDirectory: true)
-    try FileManager.default.moveItem(at: f.a, to: moved)
-    f.bookmarks.relocate(f.a, to: moved)
+    try await f.moveRoot(to: moved)
     await f.mount()
     let movedImage = moved.appendingPathComponent("One/one.png")
     do {
@@ -465,8 +479,7 @@ private func t229RecoveryGeneratedNavigationAndSecondEjectInterleavings(_ trace:
     controller.session.focus(selected.itemID)
     let moved = f.base.appendingPathComponent("MovedRoot", isDirectory: true)
     let movedChild = moved.appendingPathComponent("One", isDirectory: true)
-    try FileManager.default.moveItem(at: f.a, to: moved)
-    f.bookmarks.relocate(f.a, to: moved)
+    try await f.moveRoot(to: moved)
     for watched in [f.a, f.childOne] { f.watchSource.emit(.mustRescan, root: watched) }
     try await f.ready(controller, folder: movedChild, count: 2)
     try await recoveryWait { controller.window?.representedURL == movedChild }
@@ -672,8 +685,7 @@ func t230SameIdentityReselectRestoresOriginalPosition(_ renamed: Bool) async thr
     var selected = f.a
     if renamed {
         selected = f.base.appendingPathComponent("ReselectedMovedRoot")
-        try FileManager.default.moveItem(at: f.a, to: selected)
-        f.bookmarks.relocate(f.a, to: selected)
+        try await f.moveRoot(to: selected)
     }
     controller.completeAccessFolderSelection(selected, reselect: true)
     try await recoveryWait { controller.waitingAccessPosition == nil && controller.session.folderScan?.snapshot?.isComplete == true }
@@ -706,8 +718,7 @@ func t230DifferentIdentitySelectionOpensNormallyPreservingLostRoot(_ kind: Strin
     var selected = f.b
     if kind == "replacement" {
         let moved = f.base.appendingPathComponent("OriginalStillLost")
-        try FileManager.default.moveItem(at: f.a, to: moved)
-        f.bookmarks.relocate(f.a, to: moved)
+        try await f.moveRoot(to: moved)
         try FileManager.default.createDirectory(at: f.a, withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: f.b.appendingPathComponent("other.png"), to: f.a.appendingPathComponent("new.png"))
         selected = f.a
