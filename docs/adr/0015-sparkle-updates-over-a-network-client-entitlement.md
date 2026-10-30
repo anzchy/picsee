@@ -43,3 +43,21 @@ date: 2026-10-28
   - 界面：Settings「更新」Tab，其所在的 Settings 窗口作为新的旅程页面另行设计。
 - **AGENTS.md「sandbox 不关」不受影响：** 沙盒保持开启，只增加一项客户端网络权限，并由本 ADR 记录。
 - **隐私说明：** README 与发布说明写明 picsee 不收集数据，只在检查更新时访问 GitHub。
+
+## 2026-10-30 补充：沙盒安装器需要的 mach-lookup 临时例外
+
+#220 实现前核对 Sparkle 沙盒文档（sparkle-project.github.io `documentation/sandboxing`）：沙盒 App 必须启用 Installer XPC Service（`SUEnableInstallerLauncherService` = YES），并为与安装工具通信加一项临时例外：
+
+```xml
+<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+<array>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
+</array>
+```
+
+不加此项的唯一替代是从源码构建 Sparkle 并启用 Installer Connection & Status XPC 服务。
+
+- **用户决定（2026-10-30，选项原文）：** 「Add the exception (Recommended)」；版本「2.10.0 (Recommended)」。
+- **结果：** App 的权限为沙盒、用户选择文件只读、app-scope 书签、`network.client`，以及上面这一项只含两个 Sparkle 服务名的 mach-lookup 例外。沙盒保持开启；不加其他例外。Downloader XPC Service 不启用（已有 `network.client`）。
+- Sparkle 固定为 2.10.0。
