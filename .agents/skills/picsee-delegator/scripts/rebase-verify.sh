@@ -1,12 +1,13 @@
 #!/bin/zsh
 # rebase-verify.sh <old-base> <old-head> <new-base> <new-head> — run after rebasing an audited branch.
-# Compares the commit messages and the changed App/Packages/project.yml lines of old-base..old-head with
-# new-base..new-head. An audit or device-smoke verdict covers a patch, so it only carries over when CODE is same.
-# Exit 0: both same. 1: code differs (send the combination back for a quick audit check, then rerun gates and
-# smoke). 2: messages differ (fix them before pushing; wins over 1, both lines still print). 3: usage.
+# Compares the commit messages and the changed App/AppTests/Packages/UITests/project.yml lines of
+# old-base..old-head with new-base..new-head. An audit or device-smoke verdict covers a patch, so it only carries
+# over when CODE is same. Exit 0: both same. 1: code differs (send the combination back for a quick audit check,
+# then rerun gates and smoke). 2: messages differ (fix them before pushing; wins over 1, both lines still print).
+# 3: usage.
 set -u
 (( $# == 4 )) || { echo "usage: rebase-verify.sh <old-base> <old-head> <new-base> <new-head>"; exit 3; }
-paths=(App Packages project.yml)
+paths=(App AppTests Packages UITests project.yml)
 for r in "$@"; do git rev-parse -q --verify "$r^{commit}" >/dev/null || { echo "unknown commit: $r"; exit 3; }; done
 msgs() { git log --reverse --format='%s%n%b%n--' "$1..$2"; }
 code() { git diff -U0 "$1" "$2" -- $paths | grep '^[-+]' | grep -v '^+++\|^---' | LC_ALL=C sort | shasum | cut -d' ' -f1; }

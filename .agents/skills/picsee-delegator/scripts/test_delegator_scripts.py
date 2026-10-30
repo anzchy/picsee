@@ -127,6 +127,24 @@ class RebaseVerifyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("CODE differ", result.stdout)
 
+    def test_app_tests_only_difference_exits_1(self):
+        (self.repo / "AppTests").mkdir()
+        self.commit("feat: topic\n\n#7 P1-01 VIEW-01", **{"App/a.swift": "a2\n", "AppTests/AppTests.swift": "test\n"})
+
+        result = self.verify()
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("CODE differ", result.stdout)
+
+    def test_ui_tests_only_difference_exits_1(self):
+        (self.repo / "UITests").mkdir()
+        self.commit("feat: topic\n\n#7 P1-01 VIEW-01", **{"App/a.swift": "a2\n", "UITests/UITests.swift": "test\n"})
+
+        result = self.verify()
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("CODE differ", result.stdout)
+
     def test_dropped_hash_line_exits_2(self):
         self.commit("feat: topic", **{"App/a.swift": "a2\n"})
 
