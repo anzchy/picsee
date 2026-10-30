@@ -216,7 +216,7 @@ jobs:
             exit 0
           fi
           gh pr create --base main --head "$BRANCH" --title "release(appcast): picsee $VERSION ($BUILD) for $TAG" \
-            --body "Adds $TAG to appcast.xml. Merge only after publishing the draft release $TAG: the enclosure URL works once the release is public, and installed copies see the update as soon as this lands on main."
+            --body "Adds $TAG to appcast.xml. Merging this offers picsee $VERSION ($BUILD) to every installed copy that has update checks on, as soon as it lands on main; GitHub's pre-release flag does not filter the feed. For a release candidate, close this PR unless you mean a general rollout. Merge only after publishing the draft release $TAG: the enclosure URL works once the release is public."
 
       - name: Delete the temporary keychain
         if: always()

@@ -65,7 +65,7 @@ node scripts/release/check-package.mjs .build/dd-rel/Build/Products/Release/Pics
    - Open the DMG, drag picsee into Applications and launch it. Gatekeeper must not warn.
    - Edit the notes' "What is in this version".
 2. **Publish the draft.** The appcast's enclosure URL only works once the release is public.
-3. **Merge the appcast PR** after publishing. Installed copies see the update as soon as `appcast.xml` lands on `main`; that is the feed in `SUFeedURL`.
+3. **Decide on the appcast PR.** Merging an appcast PR offers that build to every installed copy that has update checks on, as soon as `appcast.xml` lands on `main` (the feed in `SUFeedURL`). There is one feed, and GitHub's pre-release flag does not filter it. For a release candidate, close the appcast PR unless you mean a general rollout. For a build meant for everyone, merge it after publishing.
 4. **Promote to final:** when an rc is good, tag `v0.0.1` on the same or a later `main` commit and repeat.
 
 The appcast PR is opened with the workflow's token, so GitHub does not run CI on it. It changes only `appcast.xml`.

@@ -208,3 +208,15 @@ test("a rerun after a failed PR creation pushes over the branch and opens the PR
     assert.equal(ghCalls(world).filter((c) => c.startsWith("pr create")).length, 1);
   } finally { rmSync(world.dir, { recursive: true, force: true }); }
 });
+
+test("the appcast PR body says that merging offers the build to every installed copy", () => {
+  const world = appcastWorld();
+  try {
+    const step = runAppcast(world);
+    try { assert.equal(step.status, 0, step.stderr); } finally { step.cleanup(); }
+    const create = ghCalls(world).find((c) => c.startsWith("pr create"));
+    assert.match(create, /offers picsee 0\.0\.1 \(312\) to every installed copy that has update checks on/);
+    assert.match(create, /release candidate, close this PR unless you mean a general rollout/);
+    assert.match(create, /Merge only after publishing the draft release v0\.0\.1/);
+  } finally { rmSync(world.dir, { recursive: true, force: true }); }
+});
