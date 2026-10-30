@@ -81,6 +81,67 @@ func t231Fix1HistoricalRootLocationsRemapAfterInactiveFollow(merge: Bool) async 
     #expect(f.scope.balanced)
 }
 
+private final class RebindTransactionTrace: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [(String, URL?)] = []
+    var events: [(String, URL?)] { lock.withLock { values.filter { $0.0.hasPrefix("AccessTransaction ") } } }
+    func reset() { lock.withLock { values = [] } }
+    var diagnostics: AccessDiagnostics { AccessDiagnostics { [self] text, path in lock.withLock { values.append((text, path)) } } }
+}
+
+@Test(.timeLimit(.minutes(2)), arguments: [false, true], ["schema", "write"])
+func t231Fix1TransactionDiagnosticsMatchPersistenceAndRetry(undo: Bool, failure: String) async throws {
+    let f = try RebindFixture(); defer { f.remove() }
+    let trace = RebindTransactionTrace()
+    let access = try FileAccess(scope: f.scope, bookmarks: f.codec, store: f.roots, buildSHA: "fix1-diagnostics", diagnostics: trace.diagnostics)
+    let a = try await access.grant(folder: f.old)
+    try f.seed([f.recent(a, f.old)])
+    let original = try AccessStoreBytes(urls: [f.roots.url, f.recentURL])
+    let rebound = undo ? try await access.rebind(a, folder: f.chosen, recentStore: f.recents) : nil
+    trace.reset()
+    let protectedURL = undo && failure == "schema" ? f.roots.url : f.recentURL
+    let marker = protectedURL.appendingPathExtension("schema")
+    let markerBefore = try f.bytes(marker)
+    if failure == "schema" { try Data("{\"schemaVersion\":999}".utf8).write(to: marker) }
+    else { try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: protectedURL.deletingLastPathComponent().path) }
+    let before = try AccessStoreBytes(urls: [f.roots.url, f.recentURL])
+    let records = await access.records()
+    var caught: (any Error)?
+    do {
+        if let rebound { try await access.undoRebind(rebound.undo) }
+        else { _ = try await access.rebind(a, folder: f.chosen, recentStore: f.recents) }
+    } catch { caught = error }
+    let error = try #require(caught)
+    if failure == "schema" { #expect(error is StoredSchema.UnsupportedVersion) }
+    #expect(try AccessStoreBytes(urls: [f.roots.url, f.recentURL]) == before)
+    #expect(await access.records() == records)
+    let operation = undo ? "undo" : "rebind"
+    let stage = failure == "schema" ? (undo ? "validateRoots" : "validateRecents") : (undo ? "restore" : "writeRecents")
+    let prefix = "AccessTransaction root=\(a.rawValue.uuidString) operation=\(operation)"
+    let messages = trace.events.map(\.0)
+    #expect(messages.first == "\(prefix) outcome=attempt stage=begin kind=none")
+    #expect(messages.last == "\(prefix) outcome=error stage=\(stage) kind=\(AccessDiagnostics.errorKind(error))")
+    #expect(messages.filter { $0.contains("outcome=attempt") }.count == 1)
+    #expect(messages.filter { $0.contains("outcome=error") }.count == 1)
+    #expect(messages.allSatisfy { !$0.contains("outcome=commit") && !$0.contains(f.base.path) })
+    #expect(trace.events.allSatisfy { $0.1 == nil })
+    #expect(messages.filter { $0.contains("outcome=rollback") }.count == (failure == "write" ? 1 : 0))
+    if let markerBefore { try markerBefore.write(to: marker) }
+    else if failure == "schema" { try FileManager.default.removeItem(at: marker) }
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: protectedURL.deletingLastPathComponent().path)
+    trace.reset()
+    if let rebound {
+        try await access.undoRebind(rebound.undo)
+        #expect(try AccessStoreBytes(urls: [f.roots.url, f.recentURL]) == original)
+    } else {
+        let result = try await access.rebind(a, folder: f.chosen, recentStore: f.recents)
+        #expect(try await f.recents.load() == [f.recent(result.rootID, f.chosen)])
+        #expect(await access.records().allSatisfy { $0.id != a })
+    }
+    #expect(trace.events.map(\.0) == ["\(prefix) outcome=attempt stage=begin kind=none", "\(prefix) outcome=commit stage=publish kind=none"])
+    #expect(f.scope.balanced)
+}
+
 @Test(.timeLimit(.minutes(2)), arguments: [false, true])
 func t231FreshRebindReplacesLostRecordAndUndoRestoresExactSnapshot(empty: Bool) async throws {
     let f = try RebindFixture(); defer { f.remove() }

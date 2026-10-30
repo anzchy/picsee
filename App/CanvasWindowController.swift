@@ -64,6 +64,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var reboundLocation: ReboundLocation?
     private var rebindStrip: AccessRebindStripView?
     private var undoRebindBusy = false
+    var accessTransactionFailureReporter: (AccessRootID, String, String) -> Void = { root, stage, kind in
+        AccessDiagnostics().emit("AccessTransactionUI root=\(root.rawValue.uuidString) stage=\(stage) outcome=error kind=\(kind)")
+        NSSound.beep()
+    }
 
     private var accessAnnouncementTask: Task<Void, Never>?
     private var retryIntent: ViewerRetryIntent?
@@ -621,6 +625,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 self.layoutRebindStrip()
             } catch {
                 guard let self, operation.isCurrent else { return }
+                if !(error is CancellationError) {
+                    self.accessTransactionFailureReporter(position.rootID, "rebind", AccessDiagnostics.errorKind(error))
+                }
                 self.showWaitingAccessState()
             }
         }
@@ -712,6 +719,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 self.undoRebindBusy = false
                 self.rebindStrip?.undoButton.isEnabled = true
                 self.rebindStrip?.closeButton.isEnabled = true
+                if operation.isCurrent, !(error is CancellationError) {
+                    self.accessTransactionFailureReporter(rebound.position.rootID, "undo", AccessDiagnostics.errorKind(error))
+                }
             }
         }
     }

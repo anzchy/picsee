@@ -236,6 +236,7 @@ public actor FileAccess: AccessLeasing {
         let explicitTrash: [AccessRootID: ExplicitTrashSelection]
     }
     private struct RebindUndo {
+        let sourceID: AccessRootID
         let before: AccessStoreBytes
         let memory: RebindMemory
         let recentStore: RecentFolderStore
@@ -251,94 +252,141 @@ public actor FileAccess: AccessLeasing {
     /// No suspension separates persistence, rollback and logical publication.
     public func rebind(_ id: AccessRootID, folder: URL, recentStore: RecentFolderStore,
                        existenceProbe: @Sendable (URL) throws -> Void = { _ = try $0.resourceValues(forKeys: [.isDirectoryKey]) }) throws -> AccessRebindResult {
-        guard !storeCorrupt, let source = saved.first(where: { $0.id == id }) else { throw FileAccessError.corruptStore }
-        guard let oldRoot = lastKnownRoots[id] ?? roots[id] ?? bookmarkLocation(source.bookmark) else {
-            throw FileAccessError.invalidFolder
-        }
-        // Foreground checks may follow an inactive root without refreshing its
-        // Recent references. Capture trusted locations before retiring history.
-        let oldRoots = [oldRoot] + (previousRoots[id] ?? []).reversed()
-        let session = try ScopeSession(scope: scope, url: folder, rootID: id)
-        defer { session.stop() }
-        let destination = canonical(folder)
-        guard try destination.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw FileAccessError.invalidFolder }
-        _ = try FileManager.default.contentsOfDirectory(at: destination, includingPropertiesForKeys: nil)
-        let matching = persistedDestination(destination, excluding: id)
-        let destinationID = matching ?? AccessRootID()
-        let bookmark = try bookmarks.create(for: destination)
-        let selectedTrash = try explicitTrashEvidence(at: destination)
-        var replacement = saved.filter { $0.id != id }
-        if let index = replacement.firstIndex(where: { $0.id == destinationID }) {
-            replacement[index].bookmark = bookmark
-        } else {
-            let record = AccessRootRecord(id: destinationID, bookmark: bookmark, displayName: destination.lastPathComponent,
-                                          creatingBuildSHA: buildSHA, createdAt: Date())
-            replacement.insert(record, at: saved.firstIndex(where: { $0.id == id })!)
-        }
-        return try recentStore.withTransaction { recentURL in
-            try AccessStoreBytes.validate(store.url, as: AccessRootRecord.self)
-            try AccessStoreBytes.validate(recentURL, as: RecentFolder.self)
-            let before = try AccessStoreBytes(urls: [store.url, recentURL])
-            let recent: [RecentFolder]
-            if FileManager.default.fileExists(atPath: recentURL.path) {
-                switch try StoredSchema.decodeItems(Data(contentsOf: recentURL), as: RecentFolder.self, at: recentURL) {
-                case .current(let values): recent = values
-                case .unsupported: throw FileAccessError.corruptStore
-                }
-            } else { recent = [] }
-            let remapped = AccessRecentRemap.remap(recent, sourceID: id, oldRoots: oldRoots,
-                destinationID: destinationID, newRoot: destination, probe: existenceProbe)
-            let memory = RebindMemory(saved: saved, roots: roots, lastKnown: lastKnownRoots,
-                legacy: legacyBaseline, recovery: recoveryBaseline, previous: previousRoots,
-                explicitTrash: explicitTrashSelections)
-            try Task.checkCancellation()
-            invalidateSavedGrantVersion(id)
-            invalidateSavedGrantVersion(destinationID)
-            do {
-                // Use the strict writer: legacy save() intentionally swallows future schemas.
-                try StoredSchema.writeItems(replacement, to: store.url)
-                try StoredSchema.writeItems(remapped, to: recentURL)
-                let token = AccessRebindUndoToken(id: UUID())
-                saved = replacement
-                roots.removeValue(forKey: id)
-                lastKnownRoots.removeValue(forKey: id)
-                legacyBaseline.removeValue(forKey: id)
-                recoveryBaseline.removeValue(forKey: id)
-                previousRoots.removeValue(forKey: id)
-                explicitTrashSelections.removeValue(forKey: id)
-                legacyBaseline.removeValue(forKey: destinationID)
-                recoveryBaseline.removeValue(forKey: destinationID)
-                explicitTrashSelections[destinationID] = selectedTrash
-                publishRoot(destinationID, url: destination)
-                rebindUndos[token] = RebindUndo(before: before, memory: memory,
-                    recentStore: recentStore)
-                return AccessRebindResult(rootID: destinationID, rootURL: destination, undo: token)
-            } catch {
-                try before.restore()
-                throw error
+        let prefix = "AccessTransaction root=\(id.rawValue.uuidString) operation=rebind"
+        var stage = "source"
+        diagnostics.emit("\(prefix) outcome=attempt stage=begin kind=none")
+        do {
+            guard !storeCorrupt, let source = saved.first(where: { $0.id == id }) else { throw FileAccessError.corruptStore }
+            guard let oldRoot = lastKnownRoots[id] ?? roots[id] ?? bookmarkLocation(source.bookmark) else {
+                throw FileAccessError.invalidFolder
             }
+            // Foreground checks may follow an inactive root without refreshing its
+            // Recent references. Capture trusted locations before retiring history.
+            let oldRoots = [oldRoot] + (previousRoots[id] ?? []).reversed()
+            stage = "selection"
+            let session = try ScopeSession(scope: scope, url: folder, rootID: id)
+            defer { session.stop() }
+            let destination = canonical(folder)
+            guard try destination.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw FileAccessError.invalidFolder }
+            _ = try FileManager.default.contentsOfDirectory(at: destination, includingPropertiesForKeys: nil)
+            let matching = persistedDestination(destination, excluding: id)
+            let destinationID = matching ?? AccessRootID()
+            let bookmark = try bookmarks.create(for: destination)
+            let selectedTrash = try explicitTrashEvidence(at: destination)
+            var replacement = saved.filter { $0.id != id }
+            if let index = replacement.firstIndex(where: { $0.id == destinationID }) {
+                replacement[index].bookmark = bookmark
+            } else {
+                let record = AccessRootRecord(id: destinationID, bookmark: bookmark, displayName: destination.lastPathComponent,
+                                              creatingBuildSHA: buildSHA, createdAt: Date())
+                replacement.insert(record, at: saved.firstIndex(where: { $0.id == id })!)
+            }
+            let result = try recentStore.withTransaction { recentURL in
+                stage = "validateRoots"
+                try AccessStoreBytes.validate(store.url, as: AccessRootRecord.self)
+                stage = "validateRecents"
+                try AccessStoreBytes.validate(recentURL, as: RecentFolder.self)
+                stage = "snapshot"
+                let before = try AccessStoreBytes(urls: [store.url, recentURL])
+                stage = "readRecents"
+                let recent: [RecentFolder]
+                if FileManager.default.fileExists(atPath: recentURL.path) {
+                    switch try StoredSchema.decodeItems(Data(contentsOf: recentURL), as: RecentFolder.self, at: recentURL) {
+                    case .current(let values): recent = values
+                    case .unsupported: throw FileAccessError.corruptStore
+                    }
+                } else { recent = [] }
+                let remapped = AccessRecentRemap.remap(recent, sourceID: id, oldRoots: oldRoots,
+                    destinationID: destinationID, newRoot: destination, probe: existenceProbe)
+                let memory = RebindMemory(saved: saved, roots: roots, lastKnown: lastKnownRoots,
+                    legacy: legacyBaseline, recovery: recoveryBaseline, previous: previousRoots,
+                    explicitTrash: explicitTrashSelections)
+                stage = "cancellation"
+                try Task.checkCancellation()
+                invalidateSavedGrantVersion(id)
+                invalidateSavedGrantVersion(destinationID)
+                do {
+                    // Use the strict writer: legacy save() intentionally swallows future schemas.
+                    stage = "writeRoots"
+                    try StoredSchema.writeItems(replacement, to: store.url)
+                    stage = "writeRecents"
+                    try StoredSchema.writeItems(remapped, to: recentURL)
+                    stage = "publish"
+                    let token = AccessRebindUndoToken(id: UUID())
+                    saved = replacement
+                    roots.removeValue(forKey: id)
+                    lastKnownRoots.removeValue(forKey: id)
+                    legacyBaseline.removeValue(forKey: id)
+                    recoveryBaseline.removeValue(forKey: id)
+                    previousRoots.removeValue(forKey: id)
+                    explicitTrashSelections.removeValue(forKey: id)
+                    legacyBaseline.removeValue(forKey: destinationID)
+                    recoveryBaseline.removeValue(forKey: destinationID)
+                    explicitTrashSelections[destinationID] = selectedTrash
+                    publishRoot(destinationID, url: destination)
+                    rebindUndos[token] = RebindUndo(sourceID: id, before: before, memory: memory,
+                        recentStore: recentStore)
+                    return AccessRebindResult(rootID: destinationID, rootURL: destination, undo: token)
+                } catch {
+                    let failedStage = stage
+                    stage = "restorePrevious"
+                    diagnostics.emit("\(prefix) outcome=rollback stage=\(stage) kind=\(AccessDiagnostics.errorKind(error))")
+                    try before.restore()
+                    stage = failedStage
+                    throw error
+                }
+            }
+            diagnostics.emit("\(prefix) outcome=commit stage=publish kind=none")
+            return result
+        } catch {
+            diagnostics.emit("\(prefix) outcome=error stage=\(stage) kind=\(AccessDiagnostics.errorKind(error))")
+            throw error
         }
     }
+
     public func undoRebind(_ token: AccessRebindUndoToken) throws {
-        guard let undo = rebindUndos[token] else { throw FileAccessError.invalidFolder }
-        try undo.recentStore.withTransaction { recentURL in
-            let current = try AccessStoreBytes(urls: [store.url, recentURL])
-            try AccessStoreBytes.validate(store.url, as: AccessRootRecord.self)
-            try AccessStoreBytes.validate(recentURL, as: RecentFolder.self)
-            try Task.checkCancellation()
-            for id in Set(saved.map(\.id)).union(undo.memory.saved.map(\.id)) { invalidateSavedGrantVersion(id) }
-            do { try undo.before.restore() }
-            catch { try current.restore(); throw error }
-            saved = undo.memory.saved
-            roots = undo.memory.roots
-            lastKnownRoots = undo.memory.lastKnown
-            legacyBaseline = undo.memory.legacy
-            recoveryBaseline = undo.memory.recovery
-            previousRoots = undo.memory.previous
-            explicitTrashSelections = undo.memory.explicitTrash
-            rebindUndos.removeValue(forKey: token)
+        let root = rebindUndos[token]?.sourceID.rawValue.uuidString ?? "unknown"
+        let prefix = "AccessTransaction root=\(root) operation=undo"
+        var stage = "token"
+        diagnostics.emit("\(prefix) outcome=attempt stage=begin kind=none")
+        do {
+            guard let undo = rebindUndos[token] else { throw FileAccessError.invalidFolder }
+            try undo.recentStore.withTransaction { recentURL in
+                stage = "snapshot"
+                let current = try AccessStoreBytes(urls: [store.url, recentURL])
+                stage = "validateRoots"
+                try AccessStoreBytes.validate(store.url, as: AccessRootRecord.self)
+                stage = "validateRecents"
+                try AccessStoreBytes.validate(recentURL, as: RecentFolder.self)
+                stage = "cancellation"
+                try Task.checkCancellation()
+                for id in Set(saved.map(\.id)).union(undo.memory.saved.map(\.id)) { invalidateSavedGrantVersion(id) }
+                stage = "restore"
+                do { try undo.before.restore() }
+                catch {
+                    stage = "restoreCurrent"
+                    diagnostics.emit("\(prefix) outcome=rollback stage=\(stage) kind=\(AccessDiagnostics.errorKind(error))")
+                    try current.restore()
+                    stage = "restore"
+                    throw error
+                }
+                stage = "publish"
+                saved = undo.memory.saved
+                roots = undo.memory.roots
+                lastKnownRoots = undo.memory.lastKnown
+                legacyBaseline = undo.memory.legacy
+                recoveryBaseline = undo.memory.recovery
+                previousRoots = undo.memory.previous
+                explicitTrashSelections = undo.memory.explicitTrash
+                rebindUndos.removeValue(forKey: token)
+            }
+            diagnostics.emit("\(prefix) outcome=commit stage=publish kind=none")
+        } catch {
+            diagnostics.emit("\(prefix) outcome=error stage=\(stage) kind=\(AccessDiagnostics.errorKind(error))")
+            throw error
         }
     }
+
     public func discardRebindUndo(_ token: AccessRebindUndoToken) { rebindUndos.removeValue(forKey: token) }
     /// Match fresh bookmark resolution under its own scope, including a persisted
     /// destination whose published location was dropped by an earlier failed read.

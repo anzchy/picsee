@@ -833,6 +833,8 @@ func t231Fix1ForegroundFollowsInactiveRootThenRebindRemapsHistoricalRecent() asy
 @MainActor @Test(.timeLimit(.minutes(3))) func t231NotFoundCopyAndCancelLeaveRecoveryActions() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let c = f.controller(); defer { c.window?.close() }
+    var failures: [(AccessRootID, String, String)] = []
+    c.accessTransactionFailureReporter = { failures.append(($0, $1, $2)) }
     try await t231Lose(f, c)
     let records = await f.services.files.records(), recent = try await f.services.recent.load()
     let page = try #require(recoveryPage(c))
@@ -845,6 +847,7 @@ func t231Fix1ForegroundFollowsInactiveRootThenRebindRemapsHistoricalRecent() asy
     #expect(await f.services.files.records() == records)
     #expect(try await f.services.recent.load() == recent)
     #expect(c.window?.firstResponder === page.reselectButton)
+    #expect(failures.isEmpty)
 }
 @MainActor @Test(.timeLimit(.minutes(3)), arguments: [false, true])
 func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async throws {
@@ -911,6 +914,8 @@ func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async thro
 @MainActor @Test(.timeLimit(.minutes(3))) func t231RebindFailureAndUndoFailureRemainRecoverable() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let c = f.controller(); defer { c.window?.close() }
+    var failures: [(AccessRootID, String, String)] = []
+    c.accessTransactionFailureReporter = { failures.append(($0, $1, $2)) }
     try await t231Lose(f, c)
     let marker = f.base.appendingPathComponent("recent.json.schema")
     let originalMarker = try? Data(contentsOf: marker)
@@ -922,11 +927,15 @@ func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async thro
     #expect(c.waitingAccessPosition?.rootID == f.rootA)
     #expect(await f.services.files.records().contains { $0.id == f.rootA })
     #expect(try recoveryShell(c).mainContent.subviews.allSatisfy { !($0 is AccessRebindStripView) })
+    #expect(failures.count == 1)
+    #expect(failures.first?.0 == f.rootA && failures.first?.1 == "rebind")
+    #expect(failures.first?.2 == AccessDiagnostics.errorKind(StoredSchema.UnsupportedVersion(version: 999)))
     if let originalMarker { try originalMarker.write(to: marker) }
     else { try FileManager.default.removeItem(at: marker) }
     c.completeAccessFolderSelection(f.b, reselect: true)
     try await f.ready(c, folder: f.b)
     let strip = try t231Strip(c)
+    #expect(failures.count == 1)
     let rootsMarker = f.base.appendingPathComponent("roots.json.schema")
     let rootMarker = try? Data(contentsOf: rootsMarker)
     try Data("{\"schemaVersion\":999}".utf8).write(to: rootsMarker)
@@ -935,11 +944,15 @@ func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async thro
     #expect(c.waitingAccessPosition == nil)
     let reboundRecords = await f.services.files.records()
     #expect(strip.superview != nil && reboundRecords.allSatisfy { $0.id != f.rootA })
+    #expect(failures.count == 2)
+    #expect(failures.last?.0 == f.rootA && failures.last?.1 == "undo")
+    #expect(failures.last?.2 == AccessDiagnostics.errorKind(StoredSchema.UnsupportedVersion(version: 999)))
     if let rootMarker { try rootMarker.write(to: rootsMarker) }
     else { try FileManager.default.removeItem(at: rootsMarker) }
     strip.undoButton.performClick(nil)
     try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA }
     #expect(c.accessLossCause == .notFound && strip.superview == nil)
+    #expect(failures.count == 2)
 }
 @MainActor @Test(.timeLimit(.minutes(3))) func t231StripSurvivesResizeAndCloseRetiresControls() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
