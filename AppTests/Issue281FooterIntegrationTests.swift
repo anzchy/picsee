@@ -140,3 +140,99 @@ private final class Issue281Scanner: FolderScanning, @unchecked Sendable {
     try await waitUntil { controller.gridSearchAvailable }
     try expectFooter("山海之间_0001.png", "2 images", "cancel restored")
 }
+
+/// Holds each read of the folder until released; the first read stops part way, after the first image.
+private final class Issue281GatedRetryScanner: FolderScanning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var attempts = 0, released = 0
+    var started: Int { lock.withLock { attempts } }
+    func release() { lock.withLock { released += 1 } }
+    func scan(in folder: URL, root: ItemIdentityRoot, options: FolderScanOptions,
+              emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
+        let attempt = lock.withLock { attempts += 1; return attempts }
+        while lock.withLock({ released < attempt }) { try await Task.sleep(for: .milliseconds(10)) }
+        let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "png" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let entries = files.map { FolderEntry(url: $0, root: root) }
+        if attempt == 1 {
+            try await emit(Array(entries.prefix(1)))
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError)
+        }
+        try await emit(entries)
+    }
+}
+
+/// Fix round 6 (gpt-auditor F1): Retry on the failed-read page starts a read on the shell's reading surface, so the
+/// footer shows `–` / `Reading…` and the sidebar counts as for a first read until the retry completes.
+@Test(.timeLimit(.minutes(3))) @MainActor func issue281RetryAfterFailedReadShowsTheReadingFooter() async throws {
+    _ = NSApplication.shared
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent("issue281-retry-\(UUID().uuidString)")
+    defer { try? fm.removeItem(at: base) }
+    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("TestAssets/synthetic/landscape-3x2.png")
+    let data = try Data(contentsOf: fixture)
+    let folder = base.appendingPathComponent("Retry")
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    for file in ["山海之间_0001.png", "山海之间_0002.png"] { try data.write(to: folder.appendingPathComponent(file)) }
+    let adapter = Issue281Bookmarks()
+    let access = try FileAccess(scope: adapter, bookmarks: adapter,
+        store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "issue281")
+    let services = AccessServices(files: access,
+        recent: RecentFolderStore(url: base.appendingPathComponent("recent.json")),
+        browser: FolderBrowser(),
+        watch: WatchHub(access: access, source: FSEventSource(), scheduler: DispatchWatchScheduler()))
+    let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
+        preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: Task { services },
+        motionPolicy: MotionPolicy(source: Issue281MotionSource()))
+    let window = try #require(controller.window)
+    defer { window.close() }
+    let scanner = Issue281GatedRetryScanner()
+    controller.folderScanningOverride = scanner
+    window.setContentSize(NSSize(width: 1280, height: 772))
+    controller.showWindow(nil)
+    window.orderFrontRegardless()
+
+    func waitUntil(_ condition: () -> Bool) async throws {
+        while !condition() { window.update(); try await Task.sleep(for: .milliseconds(10)) }
+    }
+    func footer() throws -> (name: String, count: String) {
+        window.contentView?.layoutSubtreeIfNeeded()
+        let name = try #require(issue281View("grid.current-file-status", in: window.contentView) as? NSTextField)
+        let count = try #require(issue281View("grid.folder-count", in: window.contentView) as? NSTextField)
+        return (name.isHidden ? "" : name.stringValue, count.isHidden ? "" : count.stringValue)
+    }
+    func sidebarCount() -> String? {
+        guard let shell = window.contentView?.subviews.compactMap({ $0 as? GridShellView }).first,
+              let row = shell.folderTree.rows.first(where: { $0.current }) else { return nil }
+        return row.countLabel.isHidden ? "" : row.countLabel.stringValue
+    }
+
+    // First read, held: the reading footer and the sidebar's count for the folder being read.
+    controller.openGrantedFolder(folder)
+    try await waitUntil { scanner.started == 1 && controller.session.folderScan?.isReadingFolder == true }
+    try await waitUntil { issue281View("state.cancel-folder", in: window.contentView) != nil }
+    #expect(try footer() == ("–", "Reading…"), "first read")
+    let firstReadSidebar = sidebarCount()
+    // The sidebar learns this folder's count on its own, so also pin the flag that shows `0` while it is unknown.
+    let firstReadZero = window.contentView?.subviews.compactMap({ $0 as? GridShellView }).first?
+        .folderTree.showsZeroForUnknownCurrent
+
+    // It stops part way; the failure page's Retry, held.
+    scanner.release()
+    try await waitUntil { controller.session.folderScan?.failure != nil }
+    if let sheet = window.attachedSheet { window.endSheet(sheet, returnCode: .alertSecondButtonReturn) }
+    try await waitUntil { issue281View("state.retry-folder", in: window.contentView) != nil }
+    let retry = try #require(issue281View("state.retry-folder", in: window.contentView) as? NSButton)
+    retry.performClick(nil)
+    try await waitUntil { scanner.started == 2 && controller.session.folderScan?.isReadingFolder == true }
+    #expect(try footer() == ("–", "Reading…"), "held retry")
+    #expect(sidebarCount() == firstReadSidebar, "held retry: sidebar count as for a first read")
+    #expect(firstReadZero == true && window.contentView?.subviews.compactMap({ $0 as? GridShellView }).first?
+        .folderTree.showsZeroForUnknownCurrent == firstReadZero, "held retry: unknown count shows 0 as for a first read")
+
+    // Released: the completed name and count.
+    scanner.release()
+    try await waitUntil { controller.gridSearchAvailable && controller.session.folderScan?.failure == nil }
+    #expect(try footer() == ("山海之间_0001.png", "2 images"), "retry completed")
+}

@@ -2202,7 +2202,11 @@ extension CanvasWindowController: FolderScanHost {
         standaloneRecheckAfterOpen = false
         chromeOverlay.refresh(session: session)
         // An Include Subfolders rescan from the grid; the Session already recorded what Cancel Reading returns to.
-        guard presentation.showReadingOverGrid(session.folderScan?.isReadingFolder == true) else { return }
+        guard presentation.showReadingOverGrid(session.folderScan?.isReadingFolder == true) else {
+            // Retry from the failed-read page reads again on the shell's reading surface; page 26 is not a read.
+            if waitingAccessPosition == nil { presentation.resumeReadingFooter(session.folderScan?.isReadingFolder == true) }
+            return
+        }
         if folderEntryRestore == nil { folderEntryRestore = makeFolderEntryRestore() }
         showReadingState()
     }
