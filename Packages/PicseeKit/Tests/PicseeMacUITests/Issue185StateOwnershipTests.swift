@@ -192,7 +192,7 @@ private struct Issue185Random: RandomNumberGenerator {
         scene.presentation.show(target)
         #expect(!scene.state.isHidden && !scene.state.isAccessibilityHidden(), "\(target): visible")
         #expect(scene.state.buttons.map { $0.identifier?.rawValue } == ["state.open"])
-        #expect(scene.state.textLines.first == "Open a folder to start browsing")
+        #expect(scene.state.textLines.first == "Drop a photo folder here")
         let button = try #require(scene.state.buttons.first)
         let center = scene.state.convert(NSPoint(x: button.frame.midX, y: button.frame.midY), to: scene.content)
         #expect(scene.state.hitTest(center) === button, "\(target): button hit")

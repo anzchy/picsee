@@ -18,7 +18,7 @@ import PicseeCore
 
 private let viewerFolder = URL(fileURLWithPath: "/viewer/Trip")
 private let viewerSubfolders = ["2024 冲绳", "手机备份", "扫描件"].map { viewerFolder.appendingPathComponent($0) }
-private let genericHeading = "Open a folder to start browsing"
+private let genericHeading = "Drop a photo folder here"
 
 @MainActor private func sameViews(_ a: [NSView], _ b: [NSView]) -> Bool {
     a.map(ObjectIdentifier.init) == b.map(ObjectIdentifier.init)
