@@ -97,6 +97,7 @@ actor StatesPipeline: ImagePipeline {
         canvas.openingGeneration = { session.imageLoader.generation }
         content.addSubview(canvas); content.addSubview(state); content.addSubview(chrome)
         window.contentView = content
+        state.subviews.compactMap { $0 as? FirstLaunchView }.first?.pinAccessibility()
     }
     @discardableResult func open(_ file: URL, request: AccessRequest? = nil,
         pipeline: StatesPipeline, leases: StatesLeases) -> Task<Void, Never>? {
@@ -104,5 +105,16 @@ actor StatesPipeline: ImagePipeline {
             try await AccessImageSource.open(request ?? .fileGrant(file), access: leases, pipeline: pipeline)
         }
         return session.imageLoader.loadTask
+    }
+}
+
+extension FirstLaunchView {
+    /// B4 tests never read the host's accessibility settings (CI runners report Reduce Motion and
+    /// Reduce Transparency on). The posted change drives the view's own refresh, redoing its first styling.
+    func pinAccessibility(reduceMotion: Bool = false, reduceTransparency: Bool = false) {
+        reduceMotionOverride = reduceMotion
+        reduceTransparencyOverride = reduceTransparency
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        layoutSubtreeIfNeeded()
     }
 }
