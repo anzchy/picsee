@@ -28,9 +28,6 @@ final class ShortcutTextField: NSTextField {
         case .center:
             x = bounds.minX + (bounds.width - size.width) / 2
             width = size.width
-        case .right:
-            x = bounds.maxX - size.width
-            width = size.width
         default:
             x = bounds.minX
             width = bounds.width
@@ -227,7 +224,7 @@ public final class ShortcutListView: NSView {
         super.layout()
         let gap: CGFloat = 14
         let width = floor((bounds.width - 36 - gap * 2) / 3)
-        let height = cardViews.map { $0.requiredHeight(forWidth: width) }.max() ?? 0
+        let height = cardViews.reduce(0) { max($0, $1.requiredHeight(forWidth: width)) }
         for (index, card) in cardViews.enumerated() {
             card.frame = NSRect(x: 18 + CGFloat(index) * (width + gap), y: 18, width: width, height: height)
         }
