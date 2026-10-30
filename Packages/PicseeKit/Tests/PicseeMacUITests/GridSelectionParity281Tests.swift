@@ -55,3 +55,36 @@ import PicseeCore
         #expect(abs(fill.alphaComponent - expectedFill.alpha) < 0.01)
     }
 }
+
+@Test @MainActor func issue281CurrentItemAloneHasTintedNameRowAndNoSelectionBadge() throws {
+    for (page, appearanceName) in [("grid-light", NSAppearance.Name.aqua), ("grid-dark", .darkAqua)] {
+        let design = try PinnedDesign.page(page)
+        let cell = GridPhotoItem()
+        cell.view.frame = NSRect(x: 0, y: 0, width: 247, height: 224.16)
+        cell.view.appearance = try #require(NSAppearance(named: appearanceName))
+        let folder = URL(fileURLWithPath: "/tmp/picsee-grid-281-current")
+        let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
+        cell.configure(FolderEntry(url: folder.appendingPathComponent("DSC_0342.jpg"), root: root))
+        cell.view.layoutSubtreeIfNeeded()
+        // Folder open: Current Item set, nothing selected yet (device shot 11-grid-light: ring, white name row).
+        cell.isCurrent = true
+        cell.isSelected = false
+        let name = try #require(cell.view.subviews.compactMap { $0 as? NSTextField }
+            .first { $0.stringValue == "DSC_0342.jpg" })
+        // grid-light.html: the single .is-selected cell is the Current Item: ring plus tinted name row, no ✓.
+        #expect(!cell.currentRingLayer.isHidden)
+        #expect(!cell.isSelectionBadgeVisible)
+        let expectedFill = try design.color(".layout-exploration .photo-cell.is-selected .photo-name",
+            "background", viewport: 1280)
+        let fillColor = try #require(name.layer?.backgroundColor)
+        let fill = try #require(NSColor(cgColor: fillColor)?.usingColorSpace(.sRGB))
+        #expect(abs(fill.redComponent - expectedFill.red) < 0.01, "\(page)")
+        #expect(abs(fill.greenComponent - expectedFill.green) < 0.01, "\(page)")
+        #expect(abs(fill.blueComponent - expectedFill.blue) < 0.01, "\(page)")
+        #expect(abs(fill.alphaComponent - expectedFill.alpha) < 0.01, "\(page)")
+
+        cell.isCurrent = false
+        #expect(name.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) }?.alphaComponent ?? 0 == 0,
+                "a cell that is neither Current nor selected has no tint")
+    }
+}
