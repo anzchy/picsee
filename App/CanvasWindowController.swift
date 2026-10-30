@@ -20,7 +20,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         let folderURL: URL
         let currentItemID: ItemID?
         let currentImageURL: URL?
-        let wasViewing: Bool
+        var wasViewing: Bool
         let conditions: FolderViewConditions
         let recursive: Bool
         let loop: Bool
@@ -462,14 +462,17 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
     private func lostAccessCopy(_ position: WaitingAccessPosition) -> LostAccessStateText {
         let disk = accessLossCause == .diskNotConnected
+        let expired = accessLossCause == .accessExpired
         let title: String
-        if disk, let name = accessMonitor?.volumeName(for: position.rootID) {
+        if expired { title = String(localized: "Access Has Expired") }
+        else if disk, let name = accessMonitor?.volumeName(for: position.rootID) {
             title = String(format: String(localized: "External Disk “%@” Is Not Connected"), name)
         } else {
             title = disk ? String(localized: "External Disk Is Not Connected") : String(localized: "Unable to Access This Folder")
         }
-        let detail = disk
-            ? String(localized: "“%@” is on an external disk.\nConnect the disk and picsee will verify access before restoring your place.")
+        let detail = expired
+            ? String(localized: "Access has expired. Choose this folder again to restore access; picsee will return to where you left off.")
+            : disk ? String(localized: "“%@” is on an external disk.\nConnect the disk and picsee will verify access before restoring your place.")
             : String(localized: "picsee can’t read “%@” right now. Choose this folder again, or choose another folder to continue.")
         return LostAccessStateText(title: title, detail: String(format: detail, position.folderURL.lastPathComponent),
             waiting: String(localized: "Waiting for the disk…"), reselect: String(localized: "Choose Folder Again…"),
@@ -509,34 +512,47 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             panel.orderOut(nil)
             DispatchQueue.main.async { [weak self] in
                 guard let self, operation.isCurrent, self.waitingAccessPosition?.rootID == position.rootID else { return }
-                guard response == .OK, let url = panel.url else {
-                    self.showWaitingAccessState()
-                    if self.pendingAccessRecovery, let counter = self.accessMonitor?.state.snapshot(for: position.rootID)?.counter {
-                        self.recoverWaitingAccess(position.rootID, counter: counter)
-                    }
-                    return
+                self.completeAccessFolderSelection(response == .OK ? panel.url : nil, reselect: reselect)
+            }
+        }
+    }
+
+    /// Continuation of the system chooser; nil is cancellation, not a new grant.
+    func completeAccessFolderSelection(_ url: URL?, reselect: Bool) {
+        guard let position = waitingAccessPosition else { return }
+        guard let url else {
+            self.showWaitingAccessState()
+            if self.pendingAccessRecovery, let counter = self.accessMonitor?.state.snapshot(for: position.rootID)?.counter {
+                self.recoverWaitingAccess(position.rootID, counter: counter)
+            }
+            return
+        }
+        if !reselect { self.openGrantedFolder(url); return }
+        let selectionOperation = self.accessIntent.begin()
+        waitingAccessPosition?.wasViewing = false
+        waitingAccessPosition?.automaticRecovery = true
+        pendingAccessRecovery = false
+        self.accessRecoveryID = nil
+        self.accessRecoveryTask?.cancel(); self.accessRecoveryTask = nil
+        self.accessRecoveryScan?.end(); self.accessRecoveryScan = nil
+        self.navigationTask?.cancel()
+        self.navigationTask = Task { @MainActor [weak self, accessServices] in
+            do {
+                let services = try await selectionOperation.wait { try await accessServices.value }
+                let target = try await selectionOperation.wait {
+                    try await services.reselect(position.rootID, folder: url, reference: position.folderReference)
                 }
-                if !reselect { self.openGrantedFolder(url); return }
-                let selectionOperation = self.accessIntent.begin()
-                self.accessRecoveryID = nil
-                self.accessRecoveryTask?.cancel(); self.accessRecoveryTask = nil
-                self.accessRecoveryScan?.end(); self.accessRecoveryScan = nil
-                self.navigationTask?.cancel()
-                self.navigationTask = Task { @MainActor [weak self, accessServices] in
-                    do {
-                        let services = try await selectionOperation.wait { try await accessServices.value }
-                        let target = try await selectionOperation.wait { try await services.reconnect(position.rootID, folder: url) }
-                        guard let self, selectionOperation.isCurrent, self.waitingAccessPosition?.rootID == position.rootID else { return }
-                        if services.monitor.claimAnnouncement(for: position.rootID, recovered: true) {
-                            self.postAccessAnnouncement(String(localized: "Folder Access Restored"))
-                        }
-                        self.refreshRecents()
-                        self.openFolder(target.url, rootID: target.rootID)
-                    } catch {
-                        guard let self, selectionOperation.isCurrent else { return }
-                        self.showWaitingAccessState()
-                    }
-                }
+                guard let self, selectionOperation.isCurrent else { return }
+                self.refreshRecents()
+                guard self.waitingAccessPosition?.rootID == position.rootID else { return }
+                if target.restored {
+                    if let snapshot = services.monitor.state.snapshot(for: position.rootID), snapshot.availability == .readable {
+                        self.recoverWaitingAccess(position.rootID, counter: snapshot.counter)
+                    } else { self.showWaitingAccessState() }
+                } else { self.openFolder(target.url, rootID: target.rootID) }
+            } catch {
+                guard let self, selectionOperation.isCurrent else { return }
+                self.showWaitingAccessState()
             }
         }
     }

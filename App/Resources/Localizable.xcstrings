@@ -1,6 +1,8 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Access Has Expired": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Access Has Expired"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"授权失效"}}}},
+    "Access has expired. Choose this folder again to restore access; picsee will return to where you left off.": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Access has expired. Choose this folder again to restore access; picsee will return to where you left off."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"访问权限已失效。重新选择这个文件夹即可恢复，picsee 会回到你刚才的位置。"}}}},
     "Coming Soon": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Coming Soon"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "即将推出"}}}},
     "Personal Favorites": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Personal Favorites"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "个人收藏"}}}},
     "Recently Viewed": {"extractionState": "manual","localizations": {"en": {"stringUnit": {"state": "translated","value": "Recently Viewed"}},"zh-Hans": {"stringUnit": {"state": "translated","value": "最近查看"}}}},

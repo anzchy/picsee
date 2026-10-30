@@ -584,7 +584,7 @@ public actor FileAccess: AccessLeasing {
         return nil
     }
     /// Only the composition root's successful system panel invokes this operation.
-    public func grant(folder: URL) throws -> AccessRootID {
+    public func grant(folder: URL, excludingRoot: AccessRootID? = nil) throws -> AccessRootID {
         let logger = Logger(subsystem: "io.github.anzchy.picsee", category: "access")
         var id = AccessRootID()
         var existing = false
@@ -600,7 +600,7 @@ public actor FileAccess: AccessLeasing {
                 throw FileAccessError.invalidFolder
             }
             phase = "match"
-            if let held = matchingRoot(canonical(folder)) { id = held; existing = true }
+            if let held = matchingRoot(canonical(folder), excluding: excludingRoot) { id = held; existing = true }
             phase = "bookmark"
             let bookmark = try bookmarks.create(for: folder)
             var replacement = saved
