@@ -27,7 +27,7 @@ grep -E '^(lines|uncovered|no report|empty report)' $o/$p-lcov.log | tr '\n' ' '
 xcodegen generate > $o/$p-xcodegen.log 2>&1; echo "xcodegen=$?" >> $s
 $hl xcodebuild build -scheme Picsee -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -derivedDataPath .build/dd-ci \
   > $o/$p-xcodebuild.log 2>&1; echo "xcodebuild=$?" >> $s
-node --test --test-reporter=spec scripts/tdd/*.test.mjs scripts/ledger/*.test.mjs > $o/$p-node.log 2>&1; echo "node=$?" >> $s
+node --test --test-reporter=spec scripts/agents/*.test.mjs scripts/tdd/*.test.mjs scripts/ledger/*.test.mjs > $o/$p-node.log 2>&1; echo "node=$?" >> $s
 node scripts/ledger/build.mjs --check > /dev/null 2>&1; echo "ledger=$?" >> $s
 git diff --check "$base"..HEAD > /dev/null 2>&1; echo "diffcheck=$?" >> $s
 grep -E 'Test run with .* tests' $o/$p-swift.log | tail -1 >> $s
