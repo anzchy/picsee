@@ -31,6 +31,19 @@ test('gates-rows rejects duplicate lane keys as ambiguous', t => {
   assertAmbiguous(t, complete.replace('node=0\n', 'node=0\nnode=1\n'));
 });
 
+test('gates-rows normalises whitespace before detecting duplicate keys', t => {
+  assertAmbiguous(t, complete.replace('node=0\n', 'node=0\nnode = 1\n'));
+});
+
+test('gates-rows rejects a malformed recognised lane value', t => {
+  const result = runRows(t, complete.replace('node=0', 'node=abc'), ['--head', head]);
+  assert.equal(result.status, 0, result.stderr);
+  const rows = result.stdout.trim().split('\n');
+  assert.equal(rows.length, 6);
+  for (const row of rows) assert.match(row, new RegExp(`\\| NOT VERIFIED \\| ${head} \\| owner-gates summary malformed \\|$`));
+  assert.doesNotMatch(result.stdout, /\| (?:PASS|FAIL) \|/);
+});
+
 test('gates-rows rejects two concatenated runs as ambiguous', t => {
   assertAmbiguous(t, complete + complete.replaceAll(head, 'b'.repeat(40)));
 });
