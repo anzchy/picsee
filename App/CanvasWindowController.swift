@@ -8,6 +8,12 @@ import SwiftUI
 import Observation
 import Darwin
 
+/// Keep the resolved lease location when its actual file open/read fails during a rename race.
+private struct FileGrantProbeFailure: Error {
+    let url: URL
+    let underlying: any Error
+}
+
 /// The file-grant subscription owns its wake token, including the foreground-only vnode fallback.
 private final class FileGrantWakeObservation: @unchecked Sendable {
     private let center = NSWorkspace.shared.notificationCenter
@@ -132,6 +138,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var navigationTask: Task<Void, Never>?
     private var standaloneGrantURL: URL?
     private var standaloneWake: FileGrantWakeObservation?
+    private var standaloneReadInput: AccessOperation?
+    private var standaloneReadProbe: Task<Void, Never>?
     private var fileReconnectionContext: (original: URL, access: AccessOperation, input: AccessOperation)?
     private var standaloneWatch: (any DispatchSourceFileSystemObject)?
     private var standaloneWatchTask: Task<Void, Never>?
@@ -181,6 +189,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         session.host = self
         session.imageLoader.host = self
+        bindFileGrantInspectorFailure(input: inputIntent.current)
         window.delegate = self
         let content = ViewerDropView(frame: window.contentView!.bounds,
             acceptsDrop: { [weak window] in window?.attachedSheet == nil },
@@ -341,7 +350,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         }
         canvas.onCommand = { [weak self] id in self?.route(id, from: .key) ?? false }
         canvas.onResolutionNeeded = { [weak self] maximum in
-            self?.session.requireImageResolution(maximum)
+            guard let self else { return }
+            let wasSettled = self.session.imageLoader.phase == .settled
+            self.session.requireImageResolution(maximum)
+            if wasSettled, self.session.imageLoader.phase == .refining,
+               self.standaloneGrantURL != nil, self.presentationRootID == nil {
+                // A genuinely new detail demand may renew authority; an in-flight read may not.
+                self.standaloneReadInput = self.inputIntent.current
+            }
         }
         attachAccessMonitor()
     }
@@ -960,6 +976,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             scanReadContext = nil
             presentationReadContext = nil
             searchProjection.cancel()
+            standaloneReadProbe?.cancel(); standaloneReadProbe = nil
+            standaloneReadInput = nil
             standaloneWake = nil
             standaloneWatch?.cancel(); standaloneWatch = nil
             standaloneWatchTask?.cancel(); standaloneWatchTask = nil
@@ -1052,6 +1070,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     }
                 } else {
                     self.standaloneGrantURL = url
+                    self.standaloneReadInput = inputOperation
                     self.watchStandaloneFile(at: url)
                     self.reconcileStandaloneImage()
                 }
@@ -1060,6 +1079,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func watchStandaloneFile(at url: URL) {
+        standaloneReadProbe?.cancel(); standaloneReadProbe = nil
         standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel()
@@ -1108,6 +1128,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         guard let grant = standaloneGrantURL else { return }
         if standaloneReconcileTask != nil { standaloneReconcilePending = true; return }
         let operation = accessIntent.current
+        let input = inputIntent.current
         standaloneReconcileTask = Task { [weak self, accessServices, pipeline] in
             defer {
                 self?.standaloneReconcileTask = nil
@@ -1116,7 +1137,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     self?.reconcileStandaloneImage()
                 }
             }
-            guard let self, let services = try? await accessServices.value, operation.isCurrent else { return }
+            guard let self, let services = try? await accessServices.value, operation.isCurrent, input.isCurrent else { return }
             var checkedURL = grant
             do {
                 let resolved = try await services.files.resolveFileGrant(grant)
@@ -1131,7 +1152,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     _ = try handle.read(upToCount: 1)
                     return try await pipeline.request(for: lease.url, maximumPixelSize: maximum)
                 }
-                guard operation.isCurrent else { return }
+                guard operation.isCurrent, input.isCurrent else { return }
                 let opening = switch self.session.imageLoader.phase {
                 case .opening, .refining: true
                 default: false
@@ -1145,13 +1166,13 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     self.watchStandaloneFile(at: resolved)
                 }
             } catch {
-                guard operation.isCurrent else { return }
+                guard operation.isCurrent, input.isCurrent else { return }
                 var error = error
                 // The file can move or reach the Trash between resolving the grant and reading it.
                 if !(error is FileAccessError), !FileManager.default.fileExists(atPath: checkedURL.path) {
                     do {
                         let current = try await services.files.resolveFileGrant(grant)
-                        guard operation.isCurrent else { return }
+                        guard operation.isCurrent, input.isCurrent else { return }
                         let follows = current != checkedURL && FileManager.default.fileExists(atPath: current.path)
                         self.filesystemLogger.notice("File grant re-resolved after failed read outcome=\(follows ? "moved" : "missing", privacy: .public) file=\(grant.lastPathComponent, privacy: .private)")
                         if follows {
@@ -1160,7 +1181,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                             return
                         }
                     } catch let resolution {
-                        guard operation.isCurrent else { return }
+                        guard operation.isCurrent, input.isCurrent else { return }
                         self.filesystemLogger.notice("File grant re-resolved after failed read outcome=failed error=\(String(describing: resolution), privacy: .private) file=\(grant.lastPathComponent, privacy: .private)")
                         error = resolution
                     }
@@ -1177,6 +1198,77 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Reader failure is only a hint: prove file access without decoding or retrying a readable image.
+    /// The returned Task is the real operation's completion, also owned by the File Grant lifecycle.
+    @discardableResult func reportFileGrantReadFailure(_ original: URL, input originatingInput: AccessOperation? = nil) -> Task<Void, Never> {
+        guard presentationRootID == nil, gridFolderRoot == nil,
+              standaloneGrantURL == original, let fileURL,
+              let input = originatingInput ?? standaloneReadInput, input.isCurrent else { return Task {} }
+        let operation = accessIntent.current
+        let generation = session.imageLoader.generation
+        standaloneReadProbe?.cancel()
+        let task = Task { [weak self, accessServices] in
+            guard let self, let services = try? await accessServices.value, operation.isCurrent else { return }
+            do {
+                let resolved = try await services.files.withLease(.fileGrant(original)) { lease in
+                    do {
+                        let handle = try FileHandle(forReadingFrom: lease.url)
+                        defer { try? handle.close() }
+                        _ = try handle.read(upToCount: 1)
+                        return lease.url
+                    } catch { throw FileGrantProbeFailure(url: lease.url, underlying: error) }
+                }
+                guard operation.isCurrent, input.isCurrent, self.standaloneGrantURL == original,
+                      self.session.imageLoader.generation == generation else { return }
+                if resolved.standardizedFileURL.resolvingSymlinksInPath()
+                    != fileURL.standardizedFileURL.resolvingSymlinksInPath() {
+                    self.reconcileStandaloneImage()
+                }
+            } catch {
+                guard operation.isCurrent, input.isCurrent, self.standaloneGrantURL == original,
+                      self.session.imageLoader.generation == generation else { return }
+                let read = error as? FileGrantProbeFailure
+                let checkedURL = read?.url ?? fileURL
+                var failure = read?.underlying ?? error
+                guard !(failure is CancellationError) else { return }
+                if let access = failure as? FileAccessError, case .fileDeleted = access {
+                    self.clearFolderImageForNoMatches()
+                    return
+                }
+                let missing = !FileManager.default.fileExists(atPath: checkedURL.path)
+                let needsReconnection: Bool
+                if let access = failure as? FileAccessError, case .needsFileReconnection = access { needsReconnection = true }
+                else { needsReconnection = false }
+                if missing || needsReconnection {
+                    do {
+                        let resolved = try await services.files.resolveFileGrant(original)
+                        guard operation.isCurrent, input.isCurrent, self.standaloneGrantURL == original,
+                              self.session.imageLoader.generation == generation else { return }
+                        let moved = resolved.standardizedFileURL.resolvingSymlinksInPath()
+                            != checkedURL.standardizedFileURL.resolvingSymlinksInPath()
+                        if FileManager.default.fileExists(atPath: resolved.path), missing || moved {
+                            self.reconcileStandaloneImage()
+                            return
+                        }
+                    } catch {
+                        guard operation.isCurrent, input.isCurrent, self.standaloneGrantURL == original,
+                              self.session.imageLoader.generation == generation else { return }
+                        failure = error
+                    }
+                }
+                guard !(failure is CancellationError) else { return }
+                if let access = failure as? FileAccessError, case .fileDeleted = access {
+                    self.clearFolderImageForNoMatches()
+                } else {
+                    // These are actual scoped access/open/read failures (including EIO), never decoder errors.
+                    self.requestFileReconnection(original)
+                }
+            }
+        }
+        standaloneReadProbe = task
+        return task
+    }
+
     private func requestFileReconnection(_ original: URL) {
         // The presentation boundary is synchronous and precedes even an already-attached sheet.
         // Closing the loader/Inspector also advances their generations before old work can return.
@@ -1187,6 +1279,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         accessIntent.invalidate()
         endInput()
         navigationTask?.cancel()
+        standaloneReadProbe?.cancel(); standaloneReadProbe = nil
+        standaloneReadInput = nil
         standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel(); standaloneWatchTask = nil
@@ -1243,6 +1337,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         presentationRootID = nil; scanReadContext = nil; presentationReadContext = nil
         cancelSidebarTree()
         gridShell.showFolder(nil)
+        standaloneReadProbe?.cancel(); standaloneReadProbe = nil
+        standaloneReadInput = nil
         standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel(); standaloneWatchTask = nil
@@ -1326,6 +1422,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func openFolder(_ folder: URL, rootID: AccessRootID, currentItemID: ItemID? = nil) {
+        standaloneReadProbe?.cancel(); standaloneReadProbe = nil
+        standaloneReadInput = nil
         standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel(); standaloneWatchTask = nil
@@ -1657,6 +1755,7 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
     }
     func requestOpen() { onOpenRequest?() }
     func showInspector(_ visible: Bool) {
+        if visible { bindFileGrantInspectorFailure(input: inputIntent.current) }
         inspectorHost.isHidden = !visible
         layoutInspector()
         syncInspector()
@@ -1687,7 +1786,18 @@ extension CanvasWindowController: ViewerSessionNavigationHost {
                 allowsCloseFocus: { [weak self] in self?.isGridSearchFocused != true })
         }
     }
+    private func bindFileGrantInspectorFailure(input: AccessOperation) {
+        inspector.onReadFailure = { [weak self] url, access, _ in
+            guard let self, case .fileGrant(let original) = access,
+                  self.presentationRootID == nil, self.gridFolderRoot == nil,
+                  self.fileURL?.standardizedFileURL.resolvingSymlinksInPath()
+                    == url.standardizedFileURL.resolvingSymlinksInPath() else { return }
+            self.reportFileGrantReadFailure(original, input: input)
+        }
+    }
     private func syncInspector(refresh: Bool = false) {
+        // Passive window updates retain their origin; explicit new reads obtain the current input.
+        if refresh { bindFileGrantInspectorFailure(input: inputIntent.current) }
         guard waitingAccessPosition == nil, session.inspectorFocus.isVisible else {
             inspector.select(itemID: nil, url: nil, access: nil); return
         }
@@ -2028,6 +2138,10 @@ extension CanvasWindowController: ViewerImageHost {
             }
             return
         }
+        if let original = standaloneGrantURL {
+            reportFileGrantReadFailure(original)
+            return
+        }
         if error is FileAccessError { showAccessError(error) }
     }
 }
@@ -2261,6 +2375,8 @@ extension CanvasWindowController: FolderScanHost {
     }
     func folderScanDidComplete(count: Int) { chromeOverlay.refresh(session: session) }
     func folderScanDidStart() {
+        standaloneReadProbe?.cancel(); standaloneReadProbe = nil
+        standaloneReadInput = nil
         standaloneWake = nil
         standaloneWatch?.cancel(); standaloneWatch = nil
         standaloneWatchTask?.cancel(); standaloneWatchTask = nil

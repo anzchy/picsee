@@ -31,6 +31,7 @@ public enum InspectorValue: Equatable, Sendable {
 @MainActor @Observable public final class InspectorModel {
     public private(set) var name: String?
     public private(set) var value: InspectorValue = .unknown
+    @ObservationIgnored public var onReadFailure: (@MainActor (URL, AccessRequest, any Error) -> Void)?
     private let reader: any InspectorMetadataReading
     private var key: Key?
     private var generation = UUID()
@@ -52,6 +53,7 @@ public enum InspectorValue: Equatable, Sendable {
         key = next; generation = UUID(); task?.cancel()
         name = url.lastPathComponent; value = .loading
         let token = generation
+        let failureCallback = onReadFailure
         task = Task {
             do {
                 let metadata = try await reader.read(url, access: access)
@@ -60,6 +62,7 @@ public enum InspectorValue: Equatable, Sendable {
             } catch {
                 guard generation == token, !Task.isCancelled else { return }
                 value = (error as? InspectorReadError) == .noPermission ? .noPermission : .unreadable
+                failureCallback?(url, access, error)
             }
         }
     }
