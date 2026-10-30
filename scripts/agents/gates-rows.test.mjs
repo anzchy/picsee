@@ -72,14 +72,19 @@ test('gates-rows rejects a missing summary without emitting PASS', t => {
   assert.doesNotMatch(result.stdout, /\| PASS \|/);
 });
 
-test('CI lints every pull request body without interpolating it into shell', async () => {
+test('PR-body workflow lints edits without interpolating the body into shell', async () => {
   const { readFileSync } = await import('node:fs');
-  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const workflow = readFileSync(new URL('../../.github/workflows/pr-body.yml', import.meta.url), 'utf8');
+  const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /on:\n  pull_request:\n    types: \[opened, edited, synchronize, reopened\]/);
+  assert.match(workflow, /permissions:\n  contents: read/);
+  assert.match(workflow, /concurrency:\n  group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.event\.pull_request\.number \}\}\n  cancel-in-progress: true/);
+  assert.doesNotMatch(ci, /^  pr-body-lint:/m);
   const job = workflow.match(/^  pr-body-lint:\n([\s\S]*?)(?=^  [a-z][a-z-]*:\n|$(?![\s\S]))/m)?.[1];
   assert.ok(job, 'missing pr-body-lint job');
   assert.match(job, /if: github\.event_name == 'pull_request'/);
   assert.match(job, /fetch-depth: 0/);
-  assert.match(job, /actions\/setup-node@/);
+  assert.match(job, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\.4\.0/);
   assert.match(job, /node --test scripts\/agents\/\*\.test\.mjs/);
   assert.match(job, /PR_BODY: \$\{\{ github\.event\.pull_request\.body \}\}/);
   assert.match(job, /printf '%s' "\$PR_BODY" > "\$RUNNER_TEMP\/pr-body\.md"/);
@@ -87,4 +92,16 @@ test('CI lints every pull request body without interpolating it into shell', asy
   const shell = [...job.matchAll(/run: \|\n((?:        .*\n?)+)/g)].map(match => match[1]).join('\n');
   assert.doesNotMatch(shell, /\$\{\{\s*github\.event\.pull_request\.body/);
   assert.doesNotMatch(job, /xcode/i);
+});
+
+test('GitHub Actions pins every remote uses line to a SHA with a version comment', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const directory = new URL('../../.github/workflows/', import.meta.url);
+  for (const file of readdirSync(directory).filter(file => file.endsWith('.yml'))) {
+    const lines = readFileSync(new URL(file, directory), 'utf8').split(/\r?\n/);
+    for (const line of lines.filter(line => /^\s*uses:/.test(line))) {
+      if (/^\s*uses: \.\//.test(line)) continue;
+      assert.match(line, /^\s*uses: \S+@[0-9a-f]{40} # v\S+$/, `${file}: ${line.trim()}`);
+    }
+  }
 });
