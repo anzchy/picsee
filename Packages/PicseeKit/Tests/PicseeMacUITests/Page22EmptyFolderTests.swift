@@ -649,8 +649,8 @@ private func recentFolders(_ count: Int) -> [RecentFolder] {
     let page = scene.state.emptyFolderView
     #expect(scene.session.imageStatus == .emptyFolder)
     #expect(!scene.state.isHidden && !page.isHiddenOrHasHiddenAncestor && scene.shell.isHidden)
-    #expect(!scene.state.textLines.contains(String(localized: "Open a folder to start browsing")))
-    #expect(!textLabels(of: scene.state).contains(String(localized: "Open a folder to start browsing")))
+    #expect(!scene.state.textLines.contains(String(localized: "Drop a photo folder here")))
+    #expect(!textLabels(of: scene.state).contains(String(localized: "Drop a photo folder here")))
     #expect(page.heading.stringValue == "This level has no images, but has 1 subfolders")
     let tile = try #require(page.tiles.first)
     #expect(tile.url == scene.folder.appendingPathComponent("sub"))
