@@ -145,6 +145,8 @@ public struct GridSidebarFolder: Sendable, Equatable {
         addFolderPlusButton.isEnabled = false
         addFolderPlusButton.refusesFirstResponder = true
         addFolderPlusButton.setAccessibilityIdentifier("grid.sidebar.add-folder-plus")
+        addFolderPlusButton.setAccessibilityElement(true)
+        addFolderPlusButton.setAccessibilityLabel("\(String(localized: "Add Folder")) · \(String(localized: "Coming Soon"))")
         document.addSubview(addFolderPlusButton)
         addFolderButton.title = String(localized: "Add Folder")
         addFolderButton.font = .systemFont(ofSize: 12)

@@ -32,9 +32,13 @@ import PicseeInfrastructure
     #expect(tree.rows[1].nameLabel.frame.maxX <= tree.rows[1].countLabel.frame.minX)
     #expect(tree.rows[1].nameLabel.lineBreakMode == .byTruncatingTail)
 
-    let plus = try #require(issue281SidebarView("grid.sidebar.add-folder-plus", in: tree))
+    let plus = try #require(issue281SidebarView("grid.sidebar.add-folder-plus", in: tree) as? NSButton)
     #expect(plus.frame.minX > tree.heading.frame.minX)
     #expect(plus.frame.maxX <= tree.bounds.maxX)
+    #expect(plus.isAccessibilityElement())
+    #expect(plus.accessibilityLabel() == "Add Folder · Coming Soon")
+    #expect(!plus.isEnabled)
+    #expect(plus.refusesFirstResponder)
     let add = try #require(issue281SidebarView("grid.sidebar.add-folder", in: tree) as? NSButton)
     // grid-light.html: .add-folder has margin 12px 4px 0, height 30px, dashed 1px border and control radius.
     #expect(add.frame.height == 30)
