@@ -42,9 +42,28 @@ export function checkUIParity(body, files) {
 const gateLanes = ['package-tests', 'package-coverage', 'app-tests', 'unsigned-build', 'node-tooling', 'ledger', 'diff-check', 'audit', 'device-smoke'];
 const gateStatuses = new Set(['PASS', 'FAIL', 'NOT RUN', 'N/A', 'NOT VERIFIED']);
 
+function stripFencedCodeBlocks(body) {
+  const lines = [];
+  let fence;
+  for (const line of body.split(/\r?\n/)) {
+    if (fence) {
+      const closing = line.match(/^ {0,3}(`{3,}|~{3,})\s*$/);
+      if (closing && closing[1][0] === fence[0] && closing[1].length >= fence.length) fence = undefined;
+      continue;
+    }
+    const opening = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (opening) fence = opening[1];
+    else lines.push(line);
+  }
+  return lines.join('\n');
+}
+
 export function checkGates(body, head) {
-  const section = body.match(/^## Gates\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/m)?.[1];
-  if (section === undefined) return { ok: false, reason: 'missing ## Gates table' };
+  const unfencedBody = stripFencedCodeBlocks(body);
+  const headings = unfencedBody.match(/^## Gates\s*$/gm) ?? [];
+  if (headings.length === 0) return { ok: false, reason: 'missing ## Gates table' };
+  if (headings.length > 1) return { ok: false, reason: 'duplicate ## Gates section' };
+  const section = unfencedBody.match(/^## Gates\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/m)[1];
   const lines = section.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   let headerAt = -1;
   for (let i = 0; i + 2 < lines.length; i++) {
@@ -60,13 +79,19 @@ export function checkGates(body, head) {
 
   const rows = [];
   const seen = new Set();
-  for (let i = headerAt + 2; i < lines.length && lines[i].startsWith('|'); i++) {
-    const values = cells(lines[i]);
+  let tableEnd = headerAt + 2;
+  for (; tableEnd < lines.length && lines[tableEnd].startsWith('|'); tableEnd++) {
+    const values = cells(lines[tableEnd]);
     if (values.length !== 4 || !values[0]) return { ok: false, reason: 'invalid ## Gates table row' };
     rows.push(values);
     const lane = values[0].toLowerCase();
     if (seen.has(lane)) return { ok: false, reason: `duplicate ${lane} lane` };
     seen.add(lane);
+  }
+  for (let i = 0; i < lines.length; i++) {
+    if ((i < headerAt || i >= tableEnd) && /^\|.*\|$/.test(lines[i])) {
+      return { ok: false, reason: 'unconsumed Gates row after the authoritative table' };
+    }
   }
   for (const lane of gateLanes) {
     if (!seen.has(lane)) return { ok: false, reason: `missing ${lane} lane` };
@@ -84,12 +109,12 @@ export function checkGates(body, head) {
     }
     if (status === 'FAIL') return { ok: false, reason: `${lane} is a FAIL row` };
     if (status === 'PASS' && !head.toLowerCase().startsWith(sha.toLowerCase()) &&
-        !/\bCODE same [0-9a-f]{40}\b/i.test(source)) {
+        !/\bCODE same [0-9a-f]{40}\b/.test(source)) {
       return { ok: false, reason: `${lane} PASS has a stale head without CODE same evidence` };
     }
   }
 
-  const smokeLines = body.split(/\r?\n/).filter(line => /^Device-Smoke:/.test(line));
+  const smokeLines = unfencedBody.split(/\r?\n/).filter(line => /^Device-Smoke:/.test(line));
   if (smokeLines.length > 0) {
     if (smokeLines.length !== 1) return { ok: false, reason: 'Device-Smoke lines must be unique and agree with the device-smoke row' };
     const smoke = smokeLines[0].match(/^Device-Smoke:\s*(PASS|NOT VERIFIED|n\/a)(?:\s+([0-9a-f]{7,40}))?\b/i);
