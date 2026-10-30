@@ -194,19 +194,19 @@ private struct GridGeometry: Equatable {
     let topInset: CGFloat = 16
 
     init(viewportWidth width: CGFloat, contentWidth: CGFloat) {
-        let narrow = width <= 1050
+        let narrow = contentWidth <= 1050
         let wide = width >= 1600
         horizontalInset = narrow ? 16 : (wide ? 32 : 24)
         columnGap = narrow ? 12 : (wide ? 22 : 16)
         rowGap = narrow ? 12 : (wide ? 22 : 18)
-        let minColumnWidth: CGFloat = width <= 720 ? 145 : 220
+        let minColumnWidth: CGFloat = contentWidth <= 720 ? 145 : 220
         let available = max(0, contentWidth - 2 * horizontalInset)
         columns = width <= 480 ? 1 : max(1, Int((available + columnGap) / (minColumnWidth + columnGap)))
         // Leave one representable step of slack so flow layout does not wrap an exact-fit row.
         let cellWidth = max(0, ((available - CGFloat(columns - 1) * columnGap) / CGFloat(columns)).nextDown)
         let tileHeight: CGFloat
         if width <= 720 { tileHeight = 150 }
-        else if narrow { tileHeight = 165 }
+        else if width <= 1050 { tileHeight = 165 }
         else if wide { tileHeight = 200 }
         else { tileHeight = min(225, max(135, width * 0.147)) }
         // Cell padding 4+4; name margin 7, padded line 21, bottom padding 4.

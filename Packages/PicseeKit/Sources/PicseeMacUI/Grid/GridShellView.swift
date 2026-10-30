@@ -373,7 +373,7 @@ import PicseeCore
         spaceKeycap.frame = NSRect(x: 0, y: 5, width: keycapWidth, height: 18)
         quickLookLabel.frame = NSRect(x: keycapWidth + 5, y: 6, width: quickLookWidth, height: 18)
         searchStatus.isHidden = footer.bounds.width <= 480 || searchStatus.stringValue.isEmpty
-        let countWidth = searchStatus.isHidden ? 0 : min(90, searchStatus.intrinsicContentSize.width)
+        let countWidth = min(90, max(48, searchStatus.intrinsicContentSize.width))
         let statusRight = (keyboardHint.isHidden ? searchButton.frame.minX : keyboardHint.frame.minX) - 16
         let countGap: CGFloat = countWidth > 0 ? 12 : 0
         let fileWidth = min(240, max(0, statusRight - 62 - countWidth - countGap))
