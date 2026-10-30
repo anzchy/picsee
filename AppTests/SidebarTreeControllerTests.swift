@@ -29,9 +29,14 @@ private func sameSidebarURL(_ lhs: URL, _ rhs: URL) -> Bool {
     lhs.standardizedFileURL.pathComponents == rhs.standardizedFileURL.pathComponents
 }
 
-@MainActor private func waitForSidebar(_ stage: String, _ condition: () async -> Bool) async throws {
-    await waitUntil { await condition() }
-    try #require(await condition(), "Sidebar stage: \(stage)")
+@MainActor private func waitForSidebar(_ stage: String, refreshing watch: WatchHub? = nil,
+    _ condition: () async -> Bool) async throws {
+    let deadline = ContinuousClock.now + .seconds(30)
+    while await !condition(), ContinuousClock.now < deadline {
+        watch?.reconcileAll()
+        try? await Task.sleep(for: .milliseconds(50))
+    }
+    try #require(await condition(), "Sidebar stage timed out after 30 seconds: \(stage)")
 }
 
 private actor SidebarLeaseTracker: AccessLeasing {
@@ -213,25 +218,21 @@ private actor SwitchingSidebarCounter: SidebarFolderEnumerating {
     }
     try fm.createDirectory(at: c, withIntermediateDirectories: true)
     try image.write(to: c.appendingPathComponent("c.png"))
-    services.watch.reconcileAll()
-    try await waitForSidebar("added C") {
+    try await waitForSidebar("added C", refreshing: services.watch) {
         tree.rows.contains { sameSidebarURL($0.folderURL, c) } &&
         tree.rows.first(where: { sameSidebarURL($0.folderURL, c) })?.countLabel.stringValue == "1"
     }
     try image.write(to: c.appendingPathComponent("c2.png"))
-    services.watch.reconcileAll()
-    try await waitForSidebar("changed C image count") {
+    try await waitForSidebar("changed C image count", refreshing: services.watch) {
         tree.rows.first(where: { sameSidebarURL($0.folderURL, c) })?.countLabel.stringValue == "2"
     }
     let d = a.appendingPathComponent("D")
     try fm.moveItem(at: c, to: d)
-    services.watch.reconcileAll()
-    try await waitForSidebar("renamed C to D") {
+    try await waitForSidebar("renamed C to D", refreshing: services.watch) {
         !tree.rows.contains { sameSidebarURL($0.folderURL, c) } &&
         tree.rows.first(where: { sameSidebarURL($0.folderURL, d) })?.countLabel.stringValue == "2"
     }
     try fm.removeItem(at: b)
-    services.watch.reconcileAll()
-    try await waitForSidebar("removed B") { !tree.rows.contains { sameSidebarURL($0.folderURL, b) } }
+    try await waitForSidebar("removed B", refreshing: services.watch) { !tree.rows.contains { sameSidebarURL($0.folderURL, b) } }
     #expect(!tree.rows.contains(where: { sameSidebarURL($0.folderURL, b) }))
 }
