@@ -194,12 +194,12 @@ private struct GridGeometry: Equatable {
     let topInset: CGFloat = 16
 
     init(viewportWidth width: CGFloat, contentWidth: CGFloat) {
-        let narrow = contentWidth <= 1050
+        let narrow = width <= 1050
         let wide = width >= 1600
         horizontalInset = narrow ? 16 : (wide ? 32 : 24)
         columnGap = narrow ? 12 : (wide ? 22 : 16)
         rowGap = narrow ? 12 : (wide ? 22 : 18)
-        let minColumnWidth: CGFloat = contentWidth <= 720 ? 145 : 220
+        let minColumnWidth: CGFloat = width <= 720 ? 145 : 220
         let available = max(0, contentWidth - 2 * horizontalInset)
         columns = width <= 480 ? 1 : max(1, Int((available + columnGap) / (minColumnWidth + columnGap)))
         // Leave one representable step of slack so flow layout does not wrap an exact-fit row.

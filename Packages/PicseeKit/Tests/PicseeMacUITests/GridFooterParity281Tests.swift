@@ -105,3 +105,20 @@ import PicseeInfrastructure
         #expect(!hint.isHidden, "Space hint returns after editing ends")
     }
 }
+
+@Test @MainActor func issue281FooterStatusUsesPinnedResponsiveWidths() throws {
+    let cases: [(width: CGFloat, fileWidth: CGFloat, countGap: CGFloat, countHidden: Bool)] = [
+        (1280, 240, 12, false), (801, 240, 12, false), (800, 180, 7, false),
+        (721, 180, 7, false), (720, 140, 7, false), (481, 140, 7, false), (480, 90, 7, true),
+    ]
+    for item in cases {
+        let (shell, _, window) = try issue281FooterScene(width: item.width)
+        defer { window.close() }
+        let file = try #require(issue281FooterView("grid.current-file-status", in: shell) as? NSTextField)
+        let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
+        // grid-light.html: .grid-file-status>span:first-child max-width is 240/180/140/90px; .grid-file-status gap becomes 7px at 800px.
+        #expect(abs(file.frame.width - item.fileWidth) <= 1, "filename width at \(item.width)")
+        #expect(count.isHidden == item.countHidden, "count visibility at \(item.width)")
+        #expect(abs(count.frame.minX - file.frame.maxX - item.countGap) <= 1, "count gap at \(item.width)")
+    }
+}
