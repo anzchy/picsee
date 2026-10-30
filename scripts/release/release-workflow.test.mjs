@@ -66,7 +66,9 @@ test("the release is a draft and nothing is published or merged", () => {
   assert.doesNotMatch(workflow, /--draft=false|gh release edit|gh pr merge|--publish|git push[^\n]*\bmain\b/);
   const pr = step(/appcast/i).text;
   assert.match(pr, /gh pr create --base main/);
-  assert.match(pr, /git push origin "\$BRANCH"/);
+  assert.match(pr, /git push --force-with-lease="refs\/heads\/\$BRANCH:\$REMOTE" origin "HEAD:refs\/heads\/\$BRANCH"/);
+  assert.match(pr, /git push origin "HEAD:refs\/heads\/\$BRANCH"/);
+  for (const push of pr.split("\n").filter((line) => line.includes("git push"))) assert.match(push, /"HEAD:refs\/heads\/\$BRANCH"$/, push);
 });
 
 test("the tag must be on main and match the project's marketing version", () => {

@@ -72,8 +72,39 @@ The appcast PR is opened with the workflow's token, so GitHub does not run CI on
 
 ## When a run fails
 
-The run stops at the first failing step and always deletes its keychain. Fix the cause on `main`, then do one of:
-- delete the tag (`git push --delete origin v0.0.1-rc.N`) and any draft it made, and re-tag;
-- or cut `rc.N+1`.
+The run stops at the first failing step and always tries to delete its keychain. Nothing a run creates is ever published. What exists on GitHub afterwards depends on where it stopped:
 
-Never edit a published release's DMG: Sparkle verifies the EdDSA signature in the appcast against it.
+| Stopped at | Draft release `<tag>` | Branch `appcast/<tag>` | Appcast PR |
+|---|---|---|---|
+| anything before "Create the draft release" (version check, build, signing, checks, notarisation, DMG, checksum) | no | no | no |
+| "Create the draft release" | maybe: a draft with missing assets if an upload failed | no | no |
+| "Sign the update and open the appcast PR", before the push | yes | no | no |
+| the same step, after the push (e.g. PR creation refused) | yes | yes | no |
+| finished | yes | yes | yes |
+
+Apple keeps the notarisation submissions; they need no clean-up.
+
+**Same tag, same commit** (a flaky step, an expired credential you have since replaced):
+
+1. If a **draft** `<tag>` exists, delete it. Never do this to a published release:
+   ```sh
+   gh release view <tag> --json isDraft --jq .isDraft   # must print true
+   gh release delete <tag> --yes                        # keeps the git tag
+   ```
+2. Leave `appcast/<tag>` and its PR as they are. The rerun rebuilds the branch from `main` with the new DMG's signature. It replaces only that branch, with `--force-with-lease` pinned to what it just read, and updates the open PR instead of opening a second one.
+3. In Actions, open the failed run and choose **Re-run all jobs**. That reruns the same tag and commit.
+
+**Same tag, new commit** (the fix had to land on `main` first):
+
+1. Delete the draft as above.
+2. Move the tag:
+   ```sh
+   git push --delete origin <tag> && git tag -d <tag>
+   git tag -a <tag> -m "…" <fixed commit on main>
+   git push origin <tag>
+   ```
+3. `appcast/<tag>` and its PR may stay; the new run replaces the branch and reuses the PR. To remove them instead: `gh pr close <number>`, then `git push --delete origin appcast/<tag>`.
+
+**Or skip the tag:** cut `rc.N+1`, then close the old appcast PR and delete its branch. This is the safest choice for a release candidate. For the one final `v0.0.1` tag, use the same-tag path.
+
+Never edit or delete a **published** release's DMG: Sparkle verifies the EdDSA signature in the appcast against it. A bad published build is replaced by a newer one.

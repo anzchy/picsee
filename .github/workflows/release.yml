@@ -196,13 +196,25 @@ jobs:
           URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$(basename "$DMG")"
           BRANCH="appcast/$TAG"
           git fetch origin main
-          git switch -c "$BRANCH" origin/main
+          git switch -C "$BRANCH" origin/main
           node scripts/release/appcast.mjs appcast.xml --version "$BUILD" --short-version "$VERSION" --url "$URL" \
             --length "$LENGTH" --signature "$SIGNATURE" --minimum-system-version 14.0
           git add appcast.xml
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -m "release(appcast): picsee $VERSION ($BUILD) for $TAG"
-          git push origin "$BRANCH"
+          # A rerun of this tag rebuilds appcast/<tag> from main and replaces that branch only, leased to the
+          # commit just read, so nothing pushed there in between is lost silently.
+          REMOTE=$(git ls-remote --heads origin "refs/heads/$BRANCH" | cut -f 1)
+          if [[ -n "$REMOTE" ]]; then
+            git push --force-with-lease="refs/heads/$BRANCH:$REMOTE" origin "HEAD:refs/heads/$BRANCH"
+          else
+            git push origin "HEAD:refs/heads/$BRANCH"
+          fi
+          OPEN=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+          if [[ -n "$OPEN" ]]; then
+            echo "appcast PR #$OPEN already open for $BRANCH; its branch now carries this run's item"
+            exit 0
+          fi
           gh pr create --base main --head "$BRANCH" --title "release(appcast): picsee $VERSION ($BUILD) for $TAG" \
             --body "Adds $TAG to appcast.xml. Merge only after publishing the draft release $TAG: the enclosure URL works once the release is public, and installed copies see the update as soon as this lands on main."
 
