@@ -7,16 +7,23 @@ import Sparkle
 @MainActor final class SparkleUpdatePort: NSObject, AppUpdatePort, SPUUpdaterDelegate {
     private var controller: SPUStandardUpdaterController!
     private var observers: [@MainActor () -> Void] = []
-    private var automaticObservation: NSKeyValueObservation?
+    private var observations: [NSKeyValueObservation] = []
 
     override init() {
         super.init()
         controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
-        // Sparkle's second-launch question and Settings both change this flag; lastUpdateCheckDate is not
-        // KVO-compliant, so the update-cycle callback below covers it.
-        automaticObservation = controller.updater.observe(\.automaticallyChecksForUpdates) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.notify() }
-        }
+        // Sparkle's second-launch question and Settings both change the automatic flag, and a running check
+        // makes canCheckForUpdates false; both are KVO-compliant on the main thread. lastUpdateCheckDate is not,
+        // so the update-cycle callback below covers it.
+        let updater = controller.updater
+        observations = [
+            updater.observe(\.automaticallyChecksForUpdates) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.notify() }
+            },
+            updater.observe(\.canCheckForUpdates) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.notify() }
+            },
+        ]
     }
 
     var versionInfo: AppVersionInfo { AppVersionInfo(infoDictionary: Bundle.main.infoDictionary ?? [:]) }
@@ -27,6 +34,8 @@ import Sparkle
     }
 
     var lastUpdateCheckDate: Date? { controller.updater.lastUpdateCheckDate }
+
+    var canCheckForUpdates: Bool { controller.updater.canCheckForUpdates }
 
     func checkForUpdates() { controller.checkForUpdates(nil) }
 

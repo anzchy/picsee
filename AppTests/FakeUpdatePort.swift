@@ -6,6 +6,7 @@ import PicseeApplication
     var versionInfo: AppVersionInfo
     var automaticallyChecksForUpdates: Bool
     var lastUpdateCheckDate: Date?
+    var canCheckForUpdates = true
     var nextCheckDate: Date?
     private(set) var checkCount = 0
     private var observers: [@MainActor () -> Void] = []
@@ -32,8 +33,9 @@ import PicseeApplication
     }
 
     /// A change made outside Settings (Sparkle's own prompt, an update cycle), announced to observers.
-    func simulateExternal(automatic: Bool? = nil, date: Date?? = nil) {
+    func simulateExternal(automatic: Bool? = nil, date: Date?? = nil, canCheck: Bool? = nil) {
         if let automatic { automaticallyChecksForUpdates = automatic }
+        if let canCheck { canCheckForUpdates = canCheck }
         if let date { lastUpdateCheckDate = date }
         notify()
     }
