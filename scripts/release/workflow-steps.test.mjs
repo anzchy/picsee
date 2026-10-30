@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 const root = new URL("../../", import.meta.url).pathname;
@@ -35,7 +35,7 @@ export function runStep(name, { env = {}, cwd = root, fakes = {} } = {}) {
   const file = join(dir, "step.sh");
   writeFileSync(file, stepScript(name));
   const result = spawnSync("/bin/bash", ["--noprofile", "--norc", "-eo", "pipefail", file], {
-    cwd, encoding: "utf8", env: { PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: dir, RUNNER_TEMP: dir, ...env },
+    cwd, encoding: "utf8", env: { PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: dir, RUNNER_TEMP: dir, ...env },
   });
   return { ...result, dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
@@ -121,4 +121,90 @@ test("the version step fails on a mismatched or malformed tag, a commit off main
       } finally { step.cleanup(); }
     }
   } finally { rmSync(repo.dir, { recursive: true, force: true }); }
+});
+
+/** An origin with main (appcast.xml + the real appcast script) and a fresh clone to run the appcast step in. */
+function appcastWorld() {
+  const dir = mkdtempSync(join(tmpdir(), "picsee-appcast-"));
+  const git = (cwd, ...args) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args],
+    { cwd, encoding: "utf8" }).trim();
+  const origin = join(dir, "origin.git"), seed = join(dir, "seed"), work = join(dir, "work");
+  git(dir, "init", "-q", "--bare", "-b", "main", origin);
+  git(dir, "init", "-q", "-b", "main", seed);
+  mkdirSync(join(seed, "scripts/release"), { recursive: true });
+  writeFileSync(join(seed, "scripts/release/appcast.mjs"), readFileSync(join(root, "scripts/release/appcast.mjs")));
+  writeFileSync(join(seed, "appcast.xml"), readFileSync(join(root, "appcast.xml")));
+  git(seed, "add", "."); git(seed, "commit", "-q", "-m", "main");
+  git(seed, "remote", "add", "origin", origin); git(seed, "push", "-q", "origin", "main");
+  git(dir, "clone", "-q", origin, work);
+  const tools = join(dir, "sparkle");
+  mkdirSync(join(tools, "bin"), { recursive: true });
+  const signature = Buffer.alloc(64, 5).toString("base64");
+  writeFileSync(join(tools, "bin/sign_update"), `#!/bin/bash\nprintf '%s\\n' "$@" > "${dir}/sign-argv"\ncat > "${dir}/sign-stdin"\nprintf '%s\\n' '${signature}'\n`);
+  chmodSync(join(tools, "bin/sign_update"), 0o755);
+  const dmg = join(dir, "Picsee-0.0.1.dmg");
+  writeFileSync(dmg, Buffer.alloc(4321, 1));
+  return { dir, origin, work, tools, dmg, signature, git };
+}
+
+function runAppcast(world, { openPR = "" } = {}) {
+  const ghLog = join(world.dir, "gh-calls");
+  return runStep("Sign the update and open the appcast PR", {
+    cwd: world.work,
+    env: { TAG: "v0.0.1", VERSION: "0.0.1", BUILD: "312", DMG: world.dmg, SPARKLE_TOOLS: world.tools,
+      GITHUB_REPOSITORY: "anzchy/picsee", GH_TOKEN: "token", SPARKLE_ED_PRIVATE_KEY: "private-key-material",
+      GIT_CONFIG_GLOBAL: "/dev/null" },
+    fakes: { gh: `printf '%s\\n' "$*" >> "${ghLog}"\nif [[ "$1 $2" == "pr list" ]]; then printf '%s' '${openPR}'; fi\n` },
+  });
+}
+const ghCalls = (world) => { try { return readFileSync(join(world.dir, "gh-calls"), "utf8").trim().split("\n"); } catch { return []; } };
+const remoteFeed = (world) => world.git(world.origin, "show", "appcast/v0.0.1:appcast.xml");
+
+test("the appcast step signs from stdin, pushes appcast/<tag> and opens one PR", () => {
+  const world = appcastWorld();
+  try {
+    const step = runAppcast(world);
+    try { assert.equal(step.status, 0, step.stderr); } finally { step.cleanup(); }
+    assert.equal(readFileSync(join(world.dir, "sign-stdin"), "utf8"), "private-key-material");
+    assert.doesNotMatch(readFileSync(join(world.dir, "sign-argv"), "utf8"), /private-key-material/);
+    const feed = remoteFeed(world);
+    assert.match(feed, /url="https:\/\/github\.com\/anzchy\/picsee\/releases\/download\/v0\.0\.1\/Picsee-0\.0\.1\.dmg" length="4321"/);
+    assert.ok(feed.includes(`sparkle:edSignature="${world.signature}"`));
+    assert.equal(world.git(world.origin, "rev-parse", "main"), world.git(world.origin, "rev-parse", "appcast/v0.0.1~1"));
+    const calls = ghCalls(world);
+    assert.equal(calls.filter((c) => c.startsWith("pr create")).length, 1, calls.join("\n"));
+    assert.match(calls.find((c) => c.startsWith("pr create")), /--base main --head appcast\/v0\.0\.1/);
+  } finally { rmSync(world.dir, { recursive: true, force: true }); }
+});
+
+test("a rerun of the same tag replaces its appcast branch and reuses the open PR", () => {
+  const world = appcastWorld();
+  try {
+    const first = runAppcast(world); first.cleanup();
+    assert.equal(first.status, 0, first.stderr);
+    const before = world.git(world.origin, "rev-parse", "appcast/v0.0.1");
+    // A fresh runner: a new clone, while the branch and its PR already exist.
+    rmSync(world.work, { recursive: true, force: true });
+    world.git(world.dir, "clone", "-q", world.origin, world.work);
+    writeFileSync(world.dmg, Buffer.alloc(5000, 2));
+    const again = runAppcast(world, { openPR: "17" });
+    try { assert.equal(again.status, 0, again.stderr); } finally { again.cleanup(); }
+    assert.notEqual(world.git(world.origin, "rev-parse", "appcast/v0.0.1"), before);
+    assert.match(remoteFeed(world), /length="5000"/);
+    assert.equal((remoteFeed(world).match(/<item>/g) ?? []).length, 1);
+    assert.equal(ghCalls(world).filter((c) => c.startsWith("pr create")).length, 1, "no second PR");
+  } finally { rmSync(world.dir, { recursive: true, force: true }); }
+});
+
+test("a rerun after a failed PR creation pushes over the branch and opens the PR", () => {
+  const world = appcastWorld();
+  try {
+    const first = runAppcast(world); first.cleanup();
+    rmSync(join(world.dir, "gh-calls"));
+    rmSync(world.work, { recursive: true, force: true });
+    world.git(world.dir, "clone", "-q", world.origin, world.work);
+    const again = runAppcast(world);
+    try { assert.equal(again.status, 0, again.stderr); } finally { again.cleanup(); }
+    assert.equal(ghCalls(world).filter((c) => c.startsWith("pr create")).length, 1);
+  } finally { rmSync(world.dir, { recursive: true, force: true }); }
 });
