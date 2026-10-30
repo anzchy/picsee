@@ -15,6 +15,31 @@ import Testing
     return host.convert(view.bounds, from: view)
 }
 
+private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPoint)? {
+    var start: CGPoint?
+    var end: CGPoint?
+    path.applyWithBlock { element in
+        let point: CGPoint?
+        switch element.pointee.type {
+        case .moveToPoint, .addLineToPoint:
+            point = element.pointee.points[0]
+        case .addQuadCurveToPoint:
+            point = element.pointee.points[1]
+        case .addCurveToPoint:
+            point = element.pointee.points[2]
+        case .closeSubpath:
+            point = nil
+        @unknown default:
+            point = nil
+        }
+        guard let point else { return }
+        if start == nil { start = point }
+        end = point
+    }
+    guard let start, let end else { return nil }
+    return (start, end)
+}
+
 @Test @MainActor func issue282ReadingContentMatchesPinnedFramesAndCancelStyle() throws {
     for (appearanceName, designAppearance) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
         let design = try PinnedDesign.page("folder-loading", appearance: designAppearance)
@@ -75,12 +100,27 @@ import Testing
         view.appearance = NSAppearance(named: appearanceName)
         view.reduceMotion = { false }
         view.start()
-        // folder-loading.html: .mock-progress is 28x28 with a 2px divider ring and accent top segment.
+        // folder-loading.html: one 28x28 border box, 2px stroke, with its top quarter in accent.
         #expect(view.dividerLayer.lineWidth == 2)
         #expect(view.accentLayer.lineWidth == 2)
+        #expect(view.accentLayer.lineCap == .butt)
         let dividerPath = try #require(view.dividerLayer.path)
         let accentPath = try #require(view.accentLayer.path)
-        #expect(accentPath.boundingBox.height < dividerPath.boundingBox.height)
+        let dividerBounds = dividerPath.boundingBoxOfPath
+        #expect(dividerBounds == CGRect(x: 1, y: 1, width: 26, height: 26))
+        let center = CGPoint(x: dividerBounds.midX, y: dividerBounds.midY)
+        #expect(center == CGPoint(x: 14, y: 14))
+        let accentEndpoints = try #require(issue282PathEndpoints(accentPath))
+        let expectedStart = CGPoint(x: center.x + 13 * cos(CGFloat.pi / 4),
+                                    y: center.y + 13 * sin(CGFloat.pi / 4))
+        let expectedEnd = CGPoint(x: center.x + 13 * cos(3 * CGFloat.pi / 4),
+                                  y: center.y + 13 * sin(3 * CGFloat.pi / 4))
+        #expect(abs(accentEndpoints.start.x - expectedStart.x) < 0.0001)
+        #expect(abs(accentEndpoints.start.y - expectedStart.y) < 0.0001)
+        #expect(abs(accentEndpoints.end.x - expectedEnd.x) < 0.0001)
+        #expect(abs(accentEndpoints.end.y - expectedEnd.y) < 0.0001)
+        #expect(abs(hypot(accentEndpoints.start.x - center.x, accentEndpoints.start.y - center.y) - 13) < 0.0001)
+        #expect(abs(hypot(accentEndpoints.end.x - center.x, accentEndpoints.end.y - center.y) - 13) < 0.0001)
         let dividerColor = try #require(view.dividerLayer.strokeColor)
         let divider = try #require(NSColor(cgColor: dividerColor)?.usingColorSpace(.sRGB))
         let expectedDivider = try design.color(":root", "--color-border", viewport: 1280)
@@ -99,4 +139,22 @@ import Testing
         #expect(view.layer?.animation(forKey: "picsee.reading.rotation") == nil)
         #expect(view.accessibilityRole() == .progressIndicator)
     }
+}
+
+@Test @MainActor func issue282ReadingRingUpdatesRotationWhenReduceMotionChanges() {
+    let view = ReadingProgressView(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
+    var reduceMotion = false
+    view.reduceMotion = { reduceMotion }
+    view.start()
+    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
+
+    reduceMotion = true
+    NotificationCenter.default.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                    object: NSWorkspace.shared)
+    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") == nil)
+
+    reduceMotion = false
+    NotificationCenter.default.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                    object: NSWorkspace.shared)
+    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
 }

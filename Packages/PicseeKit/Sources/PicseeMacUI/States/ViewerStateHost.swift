@@ -16,22 +16,31 @@ import PicseeApplication
         accentLayer.fillColor = NSColor.clear.cgColor
         dividerLayer.lineWidth = 2
         accentLayer.lineWidth = 2
-        accentLayer.lineCap = .round
+        accentLayer.lineCap = .butt
         layer?.addSublayer(dividerLayer)
         layer?.addSublayer(accentLayer)
         setAccessibilityRole(.progressIndicator)
         refreshAppearance()
+        NotificationCenter.default.addObserver(self, selector: #selector(reduceMotionDidChange),
+                                               name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                               object: nil)
+    }
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    @objc private func reduceMotionDidChange() {
+        start()
     }
     required init?(coder: NSCoder) { nil }
 
     override func layout() {
         super.layout()
-        let inset = bounds.insetBy(dx: 2, dy: 2)
+        let inset = bounds.insetBy(dx: 1, dy: 1)
         dividerLayer.path = CGPath(ellipseIn: inset, transform: nil)
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let radius = min(bounds.width, bounds.height) / 2 - 1
         let segment = CGMutablePath()
-        segment.addArc(center: center, radius: radius, startAngle: -.pi / 2, endAngle: 0, clockwise: false)
+        segment.addArc(center: center, radius: radius, startAngle: .pi / 4, endAngle: 3 * .pi / 4, clockwise: false)
         accentLayer.path = segment
         dividerLayer.frame = bounds
         accentLayer.frame = bounds
