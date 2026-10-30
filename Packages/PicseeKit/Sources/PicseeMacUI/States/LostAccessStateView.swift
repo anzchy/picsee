@@ -101,7 +101,7 @@ public final class LostAccessStateView: NSView {
     public func display(cause: AccessLossCause, text: LostAccessStateText) {
         let previouslyFocused = window?.firstResponder as? NSView
         self.cause = cause
-        for button in buttons { button.isEnabled = false; button.nextKeyView = nil }
+        for button in [reselectButton, chooseOtherButton] { button.isEnabled = false; button.nextKeyView = nil }
         subviews.forEach { $0.removeFromSuperview() }
         titleLabel.stringValue = text.title
         let paragraph = NSMutableParagraphStyle()
@@ -113,7 +113,8 @@ public final class LostAccessStateView: NSView {
         reselectButton.title = text.reselect
         chooseOtherButton.title = text.chooseOther
         iconView.image = NSImage(systemSymbolName: cause == .diskNotConnected ? "externaldrive" : "folder.badge.questionmark", accessibilityDescription: nil)
-        buttons = cause == .diskNotConnected ? [chooseOtherButton] : [reselectButton, chooseOtherButton]
+        buttons = cause == .diskNotConnected ? [chooseOtherButton]
+            : cause == .accessExpired ? [reselectButton] : [reselectButton, chooseOtherButton]
         [iconView, titleLabel, detailLabel].forEach { addSubview($0) }
         if cause == .diskNotConnected { addSubview(waitingDot); addSubview(waitingLabel) }
         for button in buttons {
@@ -124,7 +125,10 @@ public final class LostAccessStateView: NSView {
         for (index, button) in buttons.enumerated() { button.nextKeyView = buttons[(index + 1) % buttons.count] }
         let accessibilityContent: [NSView] = [titleLabel, detailLabel] + (cause == .diskNotConnected ? [waitingLabel] : []) + buttons
         setAccessibilityChildren(accessibilityContent)
-        if previouslyFocused === reselectButton && cause == .diskNotConnected { window?.makeFirstResponder(chooseOtherButton) }
+        if let previouslyFocused, (previouslyFocused === reselectButton || previouslyFocused === chooseOtherButton),
+           !buttons.contains(where: { $0 === previouslyFocused }) {
+            window?.makeFirstResponder(buttons.first)
+        }
         refreshColors()
         refreshWaitingAnimation()
         needsLayout = true
@@ -173,7 +177,7 @@ public final class LostAccessStateView: NSView {
         let buttonHeight = ceil(font.ascender - font.descender) + 16
         let buttonWidths = buttons.map { button in ceil((button.title as NSString).size(withAttributes: [.font: font]).width) + (button === reselectButton ? 32 : 8) }
         let waitingWidth = ceil((waitingLabel.stringValue as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width)
-        let rowWidth = cause == .diskNotConnected ? 7 + 6 + waitingWidth + 16 + buttonWidths[0] : buttonWidths.reduce(0, +) + 16
+        let rowWidth = cause == .diskNotConnected ? 7 + 6 + waitingWidth + 16 + buttonWidths[0] : buttonWidths.reduce(0, +) + CGFloat(max(0, buttons.count - 1)) * 16
         let height = 32 + 18 + titleHeight + 9 + detailHeight + 18 + buttonHeight
         var top = bounds.midY + 19 + height / 2
         iconView.frame = NSRect(x: bounds.midX - 16, y: top - 32, width: 32, height: 32)

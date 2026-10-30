@@ -7,26 +7,36 @@ import PicseeMacUI
 
 private final class RecoveryBookmarks: SecurityScope, BookmarkCoding, @unchecked Sendable {
     private let lock = NSLock()
-    private var identities: [String: FileResourceIdentity] = [:]
-    private var relocated: [String: URL] = [:]
+    private var identities: [Data: FileResourceIdentity] = [:]
+    private var locations: [Data: URL] = [:]
     private var failures: Set<String> = []
     func start(_ url: URL) -> Bool { true }
     func stop(_ url: URL) {}
     func isReadable(_ url: URL) -> Bool { true }
     func create(for url: URL) throws -> Data {
         let identity = try URLIdentityResourceReader().identity(for: url)
-        lock.withLock { identities[url.path] = identity }
-        return Data(url.path.utf8)
+        // A bookmark is an object-specific token. A new directory at the old
+        // spelling must not inherit the prior token's moved location/identity.
+        let token = Data("\(UUID().uuidString)|\(url.path)".utf8)
+        lock.withLock { identities[token] = identity; locations[token] = url }
+        return token
     }
     func resolve(_ data: Data) throws -> ResolvedBookmark {
-        let path = String(decoding: data, as: UTF8.self)
-        return try lock.withLock {
-            if failures.contains(path) { throw NSError(domain: "T229RecoveryResolution", code: 1) }
-            return ResolvedBookmark(url: relocated[path] ?? URL(fileURLWithPath: path), stale: false)
+        try lock.withLock {
+            guard let url = locations[data], !failures.contains(url.path) else {
+                throw NSError(domain: "T229RecoveryResolution", code: 1)
+            }
+            return ResolvedBookmark(url: url, stale: false)
         }
     }
-    func identity(_ data: Data) -> FileResourceIdentity? { lock.withLock { identities[String(decoding: data, as: UTF8.self)] } }
-    func relocate(_ old: URL, to new: URL) { lock.withLock { relocated[old.path] = new } }
+    func identity(_ data: Data) -> FileResourceIdentity? { lock.withLock { identities[data] } }
+    func relocate(_ old: URL, to new: URL) {
+        lock.withLock {
+            for (token, url) in locations where url.standardizedFileURL == old.standardizedFileURL {
+                locations[token] = new
+            }
+        }
+    }
     func fail(_ root: URL, _ failed: Bool) {
         lock.withLock { if failed { _ = failures.insert(root.path) } else { _ = failures.remove(root.path) } }
     }
@@ -181,7 +191,7 @@ private final class RecoveryWatchSource: FolderEventSource, @unchecked Sendable 
         self.rootA = rootA; self.rootB = rootB; self.bookmarks = bookmarks; self.mounts = mounts; self.gate = gate; watchSource = source
         services = AccessServices(files: files, recent: RecentFolderStore(url: base.appendingPathComponent("recent.json")),
             browser: FolderBrowser(readValues: { try gate.read($0) }, resourceReader: gate),
-            watch: WatchHub(access: files, source: source, scheduler: DispatchWatchScheduler()), mounts: mounts)
+            watch: WatchHub(access: files, source: source, scheduler: DispatchWatchScheduler()), mounts: mounts, selectionScope: bookmarks)
     }
     func controller() -> CanvasWindowController {
         CanvasWindowController(pipeline: ImageIOPipeline(), preferencesStore: InMemoryDisplayPreferencesStore(),
@@ -619,4 +629,141 @@ private final class RecoveryDiagnosticTrace: @unchecked Sendable {
     try await recoveryWait { controller.waitingAccessPosition == nil }
     let repeated = controller.session.folderScan?.snapshot?.entries.first { $0.itemID == controller.session.selection.currentItemID }
     #expect(repeated?.url.standardizedFileURL.path == before.url.standardizedFileURL.path)
+}
+
+
+// #230: these tests supply the system panel's result to the production
+// continuation. The real chooser configuration/cancel is exercised separately.
+@MainActor private func t230OpenPositionBeforeLoss(_ f: RecoveryFixture, _ controller: CanvasWindowController) async throws -> ItemID {
+    controller.browseRecoveredFolder(f.childOne, rootID: f.rootA)
+    try await f.ready(controller, folder: f.childOne, count: 2)
+    controller.session.setFolderConditions(.init(sort: .name, direction: .descending, selectedExtensions: ["png", "jpg"]))
+    try await f.ready(controller, folder: f.childOne, count: 2)
+    let entries = try #require(controller.session.folderScan?.snapshot?.navigationEntries)
+    let chosen = try #require(entries.last)
+    controller.session.focus(chosen.itemID)
+    #expect(controller.route(.enter, from: .key))
+    try await recoveryWait { controller.session.mode == .viewing && controller.hasImage && controller.session.imageLoader.presented != nil }
+    return chosen.itemID
+}
+@MainActor private func t230DenyRoot(_ f: RecoveryFixture, _ controller: CanvasWindowController) async throws {
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.a.path)
+    await f.services.monitor.reportReadFailure(f.rootA, from: f.services.monitor.state.stamp(for: f.rootA),
+        error: NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError))
+    try await recoveryWait { recoveryPage(controller) != nil }
+    #expect(f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.accessExpired))
+    #expect(!controller.hasImage && controller.session.mode == .browsing)
+    #expect(controller.window?.representedURL == nil && controller.window?.title == "Picsee")
+    #expect(controller.inspector.name == nil && controller.inspector.value == .unknown)
+}
+
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: [false, true])
+func t230SameIdentityReselectRestoresOriginalPosition(_ renamed: Bool) async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let controller = f.controller(); defer { controller.window?.close() }
+    let item = try await t230OpenPositionBeforeLoss(f, controller)
+    let conditions = controller.session.folderConditions
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.a.path) }
+    try await t230DenyRoot(f, controller)
+    #expect(recoveryPage(controller)?.titleLabel.stringValue == String(localized: "Access Has Expired"))
+    #expect(recoveryPage(controller)?.buttons.count == 1)
+    #expect(controller.waitingAccessPosition?.folderReference != nil)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.a.path)
+    var selected = f.a
+    if renamed {
+        selected = f.base.appendingPathComponent("ReselectedMovedRoot")
+        try FileManager.default.moveItem(at: f.a, to: selected)
+        f.bookmarks.relocate(f.a, to: selected)
+    }
+    controller.completeAccessFolderSelection(selected, reselect: true)
+    try await recoveryWait { controller.waitingAccessPosition == nil && controller.session.folderScan?.snapshot?.isComplete == true }
+    #expect(controller.session.folderScan?.snapshot?.version.folder == selected.appendingPathComponent("One"))
+    #expect(controller.session.currentItemID == item)
+    #expect(controller.session.folderConditions == conditions)
+    #expect(controller.session.mode == .browsing && !controller.hasImage)
+    #expect(await f.services.files.records().count == 2)
+    #expect(f.services.monitor.state.snapshot(for: f.rootA)?.availability == .readable)
+}
+
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: ["other", "replacement", "missing-proof"])
+func t230DifferentIdentitySelectionOpensNormallyPreservingLostRoot(_ kind: String) async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let controller = f.controller(); defer { controller.window?.close() }
+    if kind == "missing-proof" {
+        await f.services.monitor.register(f.rootA)
+        _ = f.services.monitor.state.reportRootFailure(f.rootA, cause: .accessExpired, from: f.services.monitor.state.stamp(for: f.rootA))
+        controller.requestFolderReconnection(rootID: f.rootA, lastKnownFolder: f.a, displayName: "RootA")
+        try await recoveryWait { recoveryPage(controller) != nil }
+        #expect(controller.waitingAccessPosition?.folderReference == nil)
+    } else {
+        _ = try await t230OpenPositionBeforeLoss(f, controller)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.a.path) }
+        try await t230DenyRoot(f, controller)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.a.path)
+    }
+    let original = try #require(await f.services.files.records().first { $0.id == f.rootA })
+    let lost = f.services.monitor.state.snapshot(for: f.rootA)
+    var selected = f.b
+    if kind == "replacement" {
+        let moved = f.base.appendingPathComponent("OriginalStillLost")
+        try FileManager.default.moveItem(at: f.a, to: moved)
+        f.bookmarks.relocate(f.a, to: moved)
+        try FileManager.default.createDirectory(at: f.a, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: f.b.appendingPathComponent("other.png"), to: f.a.appendingPathComponent("new.png"))
+        selected = f.a
+    } else if kind == "missing-proof" { selected = f.a }
+    controller.completeAccessFolderSelection(selected, reselect: true)
+    try await recoveryWait { controller.waitingAccessPosition == nil && controller.session.folderScan?.snapshot?.isComplete == true }
+    #expect(controller.session.folderScan?.snapshot?.version.folder == selected)
+    #expect(controller.session.folderScan?.snapshot?.version.rootID != f.rootA)
+    #expect(await f.services.files.records().first { $0.id == f.rootA } == original)
+    #expect(f.services.monitor.state.snapshot(for: f.rootA) == lost)
+    #expect(await f.services.files.records().count == (kind == "other" ? 2 : 3))
+    #expect(controller.window?.attachedSheet == nil)
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func t230ExpiredPanelCancelPreservesStateAndButtons() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let controller = f.controller(); let window = try #require(controller.window)
+    defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.a.path)
+        if let panel = window.attachedSheet { window.endSheet(panel, returnCode: .cancel) }
+        window.close()
+    }
+    _ = try await t230OpenPositionBeforeLoss(f, controller)
+    try await t230DenyRoot(f, controller)
+    let page = try #require(recoveryPage(controller)), lost = f.services.monitor.state.snapshot(for: f.rootA)
+    let records = await f.services.files.records(), current = controller.waitingAccessPosition?.currentItemID
+    for _ in 0..<2 {
+        page.reselectButton.performClick(nil)
+        try await recoveryWait { window.attachedSheet is NSOpenPanel }
+        let panel = try #require(window.attachedSheet as? NSOpenPanel)
+        #expect(panel.canChooseDirectories && !panel.canChooseFiles && !panel.allowsMultipleSelection)
+        window.endSheet(panel, returnCode: .cancel)
+        try await recoveryWait { window.attachedSheet == nil }
+        #expect(recoveryPage(controller) === page && page.buttons == [page.reselectButton])
+        #expect(window.firstResponder === page.reselectButton)
+        #expect(f.services.monitor.state.snapshot(for: f.rootA) == lost)
+        #expect(await f.services.files.records() == records)
+        #expect(controller.waitingAccessPosition?.currentItemID == current)
+    }
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func t230AccessExpiredCatalogHasPinnedChineseAndEnglishCopy() throws {
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    let data = try Data(contentsOf: root.appendingPathComponent("App/Resources/Localizable.xcstrings"))
+    let catalog = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let strings = try #require(catalog["strings"] as? [String: Any])
+    for (key, chinese) in [
+        ("Access Has Expired", "授权失效"),
+        ("Access has expired. Choose this folder again to restore access; picsee will return to where you left off.", "访问权限已失效。重新选择这个文件夹即可恢复，picsee 会回到你刚才的位置。")
+    ] {
+        let entry = try #require(strings[key] as? [String: Any])
+        let localizations = try #require(entry["localizations"] as? [String: Any])
+        for (language, expected) in [("en", key), ("zh-Hans", chinese)] {
+            let translation = try #require(localizations[language] as? [String: Any])
+            let unit = try #require(translation["stringUnit"] as? [String: Any])
+            #expect(unit["value"] as? String == expected)
+        }
+    }
 }
