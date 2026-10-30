@@ -21,6 +21,7 @@ private final class MoveDuringRequestPipeline: ImagePipeline, @unchecked Sendabl
     private var armed = false
     private var loaderArmed = false
     private var headers = 0
+    private var completedHeaders = 0
     private var holdNext = false
     private var gate: CheckedContinuation<Void, Never>?
     private var movedURL: URL?
@@ -31,6 +32,7 @@ private final class MoveDuringRequestPipeline: ImagePipeline, @unchecked Sendabl
     var moves: Int { lock.withLock { ran } }
     var moved: URL? { lock.withLock { movedURL } }
     var headerRequests: Int { lock.withLock { headers } }
+    var completedHeaderRequests: Int { lock.withLock { completedHeaders } }
     var headerHeld: Bool { lock.withLock { gate != nil } }
     func holdHeader() { lock.withLock { holdNext = true } }
     func releaseHeader() { lock.withLock { () -> CheckedContinuation<Void, Never>? in defer { gate = nil }; return gate }?.resume() }
@@ -41,7 +43,9 @@ private final class MoveDuringRequestPipeline: ImagePipeline, @unchecked Sendabl
         }
         if hold { await withCheckedContinuation { continuation in lock.withLock { gate = continuation } } }
         if fire { try moveNow() }
-        return try await base.request(for: fileURL, maximumPixelSize: maximumPixelSize)
+        let request = try await base.request(for: fileURL, maximumPixelSize: maximumPixelSize)
+        lock.withLock { completedHeaders += 1 }
+        return request
     }
     func request(for fileURL: URL, maximumPixelSize: Int, identityRoot: ItemIdentityRoot?) async throws -> ImageDecodeRequest {
         let fire = lock.withLock { () -> Bool in
@@ -152,6 +156,41 @@ private func raceFixture() -> URL {
     #expect(controller.session.imageLoader.presented?.fileURL.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.representedURL?.standardizedFileURL == moved.standardizedFileURL)
     #expect(window.attachedSheet == nil)
+}
+
+@Test(.timeLimit(.minutes(3))) @MainActor func issue257RenameDuringHeldReconcileReadFollowsWithoutSheet() async throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: base, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    let original = base.appendingPathComponent("image.png")
+    let renamed = base.appendingPathComponent("renamed.png")
+    try fm.copyItem(at: raceFixture(), to: original)
+    let pipeline = MoveDuringRequestPipeline { nil }
+    let controller = try raceController(in: base, pipeline: pipeline)
+    let window = try #require(controller.window)
+    defer { window.close() }
+    controller.open(original, accessRequest: .fileGrant(original))
+    await waitUntil {
+        controller.session.imageLoader.phase == .settled && pipeline.completedHeaderRequests != 0
+    }
+    #expect(controller.session.imageLoader.presented?.fileURL.standardizedFileURL == original.standardizedFileURL)
+    pipeline.holdHeader()
+    defer { pipeline.releaseHeader() }
+    controller.reconcileStandaloneImage()
+    await waitUntil { pipeline.headerHeld }
+    #expect(pipeline.headerHeld)
+    try fm.moveItem(at: original, to: renamed)
+    pipeline.releaseHeader()
+    await waitUntil {
+        (controller.session.imageLoader.fileURL?.standardizedFileURL == renamed.standardizedFileURL &&
+         controller.session.imageLoader.presented?.fileURL.standardizedFileURL == renamed.standardizedFileURL &&
+         window.representedURL?.standardizedFileURL == renamed.standardizedFileURL) || window.attachedSheet != nil
+    }
+    #expect(window.attachedSheet == nil, "sheet: \(sheetText(window))")
+    #expect(controller.session.imageLoader.fileURL?.standardizedFileURL == renamed.standardizedFileURL)
+    #expect(controller.session.imageLoader.presented?.fileURL.standardizedFileURL == renamed.standardizedFileURL)
+    #expect(window.representedURL?.standardizedFileURL == renamed.standardizedFileURL)
 }
 
 @Test(.timeLimit(.minutes(3))) @MainActor func issue273TrashDuringLoaderDetailRequestClearsWithoutReconnectSheet() async throws {
