@@ -226,3 +226,20 @@ private func issue221CatalogValue(_ key: String, _ language: String) throws -> S
         }
     }
 }
+
+// #299: the About pane draws its links from the entry-point declarations, so a link that is
+// enabled and focusable on screen must be declared implemented, with no 「即将推出」 marker.
+@MainActor @Test(.timeLimit(.minutes(3))) func issue299AboutLinkDeclarationsMatchThePaneEnabledState() throws {
+    let panel = issue221Panel()
+    defer { panel.window.close() }
+    let views = try issue221AboutViews(in: panel)
+    for (index, button) in views.links.enumerated() {
+        let entry = try #require(panel.entryPoint(for: button))
+        #expect(button.isEnabled, "settings.about.link.\(index) must be enabled")
+        #expect(entry.state == .implemented, "\(entry) is enabled in the About pane but not declared implemented")
+        #expect(entry.isEnabled == button.isEnabled, "\(entry) declaration disagrees with the pane")
+        #expect(entry.isFocusable == !button.refusesFirstResponder, "\(entry) focusability disagrees with the pane")
+        #expect(entry.accessibilityLabel(for: .english).isEmpty)
+        #expect(entry.accessibilityLabel(for: .simplifiedChinese).isEmpty)
+    }
+}

@@ -43,10 +43,10 @@ public enum EntryPoint: String, CaseIterable, Sendable {
     public var state: EntryPointState {
         switch self {
         case .reportIssue, .diagnostics, .keyboardShortcuts,
-             .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow: .implemented
+             .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow,
+             .settingsAboutPrivacyNote, .settingsAboutSourceCode: .implemented
         case .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay,
-             .settingsDisplayThumbnailSize, .settingsDisplayFileNames, .settingsDisplayFitMode,
-             .settingsAboutPrivacyNote, .settingsAboutSourceCode: .comingSoon
+             .settingsDisplayThumbnailSize, .settingsDisplayFileNames, .settingsDisplayFitMode: .comingSoon
         }
     }
     public var isEnabled: Bool { state == .implemented }
