@@ -442,8 +442,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         inspector.select(itemID: nil, url: nil, access: nil)
         inspectorHost.isHidden = true
         gridView.clearPresentation()
-        gridShell.folderTree.clear()
-        gridShell.showFolder(nil)
+        gridShell.showFolderTree(current: GridSidebarFolder(url: folder, accessLossCause: cause),
+            parent: gridShell.folderTree.parent, children: [])
         gridShell.setSearchTerm("")
         gridShell.showSearchEmpty(false)
         WindowImageTitle.apply(to: window, imageURL: nil)

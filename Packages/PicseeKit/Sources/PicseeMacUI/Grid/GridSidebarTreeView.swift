@@ -165,7 +165,7 @@ public struct GridSidebarFolder: Sendable, Equatable {
     private let addFolderButton = NSButton()
     private let addFolderPlusButton = NSButton()
     private let addFolderBorder = CAShapeLayer()
-    private var parent: GridSidebarFolder?
+    public private(set) var parent: GridSidebarFolder?
     private var currentFolder: GridSidebarFolder?
     public private(set) var children: [GridSidebarFolder] = []
     public override init(frame frameRect: NSRect) {

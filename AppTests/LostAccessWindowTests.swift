@@ -110,7 +110,7 @@ private struct T229AppInspector: InspectorMetadataReading {
         #expect(grid.currentItemID == nil)
         #expect(grid.collectionView.numberOfItems(inSection: 0) == 0)
         let shell = try #require(controller.window?.contentView?.subviews.compactMap { $0 as? GridShellView }.first)
-        #expect(shell.folderTree.rows.isEmpty)
+        #expect(shell.folderTree.rows.count == 1)
     }
     #expect(controllers[2].session.folderScan?.snapshot?.entries.count == 1)
     #expect(controllers[2].window?.representedURL == other)
