@@ -12,9 +12,10 @@ import PicseeApplication
         .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay,
         .settingsDisplayThumbnailSize, .settingsDisplayFileNames, .settingsDisplayFitMode,
         .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow,
-        .settingsAboutPrivacyNote, .settingsAboutSourceCode,
     ]
-    #expect(Set(EntryPoint.allCases) == expectedComingSoon.union([.reportIssue, .diagnostics, .keyboardShortcuts]))
+    #expect(Set(EntryPoint.allCases) == expectedComingSoon.union([
+        .reportIssue, .diagnostics, .keyboardShortcuts, .settingsAboutPrivacyNote, .settingsAboutSourceCode,
+    ]))
     #expect(Set(EntryPoint.allCases.map(\.rawValue)).count == EntryPoint.allCases.count)
     #expect(EntryPoint.reportIssueURL.absoluteString == "https://github.com/anzchy/picsee/issues/new?template=bug_report.yml")
 

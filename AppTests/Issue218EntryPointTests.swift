@@ -40,8 +40,6 @@ import PicseeMacUI
         "settings.display.fit.1": .settingsDisplayFitMode,
         "settings.update.automatic": .settingsUpdatesAutomaticCheck,
         "settings.update.now": .settingsUpdatesCheckNow,
-        "settings.about.link.1": .settingsAboutPrivacyNote,
-        "settings.about.link.2": .settingsAboutSourceCode,
     ]
 
     for (id, entry) in expected {
@@ -75,8 +73,4 @@ import PicseeMacUI
     #expect(panel.entryPoint(for: report) == .reportIssue)
     report.performClick(nil)
     #expect(openedURLs == [EntryPoint.reportIssueURL])
-
-    let about = try #require(settingsEntryPointView("settings.pane.about", in: root))
-    #expect(about.subviews.compactMap { $0 as? NSTextField }
-        .contains { $0.stringValue == String(localized: "Coming Soon") })
 }

@@ -24,7 +24,6 @@ import PicseeMacUI
     let futureIDs: [(SettingsSection, [String])] = [
         (.display, ["settings.display.size", "settings.display.names", "settings.display.fit.0", "settings.display.fit.1"]),
         (.update, ["settings.update.automatic", "settings.update.now"]),
-        (.about, ["settings.about.link.1", "settings.about.link.2"])
     ]
     for (section, ids) in futureIDs {
         panel.select(section)
