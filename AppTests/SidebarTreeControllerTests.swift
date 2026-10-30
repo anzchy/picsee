@@ -39,6 +39,15 @@ private func sameSidebarURL(_ lhs: URL, _ rhs: URL) -> Bool {
     try #require(await condition(), "Sidebar stage timed out after 30 seconds: \(stage)")
 }
 
+@MainActor private func sidebarCondition(for seconds: Double,
+    _ condition: () async -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + .seconds(seconds)
+    while await !condition(), ContinuousClock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return await condition()
+}
+
 private final class SidebarHandoffGate: @unchecked Sendable {
     private let lock = NSLock()
     private var armed = false
@@ -77,24 +86,30 @@ private final class SidebarHandoffGate: @unchecked Sendable {
 }
 
 private final class SidebarHandoffWatch: FolderWatching, @unchecked Sendable {
+    private struct Subscription: FolderWatchSubscription {
+        let subscription: any FolderWatchSubscription
+        let didCancel: @Sendable () -> Void
+        func cancel() async {
+            await subscription.cancel()
+            didCancel()
+        }
+    }
     private let hub: WatchHub
     private let gate = SidebarHandoffGate()
     private let lock = NSLock()
-    private var registered = false
+    private var cancelledSubscriptions = 0
     init(hub: WatchHub) { self.hub = hub }
     var isHolding: Bool { gate.isHolding }
-    var didRegister: Bool { lock.withLock { registered } }
-    func armNextSubscription() {
-        lock.withLock { registered = false }
-        gate.arm()
-    }
+    var cancelledSubscriptionCount: Int { lock.withLock { cancelledSubscriptions } }
+    func armNextSubscription() { gate.arm() }
     func releaseSubscription() { gate.release() }
     func subscribe(rootID: AccessRootID, folder: URL, recursive: Bool,
         onChange: @escaping @Sendable () -> Void) async throws -> any FolderWatchSubscription {
         await gate.holdIfArmed()
         let subscription = try await hub.subscribe(rootID: rootID, folder: folder, recursive: recursive, onChange: onChange)
-        lock.withLock { registered = true }
-        return subscription
+        return Subscription(subscription: subscription) { [self] in
+            lock.withLock { cancelledSubscriptions += 1 }
+        }
     }
     func reconcileAll() { hub.reconcileAll() }
 }
@@ -358,7 +373,11 @@ private actor SwitchingSidebarCounter: SidebarFolderEnumerating {
     #expect(!tree.rows.contains(where: { sameSidebarURL($0.folderURL, b) }))
 }
 
-@Test(.timeLimit(.minutes(3))) @MainActor func sidebarWatchHandoffDeliversChangeDuringCapturedRead() async throws {
+private enum SidebarHandoffDelivery {
+    case beforeRegistrationRelease, afterOldSubscriptionRetires, duringOwnedRead
+}
+
+@MainActor private func expectSidebarHandoffDelivery(_ delivery: SidebarHandoffDelivery) async throws {
     _ = NSApplication.shared
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -391,20 +410,63 @@ private actor SwitchingSidebarCounter: SidebarFolderEnumerating {
     try await waitForSidebar("initial tree") {
         tree.rows.first(where: { sameSidebarURL($0.folderURL, b) })?.countLabel.stringValue == "1"
     }
+    let initialCancellationBaseline = watch.cancelledSubscriptionCount
     enumerator.armNextChildrenRead()
     watch.armNextSubscription()
     watch.reconcileAll()
-    try await waitForSidebar("read captured before new registration") {
-        enumerator.isReadCaptured && watch.isHolding
+    try await waitForSidebar("first refresh boundary") { enumerator.isReadCaptured || watch.isHolding }
+    var subscriptionFirst = false
+    if watch.isHolding && !enumerator.isReadCaptured {
+        _ = await sidebarCondition(for: 0.25) { enumerator.isReadCaptured }
+        if !enumerator.isReadCaptured {
+            subscriptionFirst = true
+            watch.releaseSubscription()
+        }
+    }
+    try await waitForSidebar("captured children without D") { enumerator.isReadCaptured }
+    if !subscriptionFirst {
+        try await waitForSidebar("replacement registration held") { watch.isHolding }
+    } else if case .afterOldSubscriptionRetires = delivery {
+        try await waitForSidebar("old subscription retired before event") {
+            watch.cancelledSubscriptionCount > initialCancellationBaseline
+        }
     }
     let d = a.appendingPathComponent("D")
     try fm.createDirectory(at: d, withIntermediateDirectories: true)
     source.emit(.changed(d))
-    clock.fireScheduledChanges()
-    watch.releaseSubscription()
+    switch delivery {
+    case .beforeRegistrationRelease:
+        clock.fireScheduledChanges()
+        watch.releaseSubscription()
+    case .afterOldSubscriptionRetires:
+        let retirementBaseline = watch.cancelledSubscriptionCount
+        watch.releaseSubscription()
+        if !subscriptionFirst {
+            try await waitForSidebar("old subscription retired after event") {
+                watch.cancelledSubscriptionCount > retirementBaseline
+            }
+        }
+        clock.fireScheduledChanges()
+    case .duringOwnedRead:
+        watch.releaseSubscription()
+        clock.fireScheduledChanges()
+    }
     enumerator.releaseChildrenRead()
-    try await waitForSidebar("external change delivered across handoff") {
+    let delivered = await sidebarCondition(for: 2) {
         tree.rows.first(where: { sameSidebarURL($0.folderURL, d) })?.countLabel.stringValue == "0"
     }
+    #expect(delivered, "one external change must refresh D with count 0 without another event or reconcile")
     #expect(tree.rows.contains { sameSidebarURL($0.folderURL, b) })
+}
+
+@Test(.timeLimit(.minutes(3))) @MainActor func sidebarWatchHandoffDeliversChangeDuringCapturedRead() async throws {
+    try await expectSidebarHandoffDelivery(.beforeRegistrationRelease)
+}
+
+@Test(.timeLimit(.minutes(3))) @MainActor func sidebarWatchHandoffDeliversPendingChangeAfterOldSubscriptionRetires() async throws {
+    try await expectSidebarHandoffDelivery(.afterOldSubscriptionRetires)
+}
+
+@Test(.timeLimit(.minutes(3))) @MainActor func sidebarWatchCallbackDuringOwnedReadTriggersFollowUpRefresh() async throws {
+    try await expectSidebarHandoffDelivery(.duringOwnedRead)
 }

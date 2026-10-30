@@ -1328,22 +1328,6 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     access: services.files, enumerator: SystemSidebarFolderEnumerator())
                 let loader = SidebarFolderLoadSession(browser: browser)
                 self.sidebarLoader = loader
-                loader.start(folder: folder, rootID: rootID, onRows: { [weak self] children, parentURL in
-                    guard let self, self.sidebarTreeGeneration == generation,
-                        self.gridFolderURL == folder, context.permit.isCurrent else { return }
-                    self.gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: self.sidebarKnownCounts[folder] ?? count),
-                        parent: parentURL.map { GridSidebarFolder(url: $0, count: self.sidebarKnownCounts[$0]) },
-                        children: children.map { GridSidebarFolder(url: $0) })
-                }, onCount: { [weak self] child, imageCount in
-                    guard let self, self.sidebarTreeGeneration == generation,
-                        self.gridFolderURL == folder, context.permit.isCurrent else { return }
-                    self.sidebarKnownCounts[child] = imageCount
-                    self.gridShell.updateFolderCount(imageCount, for: child)
-                }, onFailure: { [weak self] _ in
-                    guard let self, self.sidebarTreeGeneration == generation,
-                          self.gridFolderURL == folder, context.permit.isCurrent else { return }
-                    Task { await services.monitor.reportReadFailure(rootID, from: context.stamp) }
-                })
                 let watch = try await services.watch.subscribe(rootID: rootID, folder: folder,
                     recursive: true, onChange: { [weak self] in
                         Task { @MainActor [weak self] in
@@ -1360,6 +1344,22 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 self.sidebarWatchSubscription = watch
                 self.sidebarWatchGeneration = generation
                 if let previous { Task { await previous.cancel() } }
+                loader.start(folder: folder, rootID: rootID, onRows: { [weak self] children, parentURL in
+                    guard let self, self.sidebarTreeGeneration == generation,
+                        self.gridFolderURL == folder, context.permit.isCurrent else { return }
+                    self.gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: self.sidebarKnownCounts[folder] ?? count),
+                        parent: parentURL.map { GridSidebarFolder(url: $0, count: self.sidebarKnownCounts[$0]) },
+                        children: children.map { GridSidebarFolder(url: $0) })
+                }, onCount: { [weak self] child, imageCount in
+                    guard let self, self.sidebarTreeGeneration == generation,
+                        self.gridFolderURL == folder, context.permit.isCurrent else { return }
+                    self.sidebarKnownCounts[child] = imageCount
+                    self.gridShell.updateFolderCount(imageCount, for: child)
+                }, onFailure: { [weak self] _ in
+                    guard let self, self.sidebarTreeGeneration == generation,
+                          self.gridFolderURL == folder, context.permit.isCurrent else { return }
+                    Task { await services.monitor.reportReadFailure(rootID, from: context.stamp) }
+                })
             } catch {
                 if let failureContext, !Task.isCancelled, !(error is CancellationError) {
                     await monitor?.reportReadFailure(rootID, from: failureContext.stamp, error: error)
