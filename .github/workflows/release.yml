@@ -142,6 +142,7 @@ jobs:
           # Stapling the app itself means a copy dragged out of the DMG passes Gatekeeper offline.
           ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/Picsee-notarize.zip"
           scripts/release/notarize.sh "$RUNNER_TEMP/Picsee-notarize.zip"
+          unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD
           xcrun stapler staple "$APP"
           xcrun stapler validate "$APP"
 
@@ -165,6 +166,7 @@ jobs:
           set -euo pipefail
           umask 077
           scripts/release/notarize.sh "$DMG"
+          unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD
           xcrun stapler staple "$DMG"
           xcrun stapler validate "$DMG"
           spctl -a -t open --context context:primary-signature -v "$DMG"
@@ -198,6 +200,7 @@ jobs:
         run: |
           set -euo pipefail
           SIGNATURE=$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SPARKLE_TOOLS/bin/sign_update" -p --ed-key-file - "$DMG")
+          unset SPARKLE_ED_PRIVATE_KEY
           LENGTH=$(stat -f %z "$DMG")
           URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$(basename "$DMG")"
           BRANCH="appcast/$TAG"
