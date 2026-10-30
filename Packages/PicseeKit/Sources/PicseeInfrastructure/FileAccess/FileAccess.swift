@@ -255,6 +255,9 @@ public actor FileAccess: AccessLeasing {
         guard let oldRoot = lastKnownRoots[id] ?? roots[id] ?? bookmarkLocation(source.bookmark) else {
             throw FileAccessError.invalidFolder
         }
+        // Foreground checks may follow an inactive root without refreshing its
+        // Recent references. Capture trusted locations before retiring history.
+        let oldRoots = [oldRoot] + (previousRoots[id] ?? []).reversed()
         let session = try ScopeSession(scope: scope, url: folder, rootID: id)
         defer { session.stop() }
         let destination = canonical(folder)
@@ -283,7 +286,7 @@ public actor FileAccess: AccessLeasing {
                 case .unsupported: throw FileAccessError.corruptStore
                 }
             } else { recent = [] }
-            let remapped = AccessRecentRemap.remap(recent, sourceID: id, oldRoot: oldRoot,
+            let remapped = AccessRecentRemap.remap(recent, sourceID: id, oldRoots: oldRoots,
                 destinationID: destinationID, newRoot: destination, probe: existenceProbe)
             let memory = RebindMemory(saved: saved, roots: roots, lastKnown: lastKnownRoots,
                 legacy: legacyBaseline, recovery: recoveryBaseline, previous: previousRoots,

@@ -64,13 +64,13 @@ struct AccessStoreBytes: Equatable, Sendable {
 /// References carry no authority. Only confirmed absence drops a reference; an
 /// escaping symlink retains its original unresolved reference, never an outside grant.
 enum AccessRecentRemap {
-    static func remap(_ recent: [RecentFolder], sourceID: AccessRootID, oldRoot: URL,
+    static func remap(_ recent: [RecentFolder], sourceID: AccessRootID, oldRoots: [URL],
                       destinationID: AccessRootID, newRoot: URL,
                       probe: (URL) throws -> Void) -> [RecentFolder] {
         var result: [RecentFolder] = []
         for item in recent {
             guard item.rootID == sourceID else { result.append(item); continue }
-            guard let relative = relativeComponents(item.url, root: oldRoot) else {
+            guard let relative = oldRoots.lazy.compactMap({ relativeComponents(item.url, root: $0) }).first else {
                 result.append(item); continue
             }
             let candidate = relative.reduce(newRoot) { $0.appendingPathComponent($1) }

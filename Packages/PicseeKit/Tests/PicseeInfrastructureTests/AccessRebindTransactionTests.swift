@@ -36,6 +36,52 @@ private struct RebindFixture {
 }
 
 @Test(.timeLimit(.minutes(2)), arguments: [false, true])
+func t231Fix1HistoricalRootLocationsRemapAfterInactiveFollow(merge: Bool) async throws {
+    let f = try RebindFixture(); defer { f.remove() }
+    let access = try FileAccess(scope: f.scope, bookmarks: SystemSecurityScope(), store: f.roots, buildSHA: "fix1-real")
+    let a = try await access.grant(folder: f.old)
+    let b = try await access.grant(folder: f.other)
+    let destinationID = merge ? try await access.grant(folder: f.chosen) : nil
+    for child in ["first", "middle", "last"] {
+        try FileManager.default.createDirectory(at: f.old.appendingPathComponent(child, isDirectory: true), withIntermediateDirectories: true)
+    }
+    try f.seed([f.recent(a, f.old), f.recent(a, f.old.appendingPathComponent("first"), "first"), f.recent(b, f.other)])
+    let heldB = try await access.acquire(.root(b, file: f.other))
+    let renamed = f.base.appendingPathComponent("renamed", isDirectory: true)
+    let latest = f.base.appendingPathComponent("latest", isDirectory: true)
+    try FileManager.default.moveItem(at: f.old, to: renamed)
+    #expect(try await access.probeRootURL(a).resolvingSymlinksInPath().path == renamed.resolvingSymlinksInPath().path)
+    try FileManager.default.moveItem(at: renamed, to: latest)
+    #expect(try await access.probeRootURL(a).resolvingSymlinksInPath().path == latest.resolvingSymlinksInPath().path)
+    for child in ["first", "middle", "last"] {
+        try FileManager.default.createDirectory(at: f.chosen.appendingPathComponent(child, isDirectory: true), withIntermediateDirectories: true)
+    }
+    let sourceRecent = [f.recent(a, f.old), f.recent(a, f.old.appendingPathComponent("first"), "first"),
+        f.recent(b, f.other), f.recent(a, renamed.appendingPathComponent("middle"), "middle"),
+        f.recent(a, latest.appendingPathComponent("last"), "last")]
+    try f.seed(sourceRecent + (destinationID.map { [f.recent($0, f.chosen)] } ?? []))
+    try FileManager.default.removeItem(at: latest)
+    await #expect(throws: (any Error).self) { try await access.probeRootURL(a) }
+    let before = try AccessStoreBytes(urls: [f.roots.url, f.recentURL])
+    let result = try await access.rebind(a, folder: f.chosen, recentStore: f.recents)
+    if let destinationID { #expect(result.rootID == destinationID) }
+    else { #expect(result.rootID != a && result.rootID != b) }
+    let recent = try await RecentFolderStore(url: f.recentURL).load()
+    #expect(recent.allSatisfy { $0.rootID != a })
+    #expect(recent.filter { $0.rootID == result.rootID && $0.url.path == f.chosen.path }.count == 1)
+    for child in ["first", "middle", "last"] {
+        #expect(recent.contains(f.recent(result.rootID, f.chosen.appendingPathComponent(child), child)))
+    }
+    #expect(recent.contains(f.recent(b, f.other)))
+    #expect(try f.roots.load().allSatisfy { $0.id != a })
+    try await access.undoRebind(result.undo)
+    #expect(try AccessStoreBytes(urls: [f.roots.url, f.recentURL]) == before)
+    #expect(await access.records().contains { $0.id == a })
+    await access.release(heldB)
+    #expect(f.scope.balanced)
+}
+
+@Test(.timeLimit(.minutes(2)), arguments: [false, true])
 func t231FreshRebindReplacesLostRecordAndUndoRestoresExactSnapshot(empty: Bool) async throws {
     let f = try RebindFixture(); defer { f.remove() }
     let a = try await f.access.grant(folder: f.old)
