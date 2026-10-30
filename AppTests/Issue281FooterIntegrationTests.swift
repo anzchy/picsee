@@ -1,0 +1,138 @@
+import AppKit
+import Testing
+import PicseeCore
+import PicseeApplication
+import PicseeInfrastructure
+import PicseeMacUI
+
+private struct Issue281Bookmarks: SecurityScope, BookmarkCoding {
+    func start(_ url: URL) -> Bool { true }
+    func stop(_ url: URL) {}
+    func isReadable(_ url: URL) -> Bool { FileManager.default.isReadableFile(atPath: url.path) }
+    func create(for url: URL) throws -> Data { Data(url.path.utf8) }
+    func resolve(_ data: Data) throws -> ResolvedBookmark {
+        guard let path = String(data: data, encoding: .utf8) else { throw FileAccessError.corruptStore }
+        return ResolvedBookmark(url: URL(fileURLWithPath: path), stale: false)
+    }
+}
+
+/// Lists the folder's files, holds folders named `Hold` until cancelled, and stops the first scan of `Retry` part way.
+private final class Issue281Scanner: FolderScanning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var failing = true
+    func allowRetry() { lock.withLock { failing = false } }
+    func scan(in folder: URL, root: ItemIdentityRoot, options: FolderScanOptions,
+              emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
+        if folder.lastPathComponent == "Hold" { try await Task.sleep(for: .seconds(3600)) }
+        let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "png" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let entries = files.map { FolderEntry(url: $0, root: root) }
+        if folder.lastPathComponent == "Retry", lock.withLock({ failing }) {
+            // The read stops part way, after the first image.
+            try await emit(Array(entries.prefix(1)))
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError)
+        }
+        try await emit(entries)
+    }
+}
+
+@MainActor private final class Issue281MotionSource: ReduceMotionSource {
+    var reduceMotion = false
+    var onChange: (@MainActor () -> Void)?
+}
+
+@MainActor private func issue281View(_ id: String, in view: NSView?) -> NSView? {
+    guard let view else { return nil }
+    if view.accessibilityIdentifier() == id || view.identifier?.rawValue == id { return view }
+    return view.subviews.lazy.compactMap { issue281View(id, in: $0) }.first
+}
+
+/// Audit M1: the footer's name and count across the real open-folder path (completion, Cancel Reading through the
+/// restore closure, failure and Retry, and back from the viewer), each label wide enough for its whole string.
+@Test(.timeLimit(.minutes(3))) @MainActor func issue281FooterFollowsTheOpenFolderPathUntruncated() async throws {
+    _ = NSApplication.shared
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent("issue281-\(UUID().uuidString)")
+    defer { try? fm.removeItem(at: base) }
+    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("TestAssets/synthetic/landscape-3x2.png")
+    let data = try Data(contentsOf: fixture)
+    var folders: [String: URL] = [:]
+    for (name, files) in [("Shown", ["DSC_0341.png", "DSC_0342.png", "DSC_0343.png"]), ("Hold", ["H.png"]),
+                          ("Retry", ["山海之间_0001.png", "山海之间_0002.png"])] {
+        let folder = base.appendingPathComponent(name)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        for file in files { try data.write(to: folder.appendingPathComponent(file)) }
+        folders[name] = folder
+    }
+    let adapter = Issue281Bookmarks()
+    let access = try FileAccess(scope: adapter, bookmarks: adapter,
+        store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "issue281")
+    let services = AccessServices(files: access,
+        recent: RecentFolderStore(url: base.appendingPathComponent("recent.json")),
+        browser: FolderBrowser(),
+        watch: WatchHub(access: access, source: FSEventSource(), scheduler: DispatchWatchScheduler()))
+    let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
+        preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: Task { services },
+        motionPolicy: MotionPolicy(source: Issue281MotionSource()))
+    let window = try #require(controller.window)
+    defer { window.close() }
+    let scanner = Issue281Scanner()
+    controller.folderScanningOverride = scanner
+    window.setContentSize(NSSize(width: 1280, height: 772))
+    controller.showWindow(nil)
+    window.orderFrontRegardless()
+
+    func waitUntil(_ condition: () -> Bool) async throws {
+        // No wall-clock deadline (#277): the test's time limit cancels the sleep, which ends the wait.
+        while !condition() { window.update(); try await Task.sleep(for: .milliseconds(10)) }
+    }
+    func footer() throws -> (name: NSTextField, count: NSTextField) {
+        (try #require(issue281View("grid.current-file-status", in: window.contentView) as? NSTextField),
+         try #require(issue281View("grid.folder-count", in: window.contentView) as? NSTextField))
+    }
+    func expectFooter(_ name: String, _ count: String, _ step: String) throws {
+        window.contentView?.layoutSubtreeIfNeeded()
+        let (nameLabel, countLabel) = try footer()
+        #expect(nameLabel.stringValue == name, "\(step): name")
+        #expect(countLabel.stringValue == count, "\(step): count")
+        for label in [nameLabel, countLabel] {
+            #expect(!label.isHidden, "\(step): \(label.stringValue) shown")
+            #expect(label.frame.width >= ceil(label.cell?.cellSize.width ?? .infinity),
+                    "\(step): \(label.stringValue) truncated")
+        }
+    }
+
+    // Completion.
+    controller.openGrantedFolder(try #require(folders["Shown"]))
+    try await waitUntil { controller.gridSearchAvailable }
+    try expectFooter("DSC_0341.png", "3 images", "completion")
+
+    // A read that stops part way, then Retry (what the failure page's Retry calls). A folder prompt the failed
+    // open may attach is dismissed first.
+    controller.openGrantedFolder(try #require(folders["Retry"]))
+    try await waitUntil { controller.session.folderScan?.failure != nil }
+    if let sheet = window.attachedSheet { window.endSheet(sheet, returnCode: .alertSecondButtonReturn) }
+    scanner.allowRetry()
+    controller.session.retryFolderScan()
+    try await waitUntil { controller.gridSearchAvailable && controller.session.folderScan?.failure == nil }
+    try expectFooter("山海之间_0001.png", "2 images", "retry")
+
+    // Into the viewer and back.
+    let router = CommandRouter()
+    #expect(router.route(.enter, from: .key, to: controller.session))
+    try await waitUntil { controller.session.mode == .viewing }
+    #expect(router.route(.escape, from: .key, to: controller.session))
+    try await waitUntil { controller.gridSearchAvailable }
+    try expectFooter("山海之间_0001.png", "2 images", "viewer return")
+
+    // Reading another folder, then Cancel Reading through the restore closure.
+    controller.openGrantedFolder(try #require(folders["Hold"]))
+    try await waitUntil { controller.session.folderScan?.isReadingFolder == true }
+    try await waitUntil { issue281View("state.cancel-folder", in: window.contentView) != nil }
+    try expectFooter("–", "Reading…", "reading")
+    let cancel = try #require(issue281View("state.cancel-folder", in: window.contentView) as? NSButton)
+    cancel.performClick(nil)
+    try await waitUntil { controller.gridSearchAvailable }
+    try expectFooter("山海之间_0001.png", "2 images", "cancel restored")
+}
