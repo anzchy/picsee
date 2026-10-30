@@ -377,8 +377,10 @@ import PicseeCore
         let statusRight = (keyboardHint.isHidden
             ? (searchField.isHidden ? searchButton.frame.minX : searchField.frame.minX)
             : keyboardHint.frame.minX) - 16
-        let countGap: CGFloat = countWidth > 0 ? 12 : 0
-        let fileWidth = min(240, max(0, statusRight - 62 - countWidth - countGap))
+        let countGap: CGFloat = countWidth > 0 ? (footer.bounds.width <= 800 ? 7 : 12) : 0
+        let fileMaxWidth: CGFloat = footer.bounds.width <= 480 ? 90
+            : footer.bounds.width <= 720 ? 140 : footer.bounds.width <= 800 ? 180 : 240
+        let fileWidth = min(fileMaxWidth, max(0, statusRight - 62 - countWidth - countGap))
         currentFileStatus.frame = NSRect(x: 62, y: 6, width: fileWidth, height: 28)
         searchStatus.frame = NSRect(x: currentFileStatus.frame.maxX + countGap, y: 6,
                                     width: countWidth, height: 28)

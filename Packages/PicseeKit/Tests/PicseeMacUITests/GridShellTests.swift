@@ -64,7 +64,8 @@ import PicseeInfrastructure
     #expect(shell.mainFrame.width == 960)
     #expect(grid.frame == shell.mainContent.bounds)
     grid.layoutSubtreeIfNeeded()
-    #expect(abs(layout.itemSize.width - 223) < 0.1) // four columns at 960 pt
+    // The 1280px viewport keeps 220px minimum columns, 24px insets and 16px gaps despite 960pt content.
+    #expect(abs(layout.itemSize.width - 293.333) < 0.1) // three columns at 960 pt
     #expect(store.value.gridSidebarWidth == 320)
     shell.resizeSidebar(to: 100)
     shell.layoutSubtreeIfNeeded()
@@ -81,6 +82,7 @@ import PicseeInfrastructure
     #expect(store.value.gridSidebarWidth == 160)
     #expect(shell.mainFrame.width == 1120)
 
+    window.setContentSize(NSSize(width: 800, height: 680))
     shell.frame = NSRect(x: 0, y: 0, width: 800, height: 652)
     shell.layoutSubtreeIfNeeded()
     #expect(shell.footer.frame.maxY == shell.mainFrame.minY)
@@ -89,7 +91,8 @@ import PicseeInfrastructure
     #expect(shell.mainFrame.maxY == 652)
     #expect(grid.frame == NSRect(x: 0, y: 0, width: 640, height: 612))
     grid.layoutSubtreeIfNeeded()
-    #expect(abs(layout.itemSize.width - 194.667) < 0.1) // three columns at 800 × 680
+    // grid-light.html: at 800px, .photo-grid keeps min 220px columns while .grid-scroll uses 16px insets and 12px gaps.
+    #expect(abs(layout.itemSize.width - 298) < 0.1) // two columns at 800 × 680
 }
 
 @Test @MainActor func gridShellFooterButtonDragAndTruthfulFolderAreAccessible() throws {

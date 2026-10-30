@@ -30,23 +30,39 @@ import PicseeInfrastructure
 
 @Test @MainActor func issue281ThumbnailFramesAndPitchUseWindowViewportAtBreakpoints() throws {
     let design = try PinnedDesign.page("grid-light")
-    let cases: [(CGFloat, CGFloat)] = [
-        (1600, 200), (1599, 225), (1280, 188.16), (1051, 154.497),
-        (1050, 165), (721, 165), (720, 150), (481, 150), (480, 150),
+    let cases: [(width: CGFloat, height: CGFloat, columns: Int, inset: CGFloat, gap: CGFloat, rowGap: CGFloat)] = [
+        (1600, 200, 5, 32, 22, 22), (1599, 225, 5, 24, 16, 18),
+        (1280, 188.16, 4, 24, 16, 18), (1051, 154.497, 3, 24, 16, 18),
+        (1050, 165, 3, 16, 12, 12), (721, 165, 2, 16, 12, 12),
+        (720, 150, 3, 16, 12, 12), (481, 150, 1, 16, 12, 12), (480, 150, 1, 16, 12, 12),
     ]
-    for (width, expectedHeight) in cases {
-        let (grid, shell, window) = try issue281Grid(width: width)
+    for item in cases {
+        let (grid, shell, window) = try issue281Grid(width: item.width)
         defer { window.close() }
         let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
         let cell = try #require(grid.collectionView.item(at: IndexPath(item: 0, section: 0)) as? GridPhotoItem)
         let tile = try #require(cell.tileLayer)
-        let expected = try design.length(".thumbnail-wrap", "height", viewport: Double(width))
-        #expect(abs(expected - expectedHeight) < 0.01, "CSS fixture at \(width)")
-        #expect(abs(tile.frame.height - expectedHeight) <= 1, "thumbnail height at \(width): \(tile.frame)")
-        if width == 1280 {
+        let expected = try design.length(".thumbnail-wrap", "height", viewport: Double(item.width))
+        #expect(abs(expected - item.height) < 0.01, "CSS fixture at \(item.width)")
+        #expect(abs(tile.frame.height - item.height) <= 1, "thumbnail height at \(item.width): \(tile.frame)")
+        let cssGaps = try design.edges(".photo-grid", "gap", viewport: Double(item.width))
+        #expect(cssGaps.right == item.gap && cssGaps.top == item.rowGap, "horizontal CSS at \(item.width)")
+        // grid-light.html: @media switches .grid-scroll padding-left/right and .photo-grid gap/grid-template-columns on viewport width.
+        #expect(abs(layout.sectionInset.left - item.inset) <= 1, "inset at \(item.width)")
+        #expect(abs(layout.minimumInteritemSpacing - item.gap) <= 1, "column gap at \(item.width)")
+        #expect(abs(layout.minimumLineSpacing - item.rowGap) <= 1, "row gap at \(item.width)")
+        let first = try #require(layout.layoutAttributesForItem(at: IndexPath(item: 0, section: 0)))
+        let lastInRow = try #require(layout.layoutAttributesForItem(at: IndexPath(item: item.columns - 1, section: 0)))
+        let nextRow = try #require(layout.layoutAttributesForItem(at: IndexPath(item: item.columns, section: 0)))
+        let contentWidth = shell.mainFrame.width
+        let expectedWidth = (contentWidth - 2 * item.inset - CGFloat(item.columns - 1) * item.gap) / CGFloat(item.columns)
+        #expect(abs(layout.itemSize.width - expectedWidth) <= 1, "columns at \(item.width)")
+        #expect(abs(first.frame.minX - item.inset) <= 1, "first tile x at \(item.width)")
+        #expect(abs(lastInRow.frame.minX - first.frame.minX
+            - CGFloat(item.columns - 1) * (expectedWidth + item.gap)) <= 1, "last tile x at \(item.width)")
+        #expect(abs(nextRow.frame.minY - first.frame.minY - layout.itemSize.height - item.rowGap) <= 1, "row pitch at \(item.width)")
+        if item.width == 1280 {
             #expect(abs(tile.frame.width - 239) <= 1, "1280 thumbnail width")
-            let first = try #require(layout.layoutAttributesForItem(at: IndexPath(item: 0, section: 0)))
-            let nextRow = try #require(layout.layoutAttributesForItem(at: IndexPath(item: 4, section: 0)))
             #expect(abs(nextRow.frame.minY - first.frame.minY - 242.16) <= 1, "1280 row pitch")
             #expect(abs(shell.mainFrame.minX + first.frame.minX + 4 - 224) <= 1, "1280 first tile x")
         }
