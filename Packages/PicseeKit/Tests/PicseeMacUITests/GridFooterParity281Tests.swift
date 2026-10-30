@@ -122,3 +122,39 @@ import PicseeInfrastructure
         #expect(abs(count.frame.minX - file.frame.maxX - item.countGap) <= 1, "count gap at \(item.width)")
     }
 }
+
+@Test @MainActor func issue281FooterCountFollowsShortNameWithoutTruncation() throws {
+    let (shell, grid, window) = try issue281FooterScene(width: 1280)
+    defer { window.close() }
+    let other = try #require(grid.displayedItemIDs.first)
+    grid.activate(currentItemID: other)
+    shell.layoutSubtreeIfNeeded()
+    let file = try #require(issue281FooterView("grid.current-file-status", in: shell) as? NSTextField)
+    let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
+    // grid-light.html: span:first-child hugs `DSC_0342.jpg` (x 63–143) and the count follows 12px later (x 155).
+    #expect(file.stringValue == "DSC_0340.jpg")
+    #expect(abs(file.frame.width - ceil(file.intrinsicContentSize.width)) <= 1)
+    #expect(count.frame.minX - file.frame.maxX == 12)
+    #expect(count.frame.minX < 180, "count sits after the name, not in a 240pt column")
+    #expect(count.frame.width >= count.intrinsicContentSize.width, "\(count.stringValue) is truncated")
+
+    // A larger count after the last layout must still fit in full (device: `20000 张…`).
+    shell.setSearchStatus(resultCount: 20000, term: "")
+    shell.layoutSubtreeIfNeeded()
+    #expect(count.stringValue == "20000 images")
+    #expect(count.frame.width >= count.intrinsicContentSize.width, "\(count.stringValue) is truncated")
+    #expect(count.frame.minX - file.frame.maxX == 12)
+}
+
+@Test @MainActor func issue281FooterTextIsCentredInFortyPointFooter() throws {
+    let (shell, _, window) = try issue281FooterScene(width: 1280)
+    defer { window.close() }
+    let file = try #require(issue281FooterView("grid.current-file-status", in: shell) as? NSTextField)
+    let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
+    // grid-light.html: .grid-bottom-bar align-items:center; text box y 772–789 in the 760–800 footer (device 768–778).
+    for field in [file, count] {
+        let frame = shell.footer.convert(field.bounds, from: field)
+        #expect(abs(frame.height - ceil(field.intrinsicContentSize.height)) <= 1, "\(field.stringValue) one line high")
+        #expect(abs(frame.midY - shell.footer.bounds.midY) <= 1, "\(field.stringValue) centred")
+    }
+}

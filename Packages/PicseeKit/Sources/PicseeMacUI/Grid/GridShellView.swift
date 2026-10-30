@@ -72,6 +72,9 @@ import PicseeCore
     private let footerRule = NSView()
     private let footerLeadingDivider = NSView()
     private let currentFileStatus = NSTextField(labelWithString: "")
+    private var currentFileName = ""
+    private var countText = ""
+    private var isReading = false
     private let keyboardHint = NSView()
     private let spaceKeycap = NSTextField(labelWithString: "Space")
     private let quickLookLabel = NSTextField(labelWithString: "")
@@ -373,17 +376,24 @@ import PicseeCore
         spaceKeycap.frame = NSRect(x: 0, y: 5, width: keycapWidth, height: 18)
         quickLookLabel.frame = NSRect(x: keycapWidth + 5, y: 6, width: quickLookWidth, height: 18)
         searchStatus.isHidden = footer.bounds.width <= 480 || searchStatus.stringValue.isEmpty
-        let countWidth = min(90, max(48, searchStatus.intrinsicContentSize.width))
         let statusRight = (keyboardHint.isHidden
             ? (searchField.isHidden ? searchButton.frame.minX : searchField.frame.minX)
             : keyboardHint.frame.minX) - 16
-        let countGap: CGFloat = countWidth > 0 ? (footer.bounds.width <= 800 ? 7 : 12) : 0
+        // grid-light.html .grid-file-status: the name hugs its text up to 240/180/140/90px, the count follows
+        // after a 12px (7px through 800px) gap at full width; both are centred in the 40pt bar.
+        let countWidth = min(ceil(searchStatus.intrinsicContentSize.width), max(0, statusRight - 62))
+        let countGap: CGFloat = footer.bounds.width <= 800 ? 7 : 12
         let fileMaxWidth: CGFloat = footer.bounds.width <= 480 ? 90
             : footer.bounds.width <= 720 ? 140 : footer.bounds.width <= 800 ? 180 : 240
-        let fileWidth = min(fileMaxWidth, max(0, statusRight - 62 - countWidth - countGap))
-        currentFileStatus.frame = NSRect(x: 62, y: 6, width: fileWidth, height: 28)
-        searchStatus.frame = NSRect(x: currentFileStatus.frame.maxX + countGap, y: 6,
-                                    width: countWidth, height: 28)
+        let fileWidth = min(fileMaxWidth, ceil(currentFileStatus.intrinsicContentSize.width),
+                            max(0, statusRight - 62 - countWidth - countGap))
+        let fileHeight = ceil(currentFileStatus.intrinsicContentSize.height)
+        currentFileStatus.frame = NSRect(x: 62, y: ((footer.bounds.height - fileHeight) / 2).rounded(),
+                                         width: fileWidth, height: fileHeight)
+        let countHeight = ceil(searchStatus.intrinsicContentSize.height)
+        searchStatus.frame = NSRect(x: currentFileStatus.frame.maxX + countGap,
+                                    y: ((footer.bounds.height - countHeight) / 2).rounded(),
+                                    width: countWidth, height: countHeight)
         emptyState.frame = mainContent.bounds
         let centerX = emptyState.bounds.midX
         let centerY = emptyState.bounds.midY
@@ -564,30 +574,38 @@ import PicseeCore
         searchField.stringValue = term
         searchButton.state = term.isEmpty ? .off : .on
         if term.isEmpty {
-            searchStatus.stringValue = ""
-            searchStatus.isHidden = true
+            countText = ""
+            if !isReading {
+                searchStatus.stringValue = ""
+                searchStatus.isHidden = true
+            }
         }
     }
     public func setCurrentFile(_ name: String) {
-        currentFileStatus.stringValue = name
-        currentFileStatus.isHidden = name.isEmpty
-        needsLayout = true
-    }
-    public func setReadingStatus(_ reading: Bool) {
-        if reading {
-            currentFileStatus.stringValue = String(localized: "Reading…")
-            currentFileStatus.isHidden = false
-            searchStatus.stringValue = ""
-            searchStatus.isHidden = true
+        currentFileName = name
+        if !isReading {
+            currentFileStatus.stringValue = name
+            currentFileStatus.isHidden = name.isEmpty
         }
         needsLayout = true
     }
+    /// folder-loading.html: the empty name slot `—`, then `Reading…` in the count's place.
+    public func setReadingStatus(_ reading: Bool) {
+        isReading = reading
+        currentFileStatus.stringValue = reading ? "—" : currentFileName
+        currentFileStatus.isHidden = !reading && currentFileName.isEmpty
+        searchStatus.stringValue = reading ? String(localized: "Reading…") : countText
+        searchStatus.isHidden = footer.bounds.width <= 480 || searchStatus.stringValue.isEmpty
+        needsLayout = true
+    }
     public func setSearchStatus(resultCount: Int, term: String) {
-        searchStatus.stringValue = term.isEmpty
+        countText = term.isEmpty
             ? String(format: String(localized: "%lld images"), resultCount)
             : String(format: String(localized: "Search: %@ · %lld results"), term, resultCount)
+        if !isReading { searchStatus.stringValue = countText }
         searchStatus.isHidden = footer.bounds.width <= 480
         searchButton.state = term.isEmpty ? .off : .on
+        needsLayout = true
     }
     private func setEmptyDetailText(_ text: String) {
         let paragraph = NSMutableParagraphStyle()
