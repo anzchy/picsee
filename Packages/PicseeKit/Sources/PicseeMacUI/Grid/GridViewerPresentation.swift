@@ -91,6 +91,12 @@ import PicseeCore
         layoutInspector(visible: false)
         return true
     }
+    /// A folder read that starts on the shell's reading or failed surface (Retry) shows the reading footer again.
+    /// A viewer-entry read keeps the shell hidden.
+    public func resumeReadingFooter(_ reading: Bool) {
+        guard reading, let shell, !shell.isHidden, grid.isHidden else { return }
+        shell.setReadingStatus(true)
+    }
     /// Restores the native grid after a preview with the Session's reconciled selection.
     public func restoreGrid(_ snapshot: FolderSnapshot, selection: BrowserSelection, offset: NSPoint?) {
         (grid as? GridBrowserView)?.display(snapshot, selection: selection)
