@@ -108,14 +108,14 @@ import PicseeApplication
     cell.view.appearance = NSAppearance(named: .aqua)
     #expect(cell.currentRingLayer.isHidden)
     cell.isSelected = true
-    let outline = cell.view.layer?.sublayers?.first { $0.borderWidth == 2 }
+    let outline = cell.view.layer?.sublayers?.first { $0.borderWidth == 1 }
     #expect(outline?.isHidden == false)
     #expect(cell.currentRingLayer.isHidden, "Selection alone draws no Current Item ring")
     cell.isSelected = false
     cell.isCurrent = true
     #expect(!cell.currentRingLayer.isHidden)
     #expect(cell.currentRingLayer.borderWidth == 2)
-    #expect(cell.currentRingLayer.frame == cell.tileLayer?.frame.insetBy(dx: -2, dy: -2))
+    #expect(cell.currentRingLayer.frame == cell.tileLayer?.frame.insetBy(dx: -4, dy: -4))
     #expect(close(rgba(cell.currentRingLayer.borderColor), .focusRing, .light))
     #expect(outline?.isHidden == true, "Current Item alone keeps the Selection outline off")
     cell.isSelected = true
