@@ -10,7 +10,7 @@ struct AccessServices: Sendable {
     let lister = SiblingLister()
     let browser: FolderBrowser
     /// One watch per Access Root, shared by every window's folder scan.
-    let watch: WatchHub
+    let watch: any FolderWatching
     private let selectionScope: any SecurityScope
     init(buildSHA: String) throws {
         let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
@@ -24,7 +24,7 @@ struct AccessServices: Sendable {
         browser = FolderBrowser()
         watch = WatchHub(access: files, source: FSEventSource(), scheduler: DispatchWatchScheduler())
     }
-    init(files: FileAccess, recent: RecentFolderStore, browser: FolderBrowser, watch: WatchHub,
+    init(files: FileAccess, recent: RecentFolderStore, browser: FolderBrowser, watch: any FolderWatching,
          mounts: (any DiskMountPort)? = nil, selectionScope: any SecurityScope = SystemSecurityScope()) {
         self.files = files
         self.selectionScope = selectionScope
