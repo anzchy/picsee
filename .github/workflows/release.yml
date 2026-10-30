@@ -1,0 +1,212 @@
+name: Release
+# Pushing v0.0.1-rc.N or v0.0.1 builds, signs, notarises and packages picsee, then opens a draft
+# release and an appcast pull request. Nothing is published or merged here: the owner does both
+# (spec #212, #222). The runbook is docs/release/README.md.
+on:
+  push:
+    tags:
+      - 'v0.0.1-rc.*'
+      - 'v0.0.1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Notarised DMG and draft release
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPMENT_TEAM: ${{ vars.DEVELOPMENT_TEAM }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The build number is the commit count, and the tag must be on main.
+          fetch-depth: 0
+
+      - name: Check the tag against the project version
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+          [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-rc\.[1-9][0-9]*)?$ ]] || { echo "::error::unexpected tag $TAG"; exit 1; }
+          VERSION="${BASH_REMATCH[1]}"
+          MARKETING=$(sed -n 's/^ *MARKETING_VERSION: *//p' project.yml | head -1)
+          [[ "$VERSION" == "$MARKETING" ]] || { echo "::error::tag $TAG does not match MARKETING_VERSION $MARKETING"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$TAG is not on main"; exit 1; }
+          BUILD=$(git rev-list --count "$GITHUB_SHA")
+          [[ -n "$DEVELOPMENT_TEAM" ]] || { echo "::error::repository variable DEVELOPMENT_TEAM is not set"; exit 1; }
+          { echo "TAG=$TAG"; echo "VERSION=$VERSION"; echo "BUILD=$BUILD"; } >> "$GITHUB_ENV"
+          echo "Releasing picsee $VERSION ($BUILD) from $TAG"
+
+      - name: Set up Xcode
+        uses: ./.github/actions/xcode-setup
+
+      - name: Download Sparkle tools
+        run: |
+          set -euo pipefail
+          SPARKLE_TOOLS="$RUNNER_TEMP/sparkle-2.10.0"
+          curl --fail --location --silent --show-error \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.10.0/Sparkle-2.10.0.tar.xz \
+            --output "$RUNNER_TEMP/Sparkle-2.10.0.tar.xz"
+          echo "c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c  $RUNNER_TEMP/Sparkle-2.10.0.tar.xz" | shasum -a 256 --check
+          mkdir -p "$SPARKLE_TOOLS"
+          tar -xJf "$RUNNER_TEMP/Sparkle-2.10.0.tar.xz" -C "$SPARKLE_TOOLS"
+          test -x "$SPARKLE_TOOLS/bin/sign_update"
+          grep -q '^EXTERNAL LICENSES' "$SPARKLE_TOOLS/LICENSE"
+          echo "SPARKLE_TOOLS=$SPARKLE_TOOLS" >> "$GITHUB_ENV"
+
+      - name: Import the Developer ID certificate
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/picsee-release.keychain-db"
+          P12="$RUNNER_TEMP/developer-id.p12"
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$DEVELOPER_ID_P12_BASE64" | base64 --decode > "$P12"
+          security import "$P12" -k "$KEYCHAIN" -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$P12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          # Search the release keychain first, keeping the runner's own keychains.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" |
+            awk -v team="($DEVELOPMENT_TEAM)" '/"Developer ID Application: / && index($0, team) { print $2; exit }')
+          [[ -n "$IDENTITY" ]] || { echo "::error::no Developer ID Application identity for team $DEVELOPMENT_TEAM"; exit 1; }
+          echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Build Release
+        run: |
+          set -euo pipefail
+          # Stripping removes the build machine's paths from the binary (check-package fails on them).
+          xcodebuild build -scheme Picsee -configuration Release -destination 'generic/platform=macOS' \
+            -derivedDataPath .build/dd-release \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$IDENTITY" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN --timestamp" CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
+            ENABLE_HARDENED_RUNTIME=YES DEPLOYMENT_POSTPROCESSING=YES STRIP_INSTALLED_PRODUCT=YES \
+            CURRENT_PROJECT_VERSION="$BUILD"
+          APP="$PWD/.build/dd-release/Build/Products/Release/Picsee.app"
+          test -d "$APP"
+          echo "APP=$APP" >> "$GITHUB_ENV"
+
+      - name: Bundle Sparkle's licence
+        run: |
+          set -euo pipefail
+          # Sparkle's LICENSE carries its own MIT licence and its EXTERNAL LICENSES notices (#220 M2).
+          embedded=$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Frameworks/Sparkle.framework/Resources/Info.plist")
+          [[ "$embedded" == "2.10.0" ]] || { echo "::error::embedded Sparkle is $embedded, licence is for 2.10.0"; exit 1; }
+          mkdir -p "$APP/Contents/Resources/ThirdPartyNotices"
+          cp "$SPARKLE_TOOLS/LICENSE" "$APP/Contents/Resources/ThirdPartyNotices/Sparkle-2.10.0-LICENSE.txt"
+
+      - name: Re-sign Sparkle's helpers and the app
+        run: |
+          set -euo pipefail
+          # Sparkle ships its helpers ad-hoc signed; re-sign them with Developer ID in the order its
+          # sandboxing documentation gives, then the app (which now holds the licence). No --deep.
+          SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+          codesign -f -s "$IDENTITY" --keychain "$KEYCHAIN" -o runtime --timestamp "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
+          codesign -f -s "$IDENTITY" --keychain "$KEYCHAIN" -o runtime --timestamp --preserve-metadata=entitlements "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
+          codesign -f -s "$IDENTITY" --keychain "$KEYCHAIN" -o runtime --timestamp "$SPARKLE/Versions/B/Autoupdate"
+          codesign -f -s "$IDENTITY" --keychain "$KEYCHAIN" -o runtime --timestamp "$SPARKLE/Versions/B/Updater.app"
+          codesign -f -s "$IDENTITY" --keychain "$KEYCHAIN" -o runtime --timestamp "$SPARKLE"
+          codesign -f -s "$IDENTITY" --keychain "$KEYCHAIN" -o runtime --timestamp --preserve-metadata=entitlements,requirements,flags "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Check entitlements of the signed app
+        run: node scripts/release/check-entitlements.mjs "$APP" --configuration release
+
+      - name: Check package contents
+        run: node scripts/release/check-package.mjs "$APP" --require-sparkle-licence --expect-version "$VERSION" --expect-build "$BUILD"
+
+      - name: Notarise the app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Stapling the app itself means a copy dragged out of the DMG passes Gatekeeper offline.
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/Picsee-notarize.zip"
+          scripts/release/notarize.sh "$RUNNER_TEMP/Picsee-notarize.zip"
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+
+      - name: Build and sign the DMG
+        run: |
+          set -euo pipefail
+          DMG="$PWD/.build/release/Picsee-$VERSION.dmg"
+          STAGE="$RUNNER_TEMP/dmg"
+          mkdir -p "$(dirname "$DMG")" "$STAGE"
+          ditto "$APP" "$STAGE/Picsee.app"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "picsee $VERSION" -srcfolder "$STAGE" -fs APFS -format ULFO -ov "$DMG"
+          codesign --force --sign "$IDENTITY" --timestamp --keychain "$KEYCHAIN" "$DMG"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+
+      - name: Notarise the DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          scripts/release/notarize.sh "$DMG"
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          spctl -a -t open --context context:primary-signature -v "$DMG"
+          spctl -a -vv "$APP"
+
+      - name: Write the DMG checksum
+        run: |
+          set -euo pipefail
+          cd "$(dirname "$DMG")"
+          shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256"
+          cat "$(basename "$DMG").sha256"
+          echo "SHA256=$(cut -d ' ' -f 1 "$(basename "$DMG").sha256")" >> "$GITHUB_ENV"
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sed -e "s/{{VERSION}}/$VERSION/g" -e "s/{{BUILD}}/$BUILD/g" -e "s/{{SHA256}}/$SHA256/g" \
+            docs/release/notes-template.md > "$RUNNER_TEMP/notes.md"
+          prerelease=()
+          [[ "$TAG" == *-rc.* ]] && prerelease=(--prerelease)
+          gh release create "$TAG" "$DMG" "$DMG.sha256" --draft --verify-tag --title "picsee $VERSION (${TAG#v})" \
+            --notes-file "$RUNNER_TEMP/notes.md" "${prerelease[@]}"
+
+      - name: Sign the update and open the appcast PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          SIGNATURE=$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SPARKLE_TOOLS/bin/sign_update" -p --ed-key-file - "$DMG")
+          LENGTH=$(stat -f %z "$DMG")
+          URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$(basename "$DMG")"
+          BRANCH="appcast/$TAG"
+          git fetch origin main
+          git switch -c "$BRANCH" origin/main
+          node scripts/release/appcast.mjs appcast.xml --version "$BUILD" --short-version "$VERSION" --url "$URL" \
+            --length "$LENGTH" --signature "$SIGNATURE" --minimum-system-version 14.0
+          git add appcast.xml
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "release(appcast): picsee $VERSION ($BUILD) for $TAG"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title "release(appcast): picsee $VERSION ($BUILD) for $TAG" \
+            --body "Adds $TAG to appcast.xml. Merge only after publishing the draft release $TAG: the enclosure URL works once the release is public, and installed copies see the update as soon as this lands on main."
+
+      - name: Delete the temporary keychain
+        if: always()
+        run: |
+          if [[ -n "${KEYCHAIN:-}" ]]; then security delete-keychain "$KEYCHAIN" || true; fi
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/Picsee-notarize.zip"
