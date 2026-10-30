@@ -121,13 +121,19 @@ test('a started Swift Testing stream must finish even when XCTest finished elsew
 });
 test('all discovery probes share the heavy lock and issue-specific integration stays manual', () => {
   const config=JSON.parse(readFileSync('.claude/tdd-guardian/config.json','utf8'));
-  const probes=config.lanes.map(l=>l.probeCommand);
-  assert.deepEqual(config.lanes.map(l=>l.name).sort(), ['app-red','integration','swift-red','unit']);
+  // release-node (#220) runs light node tests only, so it stays outside the heavy lock.
+  const heavy=config.lanes.filter(l=>l.name!=='release-node');
+  const probes=heavy.map(l=>l.probeCommand);
+  assert.deepEqual(config.lanes.map(l=>l.name).sort(), ['app-red','integration','release-node','swift-red','unit']);
   assert.deepEqual(config.lanes.find(l=>l.name==='integration').gateOn, ['manual']);
   assert.deepEqual(config.lanes.find(l=>l.name==='app-red').gateOn, ['manual']);
+  const release=config.lanes.find(l=>l.name==='release-node');
+  assert.deepEqual(release.gateOn, ['manual']);
+  assert.equal(release.command, 'node scripts/tdd/node-lane.mjs scripts/release/check-entitlements.test.mjs');
+  assert.equal(release.probeCommand, 'node --version');
   assert.match(readFileSync('scripts/tdd/app-lane.mjs','utf8'), /spawnSync\(lock, \["xcrun", "xctest"/);
   assert.ok(probes.every(command=>command.startsWith('scripts/heavy-lock.sh ')));
-  assert.ok(config.lanes.filter(l=>l.name!=='app-red').every(l=>l.probeCommand.startsWith('scripts/heavy-lock.sh swift test ')));
+  assert.ok(heavy.filter(l=>l.name!=='app-red').every(l=>l.probeCommand.startsWith('scripts/heavy-lock.sh swift test ')));
 });
 
 test('crash-related test name and assertion message on stderr remain assertion RED', () => {
