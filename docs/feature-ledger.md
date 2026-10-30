@@ -286,11 +286,11 @@ v0.0.1 起就是门槛，范围是 J1/J2 的页面（见计划 P3「MVP 还需�
 
 | ID | 能力 | 状态 | 验证 | 计划 | 在哪 | 怎么确认 |
 |---|---|---|---|---|---|---|
-| DIST-01 | 签名与公证 | Absent | 无 | P6-06 | — | 在另一台 Mac 上下载安装包后直接打开，Gatekeeper 不拦截；`spctl --assess` 通过 |
+| DIST-01 | 签名与公证 | Absent | 无 | P6-06 | — | 在另一台 Mac 上下载安装包后直接打开，Gatekeeper 不拦截；`spctl --assess` 通过；限制：发布工作流 `.github/workflows/release.yml`（#222）写好 Developer ID 签名、公证、staple 与 spctl 自检，尚未真跑过 tag；无真机记录。 |
 | DIST-02 | 全新环境可用 | Absent | 无 | P6-05 | — | 新建一个 macOS 用户首次打开，没有旧授权和缓存也能正常使用；损坏的缓存数据库能自动恢复 |
-| DIST-03 | 安装包内容干净 | Absent | 无 | P6-07 | — | 检查 `.app` 内容，没有 REA、研究素材、私人照片或开发路径 |
+| DIST-03 | 安装包内容干净 | Absent | 无 | P6-07 | — | 检查 `.app` 内容，没有 REA、研究素材、私人照片或开发路径；限制：`scripts/release/check-package.mjs` 在发布工作流里检查已签名的 `.app`（#222），目前只有单元测试和本机未签名 Release 构建验证过，真实发布产物要等第一次 tag 运行。 |
 | DIST-04 | 升级保留数据 | Absent | 无 | P6-08 | — | 用新版本覆盖旧版本，设置、收藏和目录授权都还在 |
-| DIST-05 | 自动更新 | Partial | 单元 | P6-08 | `App/Updates/SparkleUpdatePort.swift`、`App/UI/SettingsPanelWindow.swift`、`App/Info.plist`、`App/Resources/Picsee.entitlements`、`scripts/release/check-entitlements.mjs` | 有新版本时 App 提示更新，更新后签名校验通过；限制：真机未验。新增 entitlement `com.apple.security.network.client` 与 mach-lookup 临时例外 `<bundle id>-spks`/`<bundle id>-spki`（ADR-015），签名产物由 `check-entitlements.mjs` 核对，Developer ID 发布构建的核对待 #222。设置窗口“更新”分区已接 Sparkle 2.10.0（#220）：自动检查开关、“立即检查”与“上次检查”经更新端口工作，仅用替身自动化验证；真机检查、安装与签名校验、第二次启动询问均未验证（#223），appcast 待 #222 发布，发布前“立即检查”会得到 Sparkle 自己的错误提示（未验证）。“更新”分区“只为检查更新联系 GitHub”与“关于”分区“不收集数据、不上传图片”两段为静态文案，网络行为未验证；“关于”分区的隐私说明与源代码链接已启用，目标页面、焦点与中英文布局仅自动化检查，真机未验。 |
+| DIST-05 | 自动更新 | Partial | 单元 | P6-08 | `App/Updates/SparkleUpdatePort.swift`、`App/UI/SettingsPanelWindow.swift`、`App/Info.plist`、`App/Resources/Picsee.entitlements`、`scripts/release/check-entitlements.mjs` | 有新版本时 App 提示更新，更新后签名校验通过；限制：真机未验。新增 entitlement `com.apple.security.network.client` 与 mach-lookup 临时例外 `<bundle id>-spks`/`<bundle id>-spki`（ADR-015），签名产物由 `check-entitlements.mjs` 核对，Developer ID 发布构建的核对已写进发布工作流（#222），尚未真跑。设置窗口“更新”分区已接 Sparkle 2.10.0（#220）：自动检查开关、“立即检查”与“上次检查”经更新端口工作，仅用替身自动化验证；真机检查、安装与签名校验、第二次启动询问均未验证（#223），仓库根的 `appcast.xml` 目前为空频道，发布条目由发布工作流开的 appcast PR 加入（#222，尚未真跑）；首个条目合入前“立即检查”只会显示没有更新（未验证）。“更新”分区“只为检查更新联系 GitHub”与“关于”分区“不收集数据、不上传图片”两段为静态文案，网络行为未验证；“关于”分区的隐私说明与源代码链接已启用，目标页面、焦点与中英文布局仅自动化检查，真机未验。 |
 | DIST-06 | App 图标 | Partial | 无 | P1-10 | `App/Resources/Assets.xcassets/AppIcon.appiconset/`、`project.yml` | 在 Dock、访达（列表与图标视图）和 ⌘Tab 里看到 Lens 图标，浅色/深色下 16–512 pt 都清晰无白边。限制：@1x Dock 与访达列表/图标视图通过（[记录](validation/P1.md#p1-10app-图标)）；⌘Tab、浅色 Dock、@2x 未验；无 Icon Composer `.icon`。 |
 
 ### 增强
