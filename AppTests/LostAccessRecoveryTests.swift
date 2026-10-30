@@ -987,6 +987,29 @@ func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async thro
     #expect(await f.services.files.records().allSatisfy { $0.id != f.rootA })
 }
 
+/// PR #304 CI: a footer status change re-ran the shell's layout, which reset every main-content view to the full main
+/// frame and left the strip covering the grid. Any shell layout pass must keep the strip above the grid.
+@MainActor @Test(.timeLimit(.minutes(3))) func t231StripStaysAboveGridAfterFooterStatusRelayout() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    try await t231Lose(f, c)
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    try await f.ready(c, folder: f.b)
+    let strip = try t231Strip(c), shell = try recoveryShell(c), grid = try recoveryGrid(c)
+    for step in ["current file", "search status", "reading status"] {
+        switch step {
+        case "current file": shell.setCurrentFile("DSC_0001.jpg")
+        case "search status": shell.setSearchStatus(resultCount: 3, term: "")
+        default: shell.setReadingStatus(false)
+        }
+        shell.layoutSubtreeIfNeeded()
+        let main = shell.mainContent.bounds
+        #expect(strip.frame == NSRect(x: main.minX, y: main.maxY - 44, width: main.width, height: 44), "\(step): strip frame")
+        #expect(grid.frame == NSRect(x: main.minX, y: main.minY, width: main.width, height: main.height - 44), "\(step): grid frame")
+        #expect(strip.frame.minY >= grid.frame.maxY, "\(step): strip above grid")
+    }
+}
+
 @MainActor @Test(.timeLimit(.minutes(3))) func t231NotFoundRealShellFramesAndLanguages() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     for size in [NSSize(width: 1280, height: 800), NSSize(width: 800, height: 680)] {

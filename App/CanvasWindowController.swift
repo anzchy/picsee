@@ -294,6 +294,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             previousMainFrameChange?(frame)
             self?.layoutRebindStrip()
         }
+        // The shell resets main-content frames on every layout pass, not only when the main frame moves.
+        gridShell.onMainContentLayout = { [weak self] in self?.placeRebindStrip() }
         window.contentView = content
         chromeOverlay.linkKeyViews(to: canvas)
         stateHost.linkKeyViews(to: canvas, chrome: chromeOverlay)
@@ -645,10 +647,11 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         rebindStrip = strip
         layoutRebindStrip()
     }
-    private func layoutRebindStrip() {
-        guard let gridShell, let gridView, let lostAccessView else { return }
+    /// Frames only: the strip takes the top 44pt of the main area and the grid, lost-access page and state get the rest.
+    @discardableResult private func placeRebindStrip() -> Bool {
+        guard let gridShell, let gridView, let lostAccessView else { return false }
         let bounds = gridShell.mainContent.bounds
-        guard bounds.width > 0, bounds.height > 44 else { return }
+        guard bounds.width > 0, bounds.height > 44 else { return false }
         let height: CGFloat = rebindStrip == nil ? 0 : 44
         let content = NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: max(0, bounds.height - height))
         gridView.frame = content
@@ -660,6 +663,12 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             strip.frame = NSRect(x: bounds.minX, y: bounds.maxY - height, width: bounds.width, height: height)
             strip.autoresizingMask = [.width, .minYMargin]
             strip.layoutSubtreeIfNeeded()
+        }
+        return true
+    }
+    private func layoutRebindStrip() {
+        guard placeRebindStrip() else { return }
+        if let strip = rebindStrip {
             let contentFirst: NSView = waitingAccessPosition == nil ? gridView.collectionView : lostAccessView.buttons.first ?? gridView.collectionView
             let contentLast: NSView = waitingAccessPosition == nil ? gridView.collectionView : lostAccessView.buttons.last ?? gridView.collectionView
             strip.undoButton.nextKeyView = strip.closeButton
