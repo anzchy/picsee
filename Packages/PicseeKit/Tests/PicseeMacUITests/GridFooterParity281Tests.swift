@@ -78,3 +78,30 @@ import PicseeInfrastructure
         #expect(!hint.isHidden == visible, "Space hint at \(width)")
     }
 }
+
+@Test @MainActor func issue281SearchEditorDoesNotOverlapHintOrStatusInEnglishAndChinese() throws {
+    for language in ["en", "zh-Hans"] {
+        let (shell, _, window) = try issue281FooterScene(width: 1280)
+        defer { window.close() }
+        let longName = language == "en" ? String(repeating: "LongEnglishFileName", count: 20) + ".jpg"
+            : String(repeating: "旅行照片文件名", count: 20) + ".jpg"
+        shell.setCurrentFile(longName)
+        shell.setSearchStatus(resultCount: 12, term: "")
+        let hint = try #require(issue281FooterView("grid.keyboard-hint", in: shell))
+        let file = try #require(issue281FooterView("grid.current-file-status", in: shell))
+        let count = try #require(issue281FooterView("grid.folder-count", in: shell))
+        shell.focusSearch()
+        shell.layoutSubtreeIfNeeded()
+        // grid-light.html: editing uses searchField's frame, not the hidden searchButton or the Space hint.
+        #expect(!shell.searchField.isHidden)
+        #expect(hint.isHidden, "\(language) Space hint overlaps the editor")
+        for status in [file, count] {
+            #expect(!status.isHidden, "\(language) status should remain visible")
+            #expect(!NSIntersectsRect(status.frame, shell.searchField.frame),
+                    "\(language) status overlaps the editor")
+        }
+        shell.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification,
+            object: shell.searchField))
+        #expect(!hint.isHidden, "Space hint returns after editing ends")
+    }
+}
