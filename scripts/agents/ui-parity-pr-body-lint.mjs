@@ -39,6 +39,71 @@ export function checkUIParity(body, files) {
   return { ok: false, reason: 'UI files changed; PR body needs a populated ## UI-Parity table' };
 }
 
+const gateLanes = ['package-tests', 'package-coverage', 'app-tests', 'unsigned-build', 'node-tooling', 'ledger', 'diff-check', 'audit', 'device-smoke'];
+const gateStatuses = new Set(['PASS', 'FAIL', 'NOT RUN', 'N/A', 'NOT VERIFIED']);
+
+export function checkGates(body, head) {
+  const section = body.match(/^## Gates\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/m)?.[1];
+  if (section === undefined) return { ok: false, reason: 'missing ## Gates table' };
+  const lines = section.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  let headerAt = -1;
+  for (let i = 0; i + 2 < lines.length; i++) {
+    const header = cells(lines[i]);
+    const rule = cells(lines[i + 1]);
+    if (header.length === 4 && header.every((value, index) => value === ['Lane', 'Status', 'SHA', 'Source'][index]) &&
+        rule.length === 4 && rule.every(value => /^:?-{3,}:?$/.test(value))) {
+      headerAt = i;
+      break;
+    }
+  }
+  if (headerAt < 0) return { ok: false, reason: 'missing ## Gates table' };
+
+  const rows = [];
+  const seen = new Set();
+  for (let i = headerAt + 2; i < lines.length && lines[i].startsWith('|'); i++) {
+    const values = cells(lines[i]);
+    if (values.length !== 4 || !values[0]) return { ok: false, reason: 'invalid ## Gates table row' };
+    rows.push(values);
+    const lane = values[0].toLowerCase();
+    if (seen.has(lane)) return { ok: false, reason: `duplicate ${lane} lane` };
+    seen.add(lane);
+  }
+  for (const lane of gateLanes) {
+    if (!seen.has(lane)) return { ok: false, reason: `missing ${lane} lane` };
+  }
+
+  for (const [printedLane, status, sha, source] of rows) {
+    const lane = printedLane.toLowerCase();
+    if (!gateStatuses.has(status)) return { ok: false, reason: `${lane} has invalid status ${status}` };
+    if (status === 'PASS' || status === 'FAIL' || status === 'NOT VERIFIED') {
+      if (!/^[0-9a-f]{7,40}$/i.test(sha)) return { ok: false, reason: `${lane} ${status} needs a 7-40 hex SHA` };
+      if (!source) return { ok: false, reason: `${lane} ${status} needs a Source` };
+    } else {
+      if (sha !== '' && sha !== '—') return { ok: false, reason: `${lane} ${status} needs an empty or — SHA` };
+      if (!source || source === '-' || source === '—') return { ok: false, reason: `${lane} ${status} needs a Source reason` };
+    }
+    if (status === 'FAIL') return { ok: false, reason: `${lane} is a FAIL row` };
+    if (status === 'PASS' && !head.toLowerCase().startsWith(sha.toLowerCase()) &&
+        !/\bCODE same [0-9a-f]{40}\b/i.test(source)) {
+      return { ok: false, reason: `${lane} PASS has a stale head without CODE same evidence` };
+    }
+  }
+
+  const smokeLines = body.split(/\r?\n/).filter(line => /^Device-Smoke:/.test(line));
+  if (smokeLines.length > 0) {
+    if (smokeLines.length !== 1) return { ok: false, reason: 'Device-Smoke lines must be unique and agree with the device-smoke row' };
+    const smoke = smokeLines[0].match(/^Device-Smoke:\s*(PASS|NOT VERIFIED|n\/a)(?:\s+([0-9a-f]{7,40}))?\b/i);
+    const deviceRow = rows.find(values => values[0].toLowerCase() === 'device-smoke');
+    if (!smoke) return { ok: false, reason: 'Device-Smoke line does not agree with the device-smoke row' };
+    const smokeStatus = smoke[1].toLowerCase() === 'n/a' ? 'N/A' : smoke[1].toUpperCase();
+    if (deviceRow[1] !== smokeStatus) return { ok: false, reason: 'Device-Smoke status does not agree with the device-smoke row' };
+    if (smokeStatus !== 'N/A' && (!smoke[2] || smoke[2].toLowerCase() !== deviceRow[2].toLowerCase())) {
+      return { ok: false, reason: 'Device-Smoke SHA does not equal the device-smoke row SHA' };
+    }
+  }
+  return { ok: true };
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const args = process.argv.slice(2);
   const bodyAt = args.indexOf('--body-file');
@@ -52,10 +117,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       const base = execFileSync('git', ['merge-base', args[baseAt + 1], 'HEAD'], { encoding: 'utf8' }).trim();
       const files = execFileSync('git', ['diff', '--no-renames', '--name-only', '--diff-filter=ACMRD', `${base}..HEAD`], { encoding: 'utf8' }).trim().split('\n');
       const body = readFileSync(args[bodyAt + 1], 'utf8');
-      const result = checkUIParity(body, files);
+      let result = checkUIParity(body, files);
       if (result.ok && (files.some(isUIFile) || /^Device-Smoke:/m.test(body)) && !validSmoke(body)) {
         result.ok = false;
         result.reason = 'UI files changed; PR body needs a Device-Smoke: line for the changed path';
+      }
+      if (result.ok) {
+        const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+        result = checkGates(body, head);
       }
       if (!result.ok) { console.error(result.reason); process.exitCode = 1; }
       else console.log('UI-Parity PR body: PASS');
