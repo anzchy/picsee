@@ -1,4 +1,7 @@
 # Picsee.app layout: stripped Release of origin/main 4b069ab1 (unsigned), plus the files signing, stapling and the release workflow add.
+# Signing entries observed on a locally signed Release of 6ea0ccb6 (Apple Development, hardened runtime, the workflow's
+# re-sign order): the app's _CodeSignature/CodeResources and the B4 resource bundle's detached signature (four files).
+# Contents/CodeResources (the staple ticket) is not observed locally: it needs notarisation.
 Contents/Frameworks/Sparkle.framework/Autoupdate
 Contents/Frameworks/Sparkle.framework/Resources
 Contents/Frameworks/Sparkle.framework/Sparkle
@@ -64,6 +67,10 @@ Contents/PkgInfo
 Contents/Resources/AppIcon.icns
 Contents/Resources/Assets.car
 Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/Info.plist
+Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/_CodeSignature/CodeDirectory
+Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/_CodeSignature/CodeRequirements
+Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/_CodeSignature/CodeResources
+Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/_CodeSignature/CodeSignature
 Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/Resources/alley.jpg
 Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/Resources/gate.jpg
 Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/Resources/hillside.jpg

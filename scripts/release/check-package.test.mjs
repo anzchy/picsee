@@ -208,6 +208,9 @@ test("anything outside the release layout fails, including look-alikes of allowe
     "Contents/Resources/fr.lproj/Localizable.strings", "Contents/Resources/en.lproj/Secrets.strings",
     "Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/Resources/sub/alley.jpg",
     "Contents/Resources/ThirdPartyNotices/other.txt", "Contents/Info.plist.bak",
+    "Contents/Resources/PicseeKit_PicseeMacUI.bundle/Contents/_CodeSignature/CodeEntitlements",
+    "Contents/Resources/PicseeKit_PicseeMacUI.bundle/_CodeSignature/CodeDirectory",
+    "Contents/Resources/Other.bundle/Contents/_CodeSignature/CodeDirectory", "Contents/_CodeSignature/CodeDirectory",
   ]) assert.notEqual(classifyPath(path), null, path);
 });
 
