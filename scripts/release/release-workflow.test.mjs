@@ -161,3 +161,9 @@ test("the temporary keychain is always deleted", () => {
   assert.match(cleanup.text, /^\s+if: always\(\)$/m);
   assert.match(cleanup.text, /security delete-keychain/);
 });
+
+test("the runbook states what merging an appcast PR does, and the rc rule", () => {
+  const readme = readFileSync(new URL("docs/release/README.md", root), "utf8");
+  assert.match(readme, /Merging an appcast PR offers that build to every installed copy that has update checks on/);
+  assert.match(readme, /For a release candidate, close the appcast PR unless you mean a general rollout/);
+});
