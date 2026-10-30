@@ -453,7 +453,7 @@ import PicseeCore
     }
     /// The width an NSTextField needs to draw its string untruncated: its text plus the cell's padding.
     private static func cellWidth(_ field: NSTextField) -> CGFloat {
-        ceil(field.cell?.cellSize.width ?? field.intrinsicContentSize.width)
+        ceil(field.cell!.cellSize.width)
     }
     @objc private func toggleFromButton() { toggleSidebar() }
     public func toggleSidebar() {
