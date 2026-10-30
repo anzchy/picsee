@@ -564,3 +564,145 @@ func t231ExplicitTrashStillRefusesAutomaticRootProbe() async throws {
     #expect(lease.rootID == id)
     await access.release(lease)
 }
+
+
+/// Inject the additive field through persisted JSON so this specification compiles
+/// against the legacy model before the implementation knows that field.
+private func t231Fix2Reference(_ item: RecentFolder, recordedRoot: URL) throws -> RecentFolder {
+    var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any])
+    object["recordedRoot"] = recordedRoot.absoluteString
+    return try JSONDecoder().decode(RecentFolder.self, from: JSONSerialization.data(withJSONObject: object))
+}
+private func t231Fix2RecordedRoot(_ item: RecentFolder) throws -> String? {
+    let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any])
+    return object["recordedRoot"] as? String
+}
+
+@Test func t231Fix2LiteralLegacyAndAdditivePersistenceRoundTrip() throws {
+    let legacy = Data(#"{"rootID":{"rawValue":"11111111-1111-1111-1111-111111111111"},"url":"file:///base/container/album/child/","displayName":"child","openedAt":0}"#.utf8)
+    let decoded = try JSONDecoder().decode(RecentFolder.self, from: legacy)
+    #expect(decoded.url.path == "/base/container/album/child")
+    #expect(try t231Fix2RecordedRoot(decoded) == nil)
+    #expect(try JSONDecoder().decode(RecentFolder.self, from: JSONEncoder().encode(decoded)) == decoded)
+    let root = URL(fileURLWithPath: "/base/container/album", isDirectory: true)
+    let recorded = try t231Fix2Reference(decoded, recordedRoot: root)
+    #expect(try t231Fix2RecordedRoot(recorded) == root.absoluteString)
+    #expect(try JSONDecoder().decode(RecentFolder.self, from: JSONEncoder().encode(recorded)) == recorded)
+}
+
+@Test(.timeLimit(.minutes(2)), arguments: [false, true], [false, true])
+func t231Fix2PromotionUsesRecordedEpochAndSurvivesSecondRebind(merge: Bool, misleadingChild: Bool) async throws {
+    let f = try RebindFixture(); defer { f.remove() }
+    let access = try FileAccess(scope: f.scope, bookmarks: SystemSecurityScope(), store: f.roots, buildSHA: "fix2-real")
+    let container = f.base.appendingPathComponent("container", isDirectory: true)
+    let original = container.appendingPathComponent("album", isDirectory: true)
+    let child = original.appendingPathComponent("child", isDirectory: true)
+    let staging = f.base.appendingPathComponent("staging", isDirectory: true)
+    try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+    let a = try await access.grant(folder: original)
+    let b = try await access.grant(folder: f.other)
+    let destinationID = merge ? try await access.grant(folder: f.chosen) : nil
+    let recorded = try t231Fix2Reference(f.recent(a, child, "historical"), recordedRoot: original)
+    try f.seed([recorded, f.recent(b, f.other)] + (destinationID.map { [f.recent($0, f.chosen, "destination")] } ?? []))
+    let heldB = try await access.acquire(.root(b, file: f.other))
+    try FileManager.default.moveItem(at: original, to: staging)
+    #expect(try await access.probeRootURL(a).resolvingSymlinksInPath().path == staging.path)
+    try FileManager.default.removeItem(at: container)
+    try FileManager.default.moveItem(at: staging, to: container)
+    #expect(try await access.probeRootURL(a).resolvingSymlinksInPath().path == container.path)
+    try FileManager.default.createDirectory(at: f.chosen.appendingPathComponent("child"), withIntermediateDirectories: true)
+    if misleadingChild {
+        try FileManager.default.createDirectory(at: f.chosen.appendingPathComponent("album/child"), withIntermediateDirectories: true)
+    }
+    try FileManager.default.removeItem(at: container)
+    await #expect(throws: (any Error).self) { try await access.probeRootURL(a) }
+    let before = try AccessStoreBytes(urls: [f.roots.url, f.recentURL])
+    let beforeRecords = await access.records()
+    let first = try await access.rebind(a, folder: f.chosen, recentStore: f.recents)
+    if let destinationID { #expect(first.rootID == destinationID) }
+    else { #expect(first.rootID != a && first.rootID != b) }
+    let recent = try await RecentFolderStore(url: f.recentURL).load()
+    let mapped = recent.filter { $0.displayName == "historical" }
+    #expect(mapped.count == 1)
+    #expect(mapped.first?.url.path == f.chosen.appendingPathComponent("child").path)
+    #expect(!mapped.contains { $0.url.path == f.chosen.appendingPathComponent("album/child").path })
+    if let item = mapped.first {
+        #expect(item.rootID == first.rootID && item.openedAt == recorded.openedAt)
+        #expect(try t231Fix2RecordedRoot(item) == f.chosen.absoluteString)
+    }
+    #expect(recent.contains(f.recent(b, f.other)))
+    #expect(recent.allSatisfy { $0.rootID != a })
+    if let destinationID { #expect(recent.contains(f.recent(destinationID, f.chosen, "destination"))) }
+    let secondRoot = f.base.appendingPathComponent("replacement2", isDirectory: true)
+    try FileManager.default.createDirectory(at: secondRoot.appendingPathComponent("child"), withIntermediateDirectories: true)
+    try FileManager.default.removeItem(at: f.chosen)
+    let afterFirst = try AccessStoreBytes(urls: [f.roots.url, f.recentURL])
+    let firstRecords = await access.records()
+    let second = try await access.rebind(first.rootID, folder: secondRoot, recentStore: f.recents)
+    let twice = try await RecentFolderStore(url: f.recentURL).load().filter { $0.displayName == "historical" }
+    #expect(twice.count == 1)
+    #expect(twice.first?.url.path == secondRoot.appendingPathComponent("child").path)
+    if let item = twice.first { #expect(try t231Fix2RecordedRoot(item) == secondRoot.absoluteString) }
+    try await access.undoRebind(second.undo)
+    #expect(try AccessStoreBytes(urls: [f.roots.url, f.recentURL]) == afterFirst)
+    #expect(await access.records() == firstRecords)
+    try await access.undoRebind(first.undo)
+    #expect(try AccessStoreBytes(urls: [f.roots.url, f.recentURL]) == before)
+    #expect(await access.records() == beforeRecords)
+    await access.release(heldB)
+    #expect(f.scope.balanced)
+}
+
+@Test(.timeLimit(.minutes(2)))
+func t231Fix2NewerRecordedAndLegacyOverlapKeepTheirOwnMeaning() async throws {
+    let f = try RebindFixture(); defer { f.remove() }
+    let access = try FileAccess(scope: f.scope, bookmarks: SystemSecurityScope(), store: f.roots, buildSHA: "fix2-inverse")
+    let container = f.base.appendingPathComponent("container", isDirectory: true)
+    let original = container.appendingPathComponent("album", isDirectory: true)
+    let child = original.appendingPathComponent("child", isDirectory: true)
+    let staging = f.base.appendingPathComponent("staging", isDirectory: true)
+    try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+    let a = try await access.grant(folder: original)
+    try FileManager.default.moveItem(at: original, to: staging)
+    _ = try await access.probeRootURL(a)
+    try FileManager.default.removeItem(at: container)
+    try FileManager.default.moveItem(at: staging, to: container)
+    _ = try await access.probeRootURL(a)
+    try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+    let newer = try t231Fix2Reference(f.recent(a, child, "newer"), recordedRoot: container)
+    // Decode an actual old-format representation, with no recordedRoot field.
+    let legacy = try JSONDecoder().decode(RecentFolder.self, from: JSONEncoder().encode(f.recent(a, child, "legacy")))
+    try f.seed([newer, legacy])
+    for suffix in ["child", "album/child"] {
+        try FileManager.default.createDirectory(at: f.chosen.appendingPathComponent(suffix), withIntermediateDirectories: true)
+    }
+    try FileManager.default.removeItem(at: container)
+    let result = try await access.rebind(a, folder: f.chosen, recentStore: f.recents)
+    let recent = try await RecentFolderStore(url: f.recentURL).load()
+    // Equal destination paths coalesce; assert each provenance behavior separately
+    // using the production remapper and persisted reload below.
+    #expect(recent.first?.url.path == f.chosen.appendingPathComponent("album/child").path)
+    #expect(recent.first?.rootID == result.rootID)
+    if let item = recent.first { #expect(try t231Fix2RecordedRoot(item) == f.chosen.absoluteString) }
+    let legacyMapped = AccessRecentRemap.remap([legacy], sourceID: a, oldRoots: [container, staging, original],
+        destinationID: result.rootID, newRoot: f.chosen, probe: { _ = try $0.resourceValues(forKeys: [.isDirectoryKey]) })
+    try f.seed(legacyMapped)
+    let persistedLegacy = try #require(try await RecentFolderStore(url: f.recentURL).load().first)
+    #expect(persistedLegacy.url.path == f.chosen.appendingPathComponent("album/child").path)
+    #expect(try t231Fix2RecordedRoot(persistedLegacy) == nil)
+}
+
+@Test func t231Fix2InvalidRecordedRootDoesNotFallBackOrEscape() throws {
+    let f = try RebindFixture(); defer { f.remove() }
+    let source = AccessRootID(), destination = AccessRootID()
+    let original = try t231Fix2Reference(f.recent(source, f.old.appendingPathComponent("child")), recordedRoot: f.other)
+    try FileManager.default.createDirectory(at: f.chosen.appendingPathComponent("child"), withIntermediateDirectories: true)
+    let retained = AccessRecentRemap.remap([original], sourceID: source, oldRoots: [f.old],
+        destinationID: destination, newRoot: f.chosen, probe: { _ = try $0.resourceValues(forKeys: [.isDirectoryKey]) })
+    #expect(retained == [original])
+    try FileManager.default.createSymbolicLink(at: f.chosen.appendingPathComponent("escape"), withDestinationURL: f.other)
+    let escaping = try t231Fix2Reference(f.recent(source, f.old.appendingPathComponent("escape")), recordedRoot: f.old)
+    let checked = AccessRecentRemap.remap([escaping], sourceID: source, oldRoots: [f.old],
+        destinationID: destination, newRoot: f.chosen, probe: { _ = try $0.resourceValues(forKeys: [.isDirectoryKey]) })
+    #expect(checked == [escaping])
+}

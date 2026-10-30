@@ -2145,7 +2145,8 @@ extension CanvasWindowController: FolderScanHost {
         let services = try await operation.wait { try await accessServices.value }
         guard authority.isCurrent else { throw CancellationError() }
         try await operation.wait {
-            try await services.recent.add(RecentFolder(rootID: rootID, url: folder, displayName: folder.lastPathComponent))
+            let root = await services.files.rootURL(rootID)
+            try await services.recent.add(RecentFolder(rootID: rootID, url: folder, displayName: folder.lastPathComponent, recordedRoot: root))
         }
         guard authority.isCurrent else { throw CancellationError() }
         refreshRecents()
