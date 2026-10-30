@@ -321,7 +321,9 @@ private func t229RecoveryFallsBackToRootGridWhenOriginalPositionIsGone(_ missing
     try await recoveryWait { recoveryPage(controller) != nil }
     f.bookmarks.fail(f.a, true)
     await f.mount()
-    try await recoveryWait { controller.accessLossCause == .unknown }
+    // #231: mounted-volume bookmark failure is now the proven Not Found cause.
+    try await recoveryWait { controller.accessLossCause != .diskNotConnected }
+    #expect(controller.accessLossCause == .notFound)
     #expect(f.services.monitor.state.permit(for: f.rootA) == nil)
     #expect(!controller.hasImage && controller.session.imageLoader.presented == nil)
     #expect(recoveryPage(controller)?.buttons.count == 2)
@@ -575,7 +577,9 @@ private final class RecoveryDiagnosticTrace: @unchecked Sendable {
     try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.diskNotConnected) }
     f.bookmarks.fail(f.a, true)
     await f.mount()
-    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.unknown) }
+    // #231: mounted-volume bookmark failure no longer degrades to Unknown.
+    try await recoveryWait { f.services.monitor.state.snapshot(for: f.rootA)?.availability != .lost(.diskNotConnected) }
+    #expect(f.services.monitor.state.snapshot(for: f.rootA)?.availability == .lost(.notFound))
     #expect(trace.messages.contains { $0.contains("AccessRootLost") && $0.contains("cause=diskNotConnected") })
     #expect(trace.messages.contains { $0.contains("AccessRecovery") && $0.contains("outcome=refused") })
     #expect(!trace.messages.contains { $0.contains("AccessRecovery outcome=published") })
