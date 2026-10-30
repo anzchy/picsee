@@ -71,3 +71,20 @@ test('gates-rows rejects a missing summary without emitting PASS', t => {
   assert.notEqual(result.status, 0);
   assert.doesNotMatch(result.stdout, /\| PASS \|/);
 });
+
+test('CI lints every pull request body without interpolating it into shell', async () => {
+  const { readFileSync } = await import('node:fs');
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const job = workflow.match(/^  pr-body-lint:\n([\s\S]*?)(?=^  [a-z][a-z-]*:\n|$(?![\s\S]))/m)?.[1];
+  assert.ok(job, 'missing pr-body-lint job');
+  assert.match(job, /if: github\.event_name == 'pull_request'/);
+  assert.match(job, /fetch-depth: 0/);
+  assert.match(job, /actions\/setup-node@/);
+  assert.match(job, /node --test scripts\/agents\/\*\.test\.mjs/);
+  assert.match(job, /PR_BODY: \$\{\{ github\.event\.pull_request\.body \}\}/);
+  assert.match(job, /printf '%s' "\$PR_BODY" > "\$RUNNER_TEMP\/pr-body\.md"/);
+  assert.match(job, /--base origin\/main --body-file "\$RUNNER_TEMP\/pr-body\.md"/);
+  const shell = [...job.matchAll(/run: \|\n((?:        .*\n?)+)/g)].map(match => match[1]).join('\n');
+  assert.doesNotMatch(shell, /\$\{\{\s*github\.event\.pull_request\.body/);
+  assert.doesNotMatch(job, /xcode/i);
+});

@@ -21,6 +21,22 @@ Use this template for writing the PR body:
 - **Before:** <screenshot/output/failing test run>
   **After:** <screenshot/output/passing test run>
 
+## Gates
+
+| Lane | Status | SHA | Source |
+|---|---|---|---|
+| package-tests | PASS | <head-sha> | <owner-gates evidence> |
+| package-coverage | PASS | <head-sha> | <owner-gates evidence> |
+| app-tests | PASS | <head-sha> | <CI run or NOT RUN reason> |
+| unsigned-build | PASS | <head-sha> | <CI run> |
+| node-tooling | PASS | <head-sha> | <owner-gates evidence> |
+| ledger | PASS | <head-sha> | <check output> |
+| diff-check | PASS | <head-sha> | <check output> |
+| audit | N/A | — | <reason> |
+| device-smoke | N/A | — | <reason> |
+
+Device-Smoke: n/a — <reason; for a device run use PASS|NOT VERIFIED <head7> run=<id> — <path>
+
 ## Merge Danger
 
 **Door:** <one-way or two-way>
