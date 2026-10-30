@@ -238,7 +238,9 @@ public struct GridSidebarFolder: Sendable, Equatable {
             row.frame = NSRect(x: x, y: rowY, width: max(0, bounds.width - x - 12), height: rowHeight)
             row.layoutSubtreeIfNeeded()
         }
-        addFolderButton.frame = NSRect(x: 4, y: rowY - 12 - 30, width: max(0, bounds.width - 8), height: 30)
+        let sidebarPadding: CGFloat = viewportWidth <= 1050 ? 8 : 12
+        addFolderButton.frame = NSRect(x: sidebarPadding + 4, y: rowY - 12 - 30,
+            width: max(0, bounds.width - 2 * sidebarPadding - 1 - 8), height: 30)
         addFolderBorder.frame = addFolderButton.bounds
         addFolderBorder.path = NSBezierPath(roundedRect: addFolderButton.bounds.insetBy(dx: 0.5, dy: 0.5),
             xRadius: DesignMetrics.radii["control"]!, yRadius: DesignMetrics.radii["control"]!).cgPath
