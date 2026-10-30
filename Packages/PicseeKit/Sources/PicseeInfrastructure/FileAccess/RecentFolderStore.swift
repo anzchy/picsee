@@ -3,8 +3,21 @@ import PicseeCore
 import os
 
 public actor RecentFolderStore {
-    public private(set) var storeCorrupt = false
-    private let url: URL
+    private nonisolated let storage: RecentFolderStorage
+    public var storeCorrupt: Bool { storage.lock.withLock { storage.storeCorrupt } }
+    public init(url: URL) { storage = RecentFolderStorage(url: url) }
+    public func load() throws -> [RecentFolder] { try storage.lock.withLock { try storage.load() } }
+    public func add(_ folder: RecentFolder) throws { try storage.lock.withLock { try storage.add(folder) } }
+    /// Serializes a synchronous two-store transaction against normal recent reads/writes.
+    nonisolated func withTransaction<T>(_ operation: (URL) throws -> T) rethrows -> T {
+        try storage.lock.withLock { try operation(storage.url) }
+    }
+}
+
+private final class RecentFolderStorage: @unchecked Sendable {
+    let lock = NSRecursiveLock()
+    var storeCorrupt = false
+    let url: URL
     /// New entries remain usable for this launch when an unsupported on-disk version must be preserved.
     private var sessionRecent: [RecentFolder]?
     public init(url: URL) { self.url = url }
