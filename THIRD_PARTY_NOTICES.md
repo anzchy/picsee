@@ -4,9 +4,9 @@ picsee is released under the [MIT License](LICENSE). It includes or will include
 
 ## Sparkle
 
-- Used for: automatic updates, from v0.0.1 (ADR-015, #220).
+- Used for: automatic updates, from v0.0.1 (ADR-015, #220). The app embeds Sparkle 2.10.0, pinned exactly in `project.yml`.
 - Source: https://github.com/sparkle-project/Sparkle
-- Licence: MIT. The full licence text and Sparkle's own third-party notices are bundled with the app once Sparkle is added.
+- Licence: MIT. The full licence text and Sparkle's own third-party notices are in Sparkle's [LICENSE](https://github.com/sparkle-project/Sparkle/blob/2.10.0/LICENSE).
 
 ## Sample photos on the first-launch screen
 

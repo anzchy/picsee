@@ -35,5 +35,13 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/anzchy/picsee/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>XaqePs6p9CwP2w+sJAC+eAKcExNITNS9W54AtIZGpSs=</string>
 </dict>
 </plist>
