@@ -39,6 +39,7 @@ enum SettingsSection: String, CaseIterable {
     private var cacheClear: NSButton!
     private var updateVersion: NSTextField!
     private var updateAutomatic: NSButton!
+    private var updateCheck: NSButton!
     private var updateLastChecked: NSTextField!
 
     init(cache: ThumbnailDiskCache, appearanceAdapter: WindowAppearanceAdapter,
@@ -307,11 +308,11 @@ enum SettingsSection: String, CaseIterable {
         let privacy = label(String(localized: "picsee contacts GitHub only to check for updates and sends no system information."), role: "uiSmall", muted: true)
         privacy.frame = NSRect(x: 162, y: 310, width: 390, height: 36)
         pane.addSubview(privacy)
-        let check = NSButton(title: String(localized: "Check Now"), target: self, action: #selector(checkForUpdates(_:)))
-        check.font = DesignMetrics.font("ui")
-        check.frame = NSRect(x: 162, y: 275, width: check.intrinsicContentSize.width, height: 26)
-        configure(check, entry: .settingsUpdatesCheckNow, id: "settings.update.now", title: check.title)
-        pane.addSubview(check)
+        updateCheck = NSButton(title: String(localized: "Check Now"), target: self, action: #selector(checkForUpdates(_:)))
+        updateCheck.font = DesignMetrics.font("ui")
+        updateCheck.frame = NSRect(x: 162, y: 275, width: updateCheck.intrinsicContentSize.width, height: 26)
+        configure(updateCheck, entry: .settingsUpdatesCheckNow, id: "settings.update.now", title: updateCheck.title)
+        pane.addSubview(updateCheck)
         updateLastChecked = label(String(localized: "Last checked: Unknown"), role: "uiSmall", muted: true)
         updateLastChecked.frame = NSRect(x: 162, y: 247, width: 390, height: 24)
         updateLastChecked.setAccessibilityIdentifier("settings.update.last-checked")
@@ -319,7 +320,7 @@ enum SettingsSection: String, CaseIterable {
         if updates == nil {
             // No updater (UI-fixture builds): the controls stay visible but inert, without a Coming Soon marker.
             updateAutomatic.isEnabled = false
-            check.isEnabled = false
+            updateCheck.isEnabled = false
         }
         refreshUpdates()
     }
@@ -330,6 +331,7 @@ enum SettingsSection: String, CaseIterable {
         updateVersion.stringValue = String(format: String(localized: "%@ (build %@)"),
                                            updates.versionInfo.version ?? unknown, updates.versionInfo.build ?? unknown)
         updateAutomatic.state = updates.automaticallyChecksForUpdates ? .on : .off
+        updateCheck.isEnabled = updates.canCheckForUpdates
         updateLastChecked.stringValue = updates.lastUpdateCheckDate.map {
             String(format: String(localized: "Last checked: %@"), $0.formatted(date: .abbreviated, time: .shortened))
         } ?? String(localized: "Last checked: Unknown")

@@ -21,6 +21,8 @@ public struct AppVersionInfo: Equatable, Sendable {
     var versionInfo: AppVersionInfo { get }
     var automaticallyChecksForUpdates: Bool { get set }
     var lastUpdateCheckDate: Date? { get }
+    /// False while the updater cannot start a user-initiated check (for example, a background check is running).
+    var canCheckForUpdates: Bool { get }
     func checkForUpdates()
     /// Calls `onChange` after the updater's state may have changed (an update cycle finished, or a setting changed elsewhere).
     func observe(_ onChange: @escaping @MainActor () -> Void)
