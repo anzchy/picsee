@@ -50,7 +50,7 @@ struct AccessServices: Sendable {
     func grant(_ folder: URL) async throws -> AccessRootID {
         let id = try await files.grant(folder: folder)
         await monitor.reauthorize(id, explicitSelection: true)
-        try await recent.add(RecentFolder(rootID: id, url: folder, displayName: folder.lastPathComponent))
+        try await recent.add(RecentFolder(rootID: id, url: folder, displayName: folder.lastPathComponent, recordedRoot: folder))
         return id
     }
     func images(in folder: URL, rootID: AccessRootID) async throws -> [URL] {
@@ -70,7 +70,7 @@ struct AccessServices: Sendable {
             targetID = other; url = held
         }
         await monitor.reauthorize(targetID, explicitSelection: true)
-        try await recent.add(RecentFolder(rootID: targetID, url: url, displayName: url.lastPathComponent))
+        try await recent.add(RecentFolder(rootID: targetID, url: url, displayName: url.lastPathComponent, recordedRoot: url))
         return (targetID, url)
     }
     /// A fresh panel selection refers to this URL, never an older File Grant's
@@ -98,7 +98,7 @@ struct AccessServices: Sendable {
             }
             let selected = try await files.grant(folder: folder, excludingRoot: id)
             await monitor.reauthorize(selected, explicitSelection: true)
-            try await recent.add(RecentFolder(rootID: selected, url: folder, displayName: folder.lastPathComponent))
+            try await recent.add(RecentFolder(rootID: selected, url: folder, displayName: folder.lastPathComponent, recordedRoot: folder))
             return (rootID: selected, url: folder, restored: false)
         }
         return try await withTaskCancellationHandler {

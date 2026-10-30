@@ -70,7 +70,11 @@ enum AccessRecentRemap {
         var result: [RecentFolder] = []
         for item in recent {
             guard item.rootID == sourceID else { result.append(item); continue }
-            guard let relative = oldRoots.lazy.compactMap({ relativeComponents(item.url, root: $0) }).first else {
+            // A newer root can be an ancestor of an older location. Only the
+            // recording location identifies this reference’s original suffix.
+            // Legacy records retain the latest-first historical fallback.
+            let sourceRoots = item.recordedRoot.map { [$0] } ?? oldRoots
+            guard let relative = sourceRoots.lazy.compactMap({ relativeComponents(item.url, root: $0) }).first else {
                 result.append(item); continue
             }
             let candidate = relative.reduce(newRoot) { $0.appendingPathComponent($1) }
@@ -80,7 +84,8 @@ enum AccessRecentRemap {
             catch where AccessStoreBytes.missing(error) { continue }
             catch { /* Permission and I/O uncertainty retain the mapped reference. */ }
             let mapped = RecentFolder(rootID: destinationID, url: URL(fileURLWithPath: candidate.path, isDirectory: true),
-                                      displayName: item.displayName, openedAt: item.openedAt)
+                                      displayName: item.displayName, openedAt: item.openedAt,
+                                      recordedRoot: item.recordedRoot == nil ? nil : newRoot)
             // Preserve an already-present destination entry and its metadata/order.
             let collidesWithDestination = recent.contains { other in
                 other.rootID == destinationID && other.url.standardizedFileURL.resolvingSymlinksInPath() == candidate

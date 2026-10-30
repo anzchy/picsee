@@ -168,11 +168,11 @@ extension FileAccess {
     let gate: RecoveryReadGate
     let watchSource: RecoveryWatchSource
     let services: AccessServices
-    init(diagnostics: AccessDiagnostics = AccessDiagnostics()) async throws {
+    init(diagnostics: AccessDiagnostics = AccessDiagnostics(), aComponents: [String] = ["RootA"]) async throws {
         _ = NSApplication.shared
         let fm = FileManager.default
         let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
-        let a = base.appendingPathComponent("RootA", isDirectory: true), b = base.appendingPathComponent("RootB", isDirectory: true)
+        let a = aComponents.reduce(base) { $0.appendingPathComponent($1, isDirectory: true) }, b = base.appendingPathComponent("RootB", isDirectory: true)
         let one = a.appendingPathComponent("One", isDirectory: true), two = a.appendingPathComponent("Two", isDirectory: true)
         for folder in [one, two, b] { try fm.createDirectory(at: folder, withIntermediateDirectories: true) }
         let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -813,16 +813,26 @@ func t231Fix1ForegroundFollowsInactiveRootThenRebindRemapsHistoricalRecent() asy
     f.bookmarks.fail(moved, true)
     c.openRecent(childRecent)
     try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA && recoveryPage(c) != nil }
+    // Reconnection first renders an unknown cause, then classifies the root asynchronously.
+    try await recoveryWait { c.accessLossCause == .notFound }
     #expect(c.accessLossCause == .notFound)
     // Observe the committed transaction before the new scan remembers its root.
+    f.gate.arm(replacement)
+    defer { f.gate.release() }
     await f.mounts.pauseEnumeration()
     defer { Task { await f.mounts.release() } }
     c.completeAccessFolderSelection(replacement, reselect: true)
     try await recoveryWaitAsync { await f.mounts.paused }
+    // A paused mount query can belong to a foreground check, so await actual commit.
+    try await recoveryWaitAsync {
+        let records = await f.services.files.records()
+        return !records.contains { $0.id == f.rootA } && records.contains { $0.id != f.rootB }
+    }
     let destination = try #require(await f.services.files.records().first { $0.id != f.rootB })
     let committed = try await f.services.recent.load()
     #expect(committed.allSatisfy { $0.rootID != f.rootA })
     #expect(committed.contains { $0.rootID == destination.id && $0.url.path == replacement.appendingPathComponent("One").path })
+    f.gate.release()
     await f.mounts.release()
     try await f.ready(c, folder: replacement)
     let recent = try await f.services.recent.load()
@@ -1134,4 +1144,101 @@ func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async thro
     #expect(c.accessLossCause == .notFound)
     #expect(await f.services.files.records().contains { $0.id == f.rootA })
     #expect(strip.superview == nil)
+}
+
+
+private func t231Fix2AppRecordedRoot(_ item: RecentFolder) throws -> String? {
+    let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any])
+    return object["recordedRoot"] as? String
+}
+
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t231Fix2ProductionRecentRecordingSurvivesOverlappingInactiveMoves() async throws {
+    let f = try await RecoveryFixture(aComponents: ["container", "album"]); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    c.browseRecoveredFolder(f.childOne, rootID: f.rootA)
+    try await f.ready(c, folder: f.childOne, count: 2)
+    try await c.rememberFolder(f.childOne, rootID: f.rootA)
+    let recorded = try #require(try await f.services.recent.load().first { $0.rootID == f.rootA })
+    #expect(try t231Fix2AppRecordedRoot(recorded) == f.a.absoluteString)
+    c.browseRecoveredFolder(f.b, rootID: f.rootB)
+    try await f.ready(c, folder: f.b)
+    let staging = f.base.appendingPathComponent("staging", isDirectory: true)
+    let container = f.a.deletingLastPathComponent()
+    try await f.moveRoot(to: staging)
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApplication.shared)
+    try await recoveryWaitAsync { await f.services.files.rootURL(f.rootA)?.path == staging.path }
+    try await f.services.files.runIsolated {
+        try FileManager.default.removeItem(at: container)
+        try FileManager.default.moveItem(at: staging, to: container)
+        f.bookmarks.relocate(staging, to: container)
+    }
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApplication.shared)
+    try await recoveryWaitAsync { await f.services.files.rootURL(f.rootA)?.path == container.path }
+    #expect(c.session.folderScan?.snapshot?.version.rootID == f.rootB)
+    #expect(try await f.services.recent.load().contains(recorded))
+    let replacement = f.base.appendingPathComponent("Replacement", isDirectory: true)
+    try FileManager.default.copyItem(at: container, to: replacement)
+    try FileManager.default.createDirectory(at: replacement.appendingPathComponent("album/One"), withIntermediateDirectories: true)
+    try FileManager.default.removeItem(at: container)
+    f.bookmarks.fail(container, true)
+    c.openRecent(recorded)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA && recoveryPage(c) != nil }
+    // Reconnection first renders an unknown cause, then classifies the root asynchronously.
+    try await recoveryWait { c.accessLossCause == .notFound }
+    f.gate.arm(replacement)
+    defer { f.gate.release() }
+    await f.mounts.pauseEnumeration()
+    defer { Task { await f.mounts.release() } }
+    c.completeAccessFolderSelection(replacement, reselect: true)
+    try await recoveryWaitAsync { await f.mounts.paused }
+    // The next mount query can belong to an outstanding foreground check.
+    // Observe FileAccess transaction publication before inspecting committed bytes.
+    try await recoveryWaitAsync {
+        let records = await f.services.files.records()
+        return !records.contains { $0.id == f.rootA } && records.contains { $0.id != f.rootB }
+    }
+    let committed = try await f.services.recent.load()
+    let mapped = committed.filter { $0.displayName == recorded.displayName }
+    #expect(mapped.count == 1)
+    #expect(mapped.first?.url.path == replacement.appendingPathComponent("One").path)
+    #expect(!mapped.contains { $0.url.path == replacement.appendingPathComponent("album/One").path })
+    if let item = mapped.first { #expect(try t231Fix2AppRecordedRoot(item) == replacement.absoluteString) }
+    f.gate.release()
+    await f.mounts.release()
+    try await f.ready(c, folder: replacement)
+}
+
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t231Fix2ServiceRecordingPathsPersistCurrentRootProvenance() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let granted = f.base.appendingPathComponent("Granted", isDirectory: true)
+    let selected = f.base.appendingPathComponent("Selected", isDirectory: true)
+    let moved = f.base.appendingPathComponent("Moved", isDirectory: true)
+    for url in [granted, selected] { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
+    let grantID = try await f.services.grant(granted)
+    let grantRecent = try #require(try await RecentFolderStore(url: f.base.appendingPathComponent("recent.json")).load().first { $0.rootID == grantID })
+    #expect(try t231Fix2AppRecordedRoot(grantRecent) == granted.absoluteString)
+    try await f.moveRoot(to: moved)
+    let reconnected = try await f.services.reconnect(f.rootA, folder: moved)
+    #expect(reconnected.rootID == f.rootA)
+    let reconnectRecent = try #require(try await RecentFolderStore(url: f.base.appendingPathComponent("recent.json")).load().first { $0.rootID == f.rootA })
+    #expect(try t231Fix2AppRecordedRoot(reconnectRecent) == moved.absoluteString)
+    let reselected = try await f.services.reselect(f.rootA, folder: selected, reference: nil)
+    #expect(!reselected.restored && reselected.rootID != f.rootA)
+    let selectRecent = try #require(try await RecentFolderStore(url: f.base.appendingPathComponent("recent.json")).load().first { $0.rootID == reselected.rootID })
+    #expect(try t231Fix2AppRecordedRoot(selectRecent) == selected.absoluteString)
+}
+
+
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t231Fix2MatchingReselectRefreshesRecordedRootProvenance() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let reference = try #require(try await f.services.files.captureRecoveryFolder(rootID: f.rootA, folder: f.childOne))
+    let moved = f.base.appendingPathComponent("MatchedMove", isDirectory: true)
+    try await f.moveRoot(to: moved)
+    let selected = try await f.services.reselect(f.rootA, folder: moved, reference: reference)
+    #expect(selected.restored && selected.rootID == f.rootA)
+    let recent = try #require(try await RecentFolderStore(url: f.base.appendingPathComponent("recent.json")).load().first { $0.rootID == f.rootA })
+    #expect(try t231Fix2AppRecordedRoot(recent) == moved.absoluteString)
 }
