@@ -61,11 +61,15 @@ function stripFencedCodeBlocks(body) {
 export function checkGates(body, head) {
   const unfencedBody = stripFencedCodeBlocks(body);
   const headings = unfencedBody.match(/^#{1,6}\s+gates\b.*$/gmi) ?? [];
+  const setextHeadings = [...unfencedBody.matchAll(/^([^\r\n]+)\r?\n[ \t]*(?:=+|-+)[ \t]*$/gmi)]
+    .map(match => match[1].trim())
+    .filter(heading => /^gates\b/i.test(heading));
+  headings.push(...setextHeadings);
   if (headings.length === 0) return { ok: false, reason: 'missing ## Gates table' };
   const ambiguous = headings.find(heading => heading.trimEnd() !== '## Gates');
   if (ambiguous) return { ok: false, reason: `ambiguous Gates heading: ${ambiguous}` };
   if (headings.length > 1) return { ok: false, reason: 'duplicate ## Gates section' };
-  const section = unfencedBody.match(/^## Gates\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/m)[1];
+  const section = unfencedBody.match(/^## Gates\s*$([\s\S]*?)(?=^##\s|^[^\r\n]+\r?\n[ \t]*(?:=+|-+)[ \t]*$|$(?![\s\S]))/m)[1];
   const lines = section.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   let headerAt = -1;
   for (let i = 0; i + 2 < lines.length; i++) {
