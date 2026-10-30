@@ -67,3 +67,36 @@ import Testing
         #expect(restored == 1)
     }
 }
+
+@Test @MainActor func issue282ReadingRingUsesAccentSegmentAndStopsForReduceMotion() throws {
+    for (page, appearanceName) in [("folder-loading", NSAppearance.Name.aqua), ("folder-loading", .darkAqua)] {
+        let design = try PinnedDesign.page(page, appearance: appearanceName == .aqua ? "light" : "dark")
+        let view = ReadingProgressView(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
+        view.appearance = NSAppearance(named: appearanceName)
+        view.reduceMotion = { false }
+        view.start()
+        // folder-loading.html: .mock-progress is 28x28 with a 2px divider ring and accent top segment.
+        #expect(view.dividerLayer.lineWidth == 2)
+        #expect(view.accentLayer.lineWidth == 2)
+        let dividerPath = try #require(view.dividerLayer.path)
+        let accentPath = try #require(view.accentLayer.path)
+        #expect(accentPath.boundingBox.height < dividerPath.boundingBox.height)
+        let dividerColor = try #require(view.dividerLayer.strokeColor)
+        let divider = try #require(NSColor(cgColor: dividerColor)?.usingColorSpace(.sRGB))
+        let expectedDivider = try design.color(":root", "--color-border", viewport: 1280)
+        #expect(abs(divider.redComponent - expectedDivider.red) < 0.01)
+        #expect(abs(divider.greenComponent - expectedDivider.green) < 0.01)
+        #expect(abs(divider.blueComponent - expectedDivider.blue) < 0.01)
+        let accentColor = try #require(view.accentLayer.strokeColor)
+        let accent = try #require(NSColor(cgColor: accentColor)?.usingColorSpace(.sRGB))
+        let expectedAccent = try design.color(":root", "--color-accent", viewport: 1280)
+        #expect(abs(accent.redComponent - expectedAccent.red) < 0.01)
+        #expect(abs(accent.greenComponent - expectedAccent.green) < 0.01)
+        #expect(abs(accent.blueComponent - expectedAccent.blue) < 0.01)
+        #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
+        view.reduceMotion = { true }
+        view.start()
+        #expect(view.layer?.animation(forKey: "picsee.reading.rotation") == nil)
+        #expect(view.accessibilityRole() == .progressIndicator)
+    }
+}
