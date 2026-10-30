@@ -315,3 +315,107 @@ func t229Fix3BlockedSourceProbeIsScopedResponsiveAndRejectsLateResult(_ stale: B
     #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
     #expect(f.codec.activeScopes == 0)
 }
+
+
+// POSIX denial only: genuine sandbox/TCC revocation is device-owned evidence.
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: ["foreground", "wake", "reader"])
+func t230RealRootDenialOnForegroundAndWakeInvalidatesHeldPermit(_ event: String) async throws {
+    let f = try await RootCheckFixture(); defer { f.remove() }
+    let folder = f.base.appendingPathComponent("Root")
+    let files = f.monitor.files
+    let lease = try await files.acquire(.root(f.root, file: folder))
+    let permit = try #require(f.monitor.state.permit(for: f.root))
+    let stamp = f.monitor.state.stamp(for: f.root)
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: folder.path)
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path) }
+    #expect(throws: (any Error).self) { try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) }
+    if event == "foreground" {
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApplication.shared)
+    } else if event == "wake" {
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: NSWorkspace.shared)
+    } else {
+        await f.monitor.reportReadFailure(f.root, from: stamp,
+            error: NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError))
+    }
+    try await rootCheckWait { f.monitor.state.snapshot(for: f.root)?.availability != .readable }
+    #expect(f.monitor.state.snapshot(for: f.root)?.availability == .lost(.accessExpired))
+    #expect(f.monitor.state.snapshot(for: f.root)?.counter == stamp.counter + 1)
+    #expect(!permit.isCurrent && !f.monitor.state.mayDeliver(stamp))
+    #expect(f.monitor.state.permit(for: f.root) == nil)
+    await files.release(lease)
+    #expect(f.codec.activeScopes == 0)
+}
+
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t230ReaderSourcesVerifyRootRatherThanUnreadableChild() async throws {
+    let f = try await RootCheckFixture(); defer { f.remove() }
+    let folder = f.base.appendingPathComponent("Root")
+    let child = folder.appendingPathComponent("broken.jpg")
+    let subfolder = folder.appendingPathComponent("Private")
+    try FileManager.default.createDirectory(at: subfolder, withIntermediateDirectories: true)
+    for url in [child, subfolder] {
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
+    }
+    defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: child.path)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: subfolder.path)
+    }
+    let stamp = f.monitor.state.stamp(for: f.root)
+    let permit = try #require(f.monitor.state.permit(for: f.root))
+    // Every reader reports into this common boundary; neither child proves root loss.
+    for _ in ["scan", "thumbnail", "viewer", "Inspector", "watcher"] {
+        for url in [child, subfolder] {
+            await f.monitor.reportReadFailure(f.root, from: stamp,
+                error: NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES)), file: url)
+            #expect(f.monitor.state.snapshot(for: f.root)?.availability == .readable)
+            #expect(f.monitor.state.stamp(for: f.root) == stamp && permit.isCurrent)
+        }
+    }
+}
+
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: [false, true])
+func t230ConcurrentReaderForegroundWakeShareOneLossEpisode(_ supersede: Bool) async throws {
+    let f = try await RootCheckFixture(); defer { f.remove() }
+    let folder = f.base.appendingPathComponent("Root")
+    let stamp = f.monitor.state.stamp(for: f.root)
+    let permit = try #require(f.monitor.state.permit(for: f.root))
+    var lossCounters: [UInt64] = []
+    let observation = f.monitor.state.observe { change in
+        if case .lost(let root, let counter) = change, root == f.root { lossCounters.append(counter) }
+    }
+    defer { f.monitor.state.removeObserver(observation) }
+    await f.mounts.pauseEnumeration()
+    let report = Task { @MainActor in
+        await f.monitor.reportReadFailure(f.root, from: stamp,
+            error: NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES)))
+    }
+    try await rootCheckWait { await f.mounts.paused }
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: folder.path)
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path) }
+    for _ in 0..<3 {
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApplication.shared)
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: NSWorkspace.shared)
+    }
+    // Notifications may enter before or after the held reader check. Either
+    // ordering must preserve one loss episode; Task.yield is not an entry proof.
+    if supersede { f.monitor.state.reauthorize(f.root, volumeUUID: "111") }
+    await f.mounts.release()
+    await report.value
+    if supersede {
+        // The lifecycle check may legitimately capture the new counter. Only this
+        // old report is constrained not to revoke newer authority; existing stale
+        // reader tests isolate that guarantee without a fresh lifecycle request.
+        #expect(!permit.isCurrent && !f.monitor.state.mayDeliver(stamp))
+    } else {
+        try await rootCheckWait { f.monitor.state.snapshot(for: f.root)?.availability != .readable }
+        #expect(f.monitor.state.snapshot(for: f.root)?.availability == .lost(.accessExpired))
+        #expect(f.monitor.state.snapshot(for: f.root)?.counter == stamp.counter + 1)
+        #expect(lossCounters == [stamp.counter + 1])
+        let lost = f.monitor.state.snapshot(for: f.root)
+        await f.monitor.reportReadFailure(f.root, from: stamp,
+            error: NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES)))
+        #expect(f.monitor.state.snapshot(for: f.root) == lost)
+        #expect(lossCounters == [stamp.counter + 1])
+        #expect(!permit.isCurrent)
+    }
+}

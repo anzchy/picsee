@@ -99,3 +99,35 @@ func accessCauseUnderlyingPermissionRefusalIsAccessExpired(code: Int) {
     #expect(startedWithoutListing.cause == .unknown)
     #expect(listedWithoutStartedScope.cause == .readable)
 }
+
+
+// #230: only actual refusal on a resolved root supports the specific cause.
+@Test(.timeLimit(.minutes(2))) func t230ResolvableRootRefusalClassifiesWithoutGuessing() {
+    let refusals = [
+        AccessProbeError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError),
+        AccessProbeError(domain: NSPOSIXErrorDomain, code: Int(EPERM)),
+        AccessProbeError(domain: NSPOSIXErrorDomain, code: Int(EACCES)),
+        AccessProbeError(domain: "wrapper", code: 8, underlyingErrors: [
+            AccessProbeError(domain: "nested", code: 9, underlyingErrors: [
+                AccessProbeError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError)])]),
+        AccessProbeError(domain: "wrapper", code: 8, underlyingErrors: [
+            AccessProbeError(domain: "nested", code: 9, underlyingErrors: [
+                AccessProbeError(domain: NSPOSIXErrorDomain, code: Int(EACCES))])])
+    ]
+    for refusal in refusals {
+        #expect(AccessCauseClassifier.classify(probeFacts(listing: .failed(refusal))) ==
+            AccessProbeClassification(cause: .accessExpired, isInTrash: false))
+        #expect(AccessCauseClassifier.classify(probeFacts(
+            resolution: AccessProbeResolution(url: nil, stale: nil, error: nil), listing: .failed(refusal))).cause == .unknown)
+        #expect(AccessCauseClassifier.classify(probeFacts(
+            resolution: .failed(domain: "bookmark", code: 1), listing: .failed(refusal))).cause == .notFound)
+        #expect(AccessCauseClassifier.classify(probeFacts(listing: .failed(refusal), isInTrash: true)) ==
+            AccessProbeClassification(cause: .unknown, isInTrash: true))
+    }
+    for code in [Int(EIO), Int(ENOENT)] {
+        #expect(AccessCauseClassifier.classify(probeFacts(listing: .failed(
+            AccessProbeError(domain: NSPOSIXErrorDomain, code: code)))).cause == .unknown)
+    }
+    #expect(AccessCauseClassifier.classify(probeFacts(listing: nil)).cause == .unknown)
+    #expect(AccessCauseClassifier.classify(probeFacts()).cause == .readable)
+}
