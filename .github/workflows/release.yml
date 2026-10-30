@@ -179,10 +179,11 @@ jobs:
           set -euo pipefail
           sed -e "s/{{VERSION}}/$VERSION/g" -e "s/{{BUILD}}/$BUILD/g" -e "s/{{SHA256}}/$SHA256/g" \
             docs/release/notes-template.md > "$RUNNER_TEMP/notes.md"
-          prerelease=()
-          [[ "$TAG" == *-rc.* ]] && prerelease=(--prerelease)
-          gh release create "$TAG" "$DMG" "$DMG.sha256" --draft --verify-tag --title "picsee $VERSION (${TAG#v})" \
-            --notes-file "$RUNNER_TEMP/notes.md" "${prerelease[@]}"
+          # A complete, non-empty argument list: Bash 3.2 treats "${empty[@]}" as unbound under set -u.
+          args=(release create "$TAG" "$DMG" "$DMG.sha256" --draft --verify-tag --title "picsee $VERSION (${TAG#v})"
+            --notes-file "$RUNNER_TEMP/notes.md")
+          if [[ "$TAG" == *-rc.* ]]; then args+=(--prerelease); fi
+          gh "${args[@]}"
 
       - name: Sign the update and open the appcast PR
         env:

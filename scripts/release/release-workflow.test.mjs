@@ -60,7 +60,8 @@ test("the private Sparkle key only reaches sign_update on stdin", () => {
 
 test("the release is a draft and nothing is published or merged", () => {
   const create = step(/draft release/i).text;
-  assert.match(create, /gh release create "\$TAG"[^\n]*--draft/);
+  assert.match(create, /args=\(release create "\$TAG"[^\n]*--draft/);
+  assert.match(create, /^\s*gh "\$\{args\[@\]\}"$/m);
   assert.match(create, /--verify-tag/);
   assert.doesNotMatch(workflow, /--draft=false|gh release edit|gh pr merge|--publish|git push[^\n]*\bmain\b/);
   const pr = step(/appcast/i).text;
