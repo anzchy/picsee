@@ -48,6 +48,8 @@ Device-Smoke: n/a — <reason; for a device run use PASS|NOT VERIFIED <head7> ru
 <optional: potential ramifications of merge>
 ```
 
+Build owner-gate and CI `app-tests` rows with `gh run view <id> --json headSha,url,status,conclusion,jobs > run.json`, then `node scripts/agents/gates-rows.mjs <summary.txt> --ci run.json --head <sha>`.
+
 ## Sections
 
 Skip all preambles and keep prose brief. Use the user's domain language from `GLOSSARY.md`.
