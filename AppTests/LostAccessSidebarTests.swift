@@ -223,3 +223,49 @@ func t232RecoveryRestoresNormalTreesAndCountsAcrossCauses(_ cause: AccessLossCau
         #expect(shell.mainContent.subviews.compactMap { $0 as? LostAccessStateView }.allSatisfy { $0.isHidden })
     }
 }
+
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t232LostSidebarRefinementKeepsEveryWindowCauseCurrentWithoutReads() async throws {
+    let fixture = try await T232SidebarFixture()
+    defer { fixture.remove() }
+    var controllers = [fixture.controller(), fixture.controller()]
+    defer { for controller in controllers { controller.window?.close() } }
+    controllers[0].browseRecoveredFolder(fixture.one, rootID: fixture.rootID)
+    controllers[1].browseRecoveredFolder(fixture.two, rootID: fixture.rootID)
+    try await fixture.ready(controllers[0], current: fixture.one, day: fixture.dayOne, count: 1)
+    try await fixture.ready(controllers[1], current: fixture.two, day: fixture.dayTwo, count: 2)
+    let readsBeforeLoss = await fixture.enumerator.totals
+    let state = fixture.services.monitor.state
+    state.register(fixture.rootID, volumeUUID: "T232-refinement")
+    _ = state.reportRootFailure(fixture.rootID, cause: .diskNotConnected,
+        from: state.stamp(for: fixture.rootID))
+    try await t232SidebarWait { controllers.allSatisfy { $0.accessLossCause == .diskNotConnected } }
+    let attempt = try #require(state.diskMounted(volumeUUID: "T232-refinement").first)
+
+    func expectCause(_ cause: AccessLossCause, _ title: String) throws {
+        for controller in controllers {
+            let shell = try t232SidebarShell(controller)
+            let row = try #require(shell.folderTree.rows.first { $0.current })
+            let expected = "\(String(localized: "Unavailable")), \(String(localized: String.LocalizationValue(title)))"
+            #expect(controller.accessLossCause == cause)
+            #expect(row.accessLossCause == cause)
+            #expect(row.accessibilityValue() as? String == expected)
+            #expect(row.accessibilityHelp() == expected)
+            #expect(try t232SidebarLostPage(controller).titleLabel.stringValue == String(localized: String.LocalizationValue(title)))
+        }
+    }
+
+    #expect(state.refineRecoveryFailure(attempt, cause: .notFound))
+    try await t232SidebarWait { controllers.allSatisfy { $0.accessLossCause == .notFound } }
+    let lateController = fixture.controller()
+    controllers.append(lateController)
+    lateController.browseRecoveredFolder(fixture.one, rootID: fixture.rootID)
+    try await t232SidebarWait { lateController.accessLossCause == .notFound }
+    try expectCause(.notFound, "Not Found")
+    #expect(await fixture.enumerator.totals == readsBeforeLoss)
+
+    #expect(state.refineRecoveryFailure(attempt, cause: .accessExpired))
+    try await t232SidebarWait { controllers.allSatisfy { $0.accessLossCause == .accessExpired } }
+    try expectCause(.accessExpired, "Access Has Expired")
+    #expect(await fixture.enumerator.totals == readsBeforeLoss)
+}

@@ -413,6 +413,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             accessRecoveryTask?.cancel(); accessRecoveryTask = nil
             accessRecoveryScan?.end(); accessRecoveryScan = nil
             accessLossCause = cause
+            if let folder = waitingAccessPosition?.folderURL {
+                gridShell.showFolderTree(current: GridSidebarFolder(url: folder, accessLossCause: cause),
+                    parent: gridShell.folderTree.parent, children: [])
+            }
             showWaitingAccessState()
             return
         }
