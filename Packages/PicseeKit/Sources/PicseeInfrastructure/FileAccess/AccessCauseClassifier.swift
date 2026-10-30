@@ -109,7 +109,7 @@ public enum AccessCauseClassifier {
         if facts.resolution.error != nil {
             return facts.volume.uuid == nil ? .unknown : .notFound
         }
-        if let error = facts.listing?.error, isPermissionRefusal(error) {
+        if facts.resolution.url != nil, let error = facts.listing?.error, isPermissionRefusal(error) {
             return .accessExpired
         }
         if facts.resolution.url != nil, facts.listing?.entryCount != nil {
@@ -122,8 +122,9 @@ public enum AccessCauseClassifier {
         if error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoPermissionError {
             return true
         }
-        return ([error] + error.underlyingErrors).contains {
-            $0.domain == NSPOSIXErrorDomain && ($0.code == Int(EPERM) || $0.code == Int(EACCES))
+        if error.domain == NSPOSIXErrorDomain && (error.code == Int(EPERM) || error.code == Int(EACCES)) {
+            return true
         }
+        return error.underlyingErrors.contains(where: isPermissionRefusal)
     }
 }

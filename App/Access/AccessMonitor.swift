@@ -101,7 +101,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
                 guard let self, case .lost(let id, let counter) = change,
                       let snapshot = state.snapshot(for: id),
                       case .lost(let cause) = snapshot.availability else { return }
-                files.diagnostics.emit("AccessRootLost root=\(id.rawValue.uuidString) counter=\(counter) cause=\(cause == .diskNotConnected ? "diskNotConnected" : "unknown") volume=\(snapshot.volumeUUID ?? "unknown")")
+                files.diagnostics.emit("AccessRootLost root=\(id.rawValue.uuidString) counter=\(counter) cause=\(String(describing: cause)) volume=\(snapshot.volumeUUID ?? "unknown")")
             }
             let stream = await port.events()
             events = Task { @MainActor [weak self] in
@@ -196,8 +196,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
                 markUnavailable(id, volumeUUID: volume.uuid, cause: .unknown)
                 return
             }
-            failure = result.classification.cause == .readable ? nil
-                : result.classification.cause == .diskNotConnected ? .diskNotConnected : .unknown
+            failure = Self.lossCause(for: result.classification.cause)
         } else {
             // The persistent grant is already app-wide. Cancellation of the
             // initiating UI task must not turn a skipped check into success.
@@ -240,6 +239,16 @@ private final class AccessMonitorNotification: @unchecked Sendable {
             _ = state.reportRootFailure(id, cause: cause, from: state.stamp(for: id))
         } else if cause == .diskNotConnected, let volumeUUID {
             state.diskUnmounted(volumeUUID: volumeUUID)
+        } else if let attempt = state.recoveryAttempt(for: id) {
+            _ = state.refineRecoveryFailure(attempt, cause: cause)
+        }
+    }
+    private static func lossCause(for cause: AccessProbeCause) -> AccessLossCause? {
+        switch cause {
+        case .readable: nil
+        case .diskNotConnected: .diskNotConnected
+        case .accessExpired: .accessExpired
+        case .notFound, .unknown: .unknown
         }
     }
     func readContext(for id: AccessRootID) async throws -> ReadContext {
@@ -337,12 +346,21 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         if let uuid = volume?.uuid, !(await isMounted(uuid)) {
             return .diskNotConnected
         }
+        let root: URL
+        do { root = try await files.probeRootURL(id) }
+        catch is CancellationError { return nil }
+        catch { return Task.isCancelled ? nil : .unknown }
         do {
-            let root = try await files.probeRootURL(id)
-            _ = try await files.withLease(.root(id, file: root)) { lease in
-                try FileManager.default.contentsOfDirectory(at: lease.url, includingPropertiesForKeys: nil).count
+            return try await files.withLease(.root(id, file: root)) { lease in
+                do {
+                    _ = try FileManager.default.contentsOfDirectory(at: lease.url, includingPropertiesForKeys: nil)
+                    return nil
+                } catch where AccessReadFailure.isPermissionDenied(error) {
+                    // Resolution and scope have already succeeded. Only the root's
+                    // actual read refusal establishes this cause; a child cannot.
+                    return AccessLossCause.accessExpired
+                }
             }
-            return nil
         } catch is CancellationError { return nil }
         catch { return Task.isCancelled ? nil : .unknown }
     }
@@ -416,7 +434,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
                   result.bookmarkVolume.uuid == attempt.volumeUUID,
                   grant.bookmarkVolume.uuid == attempt.volumeUUID else {
                 _ = state.refineRecoveryFailure(attempt, cause:
-                    result.classification.cause == .diskNotConnected ? .diskNotConnected : .unknown)
+                    Self.lossCause(for: result.classification.cause) ?? .unknown)
                 return
             }
             diagnosticStage = "mountedState"
