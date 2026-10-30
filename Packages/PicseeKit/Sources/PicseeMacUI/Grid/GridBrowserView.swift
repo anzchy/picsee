@@ -55,6 +55,7 @@ import PicseeApplication
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.maximumNumberOfLines = 1
         nameLabel.wantsLayer = true
+        nameLabel.layer?.cornerRadius = DesignMetrics.radii["inner"]!
         selectionBadge.alignment = .center
         selectionBadge.textColor = .white
         selectionBadge.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -63,16 +64,16 @@ import PicseeApplication
         selectionBadge.layer?.borderWidth = 1
         selectionBadge.isHidden = true
         selectionBadge.setAccessibilityElement(false)
-        // Selection follows page 11/12's tile outline; Current Item is an inset ring.
+        // Selection follows page 11/12's tile outline; Current Item has a 2pt outside ring.
         selectionOutline.borderWidth = 2
         selectionOutline.cornerRadius = DesignMetrics.radii["inner"]! + 4
         selectionOutline.isHidden = true
         surface.layer?.addSublayer(selectionOutline)
-        currentRing.frame = tile.bounds.insetBy(dx: 3, dy: 3)
-        currentRing.cornerRadius = DesignMetrics.radii["inner"]!
+        currentRing.frame = tile.frame.insetBy(dx: -2, dy: -2)
+        currentRing.cornerRadius = DesignMetrics.radii["inner"]! + 2
         currentRing.borderWidth = 2
         currentRing.isHidden = true
-        tile.layer?.addSublayer(currentRing)
+        surface.layer?.addSublayer(currentRing)
         surface.addSubview(tile)
         surface.addSubview(placeholder)
         surface.addSubview(nameLabel)
@@ -92,7 +93,7 @@ import PicseeApplication
         selectionBadge.frame = NSRect(x: tile.frame.maxX - 25, y: tile.frame.maxY - 25,
             width: 18, height: 18)
         selectionOutline.frame = tile.frame.insetBy(dx: -4, dy: -4)
-        currentRing.frame = tile.bounds.insetBy(dx: 3, dy: 3)
+        currentRing.frame = tile.frame.insetBy(dx: -2, dy: -2)
     }
 
     var tileLayer: CALayer? { tile.layer }
