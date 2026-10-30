@@ -102,7 +102,9 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    commit its diff as `docs(ledger): garden <b>..<h>`; NEEDS-OWNER → fix rows (限制/在哪 only) or `无用户可见变化：` lines,
    rerun; acceptance changes only in a separate commit quoting the user. Run it in a clean detached worktree
    (`picsee-wt/owner-gates`), never in one an implementer is using; carry its diff to the branch as a patch (guide §5.7).
-8. **PR & merge** — body: Summary, Review table + Still open, Gates, `Ledger-Gardener:` line. For changed UI, add
+8. **PR & merge** — body: Summary, Review table + Still open, `## Gates`, `Ledger-Gardener:` line. Build Gates with
+   `node scripts/agents/gates-rows.mjs <summary.txt> --head <sha>` for the six owner-gates lanes, then add CI `app-tests`,
+   audit and device-smoke rows; keep every status, SHA and source honest and run the PR-body lint. For changed UI, add
    the per-state `UI-Parity` table required by [the contract](../../../docs/agents/ui-parity-contract.md). Before
    merge, every changed reachable state needs design-derived automated assertions (geometry from the pinned CSS checked
    on rendered frames, colours, truncation, visible states, keyboard/menu behaviour), marked `AUTO-PASS`, plus both

@@ -47,7 +47,8 @@ delegator 在 brief 中列出**本次新增或改变的所有可达状态和必�
 - **从固定版设计推出的自动断言**：几何（列数、尺寸、间距、内边距按 HTML/CSS 规则推导，并断言实际渲染的 frame，不只断言布局输入）、颜色与外观、文字截断、选中/当前项等可见状态，以及键盘、菜单、焦点等行为测试。测试写明它对应的设计文件与规则。
 - **独立代码审计**（当前 roster 的审计者）覆盖上述断言是否真能拦住错误实现。
 - PR 描述放一张逐状态表：设计 tree OID、HTML/manifest SHA256、对应的自动断言，和状态 `AUTO-PASS`（自动断言通过、待批次真机）/`FAIL`/`PENDING(<WP>)`/`NOT VERIFIED`。`AUTO-PASS` 不是视觉通过，账簿不能因此升级。
-- 写好 PR 描述后，在本地运行 `node scripts/agents/ui-parity-pr-body-lint.mjs --base main --body-file /path/to/pr-body.md`。若 `main` 与 `HEAD` 间改动了 `App/` 或 `Packages/PicseeKit/Sources/PicseeMacUI/`，脚本要求描述有含数据行的 `## UI-Parity` Markdown 表格、每行合法且非 `FAIL` 的状态，以及有效的 `Device-Smoke` 结论或带理由的 `n/a`；其他 PR 若写了 `Device-Smoke` 行，也检查其格式与理由。它不替代独立审计。此脚本未接入 CI。
+- 每个 PR 描述都必须有 `## Gates` 表格（`Lane | Status | SHA | Source`），固定 lanes 为 `package-tests`、`package-coverage`、`app-tests`、`unsigned-build`、`node-tooling`、`ledger`、`diff-check`、`audit`、`device-smoke`，各出现一次；额外 lane 也按相同规则检查。状态只能是 `PASS`、`FAIL`、`NOT RUN`、`N/A`、`NOT VERIFIED`：有结果的状态需要 7–40 位 hex SHA 和来源，`NOT RUN`/`N/A` 的 SHA 为 `—` 或空且必须写理由；任何 `FAIL` 都拒绝合入。`PASS` 的 SHA 必须是 PR head 的前缀，否则 Source 必须含 `rebase-verify.sh` 的 `CODE same <40-hex>`。若有 `Device-Smoke:` 行，其状态和 SHA 必须与 `device-smoke` 行一致。
+- 写好 PR 描述后，在本地运行 `node scripts/agents/ui-parity-pr-body-lint.mjs --base main --body-file /path/to/pr-body.md`。若 `main` 与 `HEAD` 间改动了 `App/` 或 `Packages/PicseeKit/Sources/PicseeMacUI/`，脚本要求描述有含数据行的 `## UI-Parity` Markdown 表格、每行合法且非 `FAIL` 的状态，以及有效的 `Device-Smoke` 结论或带理由的 `n/a`；其他 PR 若写了 `Device-Smoke` 行，也检查其格式与理由。它不替代独立审计。CI 的 `pr-body-lint` job 在每个 `pull_request` 上运行同一检查。
 - 已有真机证据显示的 `FAIL` 必须先修或经用户决定才能合入。`PENDING` 的规则同下文。
 
 ### 变更路径真机冒烟（每个用户可见改动的 PR 合入前，#175）
