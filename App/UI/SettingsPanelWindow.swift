@@ -383,9 +383,6 @@ enum SettingsSection: String, CaseIterable {
             let width = button.intrinsicContentSize.width
             button.frame = NSRect(x: linkX, y: 283, width: width, height: 26)
             configure(button, entry: link.entry, id: "settings.about.link.\(index)", title: link.title)
-            button.isEnabled = true
-            button.refusesFirstResponder = false
-            button.setAccessibilityLabel(link.title)
             pane.addSubview(button)
             linkX += width + 14
         }
