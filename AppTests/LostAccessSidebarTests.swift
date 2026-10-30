@@ -182,3 +182,44 @@ func t232LostAccessSidebarAcrossCausesAgreesWithoutReads(_ cause: AccessLossCaus
     }
     #expect(await fixture.enumerator.totals == readsBeforeLoss)
 }
+
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: [
+    AccessLossCause.diskNotConnected, .notFound, .accessExpired, .unknown,
+])
+func t232RecoveryRestoresNormalTreesAndCountsAcrossCauses(_ cause: AccessLossCause) async throws {
+    let fixture = try await T232SidebarFixture()
+    defer { fixture.remove() }
+    let controllers = [fixture.controller(), fixture.controller()]
+    defer { for controller in controllers { controller.window?.close() } }
+    controllers[0].browseRecoveredFolder(fixture.one, rootID: fixture.rootID)
+    controllers[1].browseRecoveredFolder(fixture.two, rootID: fixture.rootID)
+    try await fixture.ready(controllers[0], current: fixture.one, day: fixture.dayOne, count: 1)
+    try await fixture.ready(controllers[1], current: fixture.two, day: fixture.dayTwo, count: 2)
+    await fixture.services.monitor.register(fixture.rootID)
+    _ = fixture.services.monitor.state.reportRootFailure(fixture.rootID, cause: cause,
+        from: fixture.services.monitor.state.stamp(for: fixture.rootID))
+    try await t232SidebarWait {
+        controllers.allSatisfy { $0.waitingAccessPosition?.rootID == fixture.rootID && $0.accessLossCause == cause }
+    }
+
+    await fixture.services.monitor.reauthorize(fixture.rootID)
+    for (index, current) in [fixture.one, fixture.two].enumerated() {
+        let day = index == 0 ? fixture.dayOne : fixture.dayTwo
+        let expectedCount = index == 0 ? 1 : 2
+        let controller = controllers[index]
+        let shell = try t232SidebarShell(controller)
+        try await t232SidebarWait {
+            controller.waitingAccessPosition == nil && controller.session.folderScan?.snapshot?.isComplete == true &&
+            shell.folderTree.rows.map(\.folderURL) == [fixture.rootURL, current, day] &&
+            shell.folderTree.rows.allSatisfy { !$0.countLabel.isHidden }
+        }
+        #expect(controller.accessLossCause == nil)
+        #expect(shell.folderTree.rows[0].countLabel.stringValue == "9")
+        let row = shell.folderTree.rows[1]
+        #expect(row.accessLossCause == nil)
+        #expect(row.countLabel.stringValue == String(expectedCount))
+        #expect(row.warningGlyph.isHidden && row.disclosureGlyph.isHidden)
+        #expect(shell.folderTree.rows[2].countLabel.stringValue == (index == 0 ? "3" : "4"))
+        #expect(shell.mainContent.subviews.compactMap { $0 as? LostAccessStateView }.allSatisfy { $0.isHidden })
+    }
+}
