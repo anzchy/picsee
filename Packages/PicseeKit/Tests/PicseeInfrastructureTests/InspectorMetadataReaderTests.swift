@@ -38,7 +38,7 @@ private actor BrokenInspectorLease: AccessLeasing {
 
 @Test func issue136InspectorReadsRealImageHeaderAndAttributes() async throws {
     let url = fixture("landscape-3x2.png")
-    let reader = ImageIOInspectorMetadataReader(access: InspectorLease())
+    let reader = ImageIOInspectorMetadataReader(access: InspectorLease(), pipeline: ImageIOPipeline())
     let value = try await reader.read(url, access: .fileGrant(url))
     #expect(value.pixelWidth == 600)
     #expect(value.pixelHeight == 400)

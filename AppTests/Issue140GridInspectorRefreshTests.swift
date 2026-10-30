@@ -63,8 +63,9 @@ private actor CountingGridInspectorReader: InspectorMetadataReading {
         browser: FolderBrowser(),
         watch: WatchHub(access: access, source: FSEventSource(), scheduler: DispatchWatchScheduler()))
     let servicesTask = Task<AccessServices, Error> { services }
-    let reader = CountingGridInspectorReader(base: WindowInspectorReader(services: servicesTask))
-    let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
+    let pipeline = ImageIOPipeline()
+    let reader = CountingGridInspectorReader(base: WindowInspectorReader(services: servicesTask, pipeline: pipeline))
+    let controller = CanvasWindowController(pipeline: pipeline,
         preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: servicesTask,
         motionPolicy: MotionPolicy(source: GridInspectorMotionSource()), inspectorReader: reader)
     let window = try #require(controller.window)
