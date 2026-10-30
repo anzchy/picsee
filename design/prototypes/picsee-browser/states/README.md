@@ -26,6 +26,7 @@ python3 -m http.server 4313 --bind 127.0.0.1 --directory design/prototypes/picse
 | `index.html` | 从manifest加载的浏览索引，不另维护一份页面列表 | 是 |
 | 22个同名HTML | 正式静态状态；不声明按钮行为已实现 | 是 |
 | `journeys.html` | 用户旅程图，是[计划 §1.6](../../../../docs/PICSEE_DEVELOPMENT_PLAN.md)旅程索引的视图（ADR-013），两者不一致时以 §1.6 为准；卡片只引用本目录的状态稿，不显示实现进度（进度看功能账簿）。不是状态稿，不进 `manifest.json`，由 `index.html` 链接 | 是 |
+| `home-image-wall.html` | 首页图片墙参考稿：2026-10-30 用户在三个方向中选定 C（斜置拼贴、缓慢漂移）并要求放大（「选C，但是图片墙可以放大」）；首页没有底栏，`?theme=dark` 看深色。**不是状态稿，不进 `manifest.json`，不是验收依据**；与 21 `first-launch.html`、已落地的 B4 散落相纸（P3-16 #202）的关系，以及首次启动时图片墙放什么图，待 `/grill-with-docs` → `/to-spec` → `/to-tickets` 决定。原型在分支 `prototype/footer-transparent` | 是 |
 | `assets/images/`、`assets/manifest.json` | 13个按内容哈希命名的共享图片，替代95处重复base64 | 是 |
 | `_ds/` | 设计系统编译后的运行时副本，由import工具同步 | 是，保证预览可直接运行 |
 | `vendor/` | 固定版本React预览依赖；不是原生App依赖 | 是 |
