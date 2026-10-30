@@ -40,16 +40,17 @@ import PicseeInfrastructure
 
     let status = try #require(issue282FooterView("grid.current-file-status", in: shell) as? NSTextField)
     let count = try #require(issue282FooterView("grid.folder-count", in: shell) as? NSTextField)
-    // folder-loading.html: `<span>—</span><span class="grid-folder-count">正在读取…</span>` at x 63 and 82, gap 12.
-    #expect(status.stringValue == "—")
+    // folder-loading.html: `<span>—</span><span class="grid-folder-count">正在读取…</span>` text at x 63 and 82, gap 12;
+    // its `—` renders 7px wide, which is SF's en dash. Frames are 2pt wider than the text on each side.
+    #expect(status.stringValue == "–")
     #expect(!status.isHidden)
-    #expect(status.frame.minX == 62)
-    #expect(abs(status.frame.width - ceil(status.intrinsicContentSize.width)) <= 1)
+    #expect(status.frame.minX == 61)
+    #expect(status.frame.width == ceil(status.cell?.cellSize.width ?? 0))
     #expect(count.stringValue == "Reading…")
     #expect(!count.isHidden)
     #expect(count.font == .monospacedSystemFont(ofSize: 12, weight: .regular))
-    #expect(count.frame.minX - status.frame.maxX == 12)
-    #expect(count.frame.width >= count.intrinsicContentSize.width)
+    #expect(count.frame.minX - status.frame.maxX == 8)
+    #expect(count.frame.width >= ceil(count.cell?.cellSize.width ?? .infinity))
     for field in [status, count] {
         #expect(abs(field.frame.midY - shell.footer.bounds.midY) <= 1, "\(field.stringValue) centred")
     }
@@ -64,4 +65,36 @@ import PicseeInfrastructure
     #expect(status.stringValue == "DSC_0000.jpg")
     #expect(count.stringValue == "3 images")
     #expect(!count.isHidden)
+}
+
+/// folder-loading.html: the folder being read shows `0` in the sidebar until its count is known (device: blank).
+@Test @MainActor func issue282SidebarShowsZeroForTheFolderBeingRead() throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 1280, height: 772),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    let grid = GridBrowserView(frame: NSRect(origin: .zero, size: shell.mainFrame.size))
+    shell.mainContent.addSubview(grid)
+    let presentation = GridViewerPresentation(canvas: NSView(), chrome: NSView(), state: NSView(),
+        grid: grid, inspector: NSView(), shell: shell)
+    let folder = URL(fileURLWithPath: "/tmp/picsee-reading-282-zero")
+    shell.showFolderTree(current: GridSidebarFolder(url: folder), parent: nil,
+        children: [GridSidebarFolder(url: folder.appendingPathComponent("child"))])
+    presentation.showGrid(reading: true)
+    let current = try #require(shell.folderTree.rows.first(where: { $0.current }))
+    #expect(current.countLabel.stringValue == "0")
+    #expect(!current.countLabel.isHidden)
+    let child = try #require(shell.folderTree.rows.first(where: { !$0.current }))
+    #expect(child.countLabel.isHidden, "only the folder being read shows 0")
+
+    // The tree can be rebuilt while reading (sidebar rows arrive late).
+    shell.showFolderTree(current: GridSidebarFolder(url: folder), parent: nil, children: [])
+    #expect(shell.folderTree.rows.first(where: { $0.current })?.countLabel.stringValue == "0")
+    shell.updateFolderCount(nil, for: folder)
+    #expect(shell.folderTree.rows.first(where: { $0.current })?.countLabel.stringValue == "0")
+
+    // After reading an unknown count is blank again; a known count is shown as is.
+    presentation.showGrid(reading: false)
+    #expect(shell.folderTree.rows.first(where: { $0.current })?.countLabel.isHidden == true)
+    shell.updateFolderCount(12, for: folder)
+    #expect(shell.folderTree.rows.first(where: { $0.current })?.countLabel.stringValue == "12")
 }

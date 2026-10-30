@@ -196,8 +196,19 @@ public struct GridSidebarFolder: Sendable, Equatable {
         guide.isHidden = true
         needsLayout = true
     }
+    /// folder-loading.html: the folder being read shows `0` until its count is known.
+    public var showsZeroForUnknownCurrent = false {
+        didSet {
+            guard let currentFolder else { return }
+            rows.first(where: { $0.current })?.setCount(shownCount(currentFolder.count, current: true))
+        }
+    }
+    private func shownCount(_ count: Int?, current: Bool) -> Int? {
+        count ?? (current && showsZeroForUnknownCurrent ? 0 : nil)
+    }
     private func append(_ folder: GridSidebarFolder, depth: Int, current: Bool) {
-        let row = GridSidebarFolderButton(folder: folder, depth: depth, current: current)
+        let row = GridSidebarFolderButton(folder: GridSidebarFolder(url: folder.url,
+            count: shownCount(folder.count, current: current)), depth: depth, current: current)
         if depth > 0 && !current { row.countLabel.alphaValue = 0.8 }
         row.target = self
         row.action = #selector(selectFolder(_:))
@@ -212,7 +223,7 @@ public struct GridSidebarFolder: Sendable, Equatable {
         if currentFolder?.url == url { currentFolder = GridSidebarFolder(url: url, count: count) }
         if parent?.url == url { parent = GridSidebarFolder(url: url, count: count) }
         if let index = children.firstIndex(where: { $0.url == url }) { children[index] = GridSidebarFolder(url: url, count: count) }
-        rows.first(where: { $0.folderURL == url })?.setCount(count)
+        if let row = rows.first(where: { $0.folderURL == url }) { row.setCount(shownCount(count, current: row.current)) }
     }
     public override func layout() {
         super.layout()

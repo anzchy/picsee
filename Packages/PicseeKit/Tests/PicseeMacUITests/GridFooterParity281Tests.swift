@@ -52,13 +52,14 @@ import PicseeInfrastructure
         let divider = try #require(issue281FooterView("grid.footer.leading-divider", in: shell))
         #expect(divider.frame == NSRect(x: 52, y: 10, width: 1, height: 20))
         let file = try #require(issue281FooterView("grid.current-file-status", in: shell) as? NSTextField)
-        #expect(file.frame.minX == 62)
-        #expect(file.frame.width <= 240)
+        // Text boxes: an NSTextField draws 2pt inside its frame (name text at x 63, at most 240 wide).
+        #expect(file.frame.minX == 61)
+        #expect(file.frame.width <= 244)
         #expect(file.lineBreakMode == .byTruncatingTail)
         #expect(file.stringValue.hasPrefix("Long旅行FileName"))
         let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
         #expect(count.stringValue == "12 images")
-        #expect(count.frame.minX - file.frame.maxX == 12)
+        #expect(count.frame.minX - file.frame.maxX == 8, "12pt between the text boxes")
         let hint = try #require(issue281FooterView("grid.keyboard-hint", in: shell))
         #expect(!hint.isHidden)
         #expect(hint.frame.maxX + 16 == shell.searchButton.frame.minX)
@@ -117,9 +118,9 @@ import PicseeInfrastructure
         let file = try #require(issue281FooterView("grid.current-file-status", in: shell) as? NSTextField)
         let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
         // grid-light.html: .grid-file-status>span:first-child max-width is 240/180/140/90px; .grid-file-status gap becomes 7px at 800px.
-        #expect(abs(file.frame.width - item.fileWidth) <= 1, "filename width at \(item.width)")
+        #expect(abs(file.frame.width - 4 - item.fileWidth) <= 1, "filename text width at \(item.width)")
         #expect(count.isHidden == item.countHidden, "count visibility at \(item.width)")
-        #expect(abs(count.frame.minX - file.frame.maxX - item.countGap) <= 1, "count gap at \(item.width)")
+        #expect(abs(count.frame.minX - file.frame.maxX + 4 - item.countGap) <= 1, "count text gap at \(item.width)")
     }
 }
 
@@ -133,17 +134,97 @@ import PicseeInfrastructure
     let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
     // grid-light.html: span:first-child hugs `DSC_0342.jpg` (x 63–143) and the count follows 12px later (x 155).
     #expect(file.stringValue == "DSC_0340.jpg")
-    #expect(abs(file.frame.width - ceil(file.intrinsicContentSize.width)) <= 1)
-    #expect(count.frame.minX - file.frame.maxX == 12)
+    #expect(file.frame.width == ceil(file.cell?.cellSize.width ?? 0))
+    #expect(count.frame.minX - file.frame.maxX == 8, "12pt between the text boxes")
     #expect(count.frame.minX < 180, "count sits after the name, not in a 240pt column")
-    #expect(count.frame.width >= count.intrinsicContentSize.width, "\(count.stringValue) is truncated")
+    #expect(count.frame.width >= ceil(count.cell?.cellSize.width ?? .infinity), "\(count.stringValue) is truncated")
 
     // A larger count after the last layout must still fit in full (device: `20000 张…`).
     shell.setSearchStatus(resultCount: 20000, term: "")
     shell.layoutSubtreeIfNeeded()
     #expect(count.stringValue == "20000 images")
-    #expect(count.frame.width >= count.intrinsicContentSize.width, "\(count.stringValue) is truncated")
-    #expect(count.frame.minX - file.frame.maxX == 12)
+    #expect(count.frame.width >= ceil(count.cell?.cellSize.width ?? .infinity), "\(count.stringValue) is truncated")
+    #expect(count.frame.minX - file.frame.maxX == 8)
+}
+
+/// Device parity-281-282-10301650 FAIL-1/FAIL-5: `DSC_0341.j…`, `12 张…`, `正在读…`. An NSTextField draws its text 2pt
+/// inside its frame, so a frame only as wide as the intrinsic text truncates it. The CSS boxes are the text boxes.
+@Test @MainActor func issue281FooterLabelsFitTheirCellsAfterControllerUpdates() throws {
+    let (shell, grid, window) = try issue281FooterScene(width: 1280)
+    defer { window.close() }
+    let file = try #require(issue281FooterView("grid.current-file-status", in: shell) as? NSTextField)
+    let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
+    func textBox(_ field: NSTextField) -> NSRect { field.frame.insetBy(dx: 2, dy: 0) }
+    func expectFits(_ field: NSTextField, _ step: String) {
+        let needed = ceil(field.cell?.cellSize.width ?? .infinity)
+        #expect(field.frame.width >= needed, "\(step): `\(field.stringValue)` truncated (\(field.frame.width) < \(needed))")
+    }
+    // The scene is laid out once; from here only the controller calls change the strings.
+    let first = try #require(grid.displayedItemIDs.first)
+    grid.activate(currentItemID: first)
+    shell.layoutSubtreeIfNeeded()
+    expectFits(file, "activate")
+    expectFits(count, "activate")
+    for name in ["DSC_0341.jpg", "山海之间 0341.jpg"] {
+        for total in [12, 20000] {
+            shell.setCurrentFile(name)
+            shell.setSearchStatus(resultCount: total, term: "")
+            shell.layoutSubtreeIfNeeded()
+            expectFits(file, "\(name) \(total)")
+            expectFits(count, "\(name) \(total)")
+            // grid-light.html: name text at x 63, count text 12px after it (x 155 after `DSC_0342.jpg`).
+            #expect(textBox(file).minX == 63)
+            #expect(textBox(count).minX - textBox(file).maxX == 12)
+        }
+    }
+
+    // folder-loading.html: `<span>—</span>` in Avenir Next is 7px wide (ink x 63–69); `正在读取…` starts at x 82.
+    shell.setReadingStatus(true)
+    shell.layoutSubtreeIfNeeded()
+    #expect(file.stringValue == "–")
+    expectFits(file, "reading")
+    expectFits(count, "reading")
+    #expect(textBox(file).minX == 63)
+    #expect(abs(textBox(count).minX - 82) <= 1)
+    shell.setReadingStatus(false)
+    shell.layoutSubtreeIfNeeded()
+    expectFits(file, "after reading")
+    expectFits(count, "after reading")
+}
+
+/// Audit F1: a long search summary must not take the filename's slot, hidden (480pt) or beside the editor (800pt).
+@Test @MainActor func issue281LongSearchSummaryLeavesTheFilenameSlot() throws {
+    let term = String(repeating: "DSC_034", count: 12)
+    do {
+        let (shell, _, window) = try issue281FooterScene(width: 480)
+        defer { window.close() }
+        let file = try #require(issue281FooterView("grid.current-file-status", in: shell) as? NSTextField)
+        let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
+        shell.setCurrentFile("DSC_0341.jpg")
+        shell.setSearchStatus(resultCount: 1, term: term)
+        shell.layoutSubtreeIfNeeded()
+        #expect(count.isHidden)
+        #expect(count.frame.width == 0, "a hidden status reserves no width")
+        #expect(file.frame.width >= ceil(file.cell?.cellSize.width ?? .infinity), "480: filename lost its slot")
+    }
+    do {
+        let (shell, _, window) = try issue281FooterScene(width: 800)
+        defer { window.close() }
+        let file = try #require(issue281FooterView("grid.current-file-status", in: shell) as? NSTextField)
+        let count = try #require(issue281FooterView("grid.folder-count", in: shell) as? NSTextField)
+        shell.setCurrentFile("DSC_0341.jpg")
+        shell.setSearchStatus(resultCount: 1, term: term)
+        shell.focusSearch()
+        shell.layoutSubtreeIfNeeded()
+        #expect(!count.isHidden)
+        #expect(file.frame.width >= ceil(file.cell?.cellSize.width ?? .infinity), "800: filename lost its slot")
+        // grid-light.html at 800px: 7px between the text boxes; the summary ends 16pt before the editor.
+        #expect(count.frame.minX - file.frame.maxX == 3)
+        #expect(count.frame.maxX <= shell.searchField.frame.minX - 16)
+        #expect(count.frame.width > 0)
+        #expect(count.frame.width < ceil(count.cell?.cellSize.width ?? 0), "the long summary is truncated")
+        #expect(count.lineBreakMode == .byTruncatingTail)
+    }
 }
 
 @Test @MainActor func issue281FooterTextIsCentredInFortyPointFooter() throws {
