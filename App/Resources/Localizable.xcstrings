@@ -801,6 +801,13 @@
         }
       }
     },
+    "Add Folder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Add Folder" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "添加文件夹" } }
+      }
+    },
     "Folders": {
       "extractionState": "manual",
       "localizations": {
