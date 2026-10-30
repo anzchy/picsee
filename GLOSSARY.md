@@ -44,6 +44,20 @@ _Avoid_: source, location
 A record that a file or folder was recently viewed, which reopens without asking only while it is still inside an Access Root.
 _Avoid_: recent grant, history bookmark
 
+### Window
+
+**Home**（首页）:
+A window with no folder open: the Image Wall with the way to choose or drop a folder, and no Bottom Bar.
+_Avoid_: first-launch screen (when any folderless window is meant), start page, empty state
+
+**Image Wall**（图片墙）:
+The tilted collage of picsee's built-in sample photographs behind the Home; it never shows the user's own images.
+_Avoid_: scattered prints (the B4 design it replaced), background photos
+
+**Bottom Bar**（底栏）:
+The bar along the bottom of a window with a folder open, holding the sidebar toggle, the Current Item with the folder count, and the Grid tools; the Grid may scroll behind it.
+_Avoid_: footer, status bar, toolbar
+
 ### Browsing
 
 **Grid**（网格）:
@@ -76,6 +90,7 @@ _Avoid_: locale, region, "translation" for the setting itself
 
 ## Relationships
 
+- The **Home** has no **Bottom Bar**; every window with a folder open shows it, including the **Reading State**, an empty folder, a failed read and **Lost Access**.
 - A change of **Interface Language** takes effect at the next launch; until then all text stays in the language picsee launched with, so the window never shows two languages at once.
 - Follow System maps any Chinese system language, Traditional included, to Simplified Chinese.
 - Relaunching to apply an **Interface Language** reopens what was open: the same folder in the **Grid**, or the same image.
