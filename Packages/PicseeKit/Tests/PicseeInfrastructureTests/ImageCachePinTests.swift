@@ -9,7 +9,7 @@ private actor CachePinObserver: ImagePresentationPinning {
     let closed: AsyncStream<RenderKey>
     private let signal: AsyncStream<RenderKey>.Continuation
     init(_ pipeline: ImageIOPipeline) { self.pipeline = pipeline; (closed, signal) = AsyncStream.makeStream() }
-    func pin(_ key: RenderKey, image: DecodedImage) async { await pipeline.pin(key, image: image) }
+    @discardableResult func pin(_ key: RenderKey, image: DecodedImage) async -> Bool { await pipeline.pin(key, image: image) }
     func unpin(_ key: RenderKey) async {
         await pipeline.unpin(key)
         if !key.isPreview { signal.yield(key) }

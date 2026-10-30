@@ -84,9 +84,9 @@ public final class ImageIOPipeline: ImagePipeline, CoverageRequesting, ImagePres
         guard let cacheTrace else { return nil }
         return ResourceSnapshotContext(tracer: cacheTrace, activity: await admission.activity())
     }
-    public func pin(_ key: RenderKey, image: DecodedImage) async {
+    @discardableResult public func pin(_ key: RenderKey, image: DecodedImage) async -> Bool {
         let context = await snapshotContext()
-        await cache.pin(key, image: image, context: context)
+        return await cache.pin(key, image: image, context: context)
     }
     public func unpin(_ key: RenderKey) async {
         let context = await snapshotContext()

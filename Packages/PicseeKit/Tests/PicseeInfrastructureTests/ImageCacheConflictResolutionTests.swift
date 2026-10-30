@@ -36,7 +36,7 @@ private actor Issue58Presentation: ImagePresentationPinning {
     init(_ pipeline: ImageIOPipeline) {
         self.pipeline = pipeline; (releases, signal) = AsyncStream.makeStream()
     }
-    func pin(_ key: RenderKey, image: DecodedImage) async { await pipeline.pin(key, image: image) }
+    @discardableResult func pin(_ key: RenderKey, image: DecodedImage) async -> Bool { await pipeline.pin(key, image: image) }
     func unpin(_ key: RenderKey) async { await pipeline.unpin(key); signal.yield(key) }
 }
 

@@ -8,8 +8,9 @@ actor ViewerPinRecorder: ImagePresentationPinning {
     private(set) var events: [ViewerPinEvent] = []
     private(set) var outstanding: [RenderKey: Int] = [:]
     private var drained: [CheckedContinuation<Void, Never>] = []
-    func pin(_ key: RenderKey, image: DecodedImage) {
+    @discardableResult func pin(_ key: RenderKey, image: DecodedImage) -> Bool {
         events.append(.pin(key)); outstanding[key, default: 0] += 1
+        return true
     }
     func unpin(_ key: RenderKey) {
         events.append(.unpin(key))
@@ -52,12 +53,13 @@ private actor SuspendedPinPort: ImagePresentationPinning {
     private var suspended: CheckedContinuation<Void, Never>?
     private var drained: [CheckedContinuation<Void, Never>] = []
     init() { (notifications, signal) = AsyncStream.makeStream() }
-    func pin(_ key: RenderKey, image: DecodedImage) async {
+    @discardableResult func pin(_ key: RenderKey, image: DecodedImage) async -> Bool {
         outstanding[key, default: 0] += 1
         if first {
             first = false
             await withCheckedContinuation { suspended = $0; signal.yield(true) }
         }
+        return true
     }
     func unpin(_ key: RenderKey) {
         if let count = outstanding[key] {

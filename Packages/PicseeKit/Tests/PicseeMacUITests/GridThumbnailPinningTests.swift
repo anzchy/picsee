@@ -11,9 +11,10 @@ actor RecordingPinning: ImagePresentationPinning {
     private(set) var wentNegative = false
     private var nextWaiterID = 0
     private var heldWaiters: [Int: (target: Int, continuation: CheckedContinuation<Void, Never>)] = [:]
-    func pin(_ key: RenderKey, image: DecodedImage) {
+    @discardableResult func pin(_ key: RenderKey, image: DecodedImage) -> Bool {
         log.append((true, key)); counts[key, default: 0] += 1
         notifyHeldWaiters()
+        return true
     }
     func unpin(_ key: RenderKey) {
         log.append((false, key)); counts[key, default: 0] -= 1

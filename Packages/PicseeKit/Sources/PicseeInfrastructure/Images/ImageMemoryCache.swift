@@ -98,7 +98,7 @@ public actor ImageMemoryCache {
         guard let index = entries.firstIndex(where: { $0.key == key && $0.pins == 0 }) else { return }
         entries.remove(at: index); emit(context); account(context)
     }
-    func pin(_ key: RenderKey, image: DecodedImage, context: ResourceSnapshotContext? = nil) {
+    @discardableResult func pin(_ key: RenderKey, image: DecodedImage, context: ResourceSnapshotContext? = nil) -> Bool {
         let previousWasRevoked = entries.first(where: { $0.key == key })?.accessPermit?.isCurrent == false
         let accepted = (try? AccessWorkPermit.admitting(image.accessPermit) { () -> Bool in
             guard image.itemID == key.itemID, image.revision == key.revision else { return false }
@@ -124,10 +124,11 @@ public actor ImageMemoryCache {
             }
             return true
         }) ?? false
-        guard accepted else { return }
+        guard accepted else { return false }
         // Observers may revoke authority; never invoke them under the publication lock.
         emit(context)
         trim(to: limit, context: context)
+        return true
     }
     func unpin(_ key: RenderKey, context: ResourceSnapshotContext? = nil) {
         guard let index = entries.firstIndex(where: { $0.key == key }), entries[index].pins > 0 else { return }
