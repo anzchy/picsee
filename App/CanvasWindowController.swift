@@ -88,6 +88,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var sidebarWatchSubscription: (any FolderWatchSubscription)?
     private var sidebarWatchGeneration: UUID?
     var sidebarBrowserOverride: SidebarFolderBrowser?
+    /// Tests swap the folder lister; the controller still builds and observes its own coordinators.
+    var folderScanningOverride: (any FolderScanning)?
     private var sidebarKnownCounts: [URL: Int] = [:]
     func completeGridDisplay(_ snapshot: FolderSnapshot, currentItemID: ItemID?, offset: NSPoint?) {
         guard waitingAccessPosition == nil, scanReadContext?.permit.isCurrent != false else { return }
@@ -895,7 +897,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private func prepareRecoveredFolder(_ folder: URL, position: WaitingAccessPosition, request: UUID,
                                         operation: AccessOperation, context: AccessMonitor.ReadContext,
                                         services: AccessServices) async throws -> FolderScanCoordinator {
-        let scan = FolderScanCoordinator(access: services.files, scanner: services.browser,
+        let scan = FolderScanCoordinator(access: services.files, scanner: folderScanningOverride ?? services.browser,
             trace: NativeFolderScanTrace(), metadataReader: ImageFolderMetadataReader(), watcher: services.watch)
         accessRecoveryScan = scan
         _ = scan.setRecursiveEnabled(position.recursive)
@@ -2034,7 +2036,7 @@ extension CanvasWindowController: FolderScanHost {
             configureReadFailureReporting(scan, monitor: services.monitor)
             return scan
         }
-        let scan = FolderScanCoordinator(access: services.files, scanner: services.browser,
+        let scan = FolderScanCoordinator(access: services.files, scanner: folderScanningOverride ?? services.browser,
             trace: NativeFolderScanTrace(), metadataReader: ImageFolderMetadataReader(), watcher: services.watch)
         scan.host = self
         configureReadFailureReporting(scan, monitor: services.monitor)
