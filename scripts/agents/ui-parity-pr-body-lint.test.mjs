@@ -28,6 +28,55 @@ const completeGates = (currentHead = head) => {
   ]);
 };
 
+function assertGatesRejectedByAPIAndCLI(t, fixture, reason) {
+  const direct = checkGates(fixture(head), head);
+  const repo = mkdtempSync(join(tmpdir(), 'picsee-gates-layout-'));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'Test');
+  mkdirSync(join(repo, 'scripts'), { recursive: true });
+  writeFileSync(join(repo, 'scripts/check.py'), 'print("base")\n');
+  git('add', 'scripts/check.py');
+  git('commit', '-qm', 'base');
+  git('branch', 'base');
+  writeFileSync(join(repo, 'scripts/check.py'), 'print("head")\n');
+  git('add', 'scripts/check.py');
+  git('commit', '-qm', 'head');
+  const body = join(repo, 'body.md');
+  writeFileSync(body, fixture(git('rev-parse', 'HEAD').trim()));
+  const script = fileURLToPath(new URL('./ui-parity-pr-body-lint.mjs', import.meta.url));
+  const cli = spawnSync(process.execPath, [script, '--base', 'base', '--body-file', body], { cwd: repo, encoding: 'utf8' });
+  assert.equal(direct.ok, false, 'checkGates accepted contradictory evidence');
+  assert.match(direct.reason, reason);
+  assert.equal(cli.status, 1, cli.stdout + cli.stderr);
+  assert.match(cli.stderr, reason);
+}
+
+test('Gates rejects a second Gates section through API and CLI', t => {
+  assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead)
+    + `\n## Gates\n\n| Lane | Status | SHA | Source |\n|---|---|---|---|\n| package-tests | FAIL | ${currentHead} | failed rerun |\n`,
+  /duplicate ## Gates section/);
+});
+
+test('Gates rejects a prose-separated FAIL row through API and CLI', t => {
+  assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead)
+    + `Rerun results:\n\n| package-tests | FAIL | ${currentHead} | failed rerun |\n`,
+  /unconsumed Gates row/);
+});
+
+test('Gates rejects a complete table only inside a fence through API and CLI', t => {
+  assertGatesRejectedByAPIAndCLI(t, currentHead => `\`\`\`markdown\n${completeGates(currentHead)}\`\`\`\n`, /missing ## Gates table/);
+});
+
+test('Gates rejects lowercase code same as stale-head evidence', () => {
+  const stale = completeGates().replace(`| package-tests | PASS | ${head.slice(0, 8)} |`, `| package-tests | PASS | ${oldHead} |`);
+  const result = checkGates(stale.replace('owner-gates swift=0', `owner-gates swift=0; code same ${codeSame}`), head);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /stale head/);
+});
+
 test('Gates accepts a complete table', () => {
   assert.equal(checkGates(completeGates(), head).ok, true);
 });
