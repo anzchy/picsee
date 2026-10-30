@@ -137,7 +137,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         self.accessServices = accessServices
         session = ViewerSession(preferencesStore: preferencesStore, imageLoader: ViewerImageLoader(trace: NativeFirstPreviewTrace(), presentation: pipeline as? any ImagePresentationPinning))
         canvas = CanvasInputBridge(frame: .zero, session: session)
-        inspector = InspectorModel(reader: inspectorReader ?? WindowInspectorReader(services: accessServices))
+        inspector = InspectorModel(reader: inspectorReader ?? WindowInspectorReader(services: accessServices, pipeline: pipeline))
         self.motionPolicy = motionPolicy
         let window = CommandWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],

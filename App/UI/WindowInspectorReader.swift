@@ -6,6 +6,7 @@ import PicseeInfrastructure
 
 struct WindowInspectorReader: InspectorMetadataReading {
     let services: Task<AccessServices, Error>
+    let pipeline: any ImagePipeline
     func read(_ url: URL, access: AccessRequest) async throws -> InspectorMetadata {
         do {
             let services = try await services.value
@@ -22,7 +23,8 @@ struct WindowInspectorReader: InspectorMetadataReading {
             do {
                 try Task.checkCancellation()
                 try context?.permit.check()
-                let metadata = try await ImageIOInspectorMetadataReader(access: files).read(url, access: request)
+                let metadata = try await ImageIOInspectorMetadataReader(access: files, pipeline: pipeline, accessPermit: context?.permit)
+                    .read(url, access: request)
                 try context?.permit.check()
                 return metadata
             } catch {
