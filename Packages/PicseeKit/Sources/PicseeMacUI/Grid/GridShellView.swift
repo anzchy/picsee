@@ -70,6 +70,11 @@ import PicseeCore
     public let folderTree = GridSidebarTreeView(frame: .zero)
     private let sidebarRule = NSView()
     private let footerRule = NSView()
+    private let footerLeadingDivider = NSView()
+    private let currentFileStatus = NSTextField(labelWithString: "")
+    private let keyboardHint = NSView()
+    private let spaceKeycap = NSTextField(labelWithString: "Space")
+    private let quickLookLabel = NSTextField(labelWithString: "")
     private let emptyState = NSView()
     private let emptyIcon = NSImageView()
     private let emptyTitle = NSTextField(labelWithString: String(localized: "No matching images"))
@@ -98,6 +103,11 @@ import PicseeCore
         footer.addSubview(infoButton)
         footer.addSubview(displayButton)
         footer.addSubview(footerRule)
+        footer.addSubview(footerLeadingDivider)
+        footer.addSubview(currentFileStatus)
+        footer.addSubview(keyboardHint)
+        keyboardHint.addSubview(spaceKeycap)
+        keyboardHint.addSubview(quickLookLabel)
         sidebar.addSubview(favoritesButton)
         sidebar.addSubview(recentsButton)
         mainContent.addSubview(emptyState)
@@ -146,10 +156,29 @@ import PicseeCore
         searchButton.action = #selector(openSearchFromButton)
         searchButton.setAccessibilityLabel(String(localized: "Search images"))
         searchButton.setAccessibilityIdentifier("grid.search.button")
-        searchStatus.font = .systemFont(ofSize: 12)
+        searchStatus.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         searchStatus.textColor = DesignColor.textSecondary.nsColor
         searchStatus.lineBreakMode = .byTruncatingTail
         searchStatus.isHidden = true
+        searchStatus.setAccessibilityIdentifier("grid.folder-count")
+        currentFileStatus.font = .systemFont(ofSize: 12)
+        currentFileStatus.textColor = DesignColor.textSecondary.nsColor
+        currentFileStatus.lineBreakMode = .byTruncatingTail
+        currentFileStatus.maximumNumberOfLines = 1
+        currentFileStatus.isHidden = true
+        currentFileStatus.setAccessibilityIdentifier("grid.current-file-status")
+        footerLeadingDivider.setAccessibilityIdentifier("grid.footer.leading-divider")
+        footerLeadingDivider.wantsLayer = true
+        keyboardHint.setAccessibilityIdentifier("grid.keyboard-hint")
+        spaceKeycap.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        spaceKeycap.textColor = DesignColor.textSecondary.nsColor
+        spaceKeycap.alignment = .center
+        spaceKeycap.wantsLayer = true
+        spaceKeycap.layer?.cornerRadius = DesignMetrics.radii["inner"]!
+        spaceKeycap.layer?.borderWidth = 1
+        quickLookLabel.stringValue = String(localized: "Quick Look")
+        quickLookLabel.font = .systemFont(ofSize: 12)
+        quickLookLabel.textColor = DesignColor.textSecondary.nsColor
         sortButton.isBordered = false
         sortButton.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
         sortButton.target = self
@@ -202,6 +231,8 @@ import PicseeCore
         toggleButton.target = self
         toggleButton.action = #selector(toggleFromButton)
         toggleButton.setAccessibilityIdentifier("grid.sidebar.toggle")
+        toggleButton.wantsLayer = true
+        toggleButton.layer?.cornerRadius = DesignMetrics.radii["control"]!
         wantsLayer = true
         sidebar.wantsLayer = true
         footer.wantsLayer = true
@@ -222,6 +253,11 @@ import PicseeCore
             sidebarRule.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
             footer.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
             footerRule.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
+            footerLeadingDivider.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
+            toggleButton.layer?.backgroundColor = preferencesStore.value.gridSidebarVisible
+                ? DesignColor.hoverBackground.nsColor.cgColor : NSColor.clear.cgColor
+            spaceKeycap.layer?.backgroundColor = DesignColor.popoverBackground.nsColor.cgColor
+            spaceKeycap.layer?.borderColor = DesignColor.divider.nsColor.cgColor
         }
     }
     public func showFolder(_ name: String?) {
@@ -304,9 +340,12 @@ import PicseeCore
         mainContent.frame = main
         for content in mainContent.subviews { content.frame = mainContent.bounds }
         footer.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 40)
-        let toggleWidth: CGFloat = footer.bounds.width < 280 ? 16 : 32
-        toggleButton.frame = NSRect(x: 8, y: 4, width: toggleWidth, height: 32)
+        let compactFooter = footer.bounds.width < 280
+        let toggleWidth: CGFloat = compactFooter ? 16 : 30
+        toggleButton.frame = NSRect(x: compactFooter ? 8 : 12, y: compactFooter ? 4 : 5,
+                                    width: toggleWidth, height: compactFooter ? 32 : 30)
         footerRule.frame = NSRect(x: 0, y: 39, width: bounds.width, height: 1)
+        footerLeadingDivider.frame = NSRect(x: 52, y: 10, width: 1, height: 20)
         // grid-light.html: 12pt trailing inset, 7pt only through 480pt;
         // toolbar gap 6pt, reduced to 2pt through 800pt.
         let trailingInset: CGFloat = footer.bounds.width <= 480 ? 7 : 12
@@ -324,8 +363,23 @@ import PicseeCore
         let searchWidth = min(190, max(120, sortButton.frame.minX - statusReserve - toolGap))
         searchField.frame = NSRect(x: sortButton.frame.minX - searchWidth - toolGap, y: 6,
                                    width: searchWidth, height: 28)
+        keyboardHint.isHidden = !footerActionsEnabled || footer.bounds.width <= 800
+        keyboardHint.setAccessibilityHidden(keyboardHint.isHidden)
+        let keycapWidth = spaceKeycap.intrinsicContentSize.width
+        let quickLookWidth = quickLookLabel.intrinsicContentSize.width
+        let hintWidth = keycapWidth + 5 + quickLookWidth
+        keyboardHint.frame = NSRect(x: searchButton.frame.minX - 16 - hintWidth, y: 6,
+                                    width: hintWidth, height: 28)
+        spaceKeycap.frame = NSRect(x: 0, y: 5, width: keycapWidth, height: 18)
+        quickLookLabel.frame = NSRect(x: keycapWidth + 5, y: 6, width: quickLookWidth, height: 18)
         searchStatus.isHidden = footer.bounds.width <= 480 || searchStatus.stringValue.isEmpty
-        searchStatus.frame = NSRect(x: 48, y: 6, width: max(0, (searchField.isHidden ? searchButton.frame.minX : searchField.frame.minX) - 56), height: 28)
+        let countWidth = searchStatus.isHidden ? 0 : min(90, searchStatus.intrinsicContentSize.width)
+        let statusRight = (keyboardHint.isHidden ? searchButton.frame.minX : keyboardHint.frame.minX) - 16
+        let countGap: CGFloat = countWidth > 0 ? 12 : 0
+        let fileWidth = min(240, max(0, statusRight - 62 - countWidth - countGap))
+        currentFileStatus.frame = NSRect(x: 62, y: 6, width: fileWidth, height: 28)
+        searchStatus.frame = NSRect(x: currentFileStatus.frame.maxX + countGap, y: 6,
+                                    width: countWidth, height: 28)
         emptyState.frame = mainContent.bounds
         let centerX = emptyState.bounds.midX
         let centerY = emptyState.bounds.midY
@@ -510,6 +564,20 @@ import PicseeCore
             searchStatus.isHidden = true
         }
     }
+    public func setCurrentFile(_ name: String) {
+        currentFileStatus.stringValue = name
+        currentFileStatus.isHidden = name.isEmpty
+        needsLayout = true
+    }
+    public func setReadingStatus(_ reading: Bool) {
+        if reading {
+            currentFileStatus.stringValue = String(localized: "Reading Folder…")
+            currentFileStatus.isHidden = false
+            searchStatus.stringValue = ""
+            searchStatus.isHidden = true
+        }
+        needsLayout = true
+    }
     public func setSearchStatus(resultCount: Int, term: String) {
         searchStatus.stringValue = term.isEmpty
             ? String(format: String(localized: "%lld images"), resultCount)
@@ -612,5 +680,7 @@ import PicseeCore
         let label = String(localized: preferencesStore.value.gridSidebarVisible ? "Hide sidebar" : "Show sidebar")
         toggleButton.toolTip = label
         toggleButton.setAccessibilityLabel(label)
+        toggleButton.state = preferencesStore.value.gridSidebarVisible ? .on : .off
+        refreshAppearance()
     }
 }

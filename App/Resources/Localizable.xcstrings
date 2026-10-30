@@ -801,6 +801,13 @@
         }
       }
     },
+    "Quick Look": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Quick Look" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "快速查看" } }
+      }
+    },
     "Add Folder": {
       "extractionState": "manual",
       "localizations": {

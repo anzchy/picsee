@@ -14,6 +14,7 @@ import PicseeInfrastructure
     shell.mainContent.addSubview(grid)
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 800),
                           styleMask: [], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
     window.contentView = shell
     let folder = URL(fileURLWithPath: "/tmp/picsee-grid-281")
     let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
