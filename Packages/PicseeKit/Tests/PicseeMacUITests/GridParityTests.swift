@@ -163,11 +163,11 @@ import PicseeCore
     cell.isCurrent = true
     cell.isSelected = true
     let tile = try #require(cell.tileLayer)
-    let outline = try #require(cell.view.layer?.sublayers?.first { $0.borderWidth == 2 && !$0.isHidden })
+    let outline = try #require(cell.view.layer?.sublayers?.first { $0.borderWidth == 1 && !$0.isHidden })
     #expect(cell.view.layer?.borderWidth == 0)
     #expect(outline !== cell.currentRingLayer)
-    #expect(outline.frame == tile.frame.insetBy(dx: -4, dy: -4))
-    #expect(cell.currentRingLayer.frame == tile.frame.insetBy(dx: -2, dy: -2))
+    #expect(outline.frame == tile.frame)
+    #expect(cell.currentRingLayer.frame == tile.frame.insetBy(dx: -4, dy: -4))
     #expect(!cell.currentRingLayer.isHidden)
     cell.isSelected = false
     #expect(outline.isHidden)

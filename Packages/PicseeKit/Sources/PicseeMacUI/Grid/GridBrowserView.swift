@@ -64,13 +64,13 @@ import PicseeApplication
         selectionBadge.layer?.borderWidth = 1
         selectionBadge.isHidden = true
         selectionBadge.setAccessibilityElement(false)
-        // Selection follows page 11/12's tile outline; Current Item has a 2pt outside ring.
-        selectionOutline.borderWidth = 2
-        selectionOutline.cornerRadius = DesignMetrics.radii["inner"]! + 4
+        // Selection stays at the tile edge; Current Item has a 2pt clear gap and 2pt stroke.
+        selectionOutline.borderWidth = 1
+        selectionOutline.cornerRadius = DesignMetrics.radii["inner"]!
         selectionOutline.isHidden = true
         surface.layer?.addSublayer(selectionOutline)
-        currentRing.frame = tile.frame.insetBy(dx: -2, dy: -2)
-        currentRing.cornerRadius = DesignMetrics.radii["inner"]! + 2
+        currentRing.frame = tile.frame.insetBy(dx: -4, dy: -4)
+        currentRing.cornerRadius = DesignMetrics.radii["inner"]! + 4
         currentRing.borderWidth = 2
         currentRing.isHidden = true
         surface.layer?.addSublayer(currentRing)
@@ -92,8 +92,8 @@ import PicseeApplication
         nameLabel.frame = NSRect(x: 4, y: 4, width: width, height: 21)
         selectionBadge.frame = NSRect(x: tile.frame.maxX - 25, y: tile.frame.maxY - 25,
             width: 18, height: 18)
-        selectionOutline.frame = tile.frame.insetBy(dx: -4, dy: -4)
-        currentRing.frame = tile.frame.insetBy(dx: -2, dy: -2)
+        selectionOutline.frame = tile.frame
+        currentRing.frame = tile.frame.insetBy(dx: -4, dy: -4)
     }
 
     var tileLayer: CALayer? { tile.layer }

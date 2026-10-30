@@ -21,10 +21,16 @@ import PicseeCore
         let name = try #require(cell.view.subviews.compactMap { $0 as? NSTextField }
             .first { $0.stringValue == longName })
 
-        // grid-light.html: selected .thumbnail-wrap has a 2px outline with offset 2px.
+        // grid-light.html: outline-width 2 and outline-offset 2 put painted edges at +2 and +4.
         #expect(ring.superlayer === cell.view.layer, "current ring is outside the thumbnail's clipped layer")
-        #expect(ring.frame == tile.frame.insetBy(dx: -2, dy: -2), "2px outside offset")
+        #expect(ring.frame == tile.frame.insetBy(dx: -4, dy: -4), "2px clear gap plus 2px stroke")
+        #expect(ring.frame.minX == tile.frame.minX - 4, "painted inner edge at tile - 2")
+        #expect(ring.frame.maxX == tile.frame.maxX + 4, "painted outer edge at tile + 4")
         #expect(ring.borderWidth == 2)
+        let selection = try #require(cell.view.layer?.sublayers?.first {
+            $0 !== ring && $0.borderWidth == 1 && !$0.isHidden
+        })
+        #expect(selection.frame == tile.frame, "Selection stays distinct at the thumbnail edge")
         let expectedAccent = try design.color(":root", "--color-accent", viewport: 1280)
         let ringColor = try #require(ring.borderColor)
         let accent = try #require(NSColor(cgColor: ringColor)?.usingColorSpace(.sRGB))
