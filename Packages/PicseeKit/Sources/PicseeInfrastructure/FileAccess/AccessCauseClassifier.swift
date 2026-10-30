@@ -101,7 +101,7 @@ public enum AccessCauseClassifier {
     }
 
     private static func cause(for facts: AccessProbeFacts) -> AccessProbeCause {
-        if facts.isInTrash { return .unknown }
+        if facts.isInTrash { return .notFound }
         if let uuid = facts.volume.uuid,
            !facts.mountedVolumes.contains(where: { $0.uuid == uuid }) {
             return .diskNotConnected

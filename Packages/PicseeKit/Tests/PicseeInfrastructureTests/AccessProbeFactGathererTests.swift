@@ -65,6 +65,11 @@ private final class AccessProbeBookmarkRecorder: AccessProbeBookmarkCoding, @unc
     _ = gatherer.gather(bookmarkData: Data([1]))
 
     #expect(bookmarks.options == [.withSecurityScope, .withoutMounting, .withoutUI])
+    // Retain observable output alongside the OS-resolution-options supplement.
+    let observed = gatherer.gather(bookmarkData: Data([1]))
+    #expect(observed.resolution.url == URL(fileURLWithPath: "/Volumes/Photos/2026", isDirectory: true))
+    #expect(observed.listing?.entryCount == 0)
+    #expect(observed.classification.cause == .readable)
 }
 
 @Test func accessProbeMountedVolumeScanHandlesMissingListAndProperties() {
@@ -168,7 +173,8 @@ private final class AccessProbeBookmarkRecorder: AccessProbeBookmarkCoding, @unc
     #expect(trashInputs.perUserVolumeTrashPath != nil)
     #expect(report.isInTrash)
     #expect(report.classification.isInTrash)
-    #expect(report.classification.cause == .unknown)
+    // #231: the signed T1 probe supports specific Not Found copy for Trash.
+    #expect(report.classification.cause == .notFound)
 }
 
 @Test func accessProbeGathererCapturesPermissionDenial() throws {

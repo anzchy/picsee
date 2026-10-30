@@ -1,0 +1,2 @@
+# Merge boundary clarification before WI-2 implementation
+Independent specification adversary confirmed a persisted-but-unresolved destination is still an Access Root. Matrix merge case now includes failed B resolution, rootURL(B)==nil, restored bookmark resolution without registration, explicit A→B selection, B ID survival/no duplicate/remapped recents and exact Undo. S5, integration, Levels 2/4. This kills matching only the published roots map; positive renewed bookmark/identity evidence required. WI-2 production/tests do not yet exist.

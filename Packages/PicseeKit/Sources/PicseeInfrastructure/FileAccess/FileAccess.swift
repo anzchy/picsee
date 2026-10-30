@@ -141,6 +141,9 @@ public actor FileAccess: AccessLeasing {
                 // identity and has no remount tracking; a scoped listing still gates it.
                 let isUUIDLess = self.requiresEmbeddedIdentity && volume.uuid == nil
                 let resolution = try bookmarks.resolve(record.bookmark)
+                guard !Self.isTrashed(resolution.url) else {
+                    throw FileAccessError.needsReconnection(record.id)
+                }
                 if volume.uuid != nil || isUUIDLess, (try? resolvedVolumeUUID(resolution.url)) != volume.uuid {
                     throw FileAccessError.needsReconnection(record.id)
                 }
@@ -476,12 +479,22 @@ public actor FileAccess: AccessLeasing {
         catch { throw FileAccessError.needsFileReconnection(original) }
     }
     static func isTrashed(_ url: URL) -> Bool {
-        let normalized = url.standardizedFileURL
+        let normalized = url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
         let components = normalized.pathComponents
         if let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
-            appropriateFor: normalized, create: false),
+            appropriateFor: nil, create: false),
            components.starts(with: trash.standardizedFileURL.pathComponents) { return true }
-        guard let volume = try? normalized.resourceValues(forKeys: [.volumeURLKey]).volume else { return false }
+        // Resource values are unavailable for a missing descendant. Its nearest
+        // existing ancestor still establishes the actual mounted volume root.
+        var ancestor = normalized
+        var volume = try? ancestor.resourceValues(forKeys: [.volumeURLKey]).volume
+        while volume == nil {
+            let parent = ancestor.deletingLastPathComponent()
+            if parent.path == ancestor.path { break }
+            ancestor = parent
+            volume = try? ancestor.resourceValues(forKeys: [.volumeURLKey]).volume
+        }
+        guard let volume else { return false }
         return isInPerUserVolumeTrash(normalized, volume: volume)
     }
     static func isInPerUserVolumeTrash(_ url: URL, volume: URL, uid: uid_t = getuid()) -> Bool {
@@ -638,11 +651,15 @@ public actor FileAccess: AccessLeasing {
             do {
                 // Resolution may follow a move even while older leases are held.
                 let resolution = try bookmarks.resolve(record.bookmark)
+                guard !Self.isTrashed(resolution.url) else { throw FileAccessError.needsReconnection(id) }
                 key = .root(id, resolution.url)
                 url = active[key]?.session.url ?? resolution.url
                 if resolution.stale && legacyBaseline[id] == nil { staleRecord = record }
             }
             catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
+            // A readable ancestor must not authorize automatic content reads in
+            // its actual Trash descendant, including through a symlink alias.
+            guard !Self.isTrashed(file) else { throw FileAccessError.outsideRoot }
             if active[key] != nil, !boundary(file, url) { throw FileAccessError.outsideRoot }
         case .fileGrant(let file):
             url = try resolveFileGrant(file)

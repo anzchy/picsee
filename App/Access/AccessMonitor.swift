@@ -164,8 +164,14 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         state.register(id, volumeUUID: volume?.uuid)
         if let uuid = volume?.uuid, !mounted {
             state.diskUnmounted(volumeUUID: uuid)
-        } else if root == nil {
-            _ = state.reportRootFailure(id, cause: .unknown, from: state.stamp(for: id))
+        } else if root == nil, let port {
+            // Initialization may have rejected a missing or Trashed bookmark.
+            // Classify its saved evidence instead of treating a nil cache as a cause.
+            let stamp = state.stamp(for: id)
+            let result = await files.verifySavedRootForRecovery(id, mounts: port)
+            if let cause = Self.lossCause(for: result.classification.cause) {
+                _ = state.reportRootFailure(id, cause: cause, from: stamp)
+            }
         }
     }
     func reauthorize(_ id: AccessRootID) async {
@@ -248,7 +254,8 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         case .readable: nil
         case .diskNotConnected: .diskNotConnected
         case .accessExpired: .accessExpired
-        case .notFound, .unknown: .unknown
+        case .notFound: .notFound
+        case .unknown: .unknown
         }
     }
     func readContext(for id: AccessRootID) async throws -> ReadContext {
@@ -349,7 +356,7 @@ private final class AccessMonitorNotification: @unchecked Sendable {
         let root: URL
         do { root = try await files.probeRootURL(id) }
         catch is CancellationError { return nil }
-        catch { return Task.isCancelled ? nil : .unknown }
+        catch { return await savedRootReadFailure(id) }
         do {
             return try await files.withLease(.root(id, file: root)) { lease in
                 do {
@@ -362,7 +369,14 @@ private final class AccessMonitorNotification: @unchecked Sendable {
                 }
             }
         } catch is CancellationError { return nil }
-        catch { return Task.isCancelled ? nil : .unknown }
+        catch { return await savedRootReadFailure(id) }
+    }
+    private func savedRootReadFailure(_ id: AccessRootID) async -> AccessLossCause? {
+        guard !Task.isCancelled, let port else { return Task.isCancelled ? nil : .unknown }
+        // Probe deliberately throws a public reconnection error. Recover its
+        // specific cause from the saved bookmark, even after roots was cleared.
+        let result = await files.verifySavedRootForRecovery(id, mounts: port)
+        return Task.isCancelled ? nil : Self.lossCause(for: result.classification.cause)
     }
     private func isMounted(_ uuid: String) async -> Bool {
         let revision = latestMountEvents[uuid]?.revision

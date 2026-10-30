@@ -89,7 +89,8 @@ func accessCauseUnderlyingPermissionRefusalIsAccessExpired(code: Int) {
         resolution: .resolved(probeURL, stale: true),
         isInTrash: true
     ))
-    #expect(result.cause == .unknown)
+    // #231: T1 proves actual Trash is Not Found, irrespective of resolution.
+    #expect(result.cause == .notFound)
     #expect(result.isInTrash)
 }
 
@@ -122,7 +123,7 @@ func accessCauseUnderlyingPermissionRefusalIsAccessExpired(code: Int) {
         #expect(AccessCauseClassifier.classify(probeFacts(
             resolution: .failed(domain: "bookmark", code: 1), listing: .failed(refusal))).cause == .notFound)
         #expect(AccessCauseClassifier.classify(probeFacts(listing: .failed(refusal), isInTrash: true)) ==
-            AccessProbeClassification(cause: .unknown, isInTrash: true))
+            AccessProbeClassification(cause: .notFound, isInTrash: true))
     }
     for code in [Int(EIO), Int(ENOENT)] {
         #expect(AccessCauseClassifier.classify(probeFacts(listing: .failed(

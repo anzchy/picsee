@@ -2,7 +2,7 @@ import Foundation
 import PicseeCore
 
 public enum AccessLossCause: Equatable, Sendable {
-    case diskNotConnected, accessExpired, unknown
+    case diskNotConnected, notFound, accessExpired, unknown
 }
 
 public enum AccessAvailability: Equatable, Sendable {

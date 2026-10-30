@@ -10,14 +10,67 @@ import PicseeApplication
 private final class RootCheckBookmarks: SecurityScope, BookmarkCoding, @unchecked Sendable {
     private let lock = NSLock()
     private var scopes = 0
+    private var relocated: URL?
+    private var resolutionFails = false
+    func relocate(to url: URL) { lock.withLock { relocated = url } }
+    func failResolution() { lock.withLock { resolutionFails = true } }
     var activeScopes: Int { lock.withLock { scopes } }
     func start(_ url: URL) -> Bool { lock.withLock { scopes += 1 }; return true }
     func stop(_ url: URL) { lock.withLock { scopes -= 1 } }
     func isReadable(_ url: URL) -> Bool { true }
     func create(for url: URL) throws -> Data { Data(url.path.utf8) }
     func resolve(_ data: Data) throws -> ResolvedBookmark {
-        ResolvedBookmark(url: URL(fileURLWithPath: String(decoding: data, as: UTF8.self)), stale: false)
+        try lock.withLock {
+            if resolutionFails { throw CocoaError(.fileReadNoSuchFile) }
+            return ResolvedBookmark(url: relocated ?? URL(fileURLWithPath: String(decoding: data, as: UTF8.self)), stale: false)
+        }
     }
+}
+
+// #231: each automatic check must preserve the specific proven cause and revoke
+// work admitted before loss. The codec simulates OS bookmark resolution only.
+@MainActor @Test(.timeLimit(.minutes(3)), arguments: ["reader", "foreground", "wake"], [false, true])
+func t231ReadForegroundWakeReportNotFoundAndInvalidateOldWork(_ event: String, _ trash: Bool) async throws {
+    let f = try await RootCheckFixture(); defer { f.remove() }
+    let context = try await f.monitor.readContext(for: f.root)
+    var trashed: NSURL?
+    defer { if let trashed { try? FileManager.default.removeItem(at: trashed as URL) } }
+    if trash {
+        try FileManager.default.trashItem(at: f.base.appendingPathComponent("Root"), resultingItemURL: &trashed)
+        f.codec.relocate(to: try #require(trashed as URL?))
+    } else { f.codec.failResolution() }
+    if event == "reader" {
+        await f.monitor.reportReadFailure(f.root, from: context.stamp)
+    } else if event == "foreground" {
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApplication.shared)
+    } else {
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
+    }
+    while f.monitor.state.snapshot(for: f.root)?.availability == .readable { await Task.yield() }
+    #expect(f.monitor.state.snapshot(for: f.root)?.availability == .lost(.notFound))
+    #expect(!f.monitor.state.mayDeliver(context.stamp))
+    #expect(!context.permit.isCurrent)
+    let lostCounter = f.monitor.state.snapshot(for: f.root)?.counter
+    await f.monitor.reportReadFailure(f.root, from: context.stamp)
+    #expect(f.monitor.state.snapshot(for: f.root)?.counter == lostCounter)
+    #expect(f.monitor.state.permit(for: f.root) == nil)
+    #expect(f.codec.activeScopes == 0)
+}
+
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t231OfflineLaunchWithMountedMissingBookmarkRegistersNotFound() async throws {
+    let f = try await RootCheckFixture(); defer { f.remove() }
+    f.codec.failResolution()
+    let files = try FileAccess(scope: f.codec, bookmarks: f.codec,
+        store: BookmarkStore(url: f.base.appendingPathComponent("roots.json")), buildSHA: "T231-launch",
+        bookmarkVolume: { _ in AccessProbeVolume(uuid: "111", url: nil, name: "Disk") },
+        resolvedVolumeUUID: { _ in "111" }, mountedVolumesProvider: {
+            [AccessProbeVolume(uuid: "111", url: nil, name: "Disk")]
+        })
+    let monitor = AccessMonitor(files: files, mounts: f.mounts)
+    await monitor.register(f.root)
+    #expect(monitor.state.snapshot(for: f.root)?.availability == .lost(.notFound))
+    #expect(monitor.state.permit(for: f.root) == nil)
 }
 private actor RootCheckMounts: DiskMountPort {
     private let volumes = [AccessProbeVolume(uuid: "111", url: nil, name: "Disk")]
