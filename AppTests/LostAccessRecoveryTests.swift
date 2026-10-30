@@ -793,6 +793,43 @@ func t230DifferentIdentitySelectionOpensNormallyPreservingLostRoot(_ kind: Strin
 @MainActor private func t231Strip(_ c: CanvasWindowController) throws -> AccessRebindStripView {
     try #require(try recoveryShell(c).mainContent.subviews.compactMap { $0 as? AccessRebindStripView }.first { !$0.isHidden })
 }
+@MainActor @Test(.timeLimit(.minutes(3)))
+func t231Fix1ForegroundFollowsInactiveRootThenRebindRemapsHistoricalRecent() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    let childRecent = RecentFolder(rootID: f.rootA, url: f.childOne, displayName: "One", openedAt: Date(timeIntervalSince1970: 1234))
+    try await f.services.recent.add(childRecent)
+    c.browseRecoveredFolder(f.b, rootID: f.rootB)
+    try await f.ready(c, folder: f.b)
+    let moved = f.base.appendingPathComponent("Renamed", isDirectory: true)
+    try await f.moveRoot(to: moved)
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApplication.shared)
+    try await recoveryWaitAsync { await f.services.files.rootURL(f.rootA)?.path == moved.path }
+    #expect(c.session.folderScan?.snapshot?.version.rootID == f.rootB)
+    #expect(try await f.services.recent.load().contains(childRecent))
+    let replacement = f.base.appendingPathComponent("Replacement", isDirectory: true)
+    try FileManager.default.copyItem(at: moved, to: replacement)
+    try FileManager.default.removeItem(at: moved)
+    f.bookmarks.fail(moved, true)
+    c.openRecent(childRecent)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA && recoveryPage(c) != nil }
+    #expect(c.accessLossCause == .notFound)
+    // Observe the committed transaction before the new scan remembers its root.
+    await f.mounts.pauseEnumeration()
+    defer { Task { await f.mounts.release() } }
+    c.completeAccessFolderSelection(replacement, reselect: true)
+    try await recoveryWaitAsync { await f.mounts.paused }
+    let destination = try #require(await f.services.files.records().first { $0.id != f.rootB })
+    let committed = try await f.services.recent.load()
+    #expect(committed.allSatisfy { $0.rootID != f.rootA })
+    #expect(committed.contains { $0.rootID == destination.id && $0.url.path == replacement.appendingPathComponent("One").path })
+    await f.mounts.release()
+    try await f.ready(c, folder: replacement)
+    let recent = try await f.services.recent.load()
+    #expect(recent.allSatisfy { $0.rootID != f.rootA })
+    #expect(recent.filter { $0.rootID == destination.id && $0.url.path == replacement.path }.count == 1)
+    #expect(try t231Strip(c).superview != nil)
+}
 @MainActor @Test(.timeLimit(.minutes(3))) func t231NotFoundCopyAndCancelLeaveRecoveryActions() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     let c = f.controller(); defer { c.window?.close() }
