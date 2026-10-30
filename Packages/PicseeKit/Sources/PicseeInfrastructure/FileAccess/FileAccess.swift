@@ -52,6 +52,7 @@ public actor FileAccess: AccessLeasing {
     private let recoveryResourceReader: any FileIdentityResourceReading
     private let bookmarkVolume: @Sendable (Data) -> AccessProbeVolume
     private let resolvedVolumeUUID: @Sendable (URL) throws -> String?
+    private let bookmarkLocation: @Sendable (Data) -> URL?
     private let bookmarkIdentity: @Sendable (Data) -> FileResourceIdentity?
     private let mountedVolumesProvider: @Sendable () -> [AccessProbeVolume]
     private let store: BookmarkStore
@@ -93,6 +94,9 @@ public actor FileAccess: AccessLeasing {
                 resolvedVolumeUUID: @escaping @Sendable (URL) throws -> String? = {
                     try $0.resourceValues(forKeys: [.volumeUUIDStringKey]).volumeUUIDString
                 },
+                bookmarkLocation: @escaping @Sendable (Data) -> URL? = {
+                    URL.resourceValues(forKeys: [.pathKey], fromBookmarkData: $0)?.path.map { URL(fileURLWithPath: $0) }
+                },
                 bookmarkIdentity: @escaping @Sendable (Data) -> FileResourceIdentity? = {
                     AccessProbeFactGatherer.bookmarkIdentity(in: $0)
                 },
@@ -111,6 +115,7 @@ public actor FileAccess: AccessLeasing {
         self.recoveryResourceReader = recoveryReader
         self.bookmarkVolume = bookmarkVolume
         self.resolvedVolumeUUID = resolvedVolumeUUID
+        self.bookmarkLocation = bookmarkLocation
         self.bookmarkIdentity = bookmarkIdentity
         self.mountedVolumesProvider = mountedVolumesProvider
         do {
@@ -220,6 +225,154 @@ public actor FileAccess: AccessLeasing {
         version.counter += 1
         version.authority.update(counter: version.counter, readable: true)
         savedGrantVersions[id] = version
+    }
+    private struct RebindMemory {
+        let saved: [AccessRootRecord]
+        let roots: [AccessRootID: URL]
+        let lastKnown: [AccessRootID: URL]
+        let legacy: [AccessRootID: FileResourceIdentity]
+        let recovery: [AccessRootID: FileResourceIdentity]
+        let previous: [AccessRootID: [URL]]
+        let explicitTrash: [AccessRootID: ExplicitTrashSelection]
+    }
+    private struct RebindUndo {
+        let before: AccessStoreBytes
+        let memory: RebindMemory
+        let recentStore: RecentFolderStore
+    }
+    private struct ExplicitTrashSelection {
+        let url: URL
+        let identity: FileResourceIdentity
+    }
+    private var explicitTrashSelections: [AccessRootID: ExplicitTrashSelection] = [:]
+    private var rebindUndos: [AccessRebindUndoToken: RebindUndo] = [:]
+
+    /// Explicit panel selection replaces location and identity, never image state.
+    /// No suspension separates persistence, rollback and logical publication.
+    public func rebind(_ id: AccessRootID, folder: URL, recentStore: RecentFolderStore,
+                       existenceProbe: @Sendable (URL) throws -> Void = { _ = try $0.resourceValues(forKeys: [.isDirectoryKey]) }) throws -> AccessRebindResult {
+        guard !storeCorrupt, let source = saved.first(where: { $0.id == id }) else { throw FileAccessError.corruptStore }
+        guard let oldRoot = lastKnownRoots[id] ?? roots[id] ?? bookmarkLocation(source.bookmark) else {
+            throw FileAccessError.invalidFolder
+        }
+        let session = try ScopeSession(scope: scope, url: folder, rootID: id)
+        defer { session.stop() }
+        let destination = canonical(folder)
+        guard try destination.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw FileAccessError.invalidFolder }
+        _ = try FileManager.default.contentsOfDirectory(at: destination, includingPropertiesForKeys: nil)
+        let matching = persistedDestination(destination, excluding: id)
+        let destinationID = matching ?? AccessRootID()
+        let bookmark = try bookmarks.create(for: destination)
+        let selectedTrash = try explicitTrashEvidence(at: destination)
+        var replacement = saved.filter { $0.id != id }
+        if let index = replacement.firstIndex(where: { $0.id == destinationID }) {
+            replacement[index].bookmark = bookmark
+        } else {
+            let record = AccessRootRecord(id: destinationID, bookmark: bookmark, displayName: destination.lastPathComponent,
+                                          creatingBuildSHA: buildSHA, createdAt: Date())
+            replacement.insert(record, at: saved.firstIndex(where: { $0.id == id })!)
+        }
+        return try recentStore.withTransaction { recentURL in
+            try AccessStoreBytes.validate(store.url, as: AccessRootRecord.self)
+            try AccessStoreBytes.validate(recentURL, as: RecentFolder.self)
+            let before = try AccessStoreBytes(urls: [store.url, recentURL])
+            let recent: [RecentFolder]
+            if FileManager.default.fileExists(atPath: recentURL.path) {
+                switch try StoredSchema.decodeItems(Data(contentsOf: recentURL), as: RecentFolder.self, at: recentURL) {
+                case .current(let values): recent = values
+                case .unsupported: throw FileAccessError.corruptStore
+                }
+            } else { recent = [] }
+            let remapped = AccessRecentRemap.remap(recent, sourceID: id, oldRoot: oldRoot,
+                destinationID: destinationID, newRoot: destination, probe: existenceProbe)
+            let memory = RebindMemory(saved: saved, roots: roots, lastKnown: lastKnownRoots,
+                legacy: legacyBaseline, recovery: recoveryBaseline, previous: previousRoots,
+                explicitTrash: explicitTrashSelections)
+            try Task.checkCancellation()
+            invalidateSavedGrantVersion(id)
+            invalidateSavedGrantVersion(destinationID)
+            do {
+                // Use the strict writer: legacy save() intentionally swallows future schemas.
+                try StoredSchema.writeItems(replacement, to: store.url)
+                try StoredSchema.writeItems(remapped, to: recentURL)
+                let token = AccessRebindUndoToken(id: UUID())
+                saved = replacement
+                roots.removeValue(forKey: id)
+                lastKnownRoots.removeValue(forKey: id)
+                legacyBaseline.removeValue(forKey: id)
+                recoveryBaseline.removeValue(forKey: id)
+                previousRoots.removeValue(forKey: id)
+                explicitTrashSelections.removeValue(forKey: id)
+                legacyBaseline.removeValue(forKey: destinationID)
+                recoveryBaseline.removeValue(forKey: destinationID)
+                explicitTrashSelections[destinationID] = selectedTrash
+                publishRoot(destinationID, url: destination)
+                rebindUndos[token] = RebindUndo(before: before, memory: memory,
+                    recentStore: recentStore)
+                return AccessRebindResult(rootID: destinationID, rootURL: destination, undo: token)
+            } catch {
+                try before.restore()
+                throw error
+            }
+        }
+    }
+    public func undoRebind(_ token: AccessRebindUndoToken) throws {
+        guard let undo = rebindUndos[token] else { throw FileAccessError.invalidFolder }
+        try undo.recentStore.withTransaction { recentURL in
+            let current = try AccessStoreBytes(urls: [store.url, recentURL])
+            try AccessStoreBytes.validate(store.url, as: AccessRootRecord.self)
+            try AccessStoreBytes.validate(recentURL, as: RecentFolder.self)
+            try Task.checkCancellation()
+            for id in Set(saved.map(\.id)).union(undo.memory.saved.map(\.id)) { invalidateSavedGrantVersion(id) }
+            do { try undo.before.restore() }
+            catch { try current.restore(); throw error }
+            saved = undo.memory.saved
+            roots = undo.memory.roots
+            lastKnownRoots = undo.memory.lastKnown
+            legacyBaseline = undo.memory.legacy
+            recoveryBaseline = undo.memory.recovery
+            previousRoots = undo.memory.previous
+            explicitTrashSelections = undo.memory.explicitTrash
+            rebindUndos.removeValue(forKey: token)
+        }
+    }
+    public func discardRebindUndo(_ token: AccessRebindUndoToken) { rebindUndos.removeValue(forKey: token) }
+    /// Match fresh bookmark resolution under its own scope, including a persisted
+    /// destination whose published location was dropped by an earlier failed read.
+    private func persistedDestination(_ destination: URL, excluding id: AccessRootID) -> AccessRootID? {
+        for record in saved where record.id != id {
+            guard let resolution = try? bookmarks.resolve(record.bookmark),
+                  let session = try? ScopeSession(scope: scope, url: resolution.url, rootID: record.id) else { continue }
+            defer { session.stop() }
+            guard canonical(resolution.url) == destination else { continue }
+            if let expected = bookmarkIdentity(record.bookmark),
+               (try? resourceReader.identity(for: destination)) != expected { continue }
+            if let uuid = bookmarkVolume(record.bookmark).uuid,
+               (try? resolvedVolumeUUID(destination)) != uuid { continue }
+            return record.id
+        }
+        return nil
+    }
+    private func explicitTrashEvidence(at destination: URL) throws -> ExplicitTrashSelection? {
+        guard Self.isTrashed(destination) else { return nil }
+        guard let identity = try recoveryResourceReader.identity(for: destination) else { throw FileAccessError.invalidFolder }
+        return ExplicitTrashSelection(url: destination, identity: identity)
+    }
+    private func permitsExplicitTrash(_ id: AccessRootID, at url: URL) -> Bool {
+        guard let selected = explicitTrashSelections[id], canonical(url) == selected.url else { return false }
+        return true
+    }
+    /// Session-only panel selection verification. Automatic recovery never calls this.
+    public func verifyExplicitSelection(_ id: AccessRootID) throws -> URL {
+        guard let record = saved.first(where: { $0.id == id }), let root = roots[id] else { throw FileAccessError.needsReconnection(id) }
+        let session = try ScopeSession(scope: scope, url: root, rootID: id)
+        defer { session.stop() }
+        let resolved = try bookmarks.resolve(record.bookmark).url
+        guard canonical(root) == canonical(resolved),
+              !Self.isTrashed(resolved) || permitsExplicitTrash(id, at: resolved) else { throw FileAccessError.needsReconnection(id) }
+        try validateLegacyRoot(id, at: resolved)
+        _ = try FileManager.default.contentsOfDirectory(at: resolved, includingPropertiesForKeys: nil)
+        return resolved
     }
     public func records() -> [AccessRootRecord] { saved }
     public func launchOutcomes() -> [AccessRootID: String] { outcomes }
@@ -556,10 +709,12 @@ public actor FileAccess: AccessLeasing {
             var replacement = saved.filter { $0.id != id }
             if let index = saved.firstIndex(where: { $0.id == id }) { replacement.insert(record, at: index) }
             else { replacement.append(record) }
+            let selectedTrash = try explicitTrashEvidence(at: canonical(folder))
             phase = "store"
             invalidateSavedGrantVersion(id)
             try store.save(replacement)
             saved = replacement
+            explicitTrashSelections[id] = selectedTrash
             legacyBaseline.removeValue(forKey: id)
             recoveryBaseline[id] = Self.trustedRecoveryIdentity(at: folder, expected: bookmarkIdentity(bookmark),
                 rawReader: resourceReader, recoveryReader: recoveryResourceReader)
@@ -622,10 +777,12 @@ public actor FileAccess: AccessLeasing {
                 replacement.append(AccessRootRecord(id: id, bookmark: bookmark, displayName: folder.lastPathComponent,
                     creatingBuildSHA: buildSHA, createdAt: Date()))
             }
+            let selectedTrash = try explicitTrashEvidence(at: canonical(folder))
             phase = "store"
             invalidateSavedGrantVersion(id)
             try store.save(replacement)
             saved = replacement
+            explicitTrashSelections[id] = selectedTrash
             legacyBaseline.removeValue(forKey: id)
             recoveryBaseline[id] = Self.trustedRecoveryIdentity(at: folder, expected: bookmarkIdentity(bookmark),
                 rawReader: resourceReader, recoveryReader: recoveryResourceReader)
@@ -651,7 +808,7 @@ public actor FileAccess: AccessLeasing {
             do {
                 // Resolution may follow a move even while older leases are held.
                 let resolution = try bookmarks.resolve(record.bookmark)
-                guard !Self.isTrashed(resolution.url) else { throw FileAccessError.needsReconnection(id) }
+                guard !Self.isTrashed(resolution.url) || permitsExplicitTrash(id, at: resolution.url) else { throw FileAccessError.needsReconnection(id) }
                 key = .root(id, resolution.url)
                 url = active[key]?.session.url ?? resolution.url
                 if resolution.stale && legacyBaseline[id] == nil { staleRecord = record }
@@ -659,7 +816,7 @@ public actor FileAccess: AccessLeasing {
             catch { roots.removeValue(forKey: id); throw FileAccessError.needsReconnection(id) }
             // A readable ancestor must not authorize automatic content reads in
             // its actual Trash descendant, including through a symlink alias.
-            guard !Self.isTrashed(file) else { throw FileAccessError.outsideRoot }
+            guard !Self.isTrashed(file) || (permitsExplicitTrash(id, at: url) && boundary(canonical(file), canonical(url))) else { throw FileAccessError.outsideRoot }
             if active[key] != nil, !boundary(file, url) { throw FileAccessError.outsideRoot }
         case .fileGrant(let file):
             url = try resolveFileGrant(file)
@@ -716,6 +873,13 @@ public actor FileAccess: AccessLeasing {
     }
     /// The caller holds either a newly started or an existing live session scope.
     private func validateLegacyRoot(_ id: AccessRootID, at url: URL) throws {
+        if let selected = explicitTrashSelections[id] {
+            guard canonical(url) == selected.url,
+                  (try? recoveryResourceReader.identity(for: url)) == selected.identity else {
+                roots.removeValue(forKey: id)
+                throw FileAccessError.needsReconnection(id)
+            }
+        }
         if let expected = recoveryBaseline[id] {
             guard (try? recoveryResourceReader.identity(for: url)) == expected else {
                 roots.removeValue(forKey: id)
