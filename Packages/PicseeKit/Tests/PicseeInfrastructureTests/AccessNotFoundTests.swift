@@ -40,6 +40,36 @@ func t231LegacyRootWithoutRecoveryIdentityStillRequiresOriginalIdentity() async 
     #expect(scope.balanced)
 }
 
+/// A legacy root (no embedded or recovery identity) whose live identity still matches the launch baseline stays
+/// readable across repeated admissions, both fresh and joining a live session. Coverage context (#281, ACCESS-03):
+/// the success return of `validateLegacyRoot` is a derived coverage region, so it is exercised many times here
+/// rather than once, which parallel runs could lose.
+@Test(.timeLimit(.minutes(2)))
+func t231MatchingLegacyRootStaysReadableAcrossRepeatedAdmissions() async throws {
+    let f = try ReconnectFixture(); defer { f.remove() }
+    let scope = ReconnectScope(), codec = FakeBookmarks()
+    let original = try FileAccess(scope: scope, bookmarks: codec, store: f.store, buildSHA: "T231-legacy-match")
+    let id = try await original.grant(folder: f.old)
+    let volume = AccessProbeVolume(uuid: "legacy-volume", url: nil, name: "Legacy")
+    let restored = try FileAccess(scope: scope, bookmarks: codec, store: f.store, buildSHA: "T231-legacy-match-launch",
+        recoveryResourceReader: T231NoRecoveryIdentity(), requiresEmbeddedIdentity: true,
+        bookmarkVolume: { _ in volume }, resolvedVolumeUUID: { _ in "legacy-volume" },
+        bookmarkIdentity: { _ in nil }, mountedVolumesProvider: { [volume] })
+    for round in 0..<64 {
+        // A fresh session, then a second lease joining it while it is live.
+        let first = try await restored.acquire(.root(id, file: f.old))
+        let joined = try await restored.acquire(.root(id, file: f.old))
+        #expect(first.rootID == id && first.url == f.old, "round \(round): fresh lease")
+        #expect(joined.rootID == id && joined.url == f.old, "round \(round): joined lease")
+        #expect(await restored.rootURL(id) == f.old, "round \(round): root kept")
+        await restored.release(joined)
+        await restored.release(first)
+    }
+    #expect(await restored.records().map(\.id) == [id])
+    #expect(await restored.rootURL(id) == f.old)
+    #expect(scope.balanced)
+}
+
 @Test(.timeLimit(.minutes(2)), arguments: [false, true])
 func t231AutomaticTrashRootAdmissionNeverPublishesReadable(_ held: Bool) async throws {
     let f = try ReconnectFixture(); defer { f.remove() }
