@@ -60,6 +60,23 @@ test('Gates rejects a second Gates section through API and CLI', t => {
   /duplicate ## Gates section/);
 });
 
+test('Gates rejects a Gates rerun heading through API and CLI', t => {
+  assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead)
+    + `\n## Gates rerun\n\n| package-tests | FAIL | ${currentHead} | failed rerun |\n`,
+  /ambiguous Gates heading: ## Gates rerun/);
+});
+
+test('Gates rejects a level-three Gates heading through API and CLI', t => {
+  assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead)
+    + `\n### Gates\n\n| package-tests | FAIL | ${currentHead} | failed rerun |\n`,
+  /ambiguous Gates heading: ### Gates/);
+});
+
+test('Gates rejects a lowercase gates heading through API and CLI', t => {
+  assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead).replace('## Gates', '## gates'),
+    /ambiguous Gates heading: ## gates/);
+});
+
 test('Gates rejects a prose-separated FAIL row through API and CLI', t => {
   assertGatesRejectedByAPIAndCLI(t, currentHead => completeGates(currentHead)
     + `Rerun results:\n\n| package-tests | FAIL | ${currentHead} | failed rerun |\n`,
@@ -158,7 +175,7 @@ test('Gates rejects PR 307 historical prose and accepts its fail-closed transcri
   const historicalHead = '7ac5e013e7946afc4a563893e08223066375b4f1';
   const missing = checkGates(original, historicalHead);
   assert.equal(missing.ok, false);
-  assert.match(missing.reason, /missing ## Gates table/);
+  assert.match(missing.reason, /ambiguous Gates heading: ## Gates \(delegator,/);
   const transcribed = gatesTable([
     '| package-tests | NOT VERIFIED | 639588e7 | original reports 1319 tests on an older head; no CODE same evidence |',
     '| package-coverage | NOT VERIFIED | 639588e7 | original reports 14550/14550 lines on an older head; no CODE same evidence |',
