@@ -55,3 +55,22 @@ jobs:
         env:
           PICSEE_HEAVY_LOCK_HELD: '1'
         run: node scripts/tdd/app-lane.mjs
+
+  design-check:
+    name: Design check
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Install pinned npm dev dependencies
+        run: npm ci --ignore-scripts
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Check design catalog and journeys
+        run: npm run design:check

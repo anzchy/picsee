@@ -215,6 +215,22 @@ test('gates-rows rejects a missing summary without emitting PASS', t => {
   assert.doesNotMatch(result.stdout, /\| PASS \|/);
 });
 
+test('CI design-check job uses pinned actions and runs the design gate', async () => {
+  const { readFileSync } = await import('node:fs');
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const job = workflow.match(/^  design-check:\n([\s\S]*?)(?=^  [a-z][a-z-]*:\n|$(?![\s\S]))/m)?.[1];
+  assert.ok(job, 'missing design-check job');
+  assert.match(job, /name: Design check/);
+  assert.match(job, /if: github\.event_name != 'workflow_dispatch'/);
+  assert.match(job, /runs-on: ubuntu-latest/);
+  assert.match(job, /timeout-minutes: 10/);
+  assert.match(job, /actions\/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\.4\.0/);
+  assert.match(job, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\.4\.0/);
+  assert.match(job, /run: npm ci --ignore-scripts/);
+  assert.match(job, /run: npx playwright install --with-deps chromium/);
+  assert.match(job, /run: npm run design:check/);
+});
+
 test('PR-body workflow isolates PR tests from the trusted body-gates runner', async () => {
   const { readFileSync } = await import('node:fs');
   const workflow = readFileSync(new URL('../../.github/workflows/pr-body.yml', import.meta.url), 'utf8');
