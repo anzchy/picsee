@@ -571,7 +571,7 @@ import PicseeCore
     }
     public func setReadingStatus(_ reading: Bool) {
         if reading {
-            currentFileStatus.stringValue = String(localized: "Reading Folder…")
+            currentFileStatus.stringValue = String(localized: "Reading…")
             currentFileStatus.isHidden = false
             searchStatus.stringValue = ""
             searchStatus.isHidden = true
