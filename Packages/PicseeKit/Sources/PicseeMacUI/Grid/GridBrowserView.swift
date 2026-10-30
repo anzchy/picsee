@@ -254,7 +254,13 @@ private struct GridGeometry: Equatable {
 /// Data source retains identity separately from position; native collection view handles reuse.
 @MainActor public final class GridBrowserView: NSView, NSCollectionViewDataSource, NSCollectionViewDelegate {
     public private(set) var collectionView: NSCollectionView = GridCollectionView()
-    public private(set) var currentItemID: ItemID? { didSet { drawCurrent() } }
+    public private(set) var currentItemID: ItemID? {
+        didSet {
+            drawCurrent()
+            onCurrentFileChange?(currentItemID.flatMap { entry(for: $0) }?.url.lastPathComponent)
+        }
+    }
+    public var onCurrentFileChange: ((String?) -> Void)?
     public var onSelect: ((ItemID) -> Void)?
     public var onSelectionGesture: ((ItemID, SelectionModifier) -> BrowserSelection)?
     public var onClearSelection: (() -> BrowserSelection)?

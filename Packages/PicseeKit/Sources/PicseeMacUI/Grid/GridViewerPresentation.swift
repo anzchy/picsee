@@ -59,8 +59,13 @@ import PicseeCore
     public func showGrid(reading: Bool) {
         shell?.isHidden = false
         shell?.setFooterActionsEnabled(!reading)
+        if let grid = grid as? GridBrowserView {
+            shell?.linkKeyViews(from: grid.collectionView)
+            grid.onCurrentFileChange = { [weak shell] name in shell?.setCurrentFile(name ?? "") }
+            shell?.setCurrentFile(grid.currentItemID.flatMap { grid.entry(for: $0) }?.url.lastPathComponent ?? "")
+            shell?.setReadingStatus(reading)
+        }
         shell?.layoutSubtreeIfNeeded()
-        if let grid = grid as? GridBrowserView { shell?.linkKeyViews(from: grid.collectionView) }
         if reading, let shell, let parent = state.superview {
             state.autoresizingMask = []
             state.frame = shell.convert(shell.mainFrame, to: parent)
@@ -95,6 +100,8 @@ import PicseeCore
                                   currentItemID: ItemID?, offset: NSPoint?) {
         guard let grid = grid as? GridBrowserView else { return }
         grid.display(snapshot, selection: selection)
+        shell?.setSearchStatus(resultCount: snapshot.navigationEntries.count,
+            term: shell?.searchField.stringValue ?? "")
         showGrid(reading: false)
         grid.activate(currentItemID: currentItemID)
         if let offset { grid.restoreContentOffset(offset) }
