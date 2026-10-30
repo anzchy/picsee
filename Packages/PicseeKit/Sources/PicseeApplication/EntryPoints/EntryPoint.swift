@@ -20,6 +20,8 @@ public enum EntryPointLanguage: Sendable {
 
 public enum EntryPoint: String, CaseIterable, Sendable {
     public static let reportIssueURL = URL(string: "https://github.com/anzchy/picsee/issues/new?template=bug_report.yml")!
+    public static let settingsAboutPrivacyNoteURL = URL(string: "https://github.com/anzchy/picsee#%E9%9A%90%E7%A7%81")!
+    public static let settingsAboutSourceCodeURL = URL(string: "https://github.com/anzchy/picsee")!
 
     case reportIssue
     case diagnostics
@@ -40,11 +42,11 @@ public enum EntryPoint: String, CaseIterable, Sendable {
 
     public var state: EntryPointState {
         switch self {
-        case .reportIssue, .diagnostics, .keyboardShortcuts: .implemented
+        case .reportIssue, .diagnostics, .keyboardShortcuts,
+             .settingsAboutPrivacyNote, .settingsAboutSourceCode: .implemented
         case .contextMenu, .filmstrip, .favorites, .recents, .footerInfo, .footerDisplay,
              .settingsDisplayThumbnailSize, .settingsDisplayFileNames, .settingsDisplayFitMode,
-             .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow,
-             .settingsAboutPrivacyNote, .settingsAboutSourceCode: .comingSoon
+             .settingsUpdatesAutomaticCheck, .settingsUpdatesCheckNow: .comingSoon
         }
     }
     public var isEnabled: Bool { state == .implemented }
