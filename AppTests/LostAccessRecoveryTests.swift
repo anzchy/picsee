@@ -1010,6 +1010,35 @@ func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async thro
     }
 }
 
+/// Fix round 5 (device run parity-281-fix4-10301906): page 26 kept the reading footer, `–` and `Reading…`, because the
+/// read that ended on the lost-access page never cleared it. Main shows an empty footer status there.
+@MainActor @Test(.timeLimit(.minutes(3))) func t281Fix5LostAccessPageFooterIsNotReading() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(); defer { c.window?.close() }
+    func expectQuietFooter(_ step: String) throws {
+        let shell = try recoveryShell(c)
+        shell.layoutSubtreeIfNeeded()
+        let name = try #require(t281Fix5Label("grid.current-file-status", in: shell))
+        let count = try #require(t281Fix5Label("grid.folder-count", in: shell))
+        #expect(name.isHidden || name.stringValue.isEmpty, "\(step): name \(name.stringValue)")
+        #expect(count.isHidden || count.stringValue.isEmpty, "\(step): count \(count.stringValue)")
+        #expect(name.stringValue != "–" && count.stringValue != String(localized: "Reading…"), "\(step): reading footer")
+        #expect(!shell.searchField.isEnabled && !shell.sortButton.isEnabled, "\(step): footer actions as on main")
+    }
+    try await t231Lose(f, c)
+    try expectQuietFooter("page 26")
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    try await f.ready(c, folder: f.b)
+    let strip = try t231Strip(c)
+    strip.undoButton.performClick(nil)
+    try await recoveryWait { c.waitingAccessPosition?.rootID == f.rootA && recoveryPage(c) != nil }
+    try expectQuietFooter("undo back to page 26")
+}
+@MainActor private func t281Fix5Label(_ id: String, in view: NSView) -> NSTextField? {
+    if view.accessibilityIdentifier() == id || view.identifier?.rawValue == id { return view as? NSTextField }
+    return view.subviews.lazy.compactMap { t281Fix5Label(id, in: $0) }.first
+}
+
 @MainActor @Test(.timeLimit(.minutes(3))) func t231NotFoundRealShellFramesAndLanguages() async throws {
     let f = try await RecoveryFixture(); defer { f.remove() }
     for size in [NSSize(width: 1280, height: 800), NSSize(width: 800, height: 680)] {

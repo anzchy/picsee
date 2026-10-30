@@ -475,6 +475,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     func showWaitingAccessState() {
         guard let position = waitingAccessPosition else { return }
         presentation.showGrid(reading: true)
+        // Page 26 keeps the reading surface's disabled footer actions, but nothing is being read.
+        gridShell.setReadingStatus(false)
         stateHost.isHidden = true
         stateHost.setAccessibilityHidden(true)
         inspectorHost.isHidden = true
@@ -2206,6 +2208,8 @@ extension CanvasWindowController: FolderScanHost {
     }
     func folderScanDidEnd() {
         chromeOverlay.refresh(session: session)
+        // A failed read ends on the failure page, not the grid, so nothing clears the reading footer there.
+        if session.folderScan?.failure != nil { gridShell.setReadingStatus(false) }
         if let context = scanReadContext, let root = presentationRootID,
            let failure = session.folderScan?.failure, let monitor = accessMonitor {
             Task { await monitor.reportReadFailure(root, from: context.stamp, error: failure) }
