@@ -7,9 +7,12 @@ import PicseeApplication
 @MainActor final class ReadingProgressView: NSView {
     let dividerLayer = CAShapeLayer()
     let accentLayer = CAShapeLayer()
+    let notificationCenter: NotificationCenter
     var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    nonisolated(unsafe) private var reduceMotionObserver: NSObjectProtocol?
 
-    override init(frame frameRect: NSRect) {
+    init(frame frameRect: NSRect, notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+        self.notificationCenter = notificationCenter
         super.init(frame: frameRect)
         wantsLayer = true
         dividerLayer.fillColor = NSColor.clear.cgColor
@@ -21,15 +24,18 @@ import PicseeApplication
         layer?.addSublayer(accentLayer)
         setAccessibilityRole(.progressIndicator)
         refreshAppearance()
-        NotificationCenter.default.addObserver(self, selector: #selector(reduceMotionDidChange),
-                                               name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
-                                               object: nil)
+        reduceMotionObserver = notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.start() }
+        }
     }
     deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-    @objc private func reduceMotionDidChange() {
-        start()
+        if let reduceMotionObserver {
+            notificationCenter.removeObserver(reduceMotionObserver)
+        }
     }
     required init?(coder: NSCoder) { nil }
 

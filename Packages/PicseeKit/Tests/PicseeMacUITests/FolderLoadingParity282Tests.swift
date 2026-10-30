@@ -143,6 +143,7 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
 
 @Test @MainActor func issue282ReadingRingUpdatesRotationWhenReduceMotionChanges() {
     let view = ReadingProgressView(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
+    #expect(view.notificationCenter === NSWorkspace.shared.notificationCenter)
     var reduceMotion = false
     view.reduceMotion = { reduceMotion }
     view.start()
@@ -151,10 +152,16 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
     reduceMotion = true
     NotificationCenter.default.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                     object: NSWorkspace.shared)
+    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
+    view.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                 object: NSWorkspace.shared)
     #expect(view.layer?.animation(forKey: "picsee.reading.rotation") == nil)
 
     reduceMotion = false
     NotificationCenter.default.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                     object: NSWorkspace.shared)
+    #expect(view.layer?.animation(forKey: "picsee.reading.rotation") == nil)
+    view.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                 object: NSWorkspace.shared)
     #expect(view.layer?.animation(forKey: "picsee.reading.rotation") != nil)
 }
