@@ -47,6 +47,8 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
         defer { scene.window.close() }
         scene.state.appearance = NSAppearance(named: appearanceName)
         scene.state.display(.readingFolder)
+        // The grid presentation moves the host onto the main frame after display (1084x722 on the pinned page).
+        scene.state.frame = NSRect(x: 0, y: 40, width: 1084, height: 722)
         scene.state.layoutSubtreeIfNeeded()
         let progress = try issue282Frame("state.folder-progress", in: scene.state)
         let headingView = try #require(issue282StateView("state.folder-title", in: scene.state) as? NSTextField)
@@ -54,22 +56,25 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
         let subtitleView = try #require(issue282StateView("state.folder-subtitle", in: scene.state) as? NSTextField)
         let subtitle = try issue282Frame("state.folder-subtitle", in: scene.state)
         let cancel = try #require(issue282StateView("state.cancel-folder", in: scene.state) as? NSButton)
+        func fromTop(_ y: CGFloat) -> CGFloat { scene.state.bounds.height - y }
 
-        // folder-loading.html: .mock-progress is 28x28; h2 adds 18px after its 8px bottom margin.
+        // folder-loading.html in a 722pt main area (Chrome 1280x800, main top 38): .mock-progress top 269.45,
+        // h2 line box 323.45–346.45, p line box 355.45–377.55, .text-button 403.55–438.55 (68 wide).
         #expect(progress.size == NSSize(width: 28, height: 28))
-        #expect(progress.minY - heading.maxY == 26)
-        #expect(headingView.font?.pointSize == 16)
+        #expect(abs(fromTop(progress.maxY) - 269.45) <= 1)
+        #expect(abs(progress.midX - scene.state.bounds.midX) <= 0.5)
         #expect(headingView.font == .systemFont(ofSize: 16, weight: .medium))
         #expect(headingView.stringValue == "Reading Folder…")
-        // folder-loading.html: .empty-state p is 13px with margin-top 9px and line-height 1.7.
+        #expect(abs(fromTop(heading.midY) - (323.45 + 23 / 2)) <= 1)
+        #expect(abs(heading.height - ceil(headingView.intrinsicContentSize.height)) <= 1)
         #expect(subtitleView.font?.pointSize == 13)
-        #expect(abs(subtitle.height - 22.1) < 0.01)
-        #expect(heading.minY - subtitle.maxY == 9)
         #expect(subtitleView.stringValue == "Looking for images to browse. Please wait.")
-        // folder-loading.html: .text-button is borderless, accent-text, padding 8 and margin-top 8.
+        #expect(abs(fromTop(subtitle.midY) - (355.45 + 22.1 / 2)) <= 1)
+        #expect(abs(subtitle.height - ceil(subtitleView.intrinsicContentSize.height)) <= 1)
         #expect(!cancel.isBordered)
-        #expect(cancel.frame.height >= 30)
-        #expect(subtitle.minY - cancel.frame.maxY == 8)
+        #expect(abs(fromTop(cancel.frame.maxY) - 403.55) <= 1)
+        #expect(abs(cancel.frame.height - 35) <= 1)
+        #expect(abs(cancel.frame.midX - scene.state.bounds.midX) <= 1)
         #expect(cancel.acceptsFirstResponder)
         #expect(cancel.accessibilityLabel() == "Cancel Reading")
         var tint: NSColor?
@@ -82,15 +87,15 @@ private func issue282PathEndpoints(_ path: CGPath) -> (start: CGPoint, end: CGPo
         #expect(abs(actual.greenComponent - expected.green) < 0.01)
         #expect(abs(actual.blueComponent - expected.blue) < 0.01)
 
-        let frames = [progress, heading, subtitle, cancel.frame]
-        let union = frames.dropFirst().reduce(progress) { $0.union($1) }
-        #expect(abs(union.midX - scene.state.bounds.midX) <= 1)
-        #expect(abs(union.midY - scene.state.bounds.midY) <= 1)
         var restored = 0
         scene.state.onCancelFolderReading = { restored += 1 }
         cancel.performClick(nil)
         #expect(restored == 1)
     }
+}
+
+@Test @MainActor func issue282ReadingProgressViewIsNotDecodable() {
+    #expect(ReadingProgressView(coder: NSCoder()) == nil)
 }
 
 @Test @MainActor func issue282ReadingRingUsesAccentSegmentAndStopsForReduceMotion() throws {
