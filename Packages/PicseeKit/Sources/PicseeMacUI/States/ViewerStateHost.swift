@@ -109,6 +109,7 @@ public final class ViewerStateHost: NSView {
     private var stateIcon: NSImageView?
     private var stateLabels: [NSTextField] = []
     private var firstLaunch: FirstLaunchView?
+    private var readingViews: (progress: NSView, heading: NSTextField, subtitle: NSTextField, cancel: NSButton)?
     public func setFirstLaunchDragActive(_ active: Bool) { firstLaunch?.setDragActive(active) }
     public func linkKeyViews(to canvas: NSView, chrome: ViewerChromeOverlay) {
         keyCanvas = canvas; keyChrome = chrome
@@ -182,7 +183,7 @@ public final class ViewerStateHost: NSView {
             $0.removeFromSuperview()
         }
         buttons = []; textLines = []; showsProgress = false
-        composedState = nil; stateIcon = nil; stateLabels = []; firstLaunch = nil
+        composedState = nil; stateIcon = nil; stateLabels = []; firstLaunch = nil; readingViews = nil
         var actions: [(String, String)] = []
         var failure = false
         let notice = status == .detailLimited
@@ -223,14 +224,6 @@ public final class ViewerStateHost: NSView {
             subtitle.textColor = DesignColor.textSecondary.nsColor
             subtitle.alignment = .center
             subtitle.setAccessibilityIdentifier("state.folder-subtitle")
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.alignment = .center
-            paragraph.minimumLineHeight = 22.1
-            paragraph.maximumLineHeight = 22.1
-            subtitle.attributedStringValue = NSAttributedString(string: textLines[1], attributes: [
-                .font: subtitle.font!, .foregroundColor: DesignColor.textSecondary.nsColor,
-                .paragraphStyle: paragraph,
-            ])
             let cancel = ViewerStateButton(title: String(localized: "Cancel Reading"), target: self, action: #selector(activate(_:)))
             cancel.session = session
             cancel.isBordered = false
@@ -243,26 +236,11 @@ public final class ViewerStateHost: NSView {
             cancel.identifier = NSUserInterfaceItemIdentifier("state.cancel-folder")
             cancel.setAccessibilityIdentifier("state.cancel-folder")
             cancel.setAccessibilityLabel(String(localized: "Cancel Reading"))
-            let headingHeight: CGFloat = 20
-            let subtitleHeight: CGFloat = 22.1
-            let cancelHeight: CGFloat = 32
-            let contentHeight = 28 + 26 + headingHeight + 9 + subtitleHeight + 8 + cancelHeight
-            let center = max(160, bounds.midY)
-            let top = center + contentHeight / 2
-            progress.frame = NSRect(x: bounds.midX - 14, y: top - 28, width: 28, height: 28)
-            progress.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
-            heading.frame = NSRect(x: 16, y: progress.frame.minY - 26 - headingHeight,
-                width: max(0, bounds.width - 32), height: headingHeight)
-            heading.autoresizingMask = [.width, .minYMargin, .maxYMargin]
-            subtitle.frame = NSRect(x: 16, y: heading.frame.minY - 9 - subtitleHeight,
-                width: max(0, bounds.width - 32), height: subtitleHeight)
-            subtitle.autoresizingMask = [.width, .minYMargin, .maxYMargin]
-            let cancelWidth = max(32, ceil((cancel.intrinsicContentSize.width + 16) / 2) * 2)
-            cancel.frame = NSRect(x: bounds.midX - cancelWidth / 2, y: subtitle.frame.minY - 8 - cancelHeight,
-                width: cancelWidth, height: cancelHeight)
-            cancel.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
             [progress, heading, subtitle, cancel].forEach { addSubview($0) }
+            readingViews = (progress, heading, subtitle, cancel)
             buttons = [cancel]; setAccessibilityChildren([progress, heading, subtitle, cancel])
+            needsLayout = true
+            layoutSubtreeIfNeeded()
             return
         case .folderScanFailed(let reason, let count):
             failure = true
@@ -390,8 +368,35 @@ public final class ViewerStateHost: NSView {
             : String(localized: "Open folder", bundle: bundle)
     }
 
+    /// folder-loading.html `.empty-state` in `.grid-scroll` (padding 16 top, 30 bottom): ring 28 + 8, h2 18 + 23,
+    /// p 9 + 22.1, `.mock-actions` 18 then `.text-button` 8 + 35, centred again whenever the host moves.
+    private func layoutReading(_ views: (progress: NSView, heading: NSTextField, subtitle: NSTextField, cancel: NSButton)) {
+        let groupHeight: CGFloat = 28 + 8 + 18 + 23 + 9 + 22.1 + 18 + 8 + 35
+        let groupTop = (16 + (bounds.height - 46) / 2 - groupHeight / 2).rounded()
+        func y(fromTop offset: CGFloat, height: CGFloat) -> CGFloat { bounds.height - groupTop - offset - height }
+        func centred(_ field: NSTextField, lineTop: CGFloat, lineHeight: CGFloat) {
+            let height = ceil(field.intrinsicContentSize.height)
+            field.frame = NSRect(x: 16, y: y(fromTop: lineTop + (lineHeight - height) / 2, height: height).rounded(),
+                                 width: max(0, bounds.width - 32), height: height)
+        }
+        views.progress.frame = NSRect(x: (bounds.midX - 14).rounded(), y: y(fromTop: 0, height: 28),
+                                      width: 28, height: 28)
+        centred(views.heading, lineTop: 54, lineHeight: 23)
+        centred(views.subtitle, lineTop: 86, lineHeight: 22.1)
+        let cancelWidth = max(32, ceil((views.cancel.intrinsicContentSize.width + 16) / 2) * 2)
+        views.cancel.frame = NSRect(x: (bounds.midX - cancelWidth / 2).rounded(),
+                                    y: y(fromTop: 134.1, height: 35).rounded(), width: cancelWidth, height: 35)
+    }
+
+    /// A sidebar resize moves the host synchronously; keep the reading stack centred before the next layout pass.
+    public override func resizeSubviews(withOldSize oldSize: NSSize) {
+        super.resizeSubviews(withOldSize: oldSize)
+        if let readingViews { layoutReading(readingViews) }
+    }
+
     public override func layout() {
         super.layout()
+        if let readingViews { layoutReading(readingViews); return }
         guard composedState != nil, let icon = stateIcon else { return }
         let available = max(0, bounds.width - 32)
         let textWidth = min(640, available)
