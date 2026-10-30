@@ -29,14 +29,132 @@ private func sameSidebarURL(_ lhs: URL, _ rhs: URL) -> Bool {
     lhs.standardizedFileURL.pathComponents == rhs.standardizedFileURL.pathComponents
 }
 
-@MainActor private func waitForSidebar(_ stage: String, refreshing watch: WatchHub? = nil,
+@MainActor private func waitForSidebar(_ stage: String, refreshing watch: (any FolderWatching)? = nil,
     _ condition: () async -> Bool) async throws {
+    watch?.reconcileAll()
     let deadline = ContinuousClock.now + .seconds(30)
     while await !condition(), ContinuousClock.now < deadline {
-        watch?.reconcileAll()
-        try? await Task.sleep(for: .milliseconds(50))
+        try await Task.sleep(for: .milliseconds(50))
     }
     try #require(await condition(), "Sidebar stage timed out after 30 seconds: \(stage)")
+}
+
+private final class SidebarHandoffGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var armed = false
+    private var released = false
+    private var holding = false
+    private var continuation: CheckedContinuation<Void, Never>?
+    var isHolding: Bool { lock.withLock { holding } }
+    func arm() {
+        lock.withLock { armed = true; released = false; holding = false }
+    }
+    func holdIfArmed() async {
+        guard lock.withLock({ () -> Bool in
+            guard armed else { return false }
+            armed = false; holding = true
+            return true
+        }) else { return }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                let resumeNow = lock.withLock { () -> Bool in
+                    if released { holding = false; return true }
+                    self.continuation = continuation
+                    return false
+                }
+                if resumeNow { continuation.resume() }
+            }
+        } onCancel: { release() }
+    }
+    func release() {
+        let continuation = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            released = true; holding = false
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        continuation?.resume()
+    }
+}
+
+private final class SidebarHandoffWatch: FolderWatching, @unchecked Sendable {
+    private let hub: WatchHub
+    private let gate = SidebarHandoffGate()
+    private let lock = NSLock()
+    private var registered = false
+    init(hub: WatchHub) { self.hub = hub }
+    var isHolding: Bool { gate.isHolding }
+    var didRegister: Bool { lock.withLock { registered } }
+    func armNextSubscription() {
+        lock.withLock { registered = false }
+        gate.arm()
+    }
+    func releaseSubscription() { gate.release() }
+    func subscribe(rootID: AccessRootID, folder: URL, recursive: Bool,
+        onChange: @escaping @Sendable () -> Void) async throws -> any FolderWatchSubscription {
+        await gate.holdIfArmed()
+        let subscription = try await hub.subscribe(rootID: rootID, folder: folder, recursive: recursive, onChange: onChange)
+        lock.withLock { registered = true }
+        return subscription
+    }
+    func reconcileAll() { hub.reconcileAll() }
+}
+
+private final class SidebarHandoffEnumerator: SidebarFolderEnumerating, @unchecked Sendable {
+    private let system = SystemSidebarFolderEnumerator()
+    private let gate = SidebarHandoffGate()
+    var isReadCaptured: Bool { gate.isHolding }
+    func armNextChildrenRead() { gate.arm() }
+    func releaseChildrenRead() { gate.release() }
+    func children(in folder: URL, root: URL) async throws -> [URL] {
+        let children = try await system.children(in: folder, root: root)
+        await gate.holdIfArmed()
+        try Task.checkCancellation()
+        return children
+    }
+    func imageCount(in folder: URL, root: URL) async throws -> Int {
+        try await system.imageCount(in: folder, root: root)
+    }
+}
+
+private final class SidebarHandoffEventSource: FolderEventSource, @unchecked Sendable {
+    private struct Stream: FolderEventStream {
+        let onStop: @Sendable () -> Void
+        func stop() { onStop() }
+    }
+    private let lock = NSLock()
+    private var handlers: [UUID: @Sendable ([FolderChangeHint]) -> Void] = [:]
+    func start(watching url: URL, onHints: @escaping @Sendable ([FolderChangeHint]) -> Void) throws -> any FolderEventStream {
+        let id = UUID()
+        lock.withLock { handlers[id] = onHints }
+        return Stream { [self] in lock.withLock { handlers[id] = nil } }
+    }
+    func emit(_ hint: FolderChangeHint) {
+        let callbacks = lock.withLock { Array(handlers.values) }
+        for handler in callbacks { handler([hint]) }
+    }
+}
+
+private final class SidebarHandoffClock: WatchScheduling, @unchecked Sendable {
+    private final class Token: WatchCancellable, @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func cancel() { lock.withLock { done = true } }
+        var cancelled: Bool { lock.withLock { done } }
+    }
+    private let lock = NSLock()
+    private var pending: [(token: Token, action: @Sendable () -> Void)] = []
+    var nowMilliseconds: Int { 0 }
+    func schedule(afterMilliseconds: Int, _ action: @escaping @Sendable () -> Void) -> any WatchCancellable {
+        let token = Token()
+        lock.withLock { pending.append((token, action)) }
+        return token
+    }
+    func fireScheduledChanges() {
+        while let action = lock.withLock({ () -> (@Sendable () -> Void)? in
+            pending.removeAll { $0.token.cancelled }
+            return pending.isEmpty ? nil : pending.removeFirst().action
+        }) { action() }
+    }
 }
 
 private actor SidebarLeaseTracker: AccessLeasing {
@@ -233,6 +351,60 @@ private actor SwitchingSidebarCounter: SidebarFolderEnumerating {
         tree.rows.first(where: { sameSidebarURL($0.folderURL, d) })?.countLabel.stringValue == "2"
     }
     try fm.removeItem(at: b)
-    try await waitForSidebar("removed B", refreshing: services.watch) { !tree.rows.contains { sameSidebarURL($0.folderURL, b) } }
+    try await waitForSidebar("removed B", refreshing: services.watch) {
+        !tree.rows.contains { sameSidebarURL($0.folderURL, b) } &&
+        tree.rows.first(where: { sameSidebarURL($0.folderURL, d) })?.countLabel.stringValue == "2"
+    }
     #expect(!tree.rows.contains(where: { sameSidebarURL($0.folderURL, b) }))
+}
+
+@Test(.timeLimit(.minutes(3))) @MainActor func sidebarWatchHandoffDeliversChangeDuringCapturedRead() async throws {
+    _ = NSApplication.shared
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let a = base.appendingPathComponent("A"), b = a.appendingPathComponent("B")
+    try fm.createDirectory(at: b, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: base) }
+    let image = try Data(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().appendingPathComponent("TestAssets/synthetic/portrait-2x3.png"))
+    try image.write(to: a.appendingPathComponent("a.png"))
+    try image.write(to: b.appendingPathComponent("b.png"))
+    let scope = SystemSecurityScope()
+    let access = try FileAccess(scope: scope, bookmarks: scope,
+        store: BookmarkStore(url: base.appendingPathComponent("roots.json")), buildSHA: "sidebar-handoff")
+    let root = try await access.grant(folder: base)
+    let source = SidebarHandoffEventSource(), clock = SidebarHandoffClock()
+    let hub = WatchHub(access: access, source: source, scheduler: clock)
+    let watch = SidebarHandoffWatch(hub: hub)
+    let services = AccessServices(files: access,
+        recent: RecentFolderStore(url: base.appendingPathComponent("recent.json")),
+        browser: FolderBrowser(), watch: watch)
+    let controller = CanvasWindowController(pipeline: ImageIOPipeline(),
+        preferencesStore: InMemoryDisplayPreferencesStore(), accessServices: Task { services },
+        motionPolicy: MotionPolicy(source: SidebarMotionSource()))
+    defer { controller.window?.close() }
+    let enumerator = SidebarHandoffEnumerator()
+    controller.sidebarBrowserOverride = SidebarFolderBrowser(access: access, enumerator: enumerator)
+    defer { enumerator.releaseChildrenRead(); watch.releaseSubscription() }
+    controller.browseRecoveredFolder(a, rootID: root)
+    let tree = try sidebarTree(controller)
+    try await waitForSidebar("initial tree") {
+        tree.rows.first(where: { sameSidebarURL($0.folderURL, b) })?.countLabel.stringValue == "1"
+    }
+    enumerator.armNextChildrenRead()
+    watch.armNextSubscription()
+    watch.reconcileAll()
+    try await waitForSidebar("read captured before new registration") {
+        enumerator.isReadCaptured && watch.isHolding
+    }
+    let d = a.appendingPathComponent("D")
+    try fm.createDirectory(at: d, withIntermediateDirectories: true)
+    source.emit(.changed(d))
+    clock.fireScheduledChanges()
+    watch.releaseSubscription()
+    enumerator.releaseChildrenRead()
+    try await waitForSidebar("external change delivered across handoff") {
+        tree.rows.first(where: { sameSidebarURL($0.folderURL, d) })?.countLabel.stringValue == "0"
+    }
+    #expect(tree.rows.contains { sameSidebarURL($0.folderURL, b) })
 }

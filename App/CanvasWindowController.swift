@@ -86,6 +86,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     private var sidebarLoader: SidebarFolderLoadSession?
     private var sidebarTreeGeneration = UUID()
     private var sidebarWatchSubscription: (any FolderWatchSubscription)?
+    private var sidebarWatchGeneration: UUID?
     var sidebarBrowserOverride: SidebarFolderBrowser?
     private var sidebarKnownCounts: [URL: Int] = [:]
     func completeGridDisplay(_ snapshot: FolderSnapshot, currentItemID: ItemID?, offset: NSPoint?) {
@@ -1308,7 +1309,7 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func loadSidebarTree(_ folder: URL, rootID: AccessRootID, count: Int?) {
-        cancelSidebarTree()
+        cancelSidebarTree(preservingWatch: true)
         let generation = sidebarTreeGeneration
         gridShell.showFolderTree(current: GridSidebarFolder(url: folder, count: count), parent: nil, children: [])
         sidebarTreeTask = Task(priority: .utility) { [weak self, accessServices] in
@@ -1346,8 +1347,8 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                 let watch = try await services.watch.subscribe(rootID: rootID, folder: folder,
                     recursive: true, onChange: { [weak self] in
                         Task { @MainActor [weak self] in
-                            guard let self, self.sidebarTreeGeneration == generation,
-                                self.gridFolderURL == folder else { return }
+                            guard let self, self.gridFolderURL == folder,
+                                self.sidebarWatchGeneration == generation || self.sidebarTreeGeneration == generation else { return }
                             self.loadSidebarTree(folder, rootID: rootID, count: nil)
                         }
                     })
@@ -1355,7 +1356,10 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
                     await watch.cancel()
                     return
                 }
+                let previous = self.sidebarWatchSubscription
                 self.sidebarWatchSubscription = watch
+                self.sidebarWatchGeneration = generation
+                if let previous { Task { await previous.cancel() } }
             } catch {
                 if let failureContext, !Task.isCancelled, !(error is CancellationError) {
                     await monitor?.reportReadFailure(rootID, from: failureContext.stamp, error: error)
@@ -1363,14 +1367,17 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
             }
         }
     }
-    private func cancelSidebarTree() {
+    private func cancelSidebarTree(preservingWatch: Bool = false) {
         sidebarTreeGeneration = UUID()
         sidebarTreeTask?.cancel()
         sidebarTreeTask = nil
         sidebarLoader?.cancel()
         sidebarLoader = nil
-        if let watch = sidebarWatchSubscription { Task { await watch.cancel() } }
-        sidebarWatchSubscription = nil
+        if !preservingWatch {
+            if let watch = sidebarWatchSubscription { Task { await watch.cancel() } }
+            sidebarWatchSubscription = nil
+            sidebarWatchGeneration = nil
+        }
         sidebarKnownCounts.removeAll()
     }
 
