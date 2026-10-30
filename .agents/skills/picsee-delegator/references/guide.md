@@ -526,7 +526,7 @@ keep branches short, integrate often, and never let two branches own one core mo
   | `OVERLAP` | no textual conflict, but both sides changed the same code file | rebase now, `rebase-verify.sh`, quick combination check by both auditors |
   | `CODE` | textual conflict in code | rebase now; send the conflict to the implementer if it is not mechanical |
   | `EMPTY` | no commits of its own yet; `UNCOMMITTED` means edits the check cannot see | tell the implementer what changed on main |
-  | `MERGED` | all its patches are on main | remove the worktree when the user agrees |
+  | `MERGED` | all its patches are on main | remove the worktree now (standing approval, step 8), unless it is a pane home |
 
   Exit 0 = clean or ledger only, 1 = overlap, 2 = code conflict.
 - **Merge as soon as ready.** A green, audited, smoked branch merges now; holding it for another item only lengthens
@@ -728,7 +728,8 @@ run=<run-id>`, garden it, open a `docs/validation` PR and merge.
 - Never change system or privacy settings. Never empty the Trash. Never click web links during device runs.
 - Never kill a process this run didn't start; that includes the user's Picsee.
 - Ask before `rm -r`, `git reset --hard`, deleting branches or worktrees, or any force push other than
-  `--force-with-lease` on your own PR branches.
+  `--force-with-lease` on your own PR branches. Exception: remove a merged PR's worktree right after the merge
+  (user 2026-10-30); its branch stays.
 - Stage named paths only; never `git add -A`, `.` or `-u`.
 - Heavy lock: put only the heavy job itself under `scripts/heavy-lock.sh`, one command per call. Never a bare shell,
   REPL, `sleep`, or a persistent session. Never delete the lock files.

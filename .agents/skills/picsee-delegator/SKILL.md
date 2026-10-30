@@ -114,7 +114,10 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    Push with `python3 scripts/codex-rules/push-guard.py` (exact lease OID after rebasing an owned PR branch). Wait for checks
    to register, `gh pr checks --watch`, then `gh pr merge --rebase` (authorised when no blocking C/H, gardener not BLOCK,
    CI green, and `Device-Smoke:` is PASS or n/a). Merge as soon as an item is ready; don't hold a green branch for
-   another. **After every merge**, `git fetch` and run `$SK/scripts/overlap-check.py trial`: `OVERLAP` or `CODE` →
+   another. **Right after the merge, remove that PR's worktree** (user 2026-10-30: 「已经提交并成功merge pr的对应的worktree要及时清除，这个要作为一个rule」):
+   archive untracked `.claude/tdd-guardian/` to `~/.picsee/archive/tdd-guardian/<worktree>/`, then `git worktree remove`
+   (`--force` only when the rest is `.tokenize/` or `.claude/mind.mv2*` caches; report any other dirt). Keep the
+   branch, pane home worktrees and `prototype/*` worktrees. **After every merge**, `git fetch` and run `$SK/scripts/overlap-check.py trial`: `OVERLAP` or `CODE` →
    rebase that branch now while it is small, then the rebase-verify and combination-check path of step 6; `LEDGER` can
    wait for its PR; `EMPTY … UNCOMMITTED` is invisible to the check, so tell its implementer what changed on main.
 9. **Device validation** — UI parity runs in batches on current `main`: after about 4–6 UI work packages, when a
