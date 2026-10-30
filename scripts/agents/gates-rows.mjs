@@ -15,7 +15,10 @@ if (args.length !== 1 && !(args.length === 3 && args[1] === '--head' && /^[0-9a-
   process.exitCode = 2;
 } else {
   try {
-    const lines = readFileSync(args[0], 'utf8').split(/\r?\n/);
+    const lines = readFileSync(args[0], 'utf8').split(/\r?\n/).map(line => {
+      const record = line.match(/^\s*([A-Za-z]+)\s*=\s*(.*?)\s*$/);
+      return record ? `${record[1]}=${record[2]}` : line;
+    });
     const head = lines.find(line => /^head=[0-9a-f]{7,40}$/i.test(line))?.split('=')[1];
     if (!head) throw new Error('owner-gates summary missing valid head');
     const finalLine = lines.filter(line => line.trim()).at(-1);
@@ -23,10 +26,16 @@ if (args.length !== 1 && !(args.length === 3 && args[1] === '--head' && /^[0-9a-
     const ambiguous = lines.filter(line => line.startsWith('head=')).length > 1 || doneCount > 1 ||
       (doneCount === 1 && finalLine !== 'DONE') ||
       lanes.some(([, key]) => lines.filter(line => line.startsWith(`${key}=`)).length > 1);
+    const malformed = lanes.some(([, key]) => {
+      const value = lines.find(line => line.startsWith(`${key}=`))?.slice(key.length + 1);
+      return value !== undefined && !/^\d+$/.test(value);
+    });
     const stale = args.length === 3 && args[2].toLowerCase() !== head.toLowerCase();
     let rows;
     if (ambiguous) {
       rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary ambiguous |`);
+    } else if (malformed) {
+      rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary malformed |`);
     } else if (finalLine !== 'DONE') {
       rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary incomplete |`);
     } else if (stale) {
