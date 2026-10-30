@@ -9,44 +9,86 @@ const lanes = [
   ['ledger', 'ledger'],
   ['diff-check', 'diffcheck'],
 ];
+const usage = 'usage: node scripts/agents/gates-rows.mjs [<summary.txt>] [--ci <run.json>] [--head <sha>]';
 const args = process.argv.slice(2);
-if (args.length !== 1 && !(args.length === 3 && args[1] === '--head' && /^[0-9a-f]{7,40}$/i.test(args[2]))) {
-  console.error('usage: node scripts/agents/gates-rows.mjs <summary.txt> [--head <sha>]');
+let summaryFile, ciFile, expectedHead;
+if (args[0] && !args[0].startsWith('--')) summaryFile = args.shift();
+let valid = true;
+while (args.length) {
+  const flag = args.shift();
+  const value = args.shift();
+  if (!value || (flag !== '--ci' && flag !== '--head') || (flag === '--ci' && ciFile) || (flag === '--head' && expectedHead)) {
+    valid = false;
+    break;
+  }
+  if (flag === '--ci') ciFile = value;
+  else expectedHead = value;
+}
+if ((!summaryFile && !ciFile) || (expectedHead && !/^[0-9a-f]{7,40}$/i.test(expectedHead))) valid = false;
+if (!valid) {
+  console.error(usage);
   process.exitCode = 2;
 } else {
   try {
-    const lines = readFileSync(args[0], 'utf8').split(/\r?\n/).map(line => {
-      const record = line.match(/^\s*([A-Za-z]+)\s*=\s*(.*?)\s*$/);
-      return record ? `${record[1]}=${record[2]}` : line;
-    });
-    const head = lines.find(line => /^head=[0-9a-f]{7,40}$/i.test(line))?.split('=')[1];
-    if (!head) throw new Error('owner-gates summary missing valid head');
-    const finalLine = lines.filter(line => line.trim()).at(-1);
-    const doneCount = lines.filter(line => line === 'DONE').length;
-    const ambiguous = lines.filter(line => line.startsWith('head=')).length > 1 || doneCount > 1 ||
-      (doneCount === 1 && finalLine !== 'DONE') ||
-      lanes.some(([, key]) => lines.filter(line => line.startsWith(`${key}=`)).length > 1);
-    const malformed = lanes.some(([, key]) => {
-      const value = lines.find(line => line.startsWith(`${key}=`))?.slice(key.length + 1);
-      return value !== undefined && !/^\d+$/.test(value);
-    });
-    const stale = args.length === 3 && args[2].toLowerCase() !== head.toLowerCase();
-    let rows;
-    if (ambiguous) {
-      rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary ambiguous |`);
-    } else if (malformed) {
-      rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary malformed |`);
-    } else if (finalLine !== 'DONE') {
-      rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary incomplete |`);
-    } else if (stale) {
-      rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates stale head ${head.slice(0, 7)} |`);
-    } else {
-      rows = lanes.map(([lane, key]) => {
-        const exit = lines.find(line => line.startsWith(`${key}=`))?.slice(key.length + 1);
-        if (exit === undefined) return `| ${lane} | NOT RUN | — | owner-gates summary missing ${key} |`;
-        const status = exit === '0' ? 'PASS' : 'FAIL';
-        return `| ${lane} | ${status} | ${head} | owner-gates ${key}=${exit} |`;
+    const rows = [];
+    if (summaryFile) {
+      const lines = readFileSync(summaryFile, 'utf8').split(/\r?\n/).map(line => {
+        const record = line.match(/^\s*([A-Za-z]+)\s*=\s*(.*?)\s*$/);
+        return record ? `${record[1]}=${record[2]}` : line;
       });
+      const head = lines.find(line => /^head=[0-9a-f]{7,40}$/i.test(line))?.split('=')[1];
+      if (!head) throw new Error('owner-gates summary missing valid head');
+      const finalLine = lines.filter(line => line.trim()).at(-1);
+      const doneCount = lines.filter(line => line === 'DONE').length;
+      const ambiguous = lines.filter(line => line.startsWith('head=')).length > 1 || doneCount > 1 ||
+        (doneCount === 1 && finalLine !== 'DONE') ||
+        lanes.some(([, key]) => lines.filter(line => line.startsWith(`${key}=`)).length > 1);
+      const malformed = lanes.some(([, key]) => {
+        const value = lines.find(line => line.startsWith(`${key}=`))?.slice(key.length + 1);
+        return value !== undefined && !/^\d+$/.test(value);
+      });
+      const stale = expectedHead && expectedHead.toLowerCase() !== head.toLowerCase();
+      if (ambiguous) {
+        rows.push(...lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary ambiguous |`));
+      } else if (malformed) {
+        rows.push(...lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary malformed |`));
+      } else if (finalLine !== 'DONE') {
+        rows.push(...lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary incomplete |`));
+      } else if (stale) {
+        rows.push(...lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates stale head ${head.slice(0, 7)} |`));
+      } else {
+        rows.push(...lanes.map(([lane, key]) => {
+          const exit = lines.find(line => line.startsWith(`${key}=`))?.slice(key.length + 1);
+          if (exit === undefined) return `| ${lane} | NOT RUN | — | owner-gates summary missing ${key} |`;
+          const status = exit === '0' ? 'PASS' : 'FAIL';
+          return `| ${lane} | ${status} | ${head} | owner-gates ${key}=${exit} |`;
+        }));
+      }
+    }
+    if (ciFile) {
+      const run = JSON.parse(readFileSync(ciFile, 'utf8'));
+      if (!run || typeof run.headSha !== 'string' || !run.headSha || !Array.isArray(run.jobs)) {
+        throw new Error('CI run missing valid headSha or jobs');
+      }
+      const { headSha, url, status } = run;
+      const runHead = headSha.toLowerCase();
+      const head = expectedHead?.toLowerCase();
+      const jobs = run.jobs.filter(job => job?.name === 'App tests');
+      if (head && runHead !== head && !runHead.startsWith(head) && !head.startsWith(runHead)) {
+        rows.push(`| app-tests | NOT VERIFIED | ${headSha} | CI stale head ${headSha.slice(0, 7)} ${url} |`);
+      } else if (status !== 'completed') {
+        rows.push(`| app-tests | NOT VERIFIED | ${headSha} | CI run ${status} ${url} |`);
+      } else if (jobs.length === 0) {
+        rows.push(`| app-tests | NOT RUN | — | App tests job absent from ${url} |`);
+      } else if (jobs.length > 1) {
+        rows.push(`| app-tests | NOT VERIFIED | ${headSha} | CI run ambiguous: ${jobs.length} App tests jobs |`);
+      } else if (jobs[0].conclusion === 'skipped') {
+        rows.push(`| app-tests | NOT RUN | — | App tests skipped (app_tests=false) ${url} |`);
+      } else if (jobs[0].conclusion === 'success') {
+        rows.push(`| app-tests | PASS | ${headSha} | ${url} |`);
+      } else {
+        rows.push(`| app-tests | FAIL | ${headSha} | App tests ${jobs[0].conclusion} ${url} |`);
+      }
     }
     console.log(rows.join('\n'));
   } catch (error) {

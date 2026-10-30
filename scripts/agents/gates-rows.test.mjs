@@ -18,6 +18,115 @@ function runRows(t, summary, args = []) {
   return spawnSync(process.execPath, [script, file, ...args], { encoding: 'utf8' });
 }
 
+function runCIFixture(name, args = []) {
+  const fixture = fileURLToPath(new URL(`./fixtures/ci-${name}.json`, import.meta.url));
+  return spawnSync(process.execPath, [script, '--ci', fixture, ...args], { encoding: 'utf8' });
+}
+
+const ciCases = [
+  {
+    name: 'success accepts a case-insensitive head prefix',
+    fixture: 'success',
+    args: ['--head', head.slice(0, 12).toUpperCase()],
+    row: `| app-tests | PASS | ${head} | https://github.com/anzchy/picsee/actions/runs/319000001 |`,
+  },
+  {
+    name: 'stale head is NOT VERIFIED',
+    fixture: 'stale',
+    row: '| app-tests | NOT VERIFIED | bbbbbbbb12345678901234567890123456789012 | CI stale head bbbbbbb https://github.com/anzchy/picsee/actions/runs/319000002 |',
+  },
+  {
+    name: 'incomplete run is NOT VERIFIED',
+    fixture: 'in-progress',
+    row: `| app-tests | NOT VERIFIED | ${head} | CI run in_progress https://github.com/anzchy/picsee/actions/runs/319000003 |`,
+  },
+  {
+    name: 'skipped job is NOT RUN',
+    fixture: 'skipped',
+    row: '| app-tests | NOT RUN | — | App tests skipped (app_tests=false) https://github.com/anzchy/picsee/actions/runs/319000004 |',
+  },
+  {
+    name: 'failed job is FAIL',
+    fixture: 'failure',
+    row: `| app-tests | FAIL | ${head} | App tests failure https://github.com/anzchy/picsee/actions/runs/319000005 |`,
+  },
+  {
+    name: 'cancelled job is FAIL',
+    fixture: 'cancelled',
+    row: `| app-tests | FAIL | ${head} | App tests cancelled https://github.com/anzchy/picsee/actions/runs/319000006 |`,
+  },
+  {
+    name: 'absent job is NOT RUN',
+    fixture: 'absent',
+    row: '| app-tests | NOT RUN | — | App tests job absent from https://github.com/anzchy/picsee/actions/runs/319000007 |',
+  },
+  {
+    name: 'duplicate jobs are NOT VERIFIED',
+    fixture: 'duplicate',
+    row: `| app-tests | NOT VERIFIED | ${head} | CI run ambiguous: 2 App tests jobs |`,
+  },
+];
+
+for (const { name, fixture, args = ['--head', head], row } of ciCases) {
+  test(`gates-rows CI ${name}`, () => {
+    const result = runCIFixture(fixture, args);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, `${row}\n`);
+  });
+}
+
+test('gates-rows rejects malformed CI JSON without emitting PASS', () => {
+  const result = runCIFixture('malformed');
+  assert.equal(result.status, 2);
+  assert.doesNotMatch(result.stdout, /\| PASS \|/);
+});
+
+test('gates-rows rejects an unreadable CI run without emitting PASS', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'picsee-gates-rows-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const result = spawnSync(process.execPath, [script, '--ci', join(directory, 'missing.json')], { encoding: 'utf8' });
+  assert.equal(result.status, 2);
+  assert.doesNotMatch(result.stdout, /\| PASS \|/);
+});
+
+for (const [name, run] of [
+  ['headSha', { jobs: [] }],
+  ['jobs', { headSha: head }],
+]) {
+  test(`gates-rows rejects CI JSON missing ${name}`, t => {
+    const directory = mkdtempSync(join(tmpdir(), 'picsee-gates-rows-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const file = join(directory, 'run.json');
+    writeFileSync(file, JSON.stringify(run));
+    const result = spawnSync(process.execPath, [script, '--ci', file], { encoding: 'utf8' });
+    assert.equal(result.status, 2);
+    assert.doesNotMatch(result.stdout, /\| PASS \|/);
+  });
+}
+
+test('gates-rows requires a summary or CI run', () => {
+  for (const args of [[], ['--head', head]]) {
+    const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /^usage:/);
+  }
+});
+
+test('summary and CI rows pass checkGates; stale CI carries NOT VERIFIED', async t => {
+  const { checkGates } = await import('./ui-parity-pr-body-lint.mjs');
+  const table = rows => `## Gates\n\n| Lane | Status | SHA | Source |\n|---|---|---|---|\n${rows}\n| audit | N/A | — | tooling-only test |\n| device-smoke | N/A | — | no user-visible change |\n`;
+  const current = runRows(t, complete, ['--ci', fileURLToPath(new URL('./fixtures/ci-success.json', import.meta.url)), '--head', head]);
+  assert.equal(current.status, 0, current.stderr);
+  assert.equal(current.stdout.trim().split('\n').length, 7);
+  assert.deepEqual(checkGates(table(current.stdout.trim()), head), { ok: true });
+
+  const stale = runRows(t, complete, ['--ci', fileURLToPath(new URL('./fixtures/ci-stale.json', import.meta.url)), '--head', head]);
+  assert.equal(stale.status, 0, stale.stderr);
+  const staleBody = table(stale.stdout.trim());
+  assert.match(staleBody, /\| app-tests \| NOT VERIFIED \|/);
+  assert.deepEqual(checkGates(staleBody, head), { ok: true });
+});
+
 function assertAmbiguous(t, summary) {
   const result = runRows(t, summary, ['--head', head]);
   assert.equal(result.status, 0, result.stderr);
