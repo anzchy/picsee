@@ -57,7 +57,7 @@ Each of these needs the owner's Apple ID with two-factor authentication. The age
 
 The workflow (#222) reads exactly the secret and variable names above.
 - It imports `DEVELOPER_ID_P12_BASE64` and its password into a temporary keychain protected by `KEYCHAIN_PASSWORD`.
-- It signs with hardened runtime and no get-task-allow.
+- It signs with hardened runtime and no get-task-allow, then checks the signed app with `node scripts/release/check-entitlements.mjs <Picsee.app> --configuration release`. This fails on any entitlement beyond ADR-015's five or a wrong `-spks`/`-spki` name.
 - It notarises with `xcrun notarytool submit --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$DEVELOPMENT_TEAM" --wait`, then staples and validates with spctl.
 - It signs the appcast with `SPARKLE_ED_PRIVATE_KEY`.
 - The app's Info.plist carries the public key as `SUPublicEDKey` (#220).

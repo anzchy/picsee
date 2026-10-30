@@ -56,6 +56,17 @@
       "coverage": "none",
       "probeCommand": "scripts/heavy-lock.sh xcodebuild -list -project Picsee.xcodeproj",
       "timeoutMs": 2400000
+    },
+    {
+      "name": "release-node",
+      "description": "Release tooling node tests (signed-app entitlement checker, #220). Pure parse/compare logic; no codesign.",
+      "command": "node scripts/tdd/node-lane.mjs scripts/release/check-entitlements.test.mjs",
+      "gateOn": [
+        "manual"
+      ],
+      "coverage": "none",
+      "probeCommand": "node --version",
+      "timeoutMs": 120000
     }
   ],
   "coverageThresholds": {
