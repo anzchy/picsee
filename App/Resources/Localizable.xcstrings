@@ -2180,6 +2180,13 @@
         }
       }
     },
+    "Reading…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reading…" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在读取…" } }
+      }
+    },
     "Reading Folder…": {
       "extractionState": "manual",
       "localizations": {
