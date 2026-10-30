@@ -19,9 +19,15 @@ if (args.length !== 1 && !(args.length === 3 && args[1] === '--head' && /^[0-9a-
     const head = lines.find(line => /^head=[0-9a-f]{7,40}$/i.test(line))?.split('=')[1];
     if (!head) throw new Error('owner-gates summary missing valid head');
     const finalLine = lines.filter(line => line.trim()).at(-1);
+    const doneCount = lines.filter(line => line === 'DONE').length;
+    const ambiguous = lines.filter(line => line.startsWith('head=')).length > 1 || doneCount > 1 ||
+      (doneCount === 1 && finalLine !== 'DONE') ||
+      lanes.some(([, key]) => lines.filter(line => line.startsWith(`${key}=`)).length > 1);
     const stale = args.length === 3 && args[2].toLowerCase() !== head.toLowerCase();
     let rows;
-    if (finalLine !== 'DONE') {
+    if (ambiguous) {
+      rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary ambiguous |`);
+    } else if (finalLine !== 'DONE') {
       rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates summary incomplete |`);
     } else if (stale) {
       rows = lanes.map(([lane]) => `| ${lane} | NOT VERIFIED | ${head} | owner-gates stale head ${head.slice(0, 7)} |`);
