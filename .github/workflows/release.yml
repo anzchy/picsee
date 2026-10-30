@@ -68,6 +68,7 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
+          umask 077
           KEYCHAIN="$RUNNER_TEMP/picsee-release.keychain-db"
           P12="$RUNNER_TEMP/developer-id.p12"
           echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
@@ -75,9 +76,12 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           printf '%s' "$DEVELOPER_ID_P12_BASE64" | base64 --decode > "$P12"
+          unset DEVELOPER_ID_P12_BASE64
           security import "$P12" -k "$KEYCHAIN" -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           rm -f "$P12"
+          unset DEVELOPER_ID_P12_PASSWORD
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          unset KEYCHAIN_PASSWORD
           # Search the release keychain first, keeping the runner's own keychains.
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" |
@@ -134,6 +138,7 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
           set -euo pipefail
+          umask 077
           # Stapling the app itself means a copy dragged out of the DMG passes Gatekeeper offline.
           ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/Picsee-notarize.zip"
           scripts/release/notarize.sh "$RUNNER_TEMP/Picsee-notarize.zip"
@@ -158,6 +163,7 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
           set -euo pipefail
+          umask 077
           scripts/release/notarize.sh "$DMG"
           xcrun stapler staple "$DMG"
           xcrun stapler validate "$DMG"
@@ -221,5 +227,9 @@ jobs:
       - name: Delete the temporary keychain
         if: always()
         run: |
-          if [[ -n "${KEYCHAIN:-}" ]]; then security delete-keychain "$KEYCHAIN" || true; fi
-          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/Picsee-notarize.zip"
+          status=0
+          if [[ -n "${KEYCHAIN:-}" && -e "$KEYCHAIN" ]]; then
+            security delete-keychain "$KEYCHAIN" || { echo "::error::could not delete the temporary keychain $KEYCHAIN"; status=1; }
+          fi
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/Picsee-notarize.zip" || { echo "::error::could not remove temporary signing files"; status=1; }
+          exit "$status"

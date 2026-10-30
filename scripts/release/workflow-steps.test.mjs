@@ -220,3 +220,66 @@ test("the appcast PR body says that merging offers the build to every installed 
     assert.match(create, /Merge only after publishing the draft release v0\.0\.1/);
   } finally { rmSync(world.dir, { recursive: true, force: true }); }
 });
+
+/** A fake `security` that logs each call and the mode of any file it imports. */
+const fakeSecurity = (team) => `log="$RUNNER_TEMP/security-calls"
+printf '%s\\n' "$*" >> "$log"
+case "$1" in
+  create-keychain) : > "$4" ;;
+  import) printf 'mode %s\\n' "$(stat -f %Lp "$2")" >> "$log" ;;
+  find-identity) printf '  1) 0123456789ABCDEF0123456789ABCDEF01234567 "Developer ID Application: Owner (${team})"\\n' ;;
+  list-keychains) printf '    "%s"\\n' "$HOME/login.keychain-db" ;;
+esac
+`;
+
+test("the certificate step keeps the .p12 private and short-lived and exports the team's identity", () => {
+  const env = join(mkdtempSync(join(tmpdir(), "picsee-env-")), "env");
+  writeFileSync(env, "");
+  const p12 = Buffer.from("fake p12 bytes").toString("base64");
+  const step = runStep("Import the Developer ID certificate", {
+    env: { GITHUB_ENV: env, DEVELOPMENT_TEAM: "GRT84NAK4T", DEVELOPER_ID_P12_BASE64: p12,
+      DEVELOPER_ID_P12_PASSWORD: "p12-password", KEYCHAIN_PASSWORD: "keychain-password" },
+    fakes: { security: fakeSecurity("GRT84NAK4T") },
+  });
+  try {
+    assert.equal(step.status, 0, step.stderr);
+    const calls = readFileSync(join(step.dir, "security-calls"), "utf8");
+    assert.match(calls, /^mode 600$/m, "the decoded .p12 is created owner-only");
+    assert.doesNotMatch(calls, new RegExp(p12.replace(/[+/=]/g, "\\$&")), "the base64 secret never reaches argv");
+    assert.equal(spawnSync("/bin/test", ["-e", join(step.dir, "developer-id.p12")]).status, 1, "the .p12 is removed");
+    const exported = readFileSync(env, "utf8");
+    assert.match(exported, /^KEYCHAIN=.*picsee-release\.keychain-db$/m);
+    assert.match(exported, /^IDENTITY=0123456789ABCDEF0123456789ABCDEF01234567$/m);
+  } finally { step.cleanup(); rmSync(dirname(env), { recursive: true, force: true }); }
+});
+
+test("the certificate step fails when no Developer ID identity belongs to the team", () => {
+  const env = join(mkdtempSync(join(tmpdir(), "picsee-env-")), "env");
+  writeFileSync(env, "");
+  const step = runStep("Import the Developer ID certificate", {
+    env: { GITHUB_ENV: env, DEVELOPMENT_TEAM: "GRT84NAK4T", DEVELOPER_ID_P12_BASE64: "eA==",
+      DEVELOPER_ID_P12_PASSWORD: "p", KEYCHAIN_PASSWORD: "k" },
+    fakes: { security: fakeSecurity("OTHERTEAM1") },
+  });
+  try {
+    assert.notEqual(step.status, 0);
+    assert.match(step.stdout, /no Developer ID Application identity for team GRT84NAK4T/);
+    assert.doesNotMatch(readFileSync(env, "utf8"), /IDENTITY=/);
+  } finally { step.cleanup(); rmSync(dirname(env), { recursive: true, force: true }); }
+});
+
+test("keychain clean-up reports a failed deletion instead of swallowing it", () => {
+  for (const [exit, expected] of [[0, 0], [1, 1]]) {
+    const keychain = join(mkdtempSync(join(tmpdir(), "picsee-kc-")), "picsee-release.keychain-db");
+    writeFileSync(keychain, "");
+    const step = runStep("Delete the temporary keychain", { env: { KEYCHAIN: keychain },
+      fakes: { security: `printf '%s\\n' "$*" >> "$RUNNER_TEMP/security-calls"\nexit ${exit}\n` } });
+    try {
+      assert.equal(step.status, expected, step.stdout + step.stderr);
+      assert.equal(readFileSync(join(step.dir, "security-calls"), "utf8"), `delete-keychain ${keychain}\n`);
+      if (expected) assert.match(step.stdout, /::error::could not delete the temporary keychain/);
+    } finally { step.cleanup(); rmSync(dirname(keychain), { recursive: true, force: true }); }
+  }
+  const none = runStep("Delete the temporary keychain", { fakes: { security: "exit 1\n" } });
+  try { assert.equal(none.status, 0, none.stderr); } finally { none.cleanup(); }
+});
