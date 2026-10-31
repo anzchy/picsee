@@ -742,3 +742,76 @@ private func i315DragWallAlpha() throws -> CGFloat {
     #expect(try presentation() == idle, "rejected drop")
     #expect(dropped == 1)
 }
+
+// MARK: - WI-5 the wall is invisible to accessibility and never intercepts drags or clicks
+
+private let i315AXChildren = ["first-launch.heading", "state.open", "first-launch.shortcut",
+                              "first-launch.chip.folder", "first-launch.chip.images", "first-launch.chip.formats"]
+
+@MainActor private func i315Descendants(_ view: NSView) -> [NSView] {
+    view.subviews.flatMap { [$0] + i315Descendants($0) }
+}
+
+/// Every identifier reachable by walking the accessibility tree (not the view tree) from `element`.
+@MainActor private func i315AXReachable(_ element: Any, depth: Int = 0) -> [String] {
+    guard depth < 16, let node = element as? NSAccessibilityProtocol else { return [] }
+    return [node.accessibilityIdentifier() ?? ""] + (node.accessibilityChildren() ?? []).flatMap { i315AXReachable($0, depth: depth + 1) }
+}
+
+@Test @MainActor func i315WallIsInvisibleToAccessibility() throws {
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    let wall = try #require(wallView(home))
+    func check(_ context: String) {
+        #expect(!wall.isAccessibilityElement(), "\(context) wall is an AX element")
+        #expect(wall.isAccessibilityHidden(), "\(context) wall not AX hidden")
+        for view in i315Descendants(wall) {
+            #expect(!view.isAccessibilityElement(), "\(context) wall subview \(view.accessibilityIdentifier()) is an AX element")
+        }
+        let children = (scene.state.accessibilityChildren() ?? []).map { ($0 as? NSView)?.accessibilityIdentifier() ?? "\($0)" }
+        #expect(children == i315AXChildren, "\(context) AX children \(children)")
+        let reachable = i315AXReachable(home)
+        #expect(!reachable.contains { $0.hasPrefix("first-launch.wall") }, "\(context) AX tree reaches \(reachable)")
+    }
+    check("idle")
+    scene.state.setFirstLaunchDragActive(true)
+    home.layoutSubtreeIfNeeded()
+    check("drag active")
+    scene.state.setFirstLaunchDragActive(false)
+    home.appearance = NSAppearance(named: .darkAqua)
+    home.layoutSubtreeIfNeeded()
+    check("dark after drag")
+}
+
+@Test @MainActor func i315WallNeverInterceptsDragsOrClicks() throws {
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    let wall = try #require(wallView(home))
+    let host = try #require(home.superview)
+    let frame = wall.frame
+    var generator = SplitMix64(seed: 0x3155)
+    let corners = [CGPoint(x: frame.minX, y: frame.minY), CGPoint(x: frame.maxX, y: frame.minY),
+                   CGPoint(x: frame.minX, y: frame.maxY), CGPoint(x: frame.maxX, y: frame.maxY),
+                   CGPoint(x: frame.midX, y: frame.midY)]
+    let points = corners + (0..<500).map { _ in
+        CGPoint(x: CGFloat.random(in: frame.minX...frame.maxX, using: &generator),
+                y: CGFloat.random(in: frame.minY...frame.maxY, using: &generator))
+    }
+    let centre = centreViews(home).map(\.frame)
+    try #require(centre.count == 7)
+    for point in points {
+        let context = "seed 0x3155 point \(point)"
+        #expect(wall.hitTest(point) == nil, "\(context) wall hit")
+        guard !centre.contains(where: { $0.contains(point) }) else { continue }
+        let hit = home.hitTest(home.convert(point, to: host))
+        #expect(hit.map { $0 === wall || $0.isDescendant(of: wall) } != true, "\(context) home hit \(String(describing: hit))")
+    }
+    let button = home.openButton
+    #expect(home.hitTest(home.convert(CGPoint(x: button.frame.midX, y: button.frame.midY), to: host)) === button)
+    for view in [wall] + i315Descendants(wall) {
+        #expect(view.registeredDraggedTypes.isEmpty, "\(view.accessibilityIdentifier()) registers \(view.registeredDraggedTypes)")
+    }
+    let dropView = ViewerDropView(frame: scene.state.bounds, acceptsDrop: { true }, onDrop: { _ in })
+    #expect(dropView.registeredDraggedTypes.contains(.fileURL))
+}
+
