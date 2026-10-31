@@ -30,6 +30,10 @@ import Testing
 }
 
 func imageLayer(_ container: CALayer) -> CALayer? { container.sublayers?.first }
+func tileRing(_ container: CALayer) -> CALayer? {
+    container.sublayers?.first { $0.name == "first-launch.wall.ring" }
+}
+@MainActor func anyTileContainerMasks(_ launch: FirstLaunchView) -> Bool { tileContainers(launch).contains(where: \.masksToBounds) }
 
 func cgImage(_ layer: CALayer?) -> CGImage? {
     guard let contents = layer?.contents, CFGetTypeID(contents as CFTypeRef) == CGImage.typeID else { return nil }
