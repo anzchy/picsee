@@ -342,7 +342,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 | 网格、选择与菜单 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
 | 信息与元数据 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
 | 授权与文件访问 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
-| 缓存与资源 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
+| 缓存与资源 | 2026-10-31 | doc-gardener | 9f946bb..099d6e0。历史复核见 git log -p -- docs/feature-ledger.md |
 | 命令与键盘 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
 | 窗口与桌面工具 | 2026-10-22 | doc-gardener | 历史复核见 git log -p -- docs/feature-ledger.md |
 | 编辑与导出 | 2026-10-22 | doc-gardener | 历史复核见 git log -p -- docs/feature-ledger.md |
