@@ -301,8 +301,20 @@ public final class ViewerChromeOverlay: NSView {
         requestedVisible = visible
         applyToolsVisible()
     }
+    private var shown: Bool { requestedVisible && !(hidesOnHome && isHome) }
+    private var returningFocus = false
     private func applyToolsVisible() {
-        let visible = requestedVisible && !(hidesOnHome && isHome)
+        // The Home hides without the session's focus lock, so a focused control hands focus to the canvas before
+        // anything hides (hiding it first would pass focus along the key chain to another tool). The focus update
+        // re-syncs the chrome and lands here again; that pass leaves the hiding to this one.
+        guard !returningFocus else { return }
+        if !shown, let canvas, let focused = window?.firstResponder as? ChromeToolView, tools.contains(focused) {
+            returningFocus = true
+            session?.updateFocus(.canvas)
+            window?.makeFirstResponder(canvas)
+            returningFocus = false
+        }
+        let visible = shown
         for view in groups + tools { view.isHidden = !visible }
         needsDisplay = true
         updateAccessibilityChildren(visible: visible)
@@ -332,7 +344,7 @@ public final class ViewerChromeOverlay: NSView {
         arrangeGroups()
         fileLabel.setAccessibilityValue(filename ?? "")
         for tool in tools { tool.refresh() }
-        updateAccessibilityChildren(visible: groups.first?.isHidden == false)
+        updateAccessibilityChildren(visible: shown)
         relinkKeyViews()
     }
 }

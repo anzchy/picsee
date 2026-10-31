@@ -275,3 +275,22 @@ private enum HomeOp: CaseIterable { case show, hide, home, notHome, refresh }
     expectHidden(a.chrome, a.content, a.canvas, "A still on the Home")
     #expect(loopIDs(a.canvas) == ["state.open"])
 }
+
+/// Review M1: the Home hides the controls without the session's focus lock, so a focused control hands focus back to
+/// the canvas instead of keeping it on a hidden view.
+@Test(.timeLimit(.minutes(1))) @MainActor func i331FocusedControlMovesToCanvasOnEnteringHome() async throws {
+    let scene = HomeChromeScene(hidesOnHome: true)
+    defer { scene.window.close() }
+    await scene.open(URL(fileURLWithPath: "/A.png"))?.value
+    await waitUntil { scene.state.isHidden }
+    expectShown(scene.chrome, scene.content, scene.canvas, "showing an image")
+    #expect(scene.window.makeFirstResponder(scene.chrome.tools[0]))
+    #expect(scene.session.inspectorFocus.focus == .tools)
+    scene.session.cancelImageOpening()
+    await waitUntil { !scene.state.isHidden }
+    #expect(scene.session.imageStatus == .empty)
+    #expect(!(scene.window.firstResponder is ChromeToolView), "focus left on a hidden control")
+    #expect(scene.window.firstResponder === scene.canvas)
+    #expect(scene.session.inspectorFocus.focus == .canvas)
+    expectHidden(scene.chrome, scene.content, scene.canvas, "entered the Home from a focused control")
+}

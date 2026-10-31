@@ -166,6 +166,5 @@ private func issue331Image(in folder: URL) throws -> URL {
     try await issue331Wait("grid", detail: { "shellHidden \(views.shell.isHidden) mode \(controller.session.mode)" }) {
         !views.shell.isHidden && controller.session.folderScan?.sourceSnapshot?.isComplete == true
     }
-    #expect(views.chrome.isHidden || views.groupsHidden, "the Grid shows no viewer controls")
-    #expect(views.chrome.isHiddenOrHasHiddenAncestor)
+    #expect(views.chrome.isHiddenOrHasHiddenAncestor, "the Grid shows no viewer controls")
 }
