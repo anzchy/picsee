@@ -104,6 +104,32 @@ for (const [name, run] of [
   });
 }
 
+for (const [name, fixture, args] of [
+  ['one-character headSha with a full expected head', 'short-head', ['--head', head]],
+  ['non-hex headSha', 'nonhex-head', []],
+  ['39-hex headSha', '39-head', []],
+  ['missing URL', 'missing-url', []],
+  ['null URL', 'null-url', []],
+  ['non-HTTPS URL', 'http-url', []],
+  ['URL row injection', 'injected-url', []],
+  ['URL cell injection', 'pipe-url', []],
+  ['newline in job conclusion', 'newline-conclusion', []],
+  ['incomplete App tests job with success conclusion', 'job-in-progress', []],
+]) {
+  test(`gates-rows rejects ${name} without output`, () => {
+    const result = runCIFixture(fixture, args);
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(result.stdout, '');
+  });
+}
+
+test('valid summary with malformed CI emits no rows for checkGates', t => {
+  const fixture = fileURLToPath(new URL('./fixtures/ci-missing-url.json', import.meta.url));
+  const result = runRows(t, complete, ['--ci', fixture, '--head', head]);
+  assert.equal(result.status, 2, result.stderr);
+  assert.equal(result.stdout, '');
+});
+
 test('gates-rows requires a summary or CI run', () => {
   for (const args of [[], ['--head', head]]) {
     const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });

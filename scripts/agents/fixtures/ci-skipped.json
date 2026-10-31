@@ -4,6 +4,6 @@
   "status": "completed",
   "conclusion": "success",
   "jobs": [
-    { "name": "App tests", "conclusion": "skipped" }
+    { "name": "App tests", "status": "completed", "conclusion": "skipped" }
   ]
 }

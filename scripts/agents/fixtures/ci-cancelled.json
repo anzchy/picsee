@@ -4,6 +4,6 @@
   "status": "completed",
   "conclusion": "cancelled",
   "jobs": [
-    { "name": "App tests", "conclusion": "cancelled" }
+    { "name": "App tests", "status": "completed", "conclusion": "cancelled" }
   ]
 }

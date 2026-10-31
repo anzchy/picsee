@@ -5,6 +5,6 @@
   "conclusion": "success",
   "jobs": [
     { "name": "Walking skeleton", "conclusion": "success" },
-    { "name": "App tests", "conclusion": "success" }
+    { "name": "App tests", "status": "completed", "conclusion": "success" }
   ]
 }
