@@ -122,6 +122,7 @@ public final class ViewerStateHost: NSView {
     public func setFirstLaunchDragActive(_ active: Bool) { firstLaunch?.setDragActive(active) }
     public func linkKeyViews(to canvas: NSView, chrome: ViewerChromeOverlay) {
         keyCanvas = canvas; keyChrome = chrome
+        chrome.setHome(displayedStatus == .empty)
         ViewerStateFocus.link(canvas: canvas, state: self, chrome: chrome)
     }
     private var session: ViewerSession?
@@ -168,6 +169,8 @@ public final class ViewerStateHost: NSView {
     public func display(_ status: ViewerImageStatus, nextEnabled: Bool = false) {
         guard displayedStatus != status || displayedNextEnabled != nextEnabled else { return }
         displayedStatus = status; displayedNextEnabled = nextEnabled
+        // #331: the chrome hides on the Home before the deferred relink, so the loop keeps Choose Folder….
+        keyChrome?.setHome(status == .empty)
         if let focused = window?.firstResponder as? NSView,
            buttons.contains(where: { focused === $0 || focused.isDescendant(of: $0) }), let keyCanvas {
             session?.updateFocus(.canvas)

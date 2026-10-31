@@ -165,9 +165,15 @@ public final class ViewerChromeOverlay: NSView {
             }
         }
     }
-    public convenience init(frame: NSRect, session: ViewerSession, motionPolicy: MotionPolicy? = nil) {
+    /// #331: the Home (status `.empty`, pinned page 21) shows only its centre. Opt-in, so only the App window hides.
+    public private(set) var hidesOnHome = false
+    private var requestedVisible = true
+    private var isHome = false
+    public convenience init(frame: NSRect, session: ViewerSession, motionPolicy: MotionPolicy? = nil,
+                            hidesOnHome: Bool = false) {
         self.init(frame: frame)
         self.session = session
+        self.hidesOnHome = hidesOnHome
         let commands: [[CommandID]] = [[.open, .inspector], [.previous, .next], [.zoomOut, .actualPixels, .zoomIn]]
         let frames = [NSRect(x: 16, y: 14, width: 72, height: 38),
             NSRect(x: bounds.midX - 37, y: 14, width: 74, height: 38),
@@ -285,11 +291,30 @@ public final class ViewerChromeOverlay: NSView {
         }
         return nil
     }
+    /// The state host reports whether it shows the Home; the session's own chrome request is kept for leaving it.
+    public func setHome(_ home: Bool) {
+        guard isHome != home else { return }
+        isHome = home
+        applyToolsVisible()
+    }
     public func setToolsVisible(_ visible: Bool) {
+        requestedVisible = visible
+        applyToolsVisible()
+    }
+    private func applyToolsVisible() {
+        let visible = requestedVisible && !(hidesOnHome && isHome)
         for view in groups + tools { view.isHidden = !visible }
         needsDisplay = true
         updateAccessibilityChildren(visible: visible)
-        if let canvas { linkKeyViews(to: canvas) }
+        relinkKeyViews()
+    }
+    /// On the Home the state host owns the key loop (its Choose Folder… button); the overlay only drops a canvas
+    /// link into its own hidden tools.
+    private func relinkKeyViews() {
+        guard let canvas else { return }
+        if hidesOnHome && isHome {
+            if canvas.nextKeyView is ChromeToolView { canvas.nextKeyView = canvas }
+        } else { linkKeyViews(to: canvas) }
     }
     private func updateAccessibilityChildren(visible: Bool) {
         setAccessibilityChildren(visible ? tools + (filename == nil ? [] : [fileLabel]) : [])
@@ -308,6 +333,6 @@ public final class ViewerChromeOverlay: NSView {
         fileLabel.setAccessibilityValue(filename ?? "")
         for tool in tools { tool.refresh() }
         updateAccessibilityChildren(visible: groups.first?.isHidden == false)
-        if let canvas { linkKeyViews(to: canvas) }
+        relinkKeyViews()
     }
 }
