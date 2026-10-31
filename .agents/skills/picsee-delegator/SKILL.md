@@ -98,9 +98,12 @@ if needed."); keep each pane on one item at a time. Never touch mdpro or its tmu
    lines), then `$SK/scripts/rebase-verify.sh <old-base> <audited-head> <new-base> <new-head>`. A verdict covers a
    patch: `CODE same` keeps audits and smoke; `CODE differ` (a hand-resolved conflict) → quick combination check by
    both auditors before gates; `MESSAGES differ` → fix before pushing. Rerun all gates yourself (guide §5.6).
-7. **Gardener** — `picsee-doc-gardener` (Claude subagent on Haiku / Codex custom agent), mode `pr`, `base..head`. UPDATED →
-   commit its diff as `docs(ledger): garden <b>..<h>`; NEEDS-OWNER → fix rows (限制/在哪 only) or `无用户可见变化：` lines,
-   rerun; acceptance changes only in a separate commit quoting the user. Run it in a clean detached worktree
+7. **Gardener** — first `node scripts/ledger/garden-gate.mjs <base> <head>` (re-push: add `--since <gardened head>
+   --verdict <V>`); SKIP/REUSE/RESOLVED → that line goes in the PR body, no gardener (rules:
+   `docs/agents/doc-gardening.md` §When it runs). On `RUN`: `picsee-doc-gardener` (Claude subagent on Haiku / Codex
+   custom agent), mode `pr`, `base..head`. UPDATED → commit its diff as `docs(ledger): garden <b>..<h>`; NEEDS-OWNER →
+   fix rows (限制/在哪 only) or `无用户可见变化：` lines, then the gate with `--verdict NEEDS-OWNER`; acceptance changes
+   only in a separate commit quoting the user. Schedule a weekly `full` run. Run it in a clean detached worktree
    (`picsee-wt/owner-gates`), never in one an implementer is using; carry its diff to the branch as a patch (guide §5.7).
 8. **PR & merge** — body: Summary, Review table + Still open, `## Gates`, `Ledger-Gardener:` line. Build Gates with
    `gh run view <id> --json headSha,url,status,conclusion,jobs > run.json`, then

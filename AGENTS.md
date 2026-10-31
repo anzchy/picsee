@@ -18,20 +18,21 @@ picsee 是一个 macOS 原生看图应用（Swift 6 + SwiftUI + AppKit，最低 
 
 ## 每个 PR 都要先跑 doc gardener
 
-打开 PR 之前，以及每次重新推送 PR head 之前，都要运行 **picsee-doc-gardener**，扫描这次改动让账簿里哪些行过时了。规程见 [`docs/agents/doc-gardening.md`](docs/agents/doc-gardening.md)。
+打开 PR 之前，以及每次重新推送 PR head 之前，先跑判定脚本，只有它输出 `RUN` 才运行 **picsee-doc-gardener**，扫描这次改动让账簿里哪些行过时了。何时跳过、沿用或视为已解决，以规程 [`docs/agents/doc-gardening.md`](docs/agents/doc-gardening.md)「When it runs」为准。
 
-1. 在分支的 worktree 里，对 `$(git merge-base main HEAD)..HEAD` 运行 gardener：
+1. 在分支的 worktree 里运行判定：`node scripts/ledger/garden-gate.mjs $(git merge-base main HEAD) HEAD`；重新推送时加 `--since <上次 gardener 所判的 head> --verdict <上次结论>`。输出 `RUN` 时，对 `$(git merge-base main HEAD)..HEAD` 运行 gardener：
    - Claude Code：`picsee-doc-gardener` subagent；
    - Codex：custom agent `picsee-doc-gardener`。
 2. 按结果处理：
 
    | 结果 | 怎么做 |
    |---|---|
+   | `SKIP` / `REUSE` / `RESOLVED` | 判定脚本输出，不运行 gardener，不改账簿 |
    | `UPDATED` | 检查 `git diff -- docs/feature-ledger.md docs/feature-ledger.html`，单独提交为 `docs(ledger): garden <base7>..<head7>` |
-   | `NEEDS-OWNER` | 改账簿里被点名的行，或在 PR 描述里逐条写 `无用户可见变化：<ID> <理由>`，然后重跑 gardener |
+   | `NEEDS-OWNER` | 改账簿里被点名的行，或在 PR 描述里逐条写 `无用户可见变化：<ID> <理由>`；然后用 `--since <该 head> --verdict NEEDS-OWNER` 重跑判定脚本，输出 `RUN` 才重跑 gardener |
    | `BLOCK` | 不开 PR。把验收改动拆成单独提交，或补齐真机证据 |
 
-3. 把 gardener 输出的 `Ledger-Gardener: …` 那一行原样放进 PR 描述。
+3. 把 gardener 或判定脚本输出的 `Ledger-Gardener: …` 那一行原样放进 PR 描述。
 
 没有这一行的 PR 不进入审查。
 
