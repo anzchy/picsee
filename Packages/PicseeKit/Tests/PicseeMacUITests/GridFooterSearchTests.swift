@@ -26,6 +26,7 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
             let shell = GridShellView(frame: NSRect(origin: .zero, size: size),
                 preferencesStore: InMemoryDisplayPreferencesStore())
             shell.appearance = appearance
+            shell.reduceTransparencyOverride = false
             shell.layoutSubtreeIfNeeded()
             shell.showSearchEmpty(true, term: "missing")
             let title = try #require(shell.emptyStateTitle)
@@ -74,10 +75,45 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
                 : light.color(".mock-primary", "background", viewport: width))
             try expectPinnedColor(resolved[3], design.color(".grid-file-status", "color", viewport: width))
             let barFill = try design.color(".grid-bottom-bar", "background", viewport: width)
-            withKnownIssue("#314: the App Bottom Bar is still solid --color-surface, the pinned bar is --color-bg at 80%") {
-                try expectPinnedColor(resolved[4], barFill)
-            }
+            try expectPinnedColor(resolved[4], barFill)
         }
+    }
+}
+
+@Test @MainActor func issue314BottomBarFillRuleAndLiveReduceTransparencyMatchPinnedPages() throws {
+    _ = NSApplication.shared
+    for (pageName, appearanceName) in [("grid-light", NSAppearance.Name.aqua), ("grid-dark", .darkAqua)] {
+        let design = try PinnedDesign.page(pageName)
+        let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
+            preferencesStore: InMemoryDisplayPreferencesStore())
+        shell.appearance = NSAppearance(named: appearanceName)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 680),
+            styleMask: [], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = shell
+        defer { window.close() }
+
+        shell.reduceTransparencyOverride = false
+        NSWorkspace.shared.notificationCenter.post(
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        shell.layoutSubtreeIfNeeded()
+        var fill: NSColor?
+        shell.effectiveAppearance.performAsCurrentDrawingAppearance {
+            fill = shell.footer.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))
+        }
+        try expectPinnedColor(fill, design.color(".grid-bottom-bar", "background", viewport: 800))
+        #expect(!shell.footer.subviews.contains {
+            $0.frame.width == shell.footer.bounds.width && $0.frame.height == 1
+                && $0.frame.maxY == shell.footer.bounds.maxY
+        }, "The Bottom Bar has no top rule")
+
+        shell.reduceTransparencyOverride = true
+        NSWorkspace.shared.notificationCenter.post(
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        shell.effectiveAppearance.performAsCurrentDrawingAppearance {
+            fill = shell.footer.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))
+        }
+        try expectPinnedColor(fill, design.color(":root", "--color-bg", viewport: 800))
     }
 }
 
@@ -88,10 +124,12 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
 @Test @MainActor func pinnedSearchFooterFramesAndPage23AtBothSizesAndAppearances() throws {
     _ = NSApplication.shared
     for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+        let design = try PinnedDesign.page(appearance == .darkAqua ? "grid-dark" : "grid-light")
         for size in [NSSize(width: 1280, height: 800), NSSize(width: 800, height: 680)] {
             let shell = GridShellView(frame: NSRect(origin: .zero, size: size),
                 preferencesStore: InMemoryDisplayPreferencesStore())
             shell.appearance = NSAppearance(named: appearance)
+            shell.reduceTransparencyOverride = false
             shell.layoutSubtreeIfNeeded()
             #expect(shell.footer.frame.height == 40)
             #expect(shell.sortButton.frame.size == NSSize(width: 30, height: 28))
@@ -102,9 +140,11 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
             #expect(shell.searchField.isHidden)
             #expect(shell.searchStatus.font?.pointSize == 12)
             #expect(shell.searchStatus.textColor == DesignColor.textSecondary.nsColor)
+            var footerFill: NSColor?
             shell.effectiveAppearance.performAsCurrentDrawingAppearance {
-                #expect(shell.footer.layer?.backgroundColor == DesignColor.sidebarBackground.nsColor.cgColor)
+                footerFill = shell.footer.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))
             }
+            try expectPinnedColor(footerFill, design.color(".grid-bottom-bar", "background", viewport: Double(size.width)))
             #expect(shell.footer.frame.minX == 0)
             shell.focusSearch()
             shell.layoutSubtreeIfNeeded()
