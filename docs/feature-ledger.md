@@ -333,7 +333,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
+| 打开与输入 | 2026-10-31 | doc-gardener | fbad623..8f78a20。历史复核见 git log -p -- docs/feature-ledger.md |
 | 查看与画布 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
 | C 沉浸界面 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
 | 外观与显示偏好 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
