@@ -31,6 +31,15 @@ const SETTINGS_CONTROLS={
 };
 // Shortcut list, layout C: one card per context, in order, each reachable by ?card=.
 const SHORTCUT_CARDS=[['files','文件与窗口','任何时候'],['grid','网格','浏览文件夹时'],['viewer','大图','查看一张图片时']];
+// #317 (spec #311): the grid Bottom Bar sits over the Grid at the window background's 80%, with no top rule (user:
+// 「填充 80%（很实）」「不要，靠 80% 底色区分」), in every window with a folder open (「只有未打开文件夹的窗口没有底栏」).
+// These pages show it; page 21 (the Home) does not. Each URL below is checked against grid-footer-fill.html.
+const GRID_BAR_PAGES=['grid-light','grid-dark','grid-display','empty-folder','search-empty','folder-loading','permission-denied','compact-grid','components','grid-context-menu','grid-multiselect'];
+const GRID_BAR_CASES=[...GRID_BAR_PAGES.map(n=>n+'.html'),'empty-folder.html?theme=dark','empty-folder.html?drag=over','permission-denied.html?theme=dark','folder-loading.html?case=failed','folder-loading.html?case=failed&theme=dark',
+ 'grid-light.html?scroll=behind','grid-dark.html?scroll=behind','grid-light.html?transparency=reduced','grid-dark.html?transparency=reduced'];
+// Pages that show the viewer command bar keep the bytes they had before #317 (user: 「不改，只改网格底栏」).
+// Change this list only together with a deliberate viewer design change.
+const VIEWER_BAR_SHA256={'viewer-quiet':'1cb5ee6198cd4333f156095c35fa7e1ea03eccb03e3b0144bfe799794f2cd101','viewer-controls':'a42fee6602541b08b4fa601c493afcb26a187a95068d7ac4e8ccf983b5c981af','viewer-inspector':'7611b8dd969eabbb9380d584ca1d12239319e8bcc920cd6bb8e2eed9031c76b0','image-error':'98573fc7914a86e4c55c55b233aa4901a26ba080763ddda92f4474405b7119cb','original-size':'8b4395816c23ae87fae0aa99efda248db30d09949a76273e2d9c38db6e17aab9','keyboard-focus':'4651f48a5895f120efb3ff79abe72941ca7019aecb0f2d31e761e5ce0c48909f','viewer-filmstrip':'a3adff92d1bfd4f479a7136486d6b73bc851a6c90e9289435009fdfb0652c2f5','viewer-inspector-light':'a2e2331cef71140452d0d8070a814f0a875f1d5bcf0f697d87758f75a0c9d01e'};
 module.exports=async(page,{design,states,screenshot})=>{
  const base=design+'/prototypes/picsee-browser/states/';
  const errors=[],failures=[],results=[];page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400&&r.url().startsWith('http://127.0.0.1:'))failures.push({url:r.url(),status:r.status()})});
@@ -54,6 +63,60 @@ module.exports=async(page,{design,states,screenshot})=>{
  }
  // Each manifest sha256 pins the exact bytes of its page.
  for(const state of catalog.states){const actual=await page.evaluate(async f=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',await(await fetch(f,{cache:'no-store'})).arrayBuffer()))].map(b=>b.toString(16).padStart(2,'0')).join(''),state.file);if(actual!==state.sha256)throw Error(state.file+' SHA256 mismatch: manifest '+state.sha256+', actual '+actual)}
+ // #317: page 21 is the Home with the Image Wall of home-image-wall.html (user: 「C 取代 B4 外观，保留拖入反馈」), and
+ // every grid Bottom Bar matches grid-footer-fill.html. Expected values are read from those reference pages, not retyped.
+ const barIssues=[];const shows={bar:[],viewer:[]};
+ for(const state of catalog.states){await page.setViewportSize(state.viewport);await page.goto(base+state.file);
+  const got=await page.evaluate(()=>({bar:!!document.querySelector('.grid-bottom-bar')&&document.querySelector('.grid-bottom-bar').getClientRects().length>0,viewer:!!document.querySelector('.picture-viewer')}));
+  if(got.bar)shows.bar.push(state.name);if(got.viewer)shows.viewer.push(state.name)}
+ if(JSON.stringify(shows.bar.sort())!==JSON.stringify([...GRID_BAR_PAGES].sort()))barIssues.push('pages showing the grid Bottom Bar are '+shows.bar.join(',')+', want '+[...GRID_BAR_PAGES].sort().join(','));
+ if(JSON.stringify(shows.viewer.sort())!==JSON.stringify(Object.keys(VIEWER_BAR_SHA256).sort()))barIssues.push('pages showing the viewer command bar are '+shows.viewer.join(','));
+ for(const [name,sha] of Object.entries(VIEWER_BAR_SHA256))if(catalog.states.find(s=>s.name===name).sha256!==sha)barIssues.push(name+' (viewer command bar) changed');
+ const barProbe=()=>{const bar=document.querySelector('.grid-bottom-bar'),scroll=document.querySelector('.grid-scroll'),divider=document.querySelector('.grid-bottom-left .toolbar-divider');
+  const token=v=>{const e=document.createElement('i');e.style.color=v;document.body.append(e);const c=getComputedStyle(e).color;e.remove();return c};
+  if(!bar)return{missing:true};const b=bar.getBoundingClientRect(),s=scroll&&scroll.getBoundingClientRect(),d=divider&&divider.getBoundingClientRect();
+  const behind=[...document.querySelectorAll('.photo-cell img')].some(i=>{const r=i.getBoundingClientRect();return r.bottom>b.top+1&&r.top<b.bottom});
+  let clipped=[];if(scroll){scroll.scrollTop=scroll.scrollHeight;clipped=[...scroll.querySelectorAll('*')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().height>0&&e.getBoundingClientRect().bottom>b.top+0.5).map(e=>e.className||e.tagName).slice(0,3)}
+  return{dark:document.documentElement.classList.contains('theme-dark'),fill:getComputedStyle(bar).backgroundColor,rule:getComputedStyle(bar).borderTopWidth+' '+getComputedStyle(bar).borderTopStyle,bg:token('var(--color-bg)'),
+   divider:d?[Math.round(d.width),getComputedStyle(divider).backgroundColor]:null,under:!!s&&s.bottom>=b.bottom-0.5&&s.top<b.top,behind,clipped}};
+ const barRef={};for(const theme of ['light','dark']){await page.setViewportSize({width:1280,height:800});await page.goto(base+'grid-footer-fill.html?theme='+theme);barRef[theme]=await page.evaluate(barProbe)}
+ for(const url of GRID_BAR_CASES){const state=catalog.states.find(s=>s.file===url.split('?')[0]);await page.setViewportSize(state.viewport);await page.goto(base+url);
+  await page.evaluate(async()=>Promise.all([...document.images].map(i=>i.decode().catch(()=>{}))));const got=await page.evaluate(barProbe),want=barRef[got.dark?'dark':'light'],bad=[];
+  if(got.missing){barIssues.push(url+': no grid Bottom Bar');continue}
+  if(/transparency=reduced/.test(url)){if(got.fill!==got.bg)bad.push('Reduce Transparency fill '+got.fill+' is not the window background '+got.bg)}else if(got.fill!==want.fill)bad.push('fill '+got.fill+', want '+want.fill);
+  if(got.rule!==want.rule)bad.push('top rule '+got.rule+', want '+want.rule);
+  if(JSON.stringify(got.divider)!==JSON.stringify(want.divider))bad.push('leading divider '+JSON.stringify(got.divider)+', want '+JSON.stringify(want.divider));
+  if(!got.under)bad.push('Grid scroll area does not run behind the bar');if(got.clipped.length)bad.push('content still under the bar at the end of the scroll: '+got.clipped.join(','));
+  if(/scroll=behind/.test(url)&&!got.behind)bad.push('no photo behind the bar');
+  if(bad.length)barIssues.push(url+': '+bad.join(', '));
+ }
+ const homeProbe=()=>{const q=s=>document.querySelector(s),cs=(e,p)=>e?getComputedStyle(e,p):{};const visible=e=>!!e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden';
+  const wall=q('.wall'),tiles=q('.wall .tiles'),t=cs(tiles),img=q('.wall .tiles img'),even=q('.wall .tiles>:nth-child(2n)'),rect=e=>e?['top','left','width','height'].map(k=>Math.round(e.getBoundingClientRect()[k])):null;
+  const anim=tiles&&tiles.getAnimations()[0];const prompt=q('[data-drop-prompt]')||[...document.querySelectorAll('main .mock-muted')].find(e=>e.innerText.includes('拖入'));const outline=q('.drop-outline');
+  const token=v=>{const e=document.createElement('i');e.style.color=v;document.body.append(e);const c=getComputedStyle(e).color;e.remove();return c};
+  return{dark:document.documentElement.classList.contains('theme-dark'),bar:visible(q('.grid-bottom-bar')),sidebar:visible(q('.sidebar')),wallHidden:!!wall&&wall.getAttribute('aria-hidden')==='true'&&cs(wall).pointerEvents==='none',wallRect:rect(wall),
+   tiles:tiles?{transform:t.transform,opacity:t.opacity,columns:t.gridTemplateColumns,rows:t.gridAutoRows,gap:t.rowGap+' '+t.columnGap,box:[t.left,t.right,t.top,t.height].join(' '),count:tiles.children.length,
+    motion:[t.animationDuration,t.animationDirection,t.animationTimingFunction,t.animationIterationCount].join(' '),keyframes:anim?JSON.stringify(anim.effect.getKeyframes().map(k=>[k.offset,k.translate])):'none',
+    radius:cs(img).borderRadius,shadow:cs(img).boxShadow,fit:cs(img).objectFit,offset:cs(even).transform,veil:cs(wall,'::after').backgroundImage}:null,
+   heading:(q('main h2')||{}).innerText,button:q('.mock-primary')&&[q('.mock-primary').innerText,...rect(q('.mock-primary'))],hint:prompt&&[prompt.innerText,...rect(prompt)],
+   onTop:(b=>!!b&&document.elementFromPoint(b.left+b.width/2,b.top+b.height/2)===q('.mock-primary'))(q('.mock-primary')&&q('.mock-primary').getBoundingClientRect()),
+   wallAlpha:wall&&tiles?+cs(wall).opacity*+t.opacity:0,dragOver:!!q('[data-drop-target].is-drag-over'),promptColor:prompt?cs(prompt).color:null,accentText:token('var(--color-accent-text)'),outline:outline?cs(outline).borderTopColor:null}};
+ const homeRef={};for(const theme of ['light','dark']){await page.setViewportSize({width:1280,height:800});await page.goto(base+'home-image-wall.html?theme='+theme);homeRef[theme]=await page.evaluate(homeProbe)}
+ const home={};for(const url of ['first-launch.html','first-launch.html?theme=dark','first-launch.html?drag=over','first-launch.html?drag=over&theme=dark']){await page.setViewportSize({width:1280,height:800});await page.goto(base+url);home[url]=await page.evaluate(homeProbe)}
+ for(const [url,overURL,want,dark] of [['first-launch.html','first-launch.html?drag=over',homeRef.light,false],['first-launch.html?theme=dark','first-launch.html?drag=over&theme=dark',homeRef.dark,true]]){const got=home[url],over=home[overURL],bad=[];
+  if(got.dark!==dark)bad.push('dark='+got.dark);if(got.bar)bad.push('shows the Bottom Bar');if(got.sidebar)bad.push('shows the sidebar');
+  if(!got.tiles)bad.push('no Image Wall');else{if(!got.wallHidden)bad.push('wall not aria-hidden or takes pointer events');if(JSON.stringify(got.wallRect)!==JSON.stringify(want.wallRect))bad.push('wall '+got.wallRect+', want '+want.wallRect);
+   for(const k of Object.keys(want.tiles))if(got.tiles[k]!==want.tiles[k])bad.push('wall '+k+' '+JSON.stringify(got.tiles[k])+', want '+JSON.stringify(want.tiles[k]))}
+  for(const k of ['heading','button','hint'])if(JSON.stringify(got[k])!==JSON.stringify(want[k]))bad.push(k+' '+JSON.stringify(got[k])+', want '+JSON.stringify(want[k]));if(!got.onTop)bad.push('centre button is covered');
+  // Drag-over keeps B4's feedback: the wall fades and the drop prompt highlights with the accent (#311).
+  if(!over.dragOver)bad.push('?drag=over: no drop target in drag-over');if(!(over.wallAlpha<got.wallAlpha))bad.push('?drag=over: wall does not fade ('+over.wallAlpha+' vs '+got.wallAlpha+')');
+  if(over.promptColor!==over.accentText||got.promptColor===got.accentText)bad.push('?drag=over: drop prompt not highlighted ('+got.promptColor+' → '+over.promptColor+')');
+  if(!over.outline||/^rgba\(0, 0, 0, 0\)$|transparent/.test(over.outline))bad.push('?drag=over: no drop outline');
+  if(bad.length)barIssues.push(url+': '+bad.join(', '));
+ }
+ // Reduce Motion stops the drift entirely.
+ await page.emulateMedia({reducedMotion:'reduce'});await page.goto(base+'first-launch.html');if(await page.evaluate(()=>{const t=document.querySelector('.wall .tiles');return!t||getComputedStyle(t).animationName!=='none'}))barIssues.push('first-launch.html: wall drifts under Reduce Motion');await page.emulateMedia({reducedMotion:null});
+ if(barIssues.length)throw Error('#317 Home and Bottom Bar: '+barIssues.join(' | '));
  // Sub-cases of 22-BD, 24 and 26-BC (ADR-014) are reachable by query; the bare URL is the pinned main case.
  const subcases=[
   ['empty-folder.html',{tiles:3,recents:0,buttons:['包含子文件夹浏览','选择其他文件夹…'],drop:true}],
