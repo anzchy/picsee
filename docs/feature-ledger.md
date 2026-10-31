@@ -114,7 +114,7 @@
 | OPEN-05 | 无法读取的图片 | Partial | 单元 | P1-07、P2-03 | `Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerImageStatus.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Viewer/ViewerRetryIntent.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/`、`App/CanvasWindowController.swift` | 打开截断的 JPEG：显示 25 页错误态，有“重试”和“下一张”；底部工具仍可用，可经网格按钮或 Esc 返回；不会显示上一张图。限制：网格/Esc 仅单元（P3-01）；@1x 三类错误/重试（截断 PNG）与构图/窄窗通过（[P1](validation/P1.md#p1-07空态加载失败取消菜单焦点与中英文本)、[#92](validation/P1.md#p1-08c-沉浸工具与窗口-chrome)）；JPEG/加载中未验；过滤后下一张与扫描中重试仅单元，原生组合未验。 |
 | OPEN-06 | 最近打开 | Partial | 单元 | P2-08、P2-09、P3-14 | `Packages/PicseeKit/Sources/PicseeInfrastructure/FileAccess/RecentFolderStore.swift`、`App/Access/AccessMenus.swift`、`App/CanvasWindowController.swift`、`Packages/PicseeKit/Sources/PicseeApplication/Access/AccessRecovery.swift` | 打开一个目录后退出重开，最近列表里有它；授权失效时显示重新授权入口；不保存图片副本。限制：重启后浏览、随改名更新、运行中目录消失后第一次 Open Recent 即提示重连 @1x 通过（[记录](validation/P2.md#p2-01授权根存储重连与租约)，早于 P2-07 监听，未复验）；目录在卷上找不到时现显示页 26「找不到」与「在新位置选择…」，重绑后最近项按记录时根位置映射到新位置（#231，自动测试；签名构建冒烟见 PR，未写入 docs/validation）；窗口内正在看的目录不存在时，刷新失败先显示文件夹扫描失败与重试，随后提示重连，仅单元；签名真机未验；最近目录重开现进网格，仅单元（P3-01）；仅文件夹、最多 10 项；不保存图片副本未验；损坏库降级仅单元。有多文件预览集合时从最近列表或已授权目录进入，集合要到进入目录浏览时才结束；转入重连提示或出错时集合保留，←/→ 仍在集合内移动，按代码推断，无测试（#150）。带 schemaVersion 的新存储格式（#216）的重启保留仅单元，现有真机重启记录早于该格式。 |
 | OPEN-07 | 从剪贴板打开 | Absent | 无 | P4-02 | — | 截图到剪贴板后选“从剪贴板打开”，新窗口显示该图 |
-| OPEN-08 | 首页图片墙 | Partial | 单元 | P3-16、#315 | `Packages/PicseeKit/Sources/PicseeMacUI/States/FirstLaunchView.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/FirstLaunchLayout.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/ViewerStateHost.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/B4Samples/`、`Packages/PicseeKit/Sources/PicseeMacUI/Input/ViewerDropView.swift` | 没打开文件夹的窗口（首页）：内容区铺满倾斜的图片墙，只用内置的六张样图，不读用户磁盘；倾斜、列、交错与不透明度在浅色、深色下与 21 页一致；中央可“选择文件夹…”或拖入；拖入可打开的文件夹时图片墙淡出、拖入提示高亮，松开即打开；不能打开的拖入不变化，取消后恢复；图片墙不进辅助功能、不拦截拖入。 限制：图片墙几何、浅深色、拖入与辅助设置仅单元；开启「降低透明度」时拖入期间图片墙隐藏（不透明度 0），开启「减弱动态效果」时拖入即时变化、不淡化；图片墙静止，漂移待 #316；首页的查看器浮动控件待 #331；签名真机、VoiceOver 实走、@2x 与 21 页视觉对照未验。 |
+| OPEN-08 | 首页图片墙 | Partial | 单元 | P3-16 | `Packages/PicseeKit/Sources/PicseeMacUI/States/FirstLaunchView.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/FirstLaunchLayout.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/States/ViewerStateHost.swift`、`Packages/PicseeKit/Sources/PicseeMacUI/B4Samples/`、`Packages/PicseeKit/Sources/PicseeMacUI/Input/ViewerDropView.swift` | 没打开文件夹的窗口（首页）：内容区铺满倾斜的图片墙，只用内置的六张样图，不读用户磁盘；倾斜、列、交错与不透明度在浅色、深色下与 21 页一致；中央可“选择文件夹…”或拖入；拖入可打开的文件夹时图片墙淡出、拖入提示高亮，松开即打开；不能打开的拖入不变化，取消后恢复；图片墙不进辅助功能、不拦截拖入。 限制：图片墙几何、浅深色、拖入与辅助设置仅单元；开启「降低透明度」时拖入期间图片墙隐藏（不透明度 0），开启「减弱动态效果」时拖入即时变化、不淡化；图片墙静止，漂移待 #316；首页的查看器浮动控件待 #331；签名真机、VoiceOver 实走、@2x 与 21 页视觉对照未验。 |
 
 ### 查看与画布
 
@@ -333,7 +333,7 @@ picsee 只支持 macOS，没有跨平台差异表，但同一能力在不同硬�
 
 | 区域 | 最近审查 | 审查人 | 备注 |
 |---|---|---|---|
-| 打开与输入 | 2026-10-31 | doc-gardener | fbad623..8f78a20。历史复核见 git log -p -- docs/feature-ledger.md |
+| 打开与输入 | 2026-10-31 | doc-gardener | 46485b3..99ab469。历史复核见 git log -p -- docs/feature-ledger.md |
 | 查看与画布 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
 | C 沉浸界面 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
 | 外观与显示偏好 | 2026-10-31 | doc-gardener | 58cc251..6796cd6。历史复核见 git log -p -- docs/feature-ledger.md |
