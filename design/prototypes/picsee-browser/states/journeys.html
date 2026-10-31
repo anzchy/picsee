@@ -181,7 +181,7 @@ const LEDGER = {
   'compact-grid': 'GRID-08', 'settings': 'PREF-01/03 · CACHE-03', 'shortcuts': 'CMD-01',
 };
 // A page that a later design replaces. The card stays the state page; the overlay names the replacement (not a branch).
-const REPLACED = { 'first-launch': '外观以 B4 散落相纸为准（P3-16 #202；原型在分支 prototype/first-launch-b4-final 9234b14）' };
+const REPLACED = {};
 
 const K = s => s.replace(/\[([^\]]+)\]/g, '<kbd>$1</kbd>');   // [Esc] → App shortcut
 // Entrances into J1/J2 (plan §1.6, ledger OPEN-*/ACCESS-01). The last column is where the user lands.
@@ -210,7 +210,7 @@ const JOURNEYS = [
   { id: 'J1', name: '打开与浏览', goal: '从空窗口到看见自己的照片', stages: ['发现', '授权', '读取', '浏览'],
     wps: 'P3-16 #202 · P3-17b #205 · P3-10 #113 · P3-17a #204 · P2-08b #137 · P2-08c #141 · P2-09 #142 · P0-04（ACCESS-01）· #185',
     steps: [
-      { p: 'first-launch', note: '没有文件夹：选择或拖入；不可用的操作明确禁用' },
+      { p: 'first-launch', note: '没有文件夹：首页只有图片墙和居中的「选择文件夹」，没有底栏和侧栏；选择或拖入' },
       { p: 'folder-loading', t: '「选择文件夹…」<br>或拖入文件夹', note: '扫描完成前留在这里；未得总数不伪造百分比',
         branches: [
           { id: 'J1-cancel', t: '取消读取', at: '「选择文件夹…」或拖入文件夹', outs: [
@@ -285,7 +285,7 @@ const JOURNEYS = [
 const REF = { pages: ['grid-dark', 'keyboard-focus', 'compact-grid', 'components'],
   note: '这些页面不是某一步，而是每条旅程都要满足的约束：深色外观、键盘焦点、小窗口布局和组件状态（计划 §1.6）。' };
 const DRAFTS = [
-  '21 原稿：<code>first-launch.html</code>。J1 主路径仍用它的卡片，外观以 P3-16 的 B4 为准；B4 落地后替换这一页。',
+  '21 原稿（居中提示加禁用底栏）和 B4 散落相纸（P3-16 #202，原型在分支 <code>prototype/first-launch-b4-final</code> 9234b14）：已由 <code>first-launch.html</code> 的图片墙首页替换（#317，spec #311）；旧稿见 git 历史。',
   '22 原稿（22-A，页内居中提示）：已由 <code>empty-folder.html</code>（22-BD）替换；旧稿见 git 历史 <code>1c9346d:design/prototypes/picsee-browser/states/empty-folder.html</code>。',
   '26 原稿（26-A，页内居中提示）：已由 <code>permission-denied.html</code>（26-BC）替换；旧稿见 <code>1c9346d:design/prototypes/picsee-browser/states/permission-denied.html</code>。',
   '22、26 的其他候选（22-0/B/C/D、26-0/A/B/C/D、26M-A/B）只在分支 <code>prototype/states-22-26</code> 的原型里，不进 main（ADR-014）。',
