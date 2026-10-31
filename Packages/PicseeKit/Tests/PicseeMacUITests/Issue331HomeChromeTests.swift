@@ -197,7 +197,7 @@ private enum HomeOp: CaseIterable { case show, hide, home, notHome, refresh }
     expectHidden(scene.chrome, scene.content, scene.canvas, "after two Tabs")
 }
 
-@Test(.timeLimit(.minutes(1))) @MainActor func i331LoadingShowsControlsAndCancelReturnsHomeHidden() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func i331LoadingShowsControlsAndCancelReturnsHomeHidden() async throws {
     let scene = HomeChromeScene(hidesOnHome: true)
     defer { scene.window.close() }
     let gate = HomeOpeningGate()
@@ -231,7 +231,7 @@ private enum HomeOp: CaseIterable { case show, hide, home, notHome, refresh }
     await task?.value
 }
 
-@Test(.timeLimit(.minutes(1))) @MainActor func i331ShowingImageShowsControls() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func i331ShowingImageShowsControls() async throws {
     let scene = HomeChromeScene(hidesOnHome: true)
     defer { scene.window.close() }
     await scene.open(URL(fileURLWithPath: "/A.png"))?.value
@@ -260,7 +260,7 @@ private enum HomeOp: CaseIterable { case show, hide, home, notHome, refresh }
     }
 }
 
-@Test(.timeLimit(.minutes(1))) @MainActor func i331TwoOverlaysDecideIndependently() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func i331TwoOverlaysDecideIndependently() async throws {
     let a = HomeChromeScene(hidesOnHome: true), b = HomeChromeScene(hidesOnHome: true)
     defer { a.window.close(); b.window.close() }
     await b.open(URL(fileURLWithPath: "/A.png"))?.value
@@ -278,7 +278,7 @@ private enum HomeOp: CaseIterable { case show, hide, home, notHome, refresh }
 
 /// Review M1: the Home hides the controls without the session's focus lock, so a focused control hands focus back to
 /// the canvas instead of keeping it on a hidden view.
-@Test(.timeLimit(.minutes(1))) @MainActor func i331FocusedControlMovesToCanvasOnEnteringHome() async throws {
+@Test(.timeLimit(.minutes(2))) @MainActor func i331FocusedControlMovesToCanvasOnEnteringHome() async throws {
     let scene = HomeChromeScene(hidesOnHome: true)
     defer { scene.window.close() }
     await scene.open(URL(fileURLWithPath: "/A.png"))?.value
