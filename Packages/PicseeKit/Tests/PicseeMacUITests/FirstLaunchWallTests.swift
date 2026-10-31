@@ -815,3 +815,103 @@ private let i315AXChildren = ["first-launch.heading", "state.open", "first-launc
     #expect(dropView.registeredDraggedTypes.contains(.fileURL))
 }
 
+// MARK: - WI-6 the centre stays readable with the scrim behind it (pinned page 21)
+
+@Test @MainActor func i315CentreReadableAtSupportedSizes() throws {
+    let padding = try i315B4Page(dark: false).edges(".chips span", "padding", viewport: 960)
+    let sizes = [NSSize(width: 800, height: 680)]
+        + generatedSizes(seed: 0x3156, count: 30, width: 800...2400, height: 680...1600)
+    let chinese: [String: String] = [
+        "first-launch.chip.folder": "文件夹", "first-launch.chip.images": "单张或多张图片",
+        "first-launch.chip.formats": "常见图片格式"]
+    let scene = StatesScene(width: 960)
+    defer { scene.window.close() }
+    scene.state.display(.empty)
+    for size in sizes {
+        try resize(scene, to: size)
+        let home = try launch(in: scene)
+        for dragActive in [false, true] {
+            scene.state.setFirstLaunchDragActive(dragActive)
+            for language in ["en", "zh"] {
+                let context = "seed 0x3156 size \(size) drag \(dragActive) \(language)"
+                if language == "zh" {
+                    let heading = try #require(wallTestView("first-launch.heading", in: home) as? NSTextField)
+                    heading.stringValue = dragActive ? "松开即可打开" : "把照片文件夹拖到这里"
+                    for (id, label) in chinese {
+                        (try #require(wallTestView(id, in: home) as? NSTextField)).stringValue = label
+                    }
+                }
+                home.needsLayout = true
+                home.layoutSubtreeIfNeeded()
+                let drop = try #require(wallTestView("first-launch.drop", in: home)).frame
+                let views = centreViews(home)
+                try #require(views.count == 7, "\(context)")
+                for view in views {
+                    let id = view.accessibilityIdentifier()
+                    #expect(!view.isHidden && view.alphaValue > 0, "\(context) \(id) hidden")
+                    #expect(view.frame.width > 0 && view.frame.height > 0, "\(context) \(id) frame \(view.frame)")
+                    #expect(drop.contains(view.frame), "\(context) \(id) \(view.frame) outside drop \(drop)")
+                    if id.hasPrefix("first-launch.chip."), let chip = view as? NSTextField {
+                        let measured = ceil((chip.stringValue as NSString).size(withAttributes: [.font: chip.font!]).width)
+                        #expect(chip.frame.width >= measured + CGFloat(padding.left + padding.right),
+                                "\(context) \(id) width \(chip.frame.width) text \(measured)")
+                    }
+                }
+                for (i, a) in views.enumerated() {
+                    for b in views[(i + 1)...] {
+                        let overlap = a.frame.intersection(b.frame)
+                        #expect(overlap.isEmpty || overlap.width * overlap.height == 0,
+                                "\(context) \(a.accessibilityIdentifier()) overlaps \(b.accessibilityIdentifier()) by \(overlap)")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Test @MainActor func i315ScrimSitsAboveTilesBelowCentre() throws {
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    let wall = try #require(wallView(home))
+    let sublayers = try #require(wall.layer?.sublayers)
+    let tiles = try #require(sublayers.firstIndex { $0.name == "first-launch.wall.tiles" })
+    let scrimIndex = try #require(sublayers.firstIndex { $0.name == "first-launch.wall.scrim" })
+    #expect(tiles < scrimIndex, "tiles \(tiles) scrim \(scrimIndex)")
+    let scrim = try #require(sublayers[scrimIndex] as? CAGradientLayer)
+    #expect(scrim.type == .radial)
+    #expect(scrim.frame == wall.bounds, "scrim \(scrim.frame) wall \(wall.bounds)")
+    let wallIndex = try #require(home.subviews.firstIndex { $0 === wall })
+    let above = [try #require(wallTestView("first-launch.drop", in: home))] + centreViews(home)
+    try #require(above.count == 8)
+    for view in above {
+        let index = try #require(home.subviews.firstIndex { $0 === view }, "\(view.accessibilityIdentifier()) not a Home subview")
+        #expect(wallIndex < index, "\(view.accessibilityIdentifier()) index \(index) below wall \(wallIndex)")
+    }
+}
+
+@Test @MainActor func i315ScrimColoursFollowPinnedRadialGradient() throws {
+    let light = try PinnedDesign.page("first-launch")
+    let dark = try PinnedDesign.page("first-launch", appearance: "dark")
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    var reads: [[PinnedDesign.Color]] = []
+    for (appearance, page) in [(NSAppearance.Name.aqua, light), (.darkAqua, dark), (.aqua, light)] {
+        home.appearance = NSAppearance(named: appearance)
+        home.layoutSubtreeIfNeeded()
+        let g = try page.radialGradient(".wall::after", viewport: 960)
+        let scrim = try #require(wallLayer("first-launch.wall.scrim", in: home) as? CAGradientLayer)
+        let colours = try ((scrim.colors as? [CGColor]) ?? []).map { try srgb($0) }
+        reads.append(colours)
+        #expect(colours.count == g.stops.count, "\(appearance.rawValue) \(colours.count) colours")
+        for (index, (colour, stop)) in zip(colours, g.stops).enumerated() {
+            #expect(i315Close(colour, stop.color), "\(appearance.rawValue) stop \(index) \(colour) vs \(stop.color)")
+        }
+        #expect((scrim.locations ?? []).map(\.doubleValue) == g.stops.map(\.location),
+                "\(appearance.rawValue) locations \(String(describing: scrim.locations))")
+        #expect(i315Close(scrim.startPoint, CGPoint(x: g.centreX / 100, y: g.centreY / 100), 0.0001),
+                "\(appearance.rawValue) start \(scrim.startPoint)")
+        #expect(i315Close(scrim.endPoint, CGPoint(x: 0.5 + g.radiusX / 100, y: 0.5 + g.radiusY / 100), 0.0001),
+                "\(appearance.rawValue) end \(scrim.endPoint)")
+    }
+    #expect(reads.count == 3 && reads[0] == reads[2] && reads[0] != reads[1], "light → dark → light \(reads)")
+}

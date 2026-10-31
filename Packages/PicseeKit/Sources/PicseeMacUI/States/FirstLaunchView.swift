@@ -208,6 +208,9 @@ import os
         func colour(_ c: [Double], _ alpha: Double) -> CGColor { CGColor(srgbRed: c[0], green: c[1], blue: c[2], alpha: alpha) }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         tilesLayer.opacity = dark ? 0.38 : 0.32
+        // Page 21 `.wall::after`: `--color-bg` mixed with transparent at 100% / 80% / 25%.
+        let background = DesignColor.canvasBackground.components(theme)
+        scrim.colors = [1, 0.8, 0.25].map { colour(background, $0) }
         for container in tiles {
             container.shadowColor = dark ? colour([0, 0, 0], 1) : colour(text, 1)
             container.shadowOpacity = dark ? 0.45 : 0.08
