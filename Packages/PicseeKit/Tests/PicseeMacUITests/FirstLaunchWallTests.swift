@@ -476,3 +476,269 @@ private func i315Close(_ a: PinnedDesign.Color, _ b: PinnedDesign.Color, rgb: Do
                 "\(context) heights \(heading.frame.height) \(button.frame.height) \(chip.frame.height)")
     }
 }
+
+// MARK: - WI-4 drag lifecycle on the wall and drop prompt (pinned page 21)
+
+private func i315B4Page(dark: Bool) throws -> PinnedDesign {
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    return try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path,
+                                 appearance: dark ? "dark" : nil)
+}
+
+private func i315DragWallAlpha() throws -> CGFloat {
+    let value = try PinnedDesign.page("first-launch").exactDeclaration(".is-drag-over .wall", "opacity")
+    return CGFloat(try #require(Double(value), "'.is-drag-over .wall' opacity '\(value)'"))
+}
+
+@Test @MainActor func i315DragSequencesRoundTripToIdleAndActive() async throws {
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    await waitForSamples(home)
+    #expect(home.sampleLoadCompleted)
+    let appearances: [NSAppearance.Name] = [.aqua, .darkAqua]
+    var reference: [NSAppearance.Name: [Bool: WallPresentation]] = [:]
+    for appearance in appearances {
+        for drag in [false, true] {
+            home.appearance = NSAppearance(named: appearance)
+            scene.state.setFirstLaunchDragActive(false)
+            home.layoutSubtreeIfNeeded()
+            scene.state.setFirstLaunchDragActive(drag)
+            home.layoutSubtreeIfNeeded()
+            reference[appearance, default: [:]][drag] = try wallPresentation(home)
+        }
+    }
+    let aquaIdle = try #require(reference[.aqua]?[false])
+    for appearance in appearances {
+        let idle = try #require(reference[appearance]?[false]), active = try #require(reference[appearance]?[true])
+        #expect(idle.wallAlpha != active.wallAlpha, "\(appearance.rawValue) wall alpha does not change on drag")
+        #expect(idle.heading != active.heading, "\(appearance.rawValue) heading does not change on drag")
+        #expect(idle.outlineHidden != active.outlineHidden, "\(appearance.rawValue) outline does not change on drag")
+    }
+    for drag in [false, true] {
+        let light = try #require(reference[.aqua]?[drag]), dark = try #require(reference[.darkAqua]?[drag])
+        #expect(light.tilesOpacity != dark.tilesOpacity, "drag \(drag) tiles opacity ignores theme")
+        #expect(light.headingColor != dark.headingColor, "drag \(drag) heading colour ignores theme")
+    }
+
+    let seed: UInt64 = 0x3154
+    var generator = SplitMix64(seed: seed)
+    for index in 0..<128 {
+        home.appearance = NSAppearance(named: .aqua)
+        scene.state.setFirstLaunchDragActive(false)
+        home.layoutSubtreeIfNeeded()
+        #expect(try wallPresentation(home) == aquaIdle, "seed 0x3154 sequence \(index) reset")
+        let events = (0..<Int.random(in: 1...10, using: &generator)).map { _ in Int.random(in: 0..<4, using: &generator) }
+        var lastAppearance = NSAppearance.Name.aqua, lastDrag = false
+        for (step, event) in events.enumerated() {
+            switch event {
+            case 0: scene.state.setFirstLaunchDragActive(true); lastDrag = true
+            case 1: scene.state.setFirstLaunchDragActive(false); lastDrag = false
+            case 2: home.appearance = NSAppearance(named: .aqua); lastAppearance = .aqua
+            default: home.appearance = NSAppearance(named: .darkAqua); lastAppearance = .darkAqua
+            }
+            home.layoutSubtreeIfNeeded()
+            let expected = try #require(reference[lastAppearance]?[lastDrag])
+            #expect(try wallPresentation(home) == expected,
+                    "seed 0x3154 sequence \(index) events \(events) step \(step): expected \(lastAppearance.rawValue) drag \(lastDrag)")
+        }
+    }
+}
+
+@Test @MainActor func i315DecodeFinishingDuringDragKeepsActivePresentation() async throws {
+    let pinned = try PinnedDesign.page("first-launch")
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    #expect(home.sampleLoadCompleted == false, "decode finished before the drag began")
+    scene.state.setFirstLaunchDragActive(true)
+    await waitForSamples(home)
+    #expect(home.sampleLoadCompleted)
+    let wall = try #require(wallView(home))
+    let tiles = try #require(wallLayer("first-launch.wall.tiles", in: home))
+    let heading = try #require(wallTestView("first-launch.heading", in: home) as? NSTextField)
+    let outline = try #require(dropOutline(home))
+    #expect(abs(wall.alphaValue - (try i315DragWallAlpha())) < 0.001, "wall alpha after decode \(wall.alphaValue)")
+    let tilesOpacity = try #require(Double(pinned.raw(".wall .tiles", "opacity", viewport: 960)))
+    #expect(abs(Double(tiles.opacity) - tilesOpacity) < 0.001, "tiles opacity after decode \(tiles.opacity)")
+    let containers = tileContainers(home)
+    #expect(containers.count == 60)
+    #expect(containers.allSatisfy { $0.opacity == 1 && !$0.isHidden }, "a decoded tile is faded or hidden")
+    #expect(heading.stringValue == "Release to open")
+    #expect(!outline.isHidden)
+
+    scene.state.setFirstLaunchDragActive(false)
+    home.layoutSubtreeIfNeeded()
+    let (fresh, freshHome) = try i315Scene()
+    defer { fresh.window.close() }
+    await waitForSamples(freshHome)
+    #expect(freshHome.sampleLoadCompleted)
+    #expect(try wallPresentation(home) == wallPresentation(freshHome), "idle after a drag that spanned decode")
+}
+
+@Test @MainActor func i315DragActiveValuesComeFromPinnedPage() throws {
+    let light = try PinnedDesign.page("first-launch")
+    let dark = try PinnedDesign.page("first-launch", appearance: "dark")
+    let dragAlpha = try i315DragWallAlpha()
+    #expect(abs(dragAlpha - 0.4) < 0.001)
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    let wall = try #require(wallView(home))
+    let tiles = try #require(wallLayer("first-launch.wall.tiles", in: home))
+    let heading = try #require(wallTestView("first-launch.heading", in: home) as? NSTextField)
+    let drop = try #require(wallTestView("first-launch.drop", in: home))
+    let outline = try #require(dropOutline(home))
+    for (appearance, page) in [(NSAppearance.Name.aqua, light), (.darkAqua, dark)] {
+        let context = appearance.rawValue
+        home.appearance = NSAppearance(named: appearance)
+        home.layoutSubtreeIfNeeded()
+        let tilesOpacity = tiles.opacity
+        scene.state.setFirstLaunchDragActive(true)
+        home.layoutSubtreeIfNeeded()
+        #expect(abs(wall.alphaValue - dragAlpha) < 0.001, "\(context) wall alpha \(wall.alphaValue)")
+        #expect(tiles.opacity == tilesOpacity, "\(context) tiles opacity changed on drag")
+        #expect(heading.stringValue == "Release to open", "\(context)")
+        let accentText = try page.color(":root", "--color-accent-text", viewport: 960)
+        let headingActive = try headingColour(home)
+        #expect(i315Close(headingActive, accentText), "\(context) heading \(headingActive) vs accent-text \(accentText)")
+        #expect(!outline.isHidden && outline.lineWidth == 1.5, "\(context) outline")
+        let stroke = try srgb(outline.strokeColor), accent = try page.color(":root", "--color-accent", viewport: 960)
+        #expect(i315Close(stroke, accent), "\(context) outline \(stroke) vs accent \(accent)")
+        let fill = try srgb(drop.layer?.backgroundColor), soft = try page.color(":root", "--color-accent-soft", viewport: 960)
+        #expect(i315Close(fill, soft), "\(context) drop fill \(fill) vs accent-soft \(soft)")
+
+        scene.state.setFirstLaunchDragActive(false)
+        home.layoutSubtreeIfNeeded()
+        #expect(heading.stringValue == "Drop a photo folder here", "\(context)")
+        let text = try page.color(":root", "--color-text", viewport: 960)
+        let headingIdle = try headingColour(home)
+        #expect(i315Close(headingIdle, text), "\(context) idle heading \(headingIdle) vs text \(text)")
+        #expect(outline.isHidden, "\(context) outline still shown")
+        #expect(try srgb(drop.layer?.backgroundColor).alpha == 0, "\(context) drop fill not cleared")
+        #expect(wall.alphaValue == 1, "\(context) wall alpha \(wall.alphaValue) after drag")
+    }
+}
+
+@Test @MainActor func i315WallFadeUsesFastMotionDurationUnlessReduceMotion() throws {
+    let pinned = try PinnedDesign.page("first-launch")
+    let fast = try PinnedDesign.seconds(pinned.rootToken("--motion-duration-fast"))
+    #expect(fast > 0)
+    #expect(try PinnedDesign.seconds(pinned.rootToken("--motion-duration-fast", media: "prefers-reduced-motion:reduce")) == 0)
+    let dragAlpha = try i315DragWallAlpha()
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    let wall = try #require(wallView(home))
+    for reduceMotion in [false, true] {
+        home.pinAccessibility(reduceMotion: reduceMotion)
+        for drag in [true, false] {
+            let context = "reduceMotion \(reduceMotion) drag \(drag)"
+            scene.state.setFirstLaunchDragActive(drag)
+            let target: CGFloat = drag ? dragAlpha : 1
+            #expect(abs(wall.alphaValue - target) < 0.001, "\(context) wall alpha \(wall.alphaValue)")
+            let animations = wallOpacityAnimations(home)
+            if reduceMotion {
+                #expect(animations.isEmpty, "\(context) wall fades under Reduce Motion")
+            } else {
+                #expect(animations.count == 1, "\(context) opacity animations \(animations.count)")
+                #expect(animations.allSatisfy { abs($0.duration - fast) < 0.0001 },
+                        "\(context) durations \(animations.map(\.duration)) vs \(fast)")
+            }
+            wall.layer?.removeAllAnimations()
+            scene.state.setFirstLaunchDragActive(drag)
+            #expect(wallOpacityAnimations(home).isEmpty, "\(context) a repeated call animated again")
+            #expect(abs(wall.alphaValue - target) < 0.001, "\(context) repeated call moved alpha \(wall.alphaValue)")
+        }
+    }
+}
+
+@Test @MainActor func i315ReduceTransparencyDragHidesWallAndUsesOpaqueDropFill() throws {
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    home.pinAccessibility(reduceTransparency: true)
+    let wall = try #require(wallView(home))
+    let drop = try #require(wallTestView("first-launch.drop", in: home))
+    for (appearance, dark) in [(NSAppearance.Name.aqua, false), (.darkAqua, true)] {
+        let context = appearance.rawValue
+        home.appearance = NSAppearance(named: appearance)
+        home.layoutSubtreeIfNeeded()
+        scene.state.setFirstLaunchDragActive(true)
+        home.layoutSubtreeIfNeeded()
+        #expect(wall.alphaValue == 0, "\(context) wall alpha \(wall.alphaValue) under Reduce Transparency")
+        let fill = try srgb(drop.layer?.backgroundColor)
+        let expected = try i315B4Page(dark: dark).color(".rt.over .drop", "background", viewport: 960)
+        #expect(i315Close(fill, expected) && fill.alpha == 1, "\(context) drop fill \(fill) vs \(expected)")
+        scene.state.setFirstLaunchDragActive(false)
+        home.layoutSubtreeIfNeeded()
+        #expect(wall.alphaValue == 1, "\(context) wall alpha \(wall.alphaValue) after drag")
+        #expect(try srgb(drop.layer?.backgroundColor).alpha == 0, "\(context) drop fill not cleared")
+    }
+}
+
+@Test @MainActor func i315LiveAccessibilityChangeRestylesWallDuringDrag() throws {
+    let dragAlpha = try i315DragWallAlpha()
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    let wall = try #require(wallView(home))
+    let drop = try #require(wallTestView("first-launch.drop", in: home))
+    let heading = try #require(wallTestView("first-launch.heading", in: home) as? NSTextField)
+    scene.state.setFirstLaunchDragActive(true)
+    home.layoutSubtreeIfNeeded()
+    #expect(abs(wall.alphaValue - dragAlpha) < 0.001, "wall alpha \(wall.alphaValue) before the change")
+    #expect(!wallOpacityAnimations(home).isEmpty, "no fade running before the change")
+    home.reduceTransparencyOverride = true
+    home.reduceMotionOverride = true
+    NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+    home.layoutSubtreeIfNeeded()
+    #expect(wall.alphaValue == 0, "wall alpha \(wall.alphaValue) after Reduce Transparency turned on")
+    #expect(try srgb(drop.layer?.backgroundColor).alpha == 1, "drop fill not opaque")
+    #expect(wallOpacityAnimations(home).isEmpty, "fade still running under Reduce Motion")
+    home.reduceTransparencyOverride = false
+    NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+    home.layoutSubtreeIfNeeded()
+    #expect(abs(wall.alphaValue - dragAlpha) < 0.001, "wall alpha \(wall.alphaValue) after Reduce Transparency turned off")
+    #expect(heading.stringValue == "Release to open")
+}
+
+@Test @MainActor func i315DropViewLifecycleDrivesWallThroughHost() async throws {
+    let dragAlpha = try i315DragWallAlpha()
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    await waitForSamples(home)
+    let idle = try wallPresentation(home)
+    scene.state.setFirstLaunchDragActive(true)
+    home.layoutSubtreeIfNeeded()
+    let active = try wallPresentation(home)
+    scene.state.setFirstLaunchDragActive(false)
+    home.layoutSubtreeIfNeeded()
+    #expect(abs(active.wallAlpha - dragAlpha) < 0.001 && active.heading == "Release to open" && !active.outlineHidden,
+            "active reference \(active.wallAlpha) \(active.heading)")
+    #expect(idle.wallAlpha == 1 && idle.outlineHidden && idle.heading == "Drop a photo folder here")
+
+    let files = NSPasteboard.withUniqueName(), strings = NSPasteboard.withUniqueName()
+    defer { files.releaseGlobally(); strings.releaseGlobally() }
+    #expect(files.writeObjects([URL(fileURLWithPath: "/photos/A.jpg") as NSURL]))
+    #expect(strings.writeObjects(["not a file" as NSString]))
+    var dropped = 0
+    let dropView = ViewerDropView(frame: scene.state.bounds, acceptsDrop: { true }, onDrop: { _ in dropped += 1 })
+    dropView.onDragActive = { scene.state.setFirstLaunchDragActive($0) }
+    func presentation() throws -> WallPresentation { home.layoutSubtreeIfNeeded(); return try wallPresentation(home) }
+
+    let accepted = WallDragInfo(files)
+    #expect(dropView.draggingEntered(accepted) == .copy)
+    #expect(try presentation() == active, "accepted enter")
+    dropView.draggingExited(accepted)
+    #expect(try presentation() == idle, "exited")
+    #expect(dropView.draggingEntered(accepted) == .copy)
+    #expect(try presentation() == active, "accepted enter before drop")
+    #expect(dropView.performDragOperation(accepted))
+    #expect(try presentation() == idle, "dropped")
+    #expect(dropped == 1)
+    #expect(dropView.draggingEntered(accepted) == .copy)
+    dropView.draggingEnded(accepted)
+    #expect(try presentation() == idle, "ended")
+
+    let rejected = WallDragInfo(strings)
+    #expect(dropView.draggingEntered(rejected) == [])
+    #expect(try presentation() == idle, "rejected enter")
+    #expect(!dropView.performDragOperation(rejected))
+    #expect(try presentation() == idle, "rejected drop")
+    #expect(dropped == 1)
+}
