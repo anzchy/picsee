@@ -11,7 +11,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "9c10c44b405078ef81b3dae00ce96952d4204517fa3df9d67c6bdfee4921b31d"
+      "sha256": "50605fbf93410484b62a11ca976432151af617aeb8c2ccff3a00640ef81f9504"
     },
     {
       "name": "grid-dark",
@@ -23,7 +23,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "ccd738c4841aa4679b769dce7ceed86ab95137b38c4157df013c17b0ff33baab"
+      "sha256": "74b280243e4fd6af6bd6a1ba01c33decf49ca0f1ccd6806e934a2d18a4a8c7fe"
     },
     {
       "name": "viewer-quiet",
@@ -59,7 +59,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "6b36c865acae7f6603b713306abd80640765840566d402afe5bacb8fdceb9e86"
+      "sha256": "d7657fe71de3e0ff4bff9add89d6f0726d6a36f72e324fb219b343bad62066f6"
     },
     {
       "name": "viewer-inspector",
@@ -83,7 +83,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "891606a1d3b3e022cfe6489c19ad81151358c2aae64f3c2d09f1e72e95dccb8e"
+      "sha256": "422a7b7b9e76df75056ed9a8715da5545721435142c832167c12964a4738a692"
     },
     {
       "name": "empty-folder",
@@ -95,7 +95,7 @@
       },
       "kind": "static-mockup",
       "origin": "local-C-adaptation",
-      "sha256": "4ecfeab377c05d6a094d0a91bd844fa1d3b299590267eaeea58a0d87aae14512"
+      "sha256": "9f4161c9e5c6062d56bc07a49ef03b67698800f89bdb4dce5200d2c764403a11"
     },
     {
       "name": "search-empty",
@@ -107,7 +107,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "2809bc1aa8936fa5f97908b436624c975127faa7b7366982b13892403d848ddd"
+      "sha256": "f105521e7e550f0979d13ee36fba0c9f3071a203607901125a79d80a5c8efb83"
     },
     {
       "name": "folder-loading",
@@ -119,7 +119,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "dba0b7c87c363906dc1f64ea3eee6f8e5d2d50907023595bfd6c2494d21aa895"
+      "sha256": "25386d7bc9a662d8f26f497be3878aa365013ca105ff495b054aa97001250807"
     },
     {
       "name": "image-error",
@@ -143,7 +143,7 @@
       },
       "kind": "static-mockup",
       "origin": "local-C-adaptation",
-      "sha256": "204904eeadd35ade4da011ced026392e4af2637d452cb28a47e8831ef8699fde"
+      "sha256": "1cdbfc0955dddd49fdf224c87a310d25afafdde14bc4811f6ae9249ff7c89fb4"
     },
     {
       "name": "original-size",
@@ -179,7 +179,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "474bab65053d7f3108da82025d73058661b7576161ec222b2b13b115134e3c37"
+      "sha256": "dbd02a32fd00e2ac9352576d20421b2e57f0842d532016fdd576c7b49f000fe3"
     },
     {
       "name": "components",
@@ -191,7 +191,7 @@
       },
       "kind": "static-mockup",
       "origin": "accepted-C-snapshot",
-      "sha256": "b7b412926371c9eba6e53243dc2e6f4fd655cfd55d67a1d5873343c6189391f6"
+      "sha256": "85708f37fd0b425549962b6a09cf7e39b00ea1f1a2f426c23a98214c8578a372"
     },
     {
       "name": "grid-context-menu",
@@ -203,7 +203,7 @@
       },
       "kind": "static-mockup",
       "origin": "local-C-adaptation",
-      "sha256": "82eccb2e4f6284f3d18287d46aa135acee4b9c4abb72525ef9d17dce83cbf9bf"
+      "sha256": "79fb0f9aff794bda02f1a7561513853ffef2e92616135d778404d4e590452d36"
     },
     {
       "name": "grid-multiselect",
@@ -215,7 +215,7 @@
       },
       "kind": "static-mockup",
       "origin": "local-C-adaptation",
-      "sha256": "b6d1bc9988ceed05ece98b4d590200ac85e5a2a4c571df887001eb56c419c2c1"
+      "sha256": "909bf2974c2a9f0da3a81142aa513dd97d39a2762ec8fa9c556e955e10637efb"
     },
     {
       "name": "viewer-filmstrip",
