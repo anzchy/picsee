@@ -1,0 +1,9 @@
+{
+  "headSha": "3de39c6012345678901234567890123456789012",
+  "url": null,
+  "status": "completed",
+  "conclusion": "success",
+  "jobs": [
+    { "name": "App tests", "status": "completed", "conclusion": "success" }
+  ]
+}

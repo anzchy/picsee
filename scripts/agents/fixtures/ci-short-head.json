@@ -1,0 +1,9 @@
+{
+  "headSha": "a",
+  "url": "https://github.com/anzchy/picsee/actions/runs/319000101",
+  "status": "completed",
+  "conclusion": "success",
+  "jobs": [
+    { "name": "App tests", "status": "completed", "conclusion": "success" }
+  ]
+}
