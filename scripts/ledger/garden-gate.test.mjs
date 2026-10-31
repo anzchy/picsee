@@ -287,3 +287,111 @@ test("outside a git repository it fails closed to RUN", (t) => {
   assert.equal(result.stdout.trim(), "RUN");
   assert.ok(result.stderr.trim());
 });
+
+// F1: Git quotes non-ASCII and quote characters in display output; paths must be read raw.
+const quotedPaths = [
+  ["a unicode path under App/", "App/画布.swift", null],
+  ["a unicode path named in 在哪", "Config/授权.entitlements", (ledger) => ledger.replace("`Config/Picsee.entitlements`", "`Config/授权.entitlements`")],
+  ["a path with a quote and a space named in 在哪", 'Config/Pic "see" one.entitlements', (ledger) => ledger.replace("`Config/Picsee.entitlements`", '`Config/Pic "see" one.entitlements`')],
+];
+for (const [name, path, edit] of quotedPaths) {
+  test(`${name} gives RUN`, (t) => {
+    const r = makeRepo(t);
+    const base = edit ? r.commitLedger("chore: ledger", edit(r.read(LEDGER))) : r.base;
+    r.commit("chore: adjust file", { [path]: "x\n" });
+    const result = r.run(base, "HEAD");
+    assert.equal(result.line, "RUN");
+    assert.ok(result.stderr.includes(path), result.stderr);
+  });
+
+  test(`${name} gives RUN instead of REUSE`, (t) => {
+    const r = makeRepo(t);
+    if (edit) r.commitLedger("chore: ledger", edit(r.read(LEDGER)));
+    const gardened = r.commit("chore: app", { "App/PicseeApp.swift": "// x\n" });
+    r.commit("chore: adjust file", { [path]: "x\n" });
+    const result = r.run(r.base, "HEAD", "--since", gardened, "--verdict", "CLEAN");
+    assert.equal(result.line, "RUN");
+    assert.ok(result.stderr.includes(path), result.stderr);
+  });
+}
+
+// F2: a `*` in a 在哪 path keeps its literal prefix as a plain string prefix.
+const wildcards = [
+  ["a file-prefix wildcard", "`Config/Picsee*.entitlements`", "Config/PicseeDebug.entitlements"],
+  ["a directory wildcard", "`Config/*`", "Config/Other.plist"],
+  ["a leading star", "`*.entitlements`", "Elsewhere/thing.txt"],
+];
+for (const [name, named, path] of wildcards) {
+  test(`${name} in 在哪 gives RUN`, (t) => {
+    const r = makeRepo(t);
+    const base = r.commitLedger("chore: ledger", r.read(LEDGER).replace("`Config/Picsee.entitlements`", named));
+    r.commit("chore: adjust file", { [path]: "x\n" });
+    assert.equal(r.run(base, "HEAD").line, "RUN");
+    const gardened = r.git("rev-parse", "HEAD~1");
+    assert.equal(r.run(base, "HEAD", "--since", gardened, "--verdict", "CLEAN").line, "RUN");
+  });
+}
+
+test("a literal 在哪 file path does not cover a sibling with a longer name", (t) => {
+  const r = makeRepo(t);
+  const head = r.commit("chore: adjust file", { "Config/Picsee.entitlements.bak": "x\n" });
+  assert.equal(r.run(r.base, "HEAD").line, skipLine(r.base, head));
+});
+
+// F3: only a confirmed absence counts as "no ledger at the baseline"; any other Git failure is RUN.
+function gitShim(t, failWhenArgsInclude) {
+  const dir = mkdtempSync(join(tmpdir(), "picsee-garden-gate-shim-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const realGit = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+  const shim = join(dir, "git");
+  writeFileSync(shim, `#!/bin/sh\ncase " $* " in\n  *"${failWhenArgsInclude}"*) echo "fatal: injected object read failure" >&2; exit 128 ;;\nesac\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  return { ...process.env, PATH: `${dir}:${process.env.PATH}` };
+}
+
+function runWith(r, env, ...args) {
+  const result = spawnSync(process.execPath, [gate, ...args], { cwd: r.repo, encoding: "utf8", env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.split("\n").filter(Boolean).length, 1, result.stdout);
+  return { line: result.stdout.trim(), stderr: result.stderr };
+}
+
+test("a failed baseline ledger read gives RUN, not SKIP", (t) => {
+  const r = makeRepo(t);
+  r.commit("chore: notes", { "notes.txt": "x\n" });
+  assert.match(r.run(r.base, "HEAD").line, /^Ledger-Gardener: SKIP /);
+  const result = runWith(r, gitShim(t, `show ${r.base}:${LEDGER}`), r.base, "HEAD");
+  assert.equal(result.line, "RUN");
+  assert.match(result.stderr, /injected object read failure/);
+});
+
+test("a failed baseline ledger lookup gives RUN, not SKIP", (t) => {
+  const r = makeRepo(t);
+  r.commit("chore: notes", { "notes.txt": "x\n" });
+  const result = runWith(r, gitShim(t, `ls-tree --full-tree -z ${r.base}`), r.base, "HEAD");
+  assert.equal(result.line, "RUN");
+  assert.match(result.stderr, /injected object read failure/);
+});
+
+test("a failed --since ledger read gives RUN, not REUSE", (t) => {
+  const r = makeRepo(t);
+  const gardened = r.commit("chore: app", { "App/PicseeApp.swift": "// x\n" });
+  r.commit("chore: notes", { "notes.txt": "x\n" });
+  assert.match(r.run(r.base, "HEAD", "--since", gardened, "--verdict", "CLEAN").line, /^Ledger-Gardener: REUSE /);
+  const result = runWith(r, gitShim(t, `show ${gardened}:${LEDGER}`), r.base, "HEAD", "--since", gardened, "--verdict", "CLEAN");
+  assert.equal(result.line, "RUN");
+  assert.match(result.stderr, /injected object read failure/);
+});
+
+test("a ledger that did not exist at the base is not an error", (t) => {
+  const r = makeRepo(t);
+  r.git("rm", "-q", LEDGER, HTML);
+  r.git("commit", "-q", "-m", "chore: no ledger yet");
+  const base = r.git("rev-parse", "HEAD");
+  r.write(LEDGER, fixtureLedger);
+  r.buildHtml();
+  r.git("add", "--", LEDGER, HTML);
+  r.git("commit", "-q", "-m", "chore: add ledger");
+  const result = r.run(base, "HEAD");
+  assert.equal(result.line, "RUN");
+  assert.match(result.stderr, /is a mapped path/);
+});
