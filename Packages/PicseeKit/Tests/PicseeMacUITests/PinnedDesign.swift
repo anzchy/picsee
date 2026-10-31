@@ -61,74 +61,6 @@ struct PinnedDesign {
         return Self(name: name, rules: rules, appearance: resolvedAppearance, html: html)
     }
 
-    func b4PrintSpecs() throws -> [(name: String, anchor: String, a: Double, b: Double, angle: Double)] {
-        guard name == "b4-first-launch" else { throw Error("print angles requested from \(name)") }
-        let rows = Self.matches(#"\['(TL|T|R|BR|BL|L)',\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*'([^']+)'\]"#, in: html)
-        guard rows.count == 6 else { throw Error("B4 PRINTS array does not contain six pinned rows") }
-        return try rows.map { row in
-            guard row.count == 5, let a = Double(row[1]), let b = Double(row[2]),
-                  let angle = Double(row[3]) else { throw Error("invalid B4 print angle") }
-            return (name: row[4], anchor: row[0], a: a, b: b, angle: angle)
-        }
-    }
-
-    func b4CardTransform(_ selector: String) throws -> (angle: Double, dx: Double, dy: Double) {
-        let value = try exactDeclaration(selector, "transform")
-        guard let parts = Self.matches(#"rotate\((-?[\d.]+)deg\) translate\((-?[\d.]+)px,\s*(-?[\d.]+)px\)"#, in: value).first,
-              parts.count == 3, let angle = Double(parts[0]), let dx = Double(parts[1]),
-              let dy = Double(parts[2]) else { throw Error("B4 card transform is not rotate · translate: \(value)") }
-        return (angle, dx, dy)
-    }
-
-    func b4FrontDrag() throws -> (dy: Double, scale: Double) {
-        let value = try exactDeclaration(".over .stack .f:nth-child(3)", "transform")
-        guard let parts = Self.matches(#"translateY\((-?[\d.]+)px\) scale\(([\d.]+)\)"#, in: value).first,
-              parts.count == 2, let dy = Double(parts[0]), let scale = Double(parts[1]) else {
-            throw Error("B4 front transform is not translateY · scale: \(value)")
-        }
-        return (dy, scale)
-    }
-
-    func b4PrintOpacity(_ theme: String, drag: Bool = false) throws -> Double {
-        guard let values = Self.matches(#"const OPACITY = \{ light: (\d+), dark: (\d+) \}"#, in: html).first,
-              values.count == 2, let light = Double(values[0]), let dark = Double(values[1]),
-              let dimText = Self.matches(#"const DIM = ([\d.]+)"#, in: html).first?.first,
-              let dim = Double(dimText) else { throw Error("B4 opacity values missing from pinned script") }
-        return (theme == "dark" ? dark : light) / 100 * (drag ? dim : 1)
-    }
-
-    func b4PrintShadow() throws -> (ring: Double, hairline: Double, y: Double) {
-        let value = try exactDeclaration(".print", "box-shadow")
-        guard let parts = Self.matches(#"0 0 0 (\d+)px .*0 0 0 (\d+)px .*0 (\d+)px"#, in: value).first,
-              parts.count == 3, let ring = Double(parts[0]), let hairline = Double(parts[1]),
-              let y = Double(parts[2]) else { throw Error("B4 print shadow differs from pinned layers: \(value)") }
-        return (ring, hairline, y)
-    }
-
-    func b4SizeRule() throws -> (width: Double, height: Double, printWidth: Double, printHeight: Double,
-                                 minScale: Double, maxScale: Double, maxPush: Double,
-                                 hideWidth: Double, hideHeight: Double) {
-        guard let ref = Self.matches(#"const REF = \{ w: (\d+), h: (\d+), pw: (\d+), ph: (\d+) \}"#, in: html).first,
-              ref.count == 4, let width = Double(ref[0]), let height = Double(ref[1]),
-              let printWidth = Double(ref[2]), let printHeight = Double(ref[3]),
-              let scales = Self.matches(#"clamp\(min\(W/\d+, H/\d+\), ([\d.]+), ([\d.]+)\)"#, in: html).first,
-              scales.count == 2, let minScale = Double(scales[0]), let maxScale = Double(scales[1]),
-              let pushText = Self.matches(#"最多 (\d+) pt"#, in: html).first?.first,
-              let maxPush = Double(pushText),
-              let hide = Self.matches(#"窗口小于 (\d+)×(\d+) 时全部隐藏"#, in: html).first,
-              hide.count == 2, let hideWidth = Double(hide[0]), let hideHeight = Double(hide[1]) else {
-            throw Error("B4 size rule missing from pinned script")
-        }
-        return (width, height, printWidth, printHeight, minScale, maxScale, maxPush, hideWidth, hideHeight)
-    }
-
-    func b4FanDuration() throws -> Double {
-        let value = try exactDeclaration(".stack .f", "transition")
-        guard let seconds = Self.matches(#"transform ([\d.]+)s"#, in: value).first?.first,
-              let duration = Double(seconds) else { throw Error("B4 fan duration missing: \(value)") }
-        return duration
-    }
-
     func declaration(_ selector: String, _ property: String, viewport: Double) throws -> String {
         guard let value = try matchingRules(selector, property, viewport: viewport)
             .last(where: { $0.declarations[property] != nil })?.declarations[property] else {
@@ -541,5 +473,100 @@ struct PinnedDesign {
                          blue: (a.blue * a.alpha * wa + b.blue * b.alpha * wb) / mixedAlpha, alpha: alpha)
         }
         return nil
+    }
+}
+
+extension PinnedDesign {
+    /// `:root` token outside every unsupported-media rule, or only inside the rule whose header contains `media`.
+    func rootToken(_ token: String, media: String? = nil) throws -> String {
+        let rule = rules.last { rule in
+            guard rule.selector == ":root", rule.declarations[token] != nil else { return false }
+            guard let media else { return rule.unsupported == nil }
+            return rule.unsupported?.replacingOccurrences(of: " ", with: "").contains(media) == true
+        }
+        guard let value = rule?.declarations[token] else {
+            throw Error("\(name) :root \(token) media \(media ?? "none"): no declaration")
+        }
+        return try resolveVars(value, viewport: 960, context: ":root \(token)", tokenSelector: ":root")
+    }
+
+    static func seconds(_ value: String) throws -> Double {
+        let text = value.trimmingCharacters(in: .whitespaces)
+        if text.hasSuffix("ms"), let n = Double(text.dropLast(2)) { return n / 1000 }
+        if text.hasSuffix("s"), let n = Double(text.dropLast()) { return n }
+        throw Error("expected a CSS time, got '\(value)'")
+    }
+
+    func boxShadowLayers(_ selector: String, _ property: String = "box-shadow", viewport: Double) throws
+        -> [(x: Double, y: Double, blur: Double, spread: Double, color: Color)] {
+        let value = try raw(selector, property, viewport: viewport)
+        return try Self.split(value, separator: ",").map { layer in
+            let parts = Self.splitWhitespace(layer.trimmingCharacters(in: .whitespaces))
+            let lengths = parts.prefix { evaluate($0, viewport: viewport) != nil }.compactMap { evaluate($0, viewport: viewport) }
+            guard (2...4).contains(lengths.count),
+                  let color = parseColor(parts.dropFirst(lengths.count).joined(separator: " ")) else {
+                throw Error("\(name) \(selector) \(property): unparsed shadow layer '\(layer)'")
+            }
+            return (lengths[0], lengths[1], lengths.count > 2 ? lengths[2] : 0, lengths.count > 3 ? lengths[3] : 0, color)
+        }
+    }
+
+    func radialGradient(_ selector: String, viewport: Double) throws
+        -> (radiusX: Double, radiusY: Double, centreX: Double, centreY: Double, stops: [(color: Color, location: Double)]) {
+        let value = try raw(selector, "background", viewport: viewport)
+        guard value.hasPrefix("radial-gradient("), value.hasSuffix(")") else {
+            throw Error("\(name) \(selector) background is not a radial gradient: \(value)")
+        }
+        let parts = Self.split(String(value.dropFirst("radial-gradient(".count).dropLast()), separator: ",")
+        guard let shape = Self.matches(#"^\s*ellipse ([\d.]+)% ([\d.]+)% at ([\d.]+)% ([\d.]+)%\s*$"#, in: parts[0]).first,
+              shape.count == 4, let rx = Double(shape[0]), let ry = Double(shape[1]),
+              let cx = Double(shape[2]), let cy = Double(shape[3]) else {
+            throw Error("\(name) \(selector) radial gradient shape unparsed: \(parts[0])")
+        }
+        let stops = try parts.dropFirst().map { stop -> (color: Color, location: Double) in
+            let bits = Self.splitWhitespace(stop.trimmingCharacters(in: .whitespaces))
+            guard let last = bits.last, last.hasSuffix("%"), let percent = Double(last.dropLast()),
+                  let color = parseColor(bits.dropLast().joined(separator: " ")) else {
+                throw Error("\(name) \(selector) radial gradient stop unparsed: \(stop)")
+            }
+            return (color, percent / 100)
+        }
+        return (rx, ry, cx, cy, stops)
+    }
+
+    private func transformNumber(_ selector: String, _ pattern: String) throws -> Double {
+        let value = try exactDeclaration(selector, "transform")
+        guard let text = Self.matches(pattern, in: value).first?.first, let number = Double(text) else {
+            throw Error("\(name) \(selector) transform '\(value)' does not match \(pattern)")
+        }
+        return number
+    }
+
+    func rotationDegrees(_ selector: String) throws -> Double { try transformNumber(selector, #"rotate\((-?[\d.]+)deg\)"#) }
+    func translateY(_ selector: String) throws -> Double { try transformNumber(selector, #"translateY\((-?[\d.]+)px\)"#) }
+
+    func gridColumns(_ selector: String) throws -> Int {
+        let value = try exactDeclaration(selector, "grid-template-columns")
+        guard let text = Self.matches(#"^repeat\((\d+),\s*1fr\)$"#, in: value).first?.first, let count = Int(text) else {
+            throw Error("\(name) \(selector) grid-template-columns '\(value)' is not repeat(n,1fr)")
+        }
+        return count
+    }
+
+    func border(_ selector: String) throws -> (width: Double, style: String) {
+        let value = try exactDeclaration(selector, "border")
+        let parts = Self.splitWhitespace(value)
+        guard parts.count >= 2, let width = evaluate(parts[0], viewport: 960) else {
+            throw Error("\(name) \(selector) border '\(value)' unparsed")
+        }
+        return (width, parts[1])
+    }
+
+    func childCount(tag: String, inClass: String) throws -> Int {
+        let blocks = Self.matches("(?s)<div class=\"\(inClass)\"[^>]*>(.*?)</div>", in: html)
+        guard blocks.count == 1, let body = blocks.first?.first else {
+            throw Error("\(name) expected one <div class=\"\(inClass)\">, found \(blocks.count)")
+        }
+        return body.components(separatedBy: "<\(tag)").count - 1
     }
 }

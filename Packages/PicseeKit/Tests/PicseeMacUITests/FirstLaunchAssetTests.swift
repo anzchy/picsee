@@ -22,23 +22,15 @@ import Testing
     #expect(total == 353_257)
 }
 
-@Test @MainActor func p316B4DecodeFailureLeavesNoEmptyPhotoFrame() async throws {
-    _ = NSApplication.shared
-    let invalid = URL(fileURLWithPath: "/picsee-b4-missing-photo.jpg")
-    let view = FirstLaunchView(frame: NSRect(x: 0, y: 0, width: 960, height: 640),
-                               openButton: ViewerStateButton(frame: .zero), sampleURLs: ["alley": invalid])
-    view.pinAccessibility()
-    let alley = try #require(view.subviews.first { $0.accessibilityIdentifier() == "first-launch.print.alley" })
-    #expect(alley.layer?.sublayers?.allSatisfy(\.isHidden) == true)
-    for _ in 0..<100 where !view.sampleLoadCompleted {
-        try await Task.sleep(for: .milliseconds(10))
-    }
-    view.layoutSubtreeIfNeeded()
-    #expect(view.sampleLoadCompleted)
-    #expect(alley.isHidden)
-    #expect((alley as? NSImageView)?.image == nil)
+@Test @MainActor func i315BundledWallSamplesAreExactlySixJPEGs() throws {
+    let bundle = try #require(FirstLaunchView.sampleURL(name: "alley")).deletingLastPathComponent()
+    let enumerator = try #require(FileManager.default.enumerator(at: bundle, includingPropertiesForKeys: nil))
+    let jpgs = enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension.lowercased() == "jpg" }
+    let names = jpgs.map { $0.deletingPathExtension().lastPathComponent }
+    #expect(names.count == 6)
+    #expect(Set(names) == ["alley", "lakeside", "hillside", "gate", "temple", "lakehouse"])
+    #expect(Set(names) == Set(FirstLaunchLayout.sampleNames))
 }
-
 
 @Test func p316B4CatalogContainsApprovedEnglishAndChineseCopy() throws {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

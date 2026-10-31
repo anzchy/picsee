@@ -57,53 +57,34 @@ import PicseeApplication
 }
 
 @Test @MainActor func p316B4AppearanceDragAndAccessibilityPresentation() throws {
-    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
-    let css = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
-    let shadow = try css.b4PrintShadow()
     let scene = StatesScene()
     defer { scene.window.close() }
     let launch = try #require(scene.state.subviews.compactMap { $0 as? FirstLaunchView }.first)
     launch.layoutSubtreeIfNeeded()
-    let alley = try #require(b4View("first-launch.print.alley", in: scene.state))
-    #expect(alley.layer?.borderWidth == 0)
-    #expect(alley.layer?.sublayers?.first?.borderWidth == CGFloat(shadow.ring))
-    #expect(alley.layer?.sublayers?.last?.borderWidth == 1)
-    #expect(alley.layer?.sublayers?.first?.frame.width == alley.bounds.width + 2 * CGFloat(shadow.ring))
-    #expect(alley.layer?.sublayers?.last?.frame.width == alley.bounds.width + 2 * CGFloat(shadow.hairline))
-    #expect(alley.layer?.shadowOffset.height == -CGFloat(shadow.y))
     let heading = try #require(b4View("first-launch.heading", in: scene.state) as? NSTextField)
     let drop = try #require(b4View("first-launch.drop", in: scene.state))
     let outline = try #require(drop.layer?.sublayers?.compactMap { $0 as? CAShapeLayer }.first)
     launch.themeOverride = .light; scene.state.setFirstLaunchDragActive(true)
     launch.layoutSubtreeIfNeeded()
-    let stack = try #require(b4View("first-launch.stack", in: scene.state))
-    let firstPhoto = try #require(stack.subviews.first)
-    #expect(firstPhoto.layer?.animation(forKey: "b4.fan")?.duration == (try css.b4FanDuration()))
     #expect(heading.stringValue == "Release to open")
-    #expect(abs(alley.alphaValue - (try css.b4PrintOpacity("light", drag: true))) < 0.001)
     #expect(outline.lineWidth == 1.5 && !outline.isHidden)
     #expect(outline.lineDashPattern == [6, 4])
     #expect((drop.layer?.backgroundColor?.alpha ?? 0) > 0)
     launch.setDragActive(false)
     #expect(heading.stringValue == "Drop a photo folder here")
-    #expect(abs(alley.alphaValue - (try css.b4PrintOpacity("light"))) < 0.001)
     #expect(outline.isHidden)
     #expect((drop.layer?.backgroundColor?.alpha ?? 1) == 0)
     launch.themeOverride = .dark; launch.setDragActive(true)
-    #expect(abs(alley.alphaValue - (try css.b4PrintOpacity("dark", drag: true))) < 0.001)
     launch.reduceMotionOverride = true
     launch.setDragActive(false); launch.setDragActive(true)
     launch.layoutSubtreeIfNeeded()
-    #expect(abs(alley.alphaValue - (try css.b4PrintOpacity("dark", drag: true))) < 0.001)
-    #expect(firstPhoto.layer?.animation(forKey: "b4.fan") == nil)
     launch.reduceTransparencyOverride = true
     launch.setDragActive(false); launch.setDragActive(true)
-    #expect(alley.alphaValue == 0)
     let children = try #require(scene.state.accessibilityChildren() as? [NSView])
     #expect(children.map { $0.accessibilityIdentifier() }.contains("first-launch.heading"))
     #expect(children.map { $0.accessibilityIdentifier() }.contains("state.open"))
     #expect(children.map { $0.accessibilityIdentifier() }.contains("first-launch.chip.images"))
-    #expect(!children.contains { $0.accessibilityIdentifier().hasPrefix("first-launch.print") })
+    #expect(!children.contains { $0.accessibilityIdentifier().hasPrefix("first-launch.wall") })
 }
 
 @Test @MainActor func p316B4RejectedDragNeverHighlights() throws {
@@ -126,7 +107,6 @@ import PicseeApplication
     let scene = StatesScene()
     defer { scene.window.close() }
     let launch = try #require(scene.state.subviews.compactMap { $0 as? FirstLaunchView }.first)
-    let print = try #require(b4View("first-launch.print.alley", in: scene.state))
     let chip = try #require(b4View("first-launch.chip.images", in: scene.state))
     scene.state.setFirstLaunchDragActive(true)
     launch.layoutSubtreeIfNeeded()
@@ -134,19 +114,15 @@ import PicseeApplication
     launch.reduceTransparencyOverride = true
     NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
     launch.layoutSubtreeIfNeeded()
-    #expect(print.alphaValue == 0)
     #expect(chip.layer?.borderWidth == 1)
     #expect((chip.layer?.backgroundColor?.alpha ?? 0) == 1)
-    let stack = try #require(b4View("first-launch.stack", in: scene.state))
-    #expect(stack.subviews.first?.layer?.animation(forKey: "b4.fan") == nil)
 }
 
 @Test @MainActor func p316B4PhotosDoNotInterceptFileDrags() throws {
     let scene = StatesScene()
     defer { scene.window.close() }
-    let stack = try #require(b4View("first-launch.stack", in: scene.state))
-    let print = try #require(b4View("first-launch.print.alley", in: scene.state))
-    for image in stack.subviews + [print] {
+    let wall = try #require(b4View("first-launch.wall", in: scene.state))
+    for image in [wall] + wall.subviews {
         #expect(!(image.registeredDraggedTypes ?? []).contains(.fileURL))
         #expect(!(image.registeredDraggedTypes ?? []).contains(NSPasteboard.PasteboardType("NSFilenamesPboardType")))
     }
