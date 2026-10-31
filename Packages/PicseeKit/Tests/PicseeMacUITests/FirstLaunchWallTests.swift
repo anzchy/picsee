@@ -413,3 +413,66 @@ private func i315Close(_ a: PinnedDesign.Color, _ b: PinnedDesign.Color, rgb: Do
         }
     }
 }
+
+// MARK: - WI-3 drop outline inset and centre placement (pinned page 21)
+
+@Test @MainActor func i315DropOutlineInsetsContentByPinnedInset() throws {
+    let pinned = try PinnedDesign.page("first-launch")
+    for size in [NSSize(width: 960, height: 640), NSSize(width: 800, height: 680), NSSize(width: 1440, height: 900)] {
+        let (scene, home) = try i315Scene(size)
+        defer { scene.window.close() }
+        let titleBar = CGFloat(try pinned.length(":root", "--title-bar-height", viewport: size.width))
+        let inset = CGFloat(try pinned.length(".drop-outline", "inset", viewport: size.width))
+        let radius = CGFloat(try pinned.length(".drop-outline", "border-radius", viewport: size.width))
+        let border = try pinned.border(".drop-outline")
+        let drop = try #require(wallTestView("first-launch.drop", in: home))
+        let frame = drop.convert(drop.bounds, to: home)
+        let expected = NSRect(x: 0, y: 0, width: size.width, height: size.height - titleBar).insetBy(dx: inset, dy: inset)
+        #expect(i315Close(frame, expected, 0.001), "\(size) drop \(frame) vs \(expected)")
+        #expect(drop.layer?.cornerRadius == radius, "\(size) radius \(String(describing: drop.layer?.cornerRadius))")
+        let outline = try #require(drop.layer?.sublayers?.compactMap { $0 as? CAShapeLayer }.first)
+        #expect(Double(outline.lineWidth) == border.width, "\(size) line \(outline.lineWidth)")
+        #expect(border.style == "dashed" && outline.lineDashPattern?.isEmpty == false, "\(size) dash")
+        let half = outline.lineWidth / 2
+        let path = try #require(outline.path)
+        #expect(i315Close(path.boundingBoxOfPath, drop.bounds.insetBy(dx: half, dy: half), 0.001),
+                "\(size) outline path \(path.boundingBoxOfPath)")
+        let corner = path.boundingBoxOfPath
+        #expect(!path.contains(CGPoint(x: corner.minX + 0.5, y: corner.minY + 0.5))
+                && path.contains(CGPoint(x: corner.minX + radius, y: corner.minY + radius)),
+                "\(size) outline path corner radius not \(radius)")
+    }
+}
+
+@Test @MainActor func i315CentreGroupCentresOnContentMidpoint() throws {
+    let pinned = try PinnedDesign.page("first-launch")
+    let fixtureRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("B4PinnedDesign")
+    let b4 = try PinnedDesign.page("b4-first-launch", source: fixtureRoot.appendingPathComponent("a/b/c/d/source.swift").path)
+    let gap = CGFloat(try b4.length(".centre", "gap", viewport: 960))
+    let seed: UInt64 = 0x3153
+    let sizes = generatedSizes(seed: seed, count: 40, width: 800...2400, height: 680...1600) + [NSSize(width: 960, height: 640)]
+    let scene = StatesScene(width: 960)
+    defer { scene.window.close() }
+    scene.state.display(.empty)
+    for size in sizes {
+        try resize(scene, to: size)
+        let home = try launch(in: scene)
+        let context = "seed 0x3153 size \(size)"
+        let titleBar = CGFloat(try pinned.length(":root", "--title-bar-height", viewport: size.width))
+        let views = centreViews(home)
+        try #require(views.count == 7, "\(context)")
+        let group = views.map { $0.convert($0.bounds, to: home) }.reduce(views[0].convert(views[0].bounds, to: home)) { $0.union($1) }
+        let drop = try #require(wallTestView("first-launch.drop", in: home))
+        let dropFrame = drop.convert(drop.bounds, to: home)
+        #expect(i315Close(group.midY, dropFrame.midY, 0.5), "\(context) group \(group) drop \(dropFrame)")
+        #expect(i315Close(group.midY, (size.height - titleBar) / 2, 0.5), "\(context) group midY \(group.midY)")
+        #expect(i315Close(group.midX, size.width / 2, 0.5), "\(context) group midX \(group.midX)")
+        let heading = try #require(wallTestView("first-launch.heading", in: home))
+        let button = try #require(wallTestView("state.open", in: home))
+        let chip = try #require(wallTestView("first-launch.chip.images", in: home))
+        #expect(i315Close(heading.frame.minY - button.frame.maxY, gap, 1), "\(context) heading→button")
+        #expect(i315Close(button.frame.minY - chip.frame.maxY, gap, 1), "\(context) button→chips")
+        #expect(heading.frame.height == 24 && button.frame.height == 30 && chip.frame.height == 20,
+                "\(context) heights \(heading.frame.height) \(button.frame.height) \(chip.frame.height)")
+    }
+}

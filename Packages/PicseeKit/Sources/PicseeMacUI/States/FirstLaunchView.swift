@@ -158,7 +158,7 @@ import os
             shortcutKey.layer?.borderWidth = 1
             shortcutKey.layer?.borderColor = border.cgColor
             shortcutKey.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
-            dropArea.layer?.cornerRadius = 16
+            dropArea.layer?.cornerRadius = 14
             dropOutline.isHidden = !dragActive
             dropOutline.strokeColor = tint.cgColor
             let backgroundBytes = DesignColor.canvasBackground.components(theme)
@@ -201,11 +201,13 @@ import os
     override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        layoutWall(NSSize(width: w, height: max(0, h - 38)))
-        dropArea.frame = NSRect(x: 24, y: 24, width: max(0, w - 48), height: max(0, h - 62))
+        let content = NSSize(width: w, height: max(0, h - 38))
+        layoutWall(content)
+        // Page 21 `.drop-outline`: inset 18 on all four sides of the content area, radius 14.
+        dropArea.frame = NSRect(x: 18, y: 18, width: max(0, content.width - 36), height: max(0, content.height - 36))
         dropOutline.frame = dropArea.bounds
         dropOutline.path = CGPath(roundedRect: dropArea.bounds.insetBy(dx: 0.75, dy: 0.75),
-                                  cornerWidth: 16, cornerHeight: 16, transform: nil)
+                                  cornerWidth: 14, cornerHeight: 14, transform: nil)
         // The B4 centre stays at native point size when the window changes size.
         let chipWidths = chips.map { ceil(($0.stringValue as NSString).size(withAttributes: [.font: $0.font!]).width) + 18 }
         let chipTotal = chipWidths.reduce(0, +) + 12

@@ -47,10 +47,15 @@ import PicseeApplication
     #expect(abs(Double(chip.frame.width - chipTextWidth) - chipPadding.left - chipPadding.right) <= 1)
     try css.assertLength(Double(chip.font!.pointSize), ".chips span", "font-size", viewport: 960)
     try css.assertLength(Double(chip.frame.minX - firstChip.frame.maxX), ".chips", "gap", viewport: 960)
-    let margins = try css.edges(".drop", "margin", viewport: 960)
-    #expect(Double(drop.frame.minX) == margins.left)
-    #expect(Double(scene.state.bounds.maxX - drop.frame.maxX) == margins.right)
-    #expect(Double(drop.frame.minY) == margins.bottom)
+    // #315 AC7 (added scope from #313): the drop outline follows pinned page 21, inset 18 inside the content
+    // area below the 38-pt titlebar strip, so the centre sits 12 pt lower than B4's `.drop` margin placed it.
+    let page = try PinnedDesign.page("first-launch")
+    let inset = try page.length(".drop-outline", "inset", viewport: 960)
+    let titleBar = try page.length(":root", "--title-bar-height", viewport: 960)
+    #expect(Double(drop.frame.minX) == inset)
+    #expect(Double(scene.state.bounds.maxX - drop.frame.maxX) == inset)
+    #expect(Double(drop.frame.minY) == inset)
+    #expect(Double(scene.state.bounds.maxY) - titleBar - Double(drop.frame.maxY) == inset)
 }
 
 @Test @MainActor func p316B4LongestChipsRemainVisibleAt800() throws {
