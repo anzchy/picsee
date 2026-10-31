@@ -351,8 +351,16 @@ import PicseeCore
         sidebar.isHidden = !preferencesStore.value.gridSidebarVisible
         sidebar.frame = NSRect(x: 0, y: 40, width: main.minX, height: main.height)
         mainContent.frame = main
-        for content in mainContent.subviews { content.frame = mainContent.bounds }
         footer.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 40)
+        for content in mainContent.subviews {
+            if let grid = content as? GridBrowserView {
+                grid.bottomContentInset = footer.bounds.height
+                grid.frame = NSRect(x: 0, y: -footer.bounds.height, width: mainContent.bounds.width,
+                    height: mainContent.bounds.height + footer.bounds.height)
+            } else {
+                content.frame = mainContent.bounds
+            }
+        }
         let compactFooter = footer.bounds.width < 280
         let toggleWidth: CGFloat = compactFooter ? 16 : 30
         toggleButton.frame = NSRect(x: compactFooter ? 8 : 12, y: compactFooter ? 4 : 5,

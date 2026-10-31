@@ -53,7 +53,7 @@ import PicseeInfrastructure
     #expect(shell.footer.frame == NSRect(x: 0, y: 0, width: 1280, height: 40))
     #expect(shell.mainFrame == NSRect(x: 196, y: 40, width: 1084, height: 732))
     #expect(grid.frame.width == 1084)
-    #expect(grid.frame == shell.mainContent.bounds)
+    #expect(grid.frame == issue314GridFrame(in: shell))
     grid.layoutSubtreeIfNeeded()
     let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
     #expect(abs(layout.itemSize.width - 247) < 0.1) // four columns at 1084 pt
@@ -62,7 +62,7 @@ import PicseeInfrastructure
     shell.layoutSubtreeIfNeeded()
     #expect(shell.sidebar.frame.width == 320)
     #expect(shell.mainFrame.width == 960)
-    #expect(grid.frame == shell.mainContent.bounds)
+    #expect(grid.frame == issue314GridFrame(in: shell))
     grid.layoutSubtreeIfNeeded()
     // The 1280px viewport keeps 220px minimum columns, 24px insets and 16px gaps despite 960pt content.
     #expect(abs(layout.itemSize.width - 293.333) < 0.1) // three columns at 960 pt
@@ -76,7 +76,7 @@ import PicseeInfrastructure
     #expect(shell.mainFrame.width == 1280)
     grid.layoutSubtreeIfNeeded()
     #expect(grid.frame.width == 1280)
-    #expect(grid.frame == shell.mainContent.bounds)
+    #expect(grid.frame == issue314GridFrame(in: shell))
     #expect(abs(layout.itemSize.width - 233.6) < 0.1) // five columns after closing
     shell.toggleSidebar()
     #expect(store.value.gridSidebarWidth == 160)
@@ -89,7 +89,7 @@ import PicseeInfrastructure
     #expect(shell.sidebar.frame.maxX == shell.mainFrame.minX)
     #expect(shell.mainFrame.maxX == 800)
     #expect(shell.mainFrame.maxY == 652)
-    #expect(grid.frame == NSRect(x: 0, y: 0, width: 640, height: 612))
+    #expect(grid.frame == NSRect(x: 0, y: -40, width: 640, height: 652))
     grid.layoutSubtreeIfNeeded()
     // grid-light.html: at 800px, .photo-grid keeps min 220px columns while .grid-scroll uses 16px insets and 12px gaps.
     #expect(abs(layout.itemSize.width - 298) < 0.1) // two columns at 800 × 680
@@ -254,10 +254,10 @@ import PicseeInfrastructure
         grid: grid, inspector: NSView(), shell: shell)
     presentation.showGrid(reading: false)
     #expect(shell.mainFrame == NSRect(x: 284, y: 40, width: 996, height: 732))
-    #expect(grid.frame == shell.mainContent.bounds)
+    #expect(grid.frame == issue314GridFrame(in: shell))
     shell.frame.size.width = 800
     shell.layoutSubtreeIfNeeded()
-    #expect(grid.frame == shell.mainContent.bounds)
+    #expect(grid.frame == issue314GridFrame(in: shell))
     #expect(grid.frame.width == 516)
 }
 
@@ -286,4 +286,80 @@ import PicseeInfrastructure
     #expect(contentLayouts.count == 4)
     #expect(contentLayouts.allSatisfy { $0 == shell.mainContent.bounds }, "each report follows the content reset")
     #expect(carved.frame == NSRect(x: 0, y: shell.mainContent.bounds.maxY - 44, width: shell.mainContent.bounds.width, height: 44))
+}
+
+@MainActor private func issue314GridFrame(in shell: GridShellView) -> NSRect {
+    NSRect(x: 0, y: -shell.footer.bounds.height, width: shell.mainContent.bounds.width,
+        height: shell.mainContent.bounds.height + shell.footer.bounds.height)
+}
+
+@Test @MainActor func issue314GridScrollsBehindBottomBarAndClearsItAtTheEnd() throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    let grid = GridBrowserView(frame: NSRect(origin: .zero, size: shell.mainFrame.size))
+    grid.autoresizingMask = [.width, .height]
+    shell.mainContent.addSubview(grid)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 680),
+        styleMask: [], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = shell
+    defer { window.close() }
+    let folder = URL(fileURLWithPath: "/tmp/picsee-grid-314")
+    let root = ItemIdentityRoot(id: AccessRootID(rawValue: UUID()), url: folder)
+    let entries = (0..<24).map {
+        FolderEntry(url: folder.appendingPathComponent(String(format: "%02d.jpg", $0)), root: root)
+    }
+    grid.display(FolderSnapshot(version: .init(rootID: root.id, folder: folder, generation: 1),
+        entries: entries, isComplete: true), selectedItemID: nil)
+    grid.activate()
+    shell.layoutSubtreeIfNeeded()
+    grid.layoutSubtreeIfNeeded()
+
+    let design = try PinnedDesign.page("grid-light")
+    let barHeight = try design.length(".grid-bottom-bar", "height", viewport: 800)
+    let bottomPadding = try design.length(".grid-scroll", "padding-bottom", viewport: 800)
+    let gridInShell = grid.convert(grid.bounds, to: shell)
+    #expect(abs(gridInShell.minY - shell.footer.frame.minY) < 0.01)
+    #expect(abs(gridInShell.maxY - shell.bounds.maxY) < 0.01)
+    let scroll = try #require(grid.collectionView.enclosingScrollView)
+    let layout = try #require(grid.collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)
+    #expect(abs(scroll.contentInsets.bottom - barHeight) < 0.01)
+    #expect(abs(scroll.contentInsets.bottom + layout.sectionInset.bottom - bottomPadding) < 0.01)
+
+    shell.setCurrentFile(String(repeating: "Long旅行FileName", count: 12) + ".jpg")
+    shell.setSearchStatus(resultCount: entries.count, term: "")
+    shell.layoutSubtreeIfNeeded()
+    let fileStatus = try #require(shell.footer.subviews.first {
+        $0.accessibilityIdentifier() == "grid.current-file-status"
+    })
+    let controls: [NSView] = [shell.toggleButton, fileStatus, shell.searchStatus,
+        shell.searchButton, shell.sortButton, shell.infoButton, shell.displayButton]
+    for first in controls.indices {
+        for second in controls.indices where second > first {
+            #expect(!NSIntersectsRect(controls[first].frame, controls[second].frame),
+                "800×680 controls overlap: \(controls[first].frame) and \(controls[second].frame)")
+        }
+    }
+
+    let lastIndex = entries.count - 1
+    let endOffset = max(0, grid.collectionView.bounds.height - scroll.contentView.bounds.height
+        + scroll.contentInsets.bottom)
+    #expect(endOffset > 0)
+    grid.restoreContentOffset(NSPoint(x: 0, y: endOffset))
+    grid.layoutSubtreeIfNeeded()
+    var lastFrame = grid.collectionView.convert(grid.collectionView.frameForItem(at: lastIndex), to: shell)
+    #expect(lastFrame.minY >= shell.footer.frame.maxY - 0.5,
+        "Last row at the end is behind the Bottom Bar: \(lastFrame)")
+
+    grid.restoreContentOffset(.zero)
+    grid.activate(currentItemID: entries[0].itemID)
+    let right = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+        windowNumber: window.windowNumber, context: nil, characters: "\u{F703}",
+        charactersIgnoringModifiers: "\u{F703}", isARepeat: false, keyCode: 124))
+    for _ in 1..<entries.count { grid.collectionView.keyDown(with: right) }
+    #expect(grid.currentItemID == entries[lastIndex].itemID)
+    lastFrame = grid.collectionView.convert(grid.collectionView.frameForItem(at: lastIndex), to: shell)
+    #expect(lastFrame.minY >= shell.footer.frame.maxY - 0.5,
+        "Keyboard-selected last item is behind the Bottom Bar: \(lastFrame)")
 }
