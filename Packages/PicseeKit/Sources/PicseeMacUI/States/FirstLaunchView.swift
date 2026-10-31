@@ -169,6 +169,7 @@ import os
             dropArea.layer?.backgroundColor = dragActive
                 ? (reduceTransparency ? opaqueDrop : DesignColor.selectionFill.nsColor).cgColor
                 : NSColor.clear.cgColor
+            styleWall()
             needsLayout = true
         }
     }
@@ -176,6 +177,26 @@ import os
         guard dragActive != active else { return }
         dragActive = active
         refreshStyle()
+    }
+    /// Page 21: tiles carry `--home-wall-opacity`; each image carries `--radius-control` and `--shadow-soft`
+    /// (ring on the image, drop shadow on its container).
+    private func styleWall() {
+        let dark = theme == .dark
+        let text = DesignColor.textPrimary.components(theme)
+        func colour(_ c: [Double], _ alpha: Double) -> CGColor { CGColor(srgbRed: c[0], green: c[1], blue: c[2], alpha: alpha) }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        tilesLayer.opacity = dark ? 0.38 : 0.32
+        for container in tiles {
+            container.shadowColor = dark ? colour([0, 0, 0], 1) : colour(text, 1)
+            container.shadowOpacity = dark ? 0.45 : 0.08
+            container.shadowOffset = CGSize(width: 0, height: -8)
+            container.shadowRadius = 12
+            guard let image = container.sublayers?.first else { continue }
+            image.cornerRadius = 6
+            image.borderWidth = 0.5
+            image.borderColor = colour(text, dark ? 0.16 : 0.12)
+        }
+        CATransaction.commit()
     }
     override func layout() {
         super.layout()
@@ -212,6 +233,7 @@ import os
         tilesLayer.setAffineTransform(.identity)
         tilesLayer.bounds = CGRect(origin: .zero, size: layout.box.size)
         tilesLayer.position = CGPoint(x: layout.box.midX, y: layout.box.midY)
+        tilesLayer.setAffineTransform(CGAffineTransform(rotationAngle: FirstLaunchLayout.tiltDegrees * .pi / 180))
         for (container, tile) in zip(tiles, layout.tiles) {
             container.frame = tile.frame
             container.shadowPath = CGPath(roundedRect: container.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
