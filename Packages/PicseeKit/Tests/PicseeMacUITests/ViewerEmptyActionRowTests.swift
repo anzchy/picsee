@@ -52,5 +52,7 @@ import Testing
     #expect(action.minX >= 16)
     #expect(shortcut.maxX <= scene.state.bounds.maxX - 16)
     #expect(abs(shortcut.midY - action.midY) <= 0.5)
-    #expect(emptyActionView("first-launch.print.alley", in: scene.state)?.isHidden == true)
+    #expect(try emptyActionFrame("first-launch.wall", in: scene.state) == NSRect(x: 0, y: 0, width: 360, height: 642))
+    let drop = try emptyActionFrame("first-launch.drop", in: scene.state)
+    #expect(drop.contains(action) && drop.contains(shortcut))
 }

@@ -19,26 +19,9 @@ import os
     }
 }
 
-@MainActor private final class CoverImageView: NSImageView {
-    var cropRadius: CGFloat = 6
-    override func draw(_ dirtyRect: NSRect) {
-        guard let image, image.size.width > 0, image.size.height > 0,
-              bounds.width > 0, bounds.height > 0 else { return }
-        let targetRatio = bounds.width / bounds.height
-        let sourceRatio = image.size.width / image.size.height
-        let source: NSRect
-        if sourceRatio > targetRatio {
-            let width = image.size.height * targetRatio
-            source = NSRect(x: (image.size.width - width) / 2, y: 0, width: width, height: image.size.height)
-        } else {
-            let height = image.size.width / targetRatio
-            source = NSRect(x: 0, y: (image.size.height - height) / 2, width: image.size.width, height: height)
-        }
-        NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: bounds, xRadius: cropRadius, yRadius: cropRadius).addClip()
-        image.draw(in: bounds, from: source, operation: .sourceOver, fraction: 1)
-        NSGraphicsContext.restoreGraphicsState()
-    }
+/// The Home's Image Wall: decorative only, never hit, never an accessibility element.
+@MainActor private final class FirstLaunchWallView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 @MainActor final class FirstLaunchView: NSView {
@@ -48,21 +31,17 @@ import os
     let openButton: ViewerStateButton
     private let dropArea = NSView()
     private let dropOutline = CAShapeLayer()
-    private let stack = NSView()
+    private let wall = FirstLaunchWallView()
+    private let tilesLayer = CALayer()
+    private let scrim = CAGradientLayer()
+    private var tiles: [CALayer] = []
     private let heading = NSTextField(labelWithString: "")
     private let shortcut = NSTextField(labelWithString: "")
     private let shortcutKey = NSTextField(labelWithString: "⌘O")
     private let chips = (0..<3).map { _ in CenteredChipLabel(labelWithString: "") }
-    private var printViews: [String: CoverImageView] = [:]
-    private var printHairlines: [String: CALayer] = [:]
-    private var printRings: [String: CALayer] = [:]
-    private var stackViews: [CoverImageView] = []
-    private var failedSamples: Set<String> = []
     private let sampleURLs: [String: URL]?
     private(set) var sampleLoadCompleted = false
-    private var currentPrintOpacity: CGFloat = 0.3
     private var dragActive = false
-    private var animateFan = false
     var themeOverride: DesignTheme?
     var reduceMotionOverride: Bool?
     var reduceTransparencyOverride: Bool?
@@ -79,25 +58,32 @@ import os
         autoresizingMask = [.width, .height]
         wantsLayer = true
         setAccessibilityElement(false)
-        for name in ["alley", "lakeside", "hillside", "gate", "temple", "lakehouse"] {
-            let image = CoverImageView()
-            image.wantsLayer = true
-            image.unregisterDraggedTypes()
-            image.setAccessibilityElement(false)
-            image.setAccessibilityIdentifier("first-launch.print.\(name)")
-            let ring = CALayer()
-            ring.borderWidth = 5
-            ring.cornerRadius = 11
-            image.layer?.addSublayer(ring)
-            let hairline = CALayer()
-            hairline.borderWidth = 1
-            hairline.cornerRadius = 12
-            image.layer?.addSublayer(hairline)
-            addSubview(image)
-            printViews[name] = image
-            printRings[name] = ring
-            printHairlines[name] = hairline
+        wall.wantsLayer = true
+        wall.layer?.masksToBounds = true
+        wall.unregisterDraggedTypes()
+        wall.setAccessibilityElement(false)
+        wall.setAccessibilityHidden(true)
+        wall.setAccessibilityIdentifier("first-launch.wall")
+        tilesLayer.name = "first-launch.wall.tiles"
+        for tile in FirstLaunchLayout.wall(in: frame.size).tiles {
+            let container = CALayer()
+            container.name = tile.sample
+            container.isHidden = true
+            let image = CALayer()
+            image.masksToBounds = true
+            image.contentsGravity = .resizeAspectFill
+            container.addSublayer(image)
+            tilesLayer.addSublayer(container)
+            tiles.append(container)
         }
+        scrim.name = "first-launch.wall.scrim"
+        scrim.type = .radial
+        scrim.locations = [0, 0.45, 1]
+        scrim.startPoint = CGPoint(x: 0.5, y: 0.5)
+        scrim.endPoint = CGPoint(x: 0.92, y: 0.88)
+        wall.layer?.addSublayer(tilesLayer)
+        wall.layer?.addSublayer(scrim)
+        addSubview(wall)
         dropArea.wantsLayer = true
         dropArea.setAccessibilityElement(false)
         dropArea.setAccessibilityIdentifier("first-launch.drop")
@@ -106,19 +92,6 @@ import os
         dropOutline.lineDashPattern = [6, 4]
         dropArea.layer?.addSublayer(dropOutline)
         addSubview(dropArea)
-        stack.setAccessibilityElement(false)
-        stack.setAccessibilityIdentifier("first-launch.stack")
-        addSubview(stack)
-        for _ in 0..<3 {
-            let image = CoverImageView()
-            image.cropRadius = 10
-            image.wantsLayer = true
-            image.unregisterDraggedTypes()
-            image.isHidden = true
-            image.setAccessibilityElement(false)
-            stack.addSubview(image)
-            stackViews.append(image)
-        }
         heading.font = .systemFont(ofSize: 20, weight: .bold)
         heading.alignment = .center
         heading.setAccessibilityElement(true); heading.setAccessibilityRole(.staticText)
@@ -151,15 +124,10 @@ import os
     deinit { NSWorkspace.shared.notificationCenter.removeObserver(self) }
     required init?(coder: NSCoder) { nil }
     @objc private func accessibilityOptionsChanged(_ notification: Notification) {
-        if reduceMotion {
-            stackViews.forEach { $0.layer?.removeAnimation(forKey: "b4.fan") }
-            printViews.values.forEach { $0.layer?.removeAllAnimations() }
-        }
-        animateFan = false
         refreshStyle()
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshStyle() }
-    private func refreshStyle(animate: Bool = false) {
+    private func refreshStyle() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let dark = theme == .dark
             let bg = DesignColor.canvasBackground.nsColor.usingColorSpace(.deviceRGB)!
@@ -201,48 +169,18 @@ import os
             dropArea.layer?.backgroundColor = dragActive
                 ? (reduceTransparency ? opaqueDrop : DesignColor.selectionFill.nsColor).cgColor
                 : NSColor.clear.cgColor
-            let targetAlpha: CGFloat = reduceTransparency && dragActive ? 0 : (dark ? 0.4 : 0.3) * (dragActive ? 0.4 : 1)
-            currentPrintOpacity = targetAlpha
-            for (name, print) in printViews {
-                print.layer?.cornerRadius = 6
-                print.layer?.borderWidth = 0
-                printRings[name]?.borderColor = bg.cgColor
-                printRings[name]?.isHidden = print.image == nil
-                printHairlines[name]?.borderColor = border.cgColor
-                printHairlines[name]?.isHidden = print.image == nil
-                print.layer?.shadowColor = NSColor.black.cgColor
-                print.layer?.shadowOpacity = dark ? 0.45 : 0.14
-                print.layer?.shadowRadius = 11
-                print.layer?.shadowOffset = CGSize(width: 0, height: -10)
-                if animate && !reduceMotion && !reduceTransparency {
-                    NSAnimationContext.runAnimationGroup { context in
-                        context.duration = 0.45
-                        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                        print.animator().alphaValue = targetAlpha
-                    }
-                } else { print.alphaValue = targetAlpha }
-            }
-            for photo in stackViews {
-                photo.layer?.cornerRadius = 10
-                photo.layer?.borderWidth = 1
-                photo.layer?.borderColor = border.cgColor
-                photo.layer?.shadowColor = NSColor.black.cgColor
-                photo.layer?.shadowOpacity = 0.18
-                photo.layer?.shadowRadius = 13
-            }
             needsLayout = true
         }
     }
     func setDragActive(_ active: Bool) {
         guard dragActive != active else { return }
         dragActive = active
-        animateFan = !reduceMotion
-        if reduceMotion { stackViews.forEach { $0.layer?.removeAnimation(forKey: "b4.fan") } }
-        refreshStyle(animate: true)
+        refreshStyle()
     }
     override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
+        layoutWall(NSSize(width: w, height: max(0, h - 38)))
         dropArea.frame = NSRect(x: 24, y: 24, width: max(0, w - 48), height: max(0, h - 62))
         dropOutline.frame = dropArea.bounds
         dropOutline.path = CGPath(roundedRect: dropArea.bounds.insetBy(dx: 0.75, dy: 0.75),
@@ -250,36 +188,9 @@ import os
         // The B4 centre stays at native point size when the window changes size.
         let chipWidths = chips.map { ceil(($0.stringValue as NSString).size(withAttributes: [.font: $0.font!]).width) + 18 }
         let chipTotal = chipWidths.reduce(0, +) + 12
-        let centreHeight: CGFloat = 150 + 30 + 18 + 24 + 18 + 30 + 18 + 20
-        let centreMidY = dropArea.frame.midY
-        let centreTop = centreMidY + centreHeight / 2
-        stack.frame = NSRect(x: w / 2 - 110, y: centreTop - 150, width: 220, height: 150)
-        for (index, image) in stackViews.enumerated() {
-            image.frame = stack.bounds
-            let expanded = dragActive && !reduceMotion
-            let angle: CGFloat = index == 0 ? (expanded ? -14 : -9) : index == 1 ? (expanded ? 12 : 7) : 0
-            let dx: CGFloat = index == 0 ? (expanded ? -58 : -36) : index == 1 ? (expanded ? 56 : 34) : 0
-            let dy: CGFloat = index == 0 ? (expanded ? -10 : -8) : index == 1 ? (expanded ? -8 : -6) : (expanded ? 8 : 0)
-            // CSS transforms about the centre; its downward Y axis reverses the angle.
-            // The CSS order is rotate · translate (and scale for the front card).
-            let scale: CGFloat = expanded && index == 2 ? 1.04 : 1
-            let next = CGAffineTransform(translationX: stack.bounds.midX, y: stack.bounds.midY)
-                .rotated(by: -angle * .pi / 180)
-                .translatedBy(x: dx, y: dy)
-                .scaledBy(x: scale, y: scale)
-                .translatedBy(x: -stack.bounds.midX, y: -stack.bounds.midY)
-            if animateFan, let layer = image.layer {
-                let fan = CABasicAnimation(keyPath: "transform")
-                fan.fromValue = CATransform3DMakeAffineTransform(layer.affineTransform())
-                fan.toValue = CATransform3DMakeAffineTransform(next)
-                fan.duration = 0.35
-                fan.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                layer.add(fan, forKey: "b4.fan")
-            }
-            image.layer?.setAffineTransform(next)
-        }
-        animateFan = false
-        heading.frame = NSRect(x: w / 2 - 240, y: stack.frame.minY - 30 - 18 - 24, width: 480, height: 24)
+        let centreHeight: CGFloat = 24 + 18 + 30 + 18 + 20
+        let centreTop = dropArea.frame.midY + centreHeight / 2
+        heading.frame = NSRect(x: w / 2 - 240, y: centreTop - 24, width: 480, height: 24)
         let buttonWidth = ceil((openButton.title as NSString).size(withAttributes: [.font: openButton.font!]).width) + 28
         let shortcutPrefix = shortcut.stringValue.replacingOccurrences(of: "⌘O", with: "").trimmingCharacters(in: .whitespaces)
         let shortcutWidth = ceil((shortcutPrefix as NSString).size(withAttributes: [.font: shortcut.font!]).width)
@@ -293,22 +204,24 @@ import os
             chip.frame = NSRect(x: x, y: openButton.frame.minY - 18 - 20, width: width, height: 20)
             x += width + 6
         }
-        let centre = NSRect(x: w / 2 - max(420, chipTotal) / 2, y: chips[0].frame.minY,
-                            width: max(420, chipTotal), height: stack.frame.maxY - chips[0].frame.minY)
-        for layout in FirstLaunchLayout.prints(in: bounds.size, centre: centre) {
-            guard let image = printViews[layout.name] else { continue }
-            image.frame = layout.frame
-            printRings[layout.name]?.frame = image.bounds.insetBy(dx: -5, dy: -5)
-            printHairlines[layout.name]?.frame = image.bounds.insetBy(dx: -6, dy: -6)
-            image.isHidden = layout.hidden || failedSamples.contains(layout.name)
-            let rotation = CGAffineTransform(translationX: image.bounds.midX, y: image.bounds.midY)
-                .rotated(by: -layout.angle * .pi / 180)
-                .translatedBy(x: -image.bounds.midX, y: -image.bounds.midY)
-            image.layer?.setAffineTransform(rotation)
+    }
+    private func layoutWall(_ size: NSSize) {
+        wall.frame = NSRect(origin: .zero, size: size)
+        let layout = FirstLaunchLayout.wall(in: size)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        tilesLayer.setAffineTransform(.identity)
+        tilesLayer.bounds = CGRect(origin: .zero, size: layout.box.size)
+        tilesLayer.position = CGPoint(x: layout.box.midX, y: layout.box.midY)
+        for (container, tile) in zip(tiles, layout.tiles) {
+            container.frame = tile.frame
+            container.shadowPath = CGPath(roundedRect: container.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
+            container.sublayers?.first?.frame = container.bounds
         }
+        scrim.frame = wall.bounds
+        CATransaction.commit()
     }
     private func loadSamples() {
-        let names = ["alley", "lakeside", "hillside", "gate", "temple", "lakehouse"]
+        let names = FirstLaunchLayout.sampleNames
         let paths = names.compactMap { name -> (String, URL)? in
             (sampleURLs == nil ? Self.sampleURL(name: name) : sampleURLs?[name]).map { (name, $0) }
         }
@@ -330,28 +243,16 @@ import os
             for name in failures {
                 Logger(subsystem: "com.picsee.app", category: "B4Samples").error("Sample decode failed: \(name, privacy: .public)")
             }
+            let images = decoded
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.failedSamples = failures
-                for (name, image) in decoded {
-                    let nsImage = NSImage(cgImage: image, size: .zero)
-                    if let print = self.printViews[name] {
-                        let target = self.currentPrintOpacity
-                        print.alphaValue = 0
-                        print.image = nsImage
-                        self.printRings[name]?.isHidden = false
-                        self.printHairlines[name]?.isHidden = false
-                        NSAnimationContext.runAnimationGroup { context in
-                            context.duration = self.reduceMotion ? 0 : 0.45
-                            print.animator().alphaValue = target
-                        }
-                    }
-                    if let index = ["lakehouse", "gate", "alley"].firstIndex(of: name) {
-                        self.stackViews[index].image = nsImage
-                        self.stackViews[index].isHidden = false
-                    }
+                CATransaction.begin(); CATransaction.setDisableActions(true)
+                for container in self.tiles {
+                    let image = container.name.flatMap { images[$0] }
+                    container.sublayers?.first?.contents = image
+                    container.isHidden = image == nil
                 }
-                self.needsLayout = true
+                CATransaction.commit()
                 self.sampleLoadCompleted = true
             }
         }

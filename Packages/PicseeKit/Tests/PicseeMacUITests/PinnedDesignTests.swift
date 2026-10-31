@@ -240,3 +240,38 @@ private func fixturePage(_ css: String) throws -> PinnedDesign {
         try page.lengthValue("min(145px,100%)", viewport: 800)
     }
 }
+
+@Test func i315PinnedReaderReadsWallTokens() throws {
+    let light = try PinnedDesign.page("first-launch")
+    let dark = try PinnedDesign.page("first-launch", appearance: "dark")
+    #expect(try light.childCount(tag: "img", inClass: "tiles") == 60)
+    #expect(try PinnedDesign.seconds(light.rootToken("--motion-duration-fast")) == 0.15)
+    #expect(try PinnedDesign.seconds(light.rootToken("--motion-duration-fast", media: "prefers-reduced-motion:reduce")) == 0)
+    #expect(try PinnedDesign.seconds("0.35s") == 0.35)
+    #expect(throws: PinnedDesign.Error.self) { try light.raw(":root", "--motion-duration-fast", viewport: 960) }
+    #expect(try light.rotationDegrees(".wall .tiles") == -9)
+    #expect(try light.translateY(".wall .tiles>:nth-child(2n)") == 110)
+    #expect(try light.gridColumns(".wall .tiles") == 6)
+    let lightShadow = try light.boxShadowLayers(":root", "--shadow-soft", viewport: 960)
+    #expect(lightShadow.count == 2)
+    if lightShadow.count == 2 {
+        #expect([lightShadow[0].x, lightShadow[0].y, lightShadow[0].blur, lightShadow[0].spread] == [0, 0, 0, 0.5])
+        #expect([lightShadow[1].x, lightShadow[1].y, lightShadow[1].blur, lightShadow[1].spread] == [0, 8, 24, 0])
+        #expect(abs(lightShadow[0].color.alpha - 0.12) < 0.001 && abs(lightShadow[1].color.alpha - 0.08) < 0.001)
+        #expect(abs(lightShadow[1].color.red - 0x1a / 255.0) < 0.001)
+    }
+    let darkShadow = try dark.boxShadowLayers(":root", "--shadow-soft", viewport: 960)
+    #expect(darkShadow.count == 2)
+    if darkShadow.count == 2 {
+        #expect(abs(darkShadow[0].color.alpha - 0.16) < 0.001)
+        #expect(darkShadow[1].color.red == 0 && darkShadow[1].color.green == 0 && darkShadow[1].color.blue == 0)
+        #expect(abs(darkShadow[1].color.alpha - 0.45) < 0.001)
+    }
+    let scrim = try light.radialGradient(".wall::after", viewport: 960)
+    #expect([scrim.radiusX, scrim.radiusY, scrim.centreX, scrim.centreY] == [42, 38, 50, 50])
+    #expect(scrim.stops.map(\.location) == [0, 0.45, 1])
+    #expect(zip(scrim.stops.map(\.color.alpha), [1, 0.8, 0.25]).allSatisfy { abs($0 - $1) < 0.001 })
+    let border = try light.border(".drop-outline")
+    #expect(border.width == 1.5 && border.style == "dashed")
+    #expect(try light.raw(".wall img", "object-fit", viewport: 960) == "cover")
+}
