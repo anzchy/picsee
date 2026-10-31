@@ -175,8 +175,8 @@ Validated-by: <设备测试角色> run=20261105-143012-VIEW-02-03
 
 ### ⑥ 跑 doc gardener
 
-PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 调用 `picsee-doc-gardener` subagent，
-或在 Codex 调用同名 custom agent，提供这些参数：
+PR 之前（以及每次重新推送 PR head 之前），先跑 `node scripts/ledger/garden-gate.mjs …`，输出 RUN 才调用 gardener（规程「When it runs」）。
+调用时，在 Claude Code 用 `picsee-doc-gardener` subagent，或在 Codex 用同名 custom agent，提供这些参数：
 
 ```text
 用 picsee-doc-gardener 跑 pr 模式：worktree <路径>，base $(git merge-base main HEAD)，head <HEAD SHA>，分支 p0-03-canvas。
@@ -190,7 +190,7 @@ PR 之前（以及每次重新推送 PR head 之前），在 Claude Code 调用 
 |---|---|---|
 | `CLEAN` | 没有过时的行 | 把 `Ledger-Gardener:` 行放进 PR 描述，开 PR |
 | `UPDATED` | 它只做了允许的谨慎修改（路径改名、证据丢失降级、审查日期） | 看 `git diff -- docs/feature-ledger.md docs/feature-ledger.html`，确认 gardener 已运行 `npm run ledger:build`，把两者提交为 `docs(ledger): garden <base7>..<head7>`，再开 PR |
-| `NEEDS-OWNER` | 有需要你决定的事：升级缺入口、缺第二次确认、可能的自我认证、该加新行 | 改它点名的行，或在 PR 描述里逐条写 `无用户可见变化：<ID> <理由>`，然后**重跑** gardener |
+| `NEEDS-OWNER` | 有需要你决定的事：升级缺入口、缺第二次确认、可能的自我认证、该加新行 | 改它点名的行，或在 PR 描述里逐条写 `无用户可见变化：<ID> <理由>`，然后用 `--since <该 head> --verdict NEEDS-OWNER` 跑判定脚本，RUN 才重跑 |
 | `BLOCK` | 有升级没有证据，或升级的同时改写了「怎么确认」中的验收本身（只追加或修改「限制：」不算） | 不开 PR：把验收改动拆成单独提交，或补齐真机记录 |
 
 没有 `Ledger-Gardener:` 行的 PR 不进入审查。

@@ -537,7 +537,7 @@ keep branches short, integrate often, and never let two branches own one core mo
 
 ### 5.7 Doc gardener
 
-Run it before opening a PR and before every push of a new head:
+When it runs (and when the gate lets you skip, reuse or resolve): `docs/agents/doc-gardening.md` §When it runs. On `RUN`:
 - **Claude:** the `picsee-doc-gardener` subagent. It runs on Haiku (`model: haiku` in its agent file; user decision
   2026-10-25: 「picsee-doc-gardener will be powered by Haiku model, from now on」); do not override the model when
   dispatching it.
@@ -555,7 +555,7 @@ it left uncommitted ledger edits in two active implementer worktrees). Use the c
 |---|---|
 | CLEAN | Put its `Ledger-Gardener:` line in the PR body. |
 | UPDATED | Review its diff, commit as `docs(ledger): garden <base7>..<head7>`, open the PR with its line. |
-| NEEDS-OWNER | Fix the named rows (only 限制/在哪), or write `无用户可见变化：<ID> <理由>` lines in the PR body for pre-existing problems. Commit, then rerun the gardener. |
+| NEEDS-OWNER | Fix the named rows (only 限制/在哪), or write `无用户可见变化：<ID> <理由>` lines in the PR body for pre-existing problems. Commit, then run the gate with `--verdict NEEDS-OWNER`. |
 | BLOCK | Don't open the PR. Split acceptance changes into their own commit quoting the user, or add device evidence. |
 
 Typical NEEDS-OWNER causes:
