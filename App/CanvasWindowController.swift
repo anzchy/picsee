@@ -681,14 +681,14 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         rebindStrip = strip
         layoutRebindStrip()
     }
-    /// Frames only: the strip takes the top 44pt of the main area and the grid, lost-access page and state get the rest.
+    /// Frames only: the strip takes the top 44pt; the Grid keeps its Bottom Bar extension and other content gets the rest.
     @discardableResult private func placeRebindStrip() -> Bool {
         guard let gridShell, let gridView, let lostAccessView else { return false }
         let bounds = gridShell.mainContent.bounds
         guard bounds.width > 0, bounds.height > 44 else { return false }
         let height: CGFloat = rebindStrip == nil ? 0 : 44
         let content = NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: max(0, bounds.height - height))
-        gridView.frame = content
+        gridView.frame = gridShell.gridContentFrame(topInset: height)
         lostAccessView.frame = content
         if rebindStrip != nil, !gridShell.isHidden, !stateHost.isHidden, let parent = stateHost.superview {
             stateHost.frame = gridShell.mainContent.convert(content, to: parent)

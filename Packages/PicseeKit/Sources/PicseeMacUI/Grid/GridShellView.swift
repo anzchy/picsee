@@ -56,8 +56,8 @@ import PicseeCore
     public var onOpenSortMenu: ((NSButton, NSMenu) -> Void)?
     public var sortConditions: (() -> FolderViewConditions)?
     public var onMainFrameChange: ((NSRect) -> Void)?
-    /// Runs after every layout pass, which resets each main-content view to the full main bounds; owners that carve
-    /// the main area (the rebind strip) re-place their views here.
+    /// Runs after every layout pass resets the main-content views, including the Grid's Bottom Bar extension;
+    /// owners that carve the main area (the rebind strip) re-place their views here.
     public var onMainContentLayout: (() -> Void)?
     public var onOpenRecent: ((RecentFolder) -> Void)?
     public var onDropFolders: (([URL]) -> Void)?
@@ -345,6 +345,11 @@ import PicseeCore
         return NSRect(x: sidebarWidth, y: 40, width: max(0, bounds.width - sidebarWidth),
                       height: max(0, bounds.height - 40))
     }
+    public func gridContentFrame(topInset: CGFloat = 0) -> NSRect {
+        let bounds = mainContent.bounds
+        return NSRect(x: bounds.minX, y: bounds.minY - footer.bounds.height, width: bounds.width,
+            height: max(0, bounds.height - topInset + footer.bounds.height))
+    }
     public override func layout() {
         super.layout()
         let main = mainFrame
@@ -355,8 +360,7 @@ import PicseeCore
         for content in mainContent.subviews {
             if let grid = content as? GridBrowserView {
                 grid.bottomContentInset = footer.bounds.height
-                grid.frame = NSRect(x: 0, y: -footer.bounds.height, width: mainContent.bounds.width,
-                    height: mainContent.bounds.height + footer.bounds.height)
+                grid.frame = gridContentFrame()
             } else {
                 content.frame = mainContent.bounds
             }

@@ -1003,11 +1003,119 @@ func t231AppFreshRebindMergeAndUndoRestoreLostPosition(_ merge: Bool) async thro
         default: shell.setReadingStatus(false)
         }
         shell.layoutSubtreeIfNeeded()
-        let main = shell.mainContent.bounds
+        let main = shell.mainContent.bounds, footer = shell.footer.bounds.height
         #expect(strip.frame == NSRect(x: main.minX, y: main.maxY - 44, width: main.width, height: 44), "\(step): strip frame")
-        #expect(grid.frame == NSRect(x: main.minX, y: main.minY, width: main.width, height: main.height - 44), "\(step): grid frame")
+        #expect(grid.frame == NSRect(x: main.minX, y: main.minY - footer, width: main.width,
+            height: main.height - 44 + footer), "\(step): grid frame")
         #expect(strip.frame.minY >= grid.frame.maxY, "\(step): strip above grid")
     }
+}
+
+private struct Issue314Scanner: FolderScanning {
+    let browser: FolderBrowser
+    func scan(in folder: URL, root: ItemIdentityRoot, options: FolderScanOptions,
+              emit: @Sendable ([FolderEntry]) async throws -> Void) async throws {
+        if folder.lastPathComponent == "Failed" {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError)
+        }
+        try await browser.scan(in: folder, root: root, options: options, emit: emit)
+    }
+}
+
+@MainActor @Test(.timeLimit(.minutes(3))) func issue314AppGridStaysUnderBottomBarThroughControllerLayout() async throws {
+    let f = try await RecoveryFixture(); defer { f.remove() }
+    let c = f.controller(), window = try #require(c.window)
+    defer {
+        if let sheet = window.attachedSheet { window.endSheet(sheet, returnCode: .cancel) }
+        window.close()
+    }
+    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("TestAssets/synthetic/landscape-3x2.png")
+    for index in 1...23 {
+        try FileManager.default.copyItem(at: fixture, to: f.b.appendingPathComponent(String(format: "%02d.png", index)))
+    }
+    let empty = f.b.appendingPathComponent("Empty", isDirectory: true)
+    let failed = f.b.appendingPathComponent("Failed", isDirectory: true)
+    for folder in [empty, failed] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+    c.folderScanningOverride = Issue314Scanner(browser: f.services.browser)
+    window.setContentSize(NSSize(width: 1280, height: 800))
+    c.showWindow(nil)
+    window.orderFrontRegardless()
+    let shell = try recoveryShell(c), grid = try recoveryGrid(c)
+    let state = try #require(window.contentView?.subviews.compactMap { $0 as? ViewerStateHost }.first)
+
+    func layout() {
+        window.contentView?.layoutSubtreeIfNeeded()
+        shell.layoutSubtreeIfNeeded()
+        grid.layoutSubtreeIfNeeded()
+    }
+    func expectMainFrame(_ view: NSView, _ step: String) {
+        layout()
+        #expect(view.convert(view.bounds, to: shell) == shell.mainFrame, "\(step): state frame")
+    }
+    func expectExtendedGrid(_ step: String, topInset: CGFloat = 0) throws {
+        layout()
+        let frame = grid.convert(grid.bounds, to: shell)
+        #expect(abs(frame.minY - shell.footer.frame.minY) < 0.01, "\(step): Grid extends to the window bottom")
+        #expect(abs(frame.maxY - (shell.bounds.maxY - topInset)) < 0.01,
+            "\(step): Grid top respects the title strip and rebind strip")
+        let scroll = try #require(grid.collectionView.enclosingScrollView)
+        #expect(scroll.contentInsets.bottom == 40, "\(step): Bottom Bar inset")
+        let lastIndex = grid.displayedItemIDs.count - 1
+        let endOffset = max(0, grid.collectionView.bounds.height - scroll.contentView.bounds.height
+            + scroll.contentInsets.bottom)
+        #expect(endOffset > 0, "\(step): fixture scrolls")
+        grid.restoreContentOffset(NSPoint(x: 0, y: endOffset))
+        grid.layoutSubtreeIfNeeded()
+        var lastFrame = grid.collectionView.convert(grid.collectionView.frameForItem(at: lastIndex), to: shell)
+        #expect(lastFrame.minY >= shell.footer.frame.maxY + 30 - 0.5,
+            "\(step): last row at the end is behind the Bottom Bar: \(lastFrame)")
+
+        grid.restoreContentOffset(.zero)
+        grid.activate(currentItemID: grid.itemID(at: 0))
+        let right = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: "\u{F703}",
+            charactersIgnoringModifiers: "\u{F703}", isARepeat: false, keyCode: 124))
+        for _ in 1..<grid.displayedItemIDs.count { grid.collectionView.keyDown(with: right) }
+        #expect(grid.currentItemID == grid.itemID(at: lastIndex), "\(step): keyboard selects the last item")
+        lastFrame = grid.collectionView.convert(grid.collectionView.frameForItem(at: lastIndex), to: shell)
+        #expect(lastFrame.minY >= shell.footer.frame.maxY - 0.5,
+            "\(step): keyboard-selected last item clears the Bottom Bar: \(lastFrame)")
+        grid.restoreContentOffset(NSPoint(x: 0, y: endOffset))
+        grid.layoutSubtreeIfNeeded()
+        lastFrame = grid.collectionView.convert(grid.collectionView.frameForItem(at: lastIndex), to: shell)
+        #expect(lastFrame.minY >= shell.footer.frame.maxY + 30 - 0.5,
+            "\(step): keyboard-selected last item at the end has 40 + 30 pt clearance: \(lastFrame)")
+    }
+
+    f.gate.arm(f.b)
+    c.browseRecoveredFolder(f.b, rootID: f.rootB)
+    try await recoveryWait { c.session.folderScan?.isReadingFolder == true }
+    expectMainFrame(state, "Reading")
+    f.gate.release()
+    try await f.ready(c, folder: f.b, count: 24)
+    try expectExtendedGrid("ordinary folder")
+    window.setContentSize(NSSize(width: 800, height: 680))
+    c.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+    try expectExtendedGrid("800×680 resize")
+
+    c.browseRecoveredFolder(empty, rootID: f.rootB)
+    try await f.ready(c, folder: empty, count: 0)
+    expectMainFrame(state, "empty")
+    expectMainFrame(shell.emptyFolderView, "empty shell page")
+    c.browseRecoveredFolder(failed, rootID: f.rootB)
+    try await recoveryWait { c.session.folderScan?.failure != nil }
+    if let sheet = window.attachedSheet { window.endSheet(sheet, returnCode: .cancel) }
+    expectMainFrame(state, "failed")
+
+    try await t231Lose(f, c)
+    expectMainFrame(try #require(recoveryPage(c)), "Lost Access")
+    c.completeAccessFolderSelection(f.b, reselect: true)
+    try await f.ready(c, folder: f.b, count: 24)
+    let strip = try t231Strip(c), main = shell.mainContent.bounds
+    #expect(strip.frame == NSRect(x: main.minX, y: main.maxY - 44, width: main.width, height: 44),
+        "rebind: strip takes the top 44 pt")
+    try expectExtendedGrid("visible rebind strip", topInset: 44)
 }
 
 /// Fix round 5 (device run parity-281-fix4-10301906): page 26 kept the reading footer, `–` and `Reading…`, because the
