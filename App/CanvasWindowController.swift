@@ -221,7 +221,9 @@ final class CanvasWindowController: NSWindowController, NSWindowDelegate {
         inspectorHost.autoresizingMask = [.minXMargin, .height]
         inspectorHost.isHidden = true
         content.addSubview(inspectorHost)
-        chromeOverlay = ViewerChromeOverlay(frame: content.bounds, session: session, motionPolicy: motionPolicy)
+        // #331: the Home (page 21) shows only its centre; the viewer controls come back once an image opens.
+        chromeOverlay = ViewerChromeOverlay(frame: content.bounds, session: session, motionPolicy: motionPolicy,
+                                            hidesOnHome: true)
         chromeOverlay.autoresizingMask = [.width, .height]
         chromeOverlay.setAccessibilityIdentifier("chrome.tools")
         content.addSubview(chromeOverlay)
