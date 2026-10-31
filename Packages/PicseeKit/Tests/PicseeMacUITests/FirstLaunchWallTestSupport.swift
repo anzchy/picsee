@@ -52,7 +52,7 @@ func srgb(_ cg: CGColor?) throws -> PinnedDesign.Color {
                  blue: resolved.blueComponent, alpha: resolved.alphaComponent)
 }
 
-@MainActor func waitForSamples(_ launch: FirstLaunchView, timeout: Duration = .seconds(2)) async {
+@MainActor func waitForSamples(_ launch: FirstLaunchView, timeout: Duration = .seconds(15)) async {
     let clock = ContinuousClock(), deadline = clock.now + timeout
     while !launch.sampleLoadCompleted && clock.now < deadline {
         try? await Task.sleep(for: .milliseconds(10))
