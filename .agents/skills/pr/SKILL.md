@@ -37,6 +37,8 @@ Use this template for writing the PR body:
 
 Device-Smoke: n/a — <reason; for a device run use PASS|NOT VERIFIED <head7> run=<id> — <path>
 
+Ledger-Gardener: <the line from the gardener or from scripts/ledger/garden-gate.mjs, verbatim>
+
 ## Merge Danger
 
 **Door:** <one-way or two-way>
@@ -180,6 +182,11 @@ Concrete evidence that the change works. Show a before and after.
 Screenshots are S-tier - when the environment is set up for it and the change is visual.
 
 Execution-based evidence is A-tier. Test results, console output. Show the exact test that now fails and passes, using pseudocode.
+
+### Ledger-Gardener
+
+Paste the `Ledger-Gardener:` line unchanged: the gardener's PR line, or the gate's `SKIP`, `REUSE` or `RESOLVED` line. When
+to run which is in `docs/agents/doc-gardening.md` §When it runs.
 
 ### Merge Danger
 

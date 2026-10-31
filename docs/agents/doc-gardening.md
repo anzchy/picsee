@@ -8,8 +8,8 @@ Change the procedure here, never in a wrapper.
 
 **Why it exists.** `docs/feature-ledger.md` is the system of record for what picsee can do. The rule is that
 the commit that changes a behaviour also rewrites its row. The ledger's own gate can't tell whether a
-sentence is still true, and authors forget. The gardener runs on every PR and catches the rows the
-change made stale. This follows two published practices:
+sentence is still true, and authors forget. The gardener runs on every PR that can affect the ledger and
+catches the rows the change made stale. This follows two published practices:
 - OpenAI's harness-engineering team runs a recurring doc-gardening agent that scans for stale docs and
   opens fix-up PRs, because repository knowledge is the system of record;
 - Anthropic's long-running-agent harness lets an agent change a feature's status only after it has
@@ -17,12 +17,40 @@ change made stale. This follows two published practices:
 
 ## When it runs
 
+The caller runs the gate script first and starts the gardener only when it prints `RUN`:
+
+```sh
+node scripts/ledger/garden-gate.mjs <base> HEAD                                         # PR opens
+node scripts/ledger/garden-gate.mjs <base> HEAD --since <gardened-head> --verdict <V>   # re-push
+```
+
+`<base>` is `git merge-base main HEAD`; `<gardened-head>` is the head the last gardener verdict `<V>` was
+for. The script prints one line and its reason on stderr. Any other line goes into the PR body verbatim.
+
+| Situation | Rule | Gate prints |
+|---|---|---|
+| No changed path is mapped, and no commit names a ledger row ID or a plan WP ID | **Skip** the gardener | `Ledger-Gardener: SKIP <base7>..<head7> (no mapped paths)` |
+| PR opens and the range is mapped | Run `pr` once | `RUN` |
+| Re-push after a fix round or a rebase, last verdict CLEAN or UPDATED | Rerun only if the commits since the gardened head are mapped; otherwise reuse the verdict for the new head | `Ledger-Gardener: REUSE <V> <base7>..<head7> (no mapped change since <S7>)` or `RUN` |
+| After NEEDS-OWNER | No rerun when every commit since the gardened head changes only the ledger md/html, no 状态, 验证 or 怎么确认 cell and no row is added or removed, and the HTML check passes | `Ledger-Gardener: RESOLVED <base7>..<head7> (owner fixed rows after NEEDS-OWNER at <S7>)` or `RUN` |
+| Last verdict BLOCK | Always rerun | `RUN` |
+
+**Mapped** means a changed path is under `App/`, `Packages/*/Sources/` or `docs/validation/`, is `project.yml`,
+`docs/feature-ledger.md` or `docs/feature-ledger.html`, or is named (or under a directory named) in a 在哪 cell.
+Commit messages are mapped when they name an existing row ID or a `P<n>-<nn>[a-z]?` work package. Other tooling,
+`.github/` and design pages are not mapped unless a 在哪 cell names them.
+
+The gate fails closed. A `--since` that is not an ancestor of head, as after a rebase, makes it judge the whole
+merge-base..head range, so a mapped PR gives `RUN`. Any error (unknown ref, unreadable ledger, git failure) gives `RUN`.
+The gate never writes the ledger: SKIP, REUSE and RESOLVED set no area review date.
+
 | Mode | Trigger | Range |
 |---|---|---|
-| `pr` | **Before every PR is opened, and again before each re-push of a PR head.** Whoever opens the PR runs it: the delegator under rule 70, or any session or person running `gh pr create` | `git merge-base main HEAD`..`HEAD` |
-| `full` | When the user asks, or when an area in the ledger's Part 3 table is more than 30 days past its last review and code in it has changed | the whole ledger against the working tree |
+| `pr` | The gate printed `RUN` before a PR opens or a PR head is re-pushed. Whoever opens the PR runs both: the delegator under rule 70, or any session or person running `gh pr create` | `git merge-base main HEAD`..`HEAD` |
+| `full` | Once a week, scheduled by the delegator; when the user asks; or when an area in the ledger's Part 3 table is more than 30 days past its last review and code in it has changed | the whole ledger against the working tree |
 
-A PR is not opened without a gardener verdict for its head. The PR body carries the verdict line (see Output).
+A PR is not opened without a `Ledger-Gardener:` line for its head, from the gardener or the gate. The PR body
+carries that line (see Output).
 
 ## What you may change, and what you may only propose
 
@@ -42,7 +70,8 @@ A wrong downgrade costs one re-check. A wrong upgrade is the false claim the led
    Nothing else in that cell changes.
 4. **Broken links.** A link to a renamed file is repointed. A link with no target is reported, not deleted.
 5. **Area review.** For each ledger area the range touched, set its Part 3 row to today's date and reviewer
-   `doc-gardener`. Note any finding in that row's 备注 cell.
+   `doc-gardener`, and replace its 备注 cell with the range `<base7>..<head7>`. Findings go in your report and
+   the PR body, never in the ledger.
 
 **Propose only.** Write these into the report for the owner. Never edit them yourself:
 - any state or 验证 upgrade, whatever evidence you see;
@@ -151,5 +180,8 @@ Each verdict means:
 |---|---|---|
 | CLEAN | Nothing stale, nothing proposed | Puts the PR line in the PR body and opens the PR |
 | UPDATED | Only edits you were allowed to apply | Commits the ledger and HTML diff, then opens the PR |
-| NEEDS-OWNER | At least one proposal | The owner updates the rows, or writes `无用户可见变化：<ID> <reason>` in the PR body for each one; then the gardener runs again |
+| NEEDS-OWNER | At least one proposal | The owner updates the rows, or writes `无用户可见变化：<ID> <reason>` in the PR body for each one; then the caller runs the gate with `--since <this head> --verdict NEEDS-OWNER`, and reruns the gardener only on `RUN` |
 | BLOCK | Weakened acceptance or an unevidenced upgrade | The PR does not open until the commit is split or the evidence exists |
+
+The gate's SKIP, REUSE and RESOLVED lines (see When it runs) stand in for the PR line and go into the PR body
+the same way.
