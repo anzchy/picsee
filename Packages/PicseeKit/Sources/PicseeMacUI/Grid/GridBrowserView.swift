@@ -269,6 +269,13 @@ private struct GridGeometry: Equatable {
     /// The grid's Current Item changed without a selection (entry, Esc return, removal fallback).
     public var onCurrentChange: ((ItemID) -> Void)?
     private let scrollView = NSScrollView()
+    var bottomContentInset: CGFloat = 0 {
+        didSet {
+            guard bottomContentInset != oldValue else { return }
+            scrollView.automaticallyAdjustsContentInsets = false
+            scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomContentInset, right: 0)
+        }
+    }
     let metadataSortNotice = GridSortNoticeLabel(labelWithString: String(localized: "Sort unfinished"))
     private var displayedMetadataSortState: MetadataSortState = .idle
     private var entries: [FolderEntry] = []
