@@ -165,3 +165,20 @@ import PicseeApplication
     try dark.assertColor(colour(chip.layer?.backgroundColor), ".theme-dark", "--color-surface", viewport: 960)
     try dark.assertColor(colour(drop.layer?.backgroundColor), ".rt.over .drop", "background", viewport: 960)
 }
+
+@Test @MainActor func issue314OverrideRestylesFirstLaunchImmediately() throws {
+    _ = NSApplication.shared
+    let launch = FirstLaunchView(frame: NSRect(x: 0, y: 0, width: 960, height: 640),
+        openButton: ViewerStateButton(frame: .zero))
+    launch.appearance = NSAppearance(named: .aqua)
+    let chip = try #require(b4View("first-launch.chip.images", in: launch))
+    launch.reduceTransparencyOverride = true
+    #expect(chip.layer?.borderWidth == 1)
+    #expect(chip.layer?.backgroundColor?.alpha == 1)
+    launch.reduceTransparencyOverride = false
+    #expect(chip.layer?.borderWidth == 0)
+    #expect(abs((chip.layer?.backgroundColor?.alpha ?? 0) - 0.8) < 0.001)
+    launch.reduceTransparencyOverride = true
+    #expect(chip.layer?.borderWidth == 1)
+    #expect(chip.layer?.backgroundColor?.alpha == 1)
+}

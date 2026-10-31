@@ -68,7 +68,7 @@ import PicseeCore
     private var footerActionsRequested = true
     private var searchEmptyRequested = false
     private let preferencesStore: any DisplayPreferencesStore
-    var reduceTransparencyOverride: Bool?
+    var reduceTransparencyOverride: Bool? { didSet { refreshAppearance() } }
     private let divider = GridSidebarDivider()
     private let folderName = NSTextField(labelWithString: "")
     public let folderTree = GridSidebarTreeView(frame: .zero)

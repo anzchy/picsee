@@ -117,6 +117,21 @@ private func expectPinnedColor(_ actual: NSColor?, _ expected: PinnedDesign.Colo
     }
 }
 
+@Test @MainActor func issue314OverrideRestylesFooterImmediately() throws {
+    _ = NSApplication.shared
+    let shell = GridShellView(frame: NSRect(x: 0, y: 0, width: 800, height: 652),
+        preferencesStore: InMemoryDisplayPreferencesStore())
+    func fillAlpha() throws -> CGFloat {
+        try #require(shell.footer.layer?.backgroundColor?.alpha)
+    }
+    shell.reduceTransparencyOverride = true
+    #expect(try fillAlpha() == 1)
+    shell.reduceTransparencyOverride = false
+    #expect(abs(try fillAlpha() - 0.8) < 0.001)
+    shell.reduceTransparencyOverride = true
+    #expect(try fillAlpha() == 1)
+}
+
 /// grid-light.html / grid-dark.html `.grid-bottom-bar` (40px, 12px inset;
 /// 7px only at max-width:480px), `.grid-toolbar-tools` (6px gap;
 /// 2px at max-width:800px), and primitives.css `.ds-icon-button` (30x28).

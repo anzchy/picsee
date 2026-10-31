@@ -44,7 +44,7 @@ import os
     private var dragActive = false
     var themeOverride: DesignTheme?
     var reduceMotionOverride: Bool?
-    var reduceTransparencyOverride: Bool?
+    var reduceTransparencyOverride: Bool? { didSet { refreshStyle() } }
     var semanticViews: [NSView] { [heading, openButton, shortcut] + chips }
     private var reduceMotion: Bool { reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     private var reduceTransparency: Bool { reduceTransparencyOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency }
