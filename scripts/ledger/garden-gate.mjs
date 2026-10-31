@@ -21,6 +21,7 @@ const MAPPED_FILES = new Set(["project.yml", LEDGER, HTML]);
 const PACKAGE_SOURCES = /^Packages\/[^/]+\/Sources\//;
 const WP_ID = /\bP\d+-\d{2}[a-z]?\b/i;
 const ID_TOKEN = /\b[A-Za-z][A-Za-z0-9]*-\d{2,}\b/g;
+const GLOB = /[*?[{]/;
 
 class GateError extends Error {}
 
@@ -43,12 +44,11 @@ function isAncestor(ancestor, descendant) {
   throw new GateError(`git merge-base --is-ancestor failed: ${result.stderr.trim()}`);
 }
 
+// Returns null only when Git confirms the path is absent at commit; every other failure throws.
 function fileAt(commit, path) {
-  try {
-    return git("show", `${commit}:${path}`);
-  } catch {
-    return null;
-  }
+  const entry = git("ls-tree", "--full-tree", "-z", commit, "--", path);
+  if (entry === "") return null;
+  return git("show", `${commit}:${path}`);
 }
 
 function splitTableRow(line) {
@@ -97,33 +97,41 @@ function readLedger(commit) {
   return rows;
 }
 
+// A 在哪 path with a glob character keeps only its literal prefix, matched as a plain string
+// prefix; an empty prefix (a leading glob, or the repository root) matches every path.
 function ledgerIndex(rowsList) {
   const ids = new Set();
-  const paths = new Set();
+  const paths = new Map();
   for (const rows of rowsList) {
     for (const row of rows) {
       ids.add(row.ID.toUpperCase());
       for (const match of (row["在哪"] ?? "").matchAll(/`([^`]+)`/g)) {
-        const path = match[1].trim().replace(/^\.\//, "").split("*")[0];
-        if (path) paths.add(path);
+        const named = match[1].trim();
+        const path = named.replace(/^\.\//, "");
+        const glob = path.search(GLOB);
+        if (glob >= 0) paths.set(named, { prefix: path.slice(0, glob) });
+        else if (path === "" || path === "." || path === "/") paths.set(named, { prefix: "" });
+        else paths.set(named, { literal: path });
       }
     }
   }
   return { ids, paths };
 }
 
+// Raw NUL-delimited names, so Git's quoting of non-ASCII and special characters never applies.
 function changedPaths(from, to) {
-  const endpoint = git("diff", "--name-only", "--no-renames", from, to);
-  const perCommit = git("log", "-m", "--format=", "--name-only", "--no-renames", `${from}..${to}`);
-  return [...new Set(`${endpoint}\n${perCommit}`.split("\n").map((line) => line.trim()).filter(Boolean))];
+  const endpoint = git("diff", "--name-only", "-z", "--no-renames", from, to);
+  const perCommit = git("log", "-m", "--format=", "--name-only", "-z", "--no-renames", `${from}..${to}`);
+  return [...new Set(`${endpoint}\0${perCommit}`.split("\0").filter(Boolean))];
 }
 
 function pathIsMapped(path, ledgerPaths) {
   if (MAPPED_FILES.has(path) || PACKAGE_SOURCES.test(path)) return `${path} is a mapped path`;
   if (MAPPED_PREFIXES.some((prefix) => path.startsWith(prefix))) return `${path} is under a mapped directory`;
-  for (const named of ledgerPaths) {
-    const directory = named.endsWith("/") ? named : `${named}/`;
-    if (path === named || path.startsWith(directory)) return `${path} is named in 在哪 (${named})`;
+  for (const [named, { literal, prefix }] of ledgerPaths) {
+    if (prefix !== undefined ? path.startsWith(prefix) : path === literal || path.startsWith(literal.endsWith("/") ? literal : `${literal}/`)) {
+      return `${path} is named in 在哪 (${named})`;
+    }
   }
   return null;
 }
@@ -165,7 +173,7 @@ function unresolvedReason(since, head) {
     const [commit, ...parents] = line.split(" ");
     const short = commit.slice(0, 7);
     if (parents.length !== 1) return `${short} is a merge or root commit`;
-    const files = git("diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames", parents[0], commit).split("\n").filter(Boolean);
+    const files = git("diff-tree", "--no-commit-id", "--name-only", "-z", "-r", "--no-renames", parents[0], commit).split("\0").filter(Boolean);
     const other = files.find((file) => file !== LEDGER && file !== HTML);
     if (other) return `${short} changes ${other}, not only the ledger`;
     const before = guardedCells(readLedger(parents[0]));
