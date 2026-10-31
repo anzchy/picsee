@@ -18,6 +18,9 @@ private final class ScriptedDiagnostics: DiagnosticsProviding, @unchecked Sendab
     private var holding = false
     private var held: [CheckedContinuation<Void, Never>] = []
     init(_ script: [DiagnosticsSnapshot]) { self.script = script }
+    /// Set before the source is shared; called with the read count when the source is released.
+    var released: (@Sendable (Int) -> Void)?
+    deinit { released?(count) }
     var reads: Int { lock.withLock { count } }
     var heldReads: Int { lock.withLock { held.count } }
     func hold() { lock.withLock { holding = true } }
@@ -37,6 +40,14 @@ private final class ScriptedDiagnostics: DiagnosticsProviding, @unchecked Sendab
         if mustHold { await withCheckedContinuation { reader in lock.withLock { held.append(reader) } } }
         return snapshot
     }
+}
+
+/// The read count a released `ScriptedDiagnostics` reports; nil until then.
+private final class ReadsAtRelease: @unchecked Sendable {
+    private let lock = NSLock()
+    private var reads: Int?
+    var value: Int? { lock.withLock { reads } }
+    func set(_ count: Int) { lock.withLock { reads = count } }
 }
 
 /// An injected clock: every sleep waits for `advance()`, and a cancelled sleep throws.
@@ -297,20 +308,52 @@ private func catalogValue(_ key: String, _ language: String) throws -> String? {
         #expect(source.reads == 5 && sleeper.pendingCount == 1)
         model.setVisible(false)
     }
+
+    @Test func diagnosticsPanelStartsNoReadAfterHidingWhenAPauseHasJustEnded() async throws {
+        let source = ScriptedDiagnostics([fullSnapshot])
+        let sleeper = ManualSleeper()
+        // Only the model and its loop hold the token, so with the model gone the token's release marks the loop's end.
+        final class Token: Sendable {}
+        var token: Token? = Token()
+        weak var loopToken = token
+        var model: DiagnosticsPanelModel? = DiagnosticsPanelModel(source: source, sleep: { [token] in
+            _ = token
+            try await sleeper.sleep($0)
+        })
+        token = nil
+        model?.setVisible(true)
+        try #require(await sleeper.sleeping(1))
+        #expect(source.reads == 1)
+
+        // The pause ends, but the loop can't take the main actor back before the panel hides in this same turn.
+        sleeper.advance()
+        model?.setVisible(false)
+        model = nil
+        try #require(await until { loopToken == nil })
+        #expect(source.reads == 1)
+    }
 }
 
 @Suite(.timeLimit(.minutes(2))) @MainActor struct DiagnosticsPanelClockTests {
     @Test func diagnosticsPanelDefaultClockRefreshesUntilHidden() async throws {
-        let source = ScriptedDiagnostics([fullSnapshot])
-        let model = DiagnosticsPanelModel(source: source, interval: .milliseconds(10))
-        model.setVisible(true)
-        try #require(await until { source.reads >= 3 })
-        model.setVisible(false)
-        try await Task.sleep(for: .milliseconds(30))
-        let stopped = source.reads
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(source.reads == stopped)
-        #expect(value(model, "decoding.finished") == "9")
+        // Only the model and its loop hold the source, so with the model gone the source's release marks the loop's
+        // end and reports the final count: no wall-clock margin decides whether the loop stopped (#327).
+        let released = ReadsAtRelease()
+        var source: ScriptedDiagnostics? = ScriptedDiagnostics([fullSnapshot])
+        source?.released = { released.set($0) }
+        weak var loopSource = source
+        var model: DiagnosticsPanelModel? = DiagnosticsPanelModel(source: try #require(source), interval: .milliseconds(10))
+        source = nil
+        model?.setVisible(true)
+        try #require(await until { (loopSource?.reads ?? 0) >= 3 })
+        let readsAtHide = try #require(loopSource).reads
+        model?.setVisible(false)
+        #expect(value(try #require(model), "decoding.finished") == "9")
+        model = nil
+        try #require(await until { released.value != nil })
+        // A read already called when the panel hid may count after it; no read starts after it.
+        let finalReads = try #require(released.value)
+        #expect(finalReads >= readsAtHide && finalReads <= readsAtHide + 1)
     }
 }
 

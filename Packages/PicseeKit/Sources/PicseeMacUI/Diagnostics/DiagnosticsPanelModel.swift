@@ -17,7 +17,8 @@ public struct DiagnosticsSection: Sendable, Equatable, Identifiable {
 }
 
 /// The diagnostics panel's rows (CACHE-04). While visible it reads the source now and then once per interval;
-/// hiding cancels the loop, and a read that was in flight is dropped. Values are counts and sizes only.
+/// hiding cancels the loop, no read starts after it, and a read that was in flight is dropped. Values are counts and
+/// sizes only.
 @MainActor @Observable
 public final class DiagnosticsPanelModel {
     /// Localization key shown for any figure the source could not provide.
@@ -42,12 +43,13 @@ public final class DiagnosticsPanelModel {
         loop = nil
         guard visible else { return }
         loop = Task { [weak self, source, interval, sleep] in
-            // Cancellation ends the loop at the check after a read or in the pause.
+            // Cancellation ends the loop at the check after a read, in the pause, or at the check after the pause: a
+            // pause can end just before hiding, and the loop gets the main actor back only after the hide (#327).
             repeat {
                 let snapshot = await source.diagnostics()
                 guard !Task.isCancelled, let self else { break }
                 self.sections = Self.sections(snapshot)
-            } while await Self.pause(interval, sleep)
+            } while await Self.pause(interval, sleep) && !Task.isCancelled
         }
     }
 
