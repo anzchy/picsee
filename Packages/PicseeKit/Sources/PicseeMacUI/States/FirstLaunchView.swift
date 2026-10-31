@@ -127,7 +127,7 @@ import os
         refreshStyle()
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshStyle() }
-    private func refreshStyle() {
+    private func refreshStyle(animateWall: Bool = false) {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let dark = theme == .dark
             let bg = DesignColor.canvasBackground.nsColor.usingColorSpace(.deviceRGB)!
@@ -148,7 +148,8 @@ import os
                 chip.layer?.borderWidth = reduceTransparency ? 1 : 0
                 chip.layer?.borderColor = border.cgColor
             }
-            heading.textColor = DesignColor.textPrimary.nsColor
+            // Page 21 `.is-drag-over [data-drop-prompt]`: `--color-accent-text`.
+            heading.textColor = (dragActive ? DesignColor.selectionText : DesignColor.textPrimary).nsColor
             shortcut.textColor = DesignColor.textSecondary.nsColor
             openButton.bezelColor = DesignColor.primaryFill.nsColor
             openButton.contentTintColor = DesignColor.onPrimary.nsColor
@@ -170,13 +171,34 @@ import os
                 ? (reduceTransparency ? opaqueDrop : DesignColor.selectionFill.nsColor).cgColor
                 : NSColor.clear.cgColor
             styleWall()
+            fadeWall(animated: animateWall)
             needsLayout = true
         }
     }
     func setDragActive(_ active: Bool) {
         guard dragActive != active else { return }
         dragActive = active
-        refreshStyle()
+        refreshStyle(animateWall: true)
+    }
+    /// Page 21 `.is-drag-over .wall{opacity:.4}` with `transition: opacity var(--motion-duration-fast)` (150 ms);
+    /// Reduce Transparency hides the wall during a drag, Reduce Motion drops the fade.
+    private func fadeWall(animated: Bool) {
+        guard let layer = wall.layer else { return }
+        let target: CGFloat = dragActive ? (reduceTransparency ? 0 : 0.4) : 1
+        let current = wall.alphaValue
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        wall.alphaValue = target
+        CATransaction.commit()
+        if animated && !reduceMotion && current != target {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = layer.presentation()?.opacity ?? Float(current)
+            fade.toValue = Float(target)
+            fade.duration = 0.15
+            fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(fade, forKey: "first-launch.wall.fade")
+        } else if reduceMotion || current != target {
+            layer.removeAnimation(forKey: "first-launch.wall.fade")
+        }
     }
     /// Page 21: tiles carry `--home-wall-opacity`; each image carries `--radius-control` and `--shadow-soft`
     /// (ring on the image, drop shadow on its container).
