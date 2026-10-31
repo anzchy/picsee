@@ -64,7 +64,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <p>这一条参考 Anthropic 长时运行 agent 的 feature list 做法：功能列表一开始全部标为未通过，agent 只能改“是否通过”这一项，删改测试步骤被明确禁止，并且必须像真实用户那样端到端验证后才能标为通过。</p>
 <ul><li><strong>状态升级的那次提交，可以追加或修改「限制：」文本，但不得改写「怎么确认」中的验收本身。确需改验收时，单独提交并在提交说明里引用用户原话或 ADR。</strong></li><li>升级状态的人不能是唯一的验证者：<code>Shipped</code> 的真机记录由真机测试角色（<code>claude-imple-1</code>）写，实现者不能自己给自己出记录。验证记录单独提交，带 <code>Validated-by: &lt;角色&gt; run=&lt;运行 ID&gt;</code> trailer；实现提交带 <code>Implemented-by: &lt;角色&gt;</code>。所有提交可能是同一个 git 作者，gardener 靠这两个 trailer 区分角色。</li><li>一行从 <code>Shipped</code> 退回 <code>Partial</code> 或更低，在同一次提交里写明原因，不删除原记录。</li><li>不能用删掉「怎么确认」里某个入口的办法让一行升级：删入口算改验收，同样要单独提交并引用用户原话或 ADR。</li></ul>
 <h2 id="维护">维护</h2>
-<ul><li><strong>改变用户可见行为的那次提交，同时改它的那一行。</strong> 不留到之后的清理提交。新能力、状态变化、发现某条声称是假的，都在当次提交里改。参考 Google SRE 的定义，凡是用户看得见的变化都算发布，都要有对应的行。</li><li>新增的命令 ID、菜单项、偏好键、entitlement、声明的 UTType，必须出现在描述它的那一行，不能挂在无关的行上凑数（见「门禁」）。</li><li><strong>区域审查</strong>：每个区域在下面的审查表里有最近一次审查的日期和审查人。超过 30 天未审查、且这期间该区域有代码改动的，下一次合入前先审查（相当于 OpenAI 的 doc-gardening，定期清理过时文档）。</li><li>一次审查追加一个带日期的小节，不覆盖旧小节，结尾写「这次没有检查什么」。</li></ul>
+<ul><li><strong>改变用户可见行为的那次提交，同时改它的那一行。</strong> 不留到之后的清理提交。新能力、状态变化、发现某条声称是假的，都在当次提交里改。参考 Google SRE 的定义，凡是用户看得见的变化都算发布，都要有对应的行。</li><li>新增的命令 ID、菜单项、偏好键、entitlement、声明的 UTType，必须出现在描述它的那一行，不能挂在无关的行上凑数（见「门禁」）。</li><li><strong>区域审查</strong>：每个区域在下面的审查表里有最近一次审查的日期和审查人。超过 30 天未审查、且这期间该区域有代码改动的，下一次合入前先审查（相当于 OpenAI 的 doc-gardening，定期清理过时文档）。</li><li>一次审查只写日期、审查人和范围 <code>&lt;base7&gt;..&lt;head7&gt;</code>；发现写进 gardener 报告和 PR 描述，不写进账簿（#324）。</li></ul>
 <h2 id="门禁">门禁</h2>
 <p><code>npm run ledger:check</code> 的五条规则门禁仍在计划中。实现后，它会作为 CI 和合入前检查的一项，检查：</p>
 <ol><li>状态、验证两格都在枚举里；<code>Partial</code> 有 <code>限制：</code>；<code>Shipped</code> 的验证是 <code>真机</code> 且链接了 <code>docs/validation/</code>；</li><li>ID 不重复；计划一格的工作包 ID 在开发计划里存在；</li><li>每个路径都能解析到文件；没有行号、计数和构建产物路径；<code>Absent</code> 的位置是 <code>—</code>；</li><li>App 声明的每个名字都出现在某一行：CommandRouter 的命令 ID、菜单项 identifier、<code>DisplayPreferences</code> 的键、entitlements、<code>Info.plist</code> 声明的 UTType；</li><li>同一次提交里，某行状态升级的同时改写了「怎么确认」中的验收本身，报出来交给审查；只追加或修改「限制：」文本不报。</li></ol>
@@ -348,7 +348,7 @@ main{grid-area:main;overflow:auto;padding:16px 24px 48px}.content{max-width:1180
 <footer class="statusbar">
 <span>109 项能力</span><span>·</span><span>Shipped 0 · Partial 64 · Stub 0 · Absent 45 · Unknown 0</span>
 <span class="spacer"></span>
-<span>由 docs/feature-ledger.md 生成 · sha256 aa9b9b9520d4 · 请勿手改</span>
+<span>由 docs/feature-ledger.md 生成 · sha256 5c1bf2fbaf22 · 请勿手改</span>
 <label for="theme" class="result">外观</label>
 <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
 </footer>

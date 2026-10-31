@@ -43,6 +43,7 @@ Commit messages are mapped when they name an existing row ID or a `P<n>-<nn>[a-z
 The gate fails closed. A `--since` that is not an ancestor of head, as after a rebase, makes it judge the whole
 merge-base..head range, so a mapped PR gives `RUN`. Any error (unknown ref, unreadable ledger, git failure) gives `RUN`.
 The gate never writes the ledger: SKIP, REUSE and RESOLVED set no area review date.
+The gate ignores branch names: it maps IDs only from commit messages, and paths only from the changed files.
 
 | Mode | Trigger | Range |
 |---|---|---|
