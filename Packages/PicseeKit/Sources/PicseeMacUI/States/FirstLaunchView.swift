@@ -73,6 +73,9 @@ import os
             image.masksToBounds = true
             image.contentsGravity = .resizeAspectFill
             container.addSublayer(image)
+            let ring = CALayer()
+            ring.name = "first-launch.wall.ring"
+            container.addSublayer(ring)
             tilesLayer.addSublayer(container)
             tiles.append(container)
         }
@@ -203,7 +206,7 @@ import os
         }
     }
     /// Page 21: tiles carry `--home-wall-opacity`; each image carries `--radius-control` and `--shadow-soft`
-    /// (ring on the image, drop shadow on its container).
+    /// (the ring sits just outside the image, the drop shadow on its container).
     private func styleWall() {
         let dark = theme == .dark
         let text = DesignColor.textPrimary.components(theme)
@@ -218,10 +221,13 @@ import os
             container.shadowOpacity = dark ? 0.45 : 0.08
             container.shadowOffset = CGSize(width: 0, height: -8)
             container.shadowRadius = 12
-            guard let image = container.sublayers?.first else { continue }
+            guard let image = container.sublayers?.first, let ring = container.sublayers?.last else { continue }
             image.cornerRadius = 6
-            image.borderWidth = 0.5
-            image.borderColor = colour(text, dark ? 0.16 : 0.12)
+            // `--shadow-soft`'s first layer is an outer 0.5 spread, so the ring is 0.5 wide, radius 6.5,
+            // outside the image edge; a border on the image itself would cover its edge pixels.
+            ring.cornerRadius = 6.5
+            ring.borderWidth = 0.5
+            ring.borderColor = colour(text, dark ? 0.16 : 0.12)
         }
         CATransaction.commit()
     }
@@ -267,6 +273,7 @@ import os
             container.frame = tile.frame
             container.shadowPath = CGPath(roundedRect: container.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
             container.sublayers?.first?.frame = container.bounds
+            container.sublayers?.last?.frame = container.bounds.insetBy(dx: -0.5, dy: -0.5)
         }
         scrim.frame = wall.bounds
         CATransaction.commit()

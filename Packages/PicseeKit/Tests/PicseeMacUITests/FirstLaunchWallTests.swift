@@ -396,8 +396,9 @@ private func i315Close(_ a: PinnedDesign.Color, _ b: PinnedDesign.Color, rgb: Do
             let cell = "\(appearance.rawValue) \(container.name ?? "?")"
             #expect(image.cornerRadius == radius && image.masksToBounds, "\(cell) radius \(image.cornerRadius)")
             #expect(image.contentsGravity == .resizeAspectFill, "\(cell)")
-            #expect(abs(Double(image.borderWidth) - layers[0].spread) < 0.001, "\(cell) ring width \(image.borderWidth)")
-            let ring = try srgb(image.borderColor)
+            let ringLayer = try #require(tileRing(container), "\(cell) ring layer")
+            #expect(abs(Double(ringLayer.borderWidth) - layers[0].spread) < 0.001, "\(cell) ring width \(ringLayer.borderWidth)")
+            let ring = try srgb(ringLayer.borderColor)
             #expect(i315Close(ring, layers[0].color), "\(cell) ring \(ring) vs \(layers[0].color)")
             #expect(Double(container.shadowOffset.width) == layers[1].x && Double(container.shadowOffset.height) == -layers[1].y,
                     "\(cell) shadow offset \(container.shadowOffset)")
@@ -411,6 +412,39 @@ private func i315Close(_ a: PinnedDesign.Color, _ b: PinnedDesign.Color, rgb: Do
                     "\(cell) shadow alpha \(shadow.alpha) × \(container.shadowOpacity)")
             #expect(container.shadowPath.map { i315Close($0.boundingBox, container.bounds, 0.5) } == true, "\(cell) shadowPath")
         }
+    }
+}
+
+/// Audit M2: `--shadow-soft`'s first layer is an outer zero-blur spread, so the ring lies outside the image
+/// (from its edge out by the spread, at radius + spread); a CALayer border on the image would cover its edge.
+@Test @MainActor func i315WallTileRingSitsOutsideImageBounds() throws {
+    let light = try PinnedDesign.page("first-launch")
+    let dark = try PinnedDesign.page("first-launch", appearance: "dark")
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    for (size, appearance, page) in [(NSSize(width: 960, height: 640), NSAppearance.Name.aqua, light),
+                                     (NSSize(width: 1440, height: 900), .darkAqua, dark)] {
+        try resize(scene, to: size)
+        home.appearance = NSAppearance(named: appearance)
+        home.layoutSubtreeIfNeeded()
+        let spread = CGFloat(try page.boxShadowLayers(":root", "--shadow-soft", viewport: 960)[0].spread)
+        let radius = CGFloat(try page.length(":root", "--radius-control", viewport: 960))
+        #expect(spread == 0.5)
+        for container in tileContainers(home) {
+            let cell = "\(appearance.rawValue) \(size) \(container.name ?? "?")"
+            guard let image = imageLayer(container) else { Issue.record("\(cell) no image"); continue }
+            #expect(image.borderWidth == 0, "\(cell) image border \(image.borderWidth) paints inside the image")
+            #expect(i315Close(image.frame, container.bounds, 0.001) && image.cornerRadius == radius, "\(cell) image crop")
+            let ring = tileRing(container)
+            #expect(ring != nil, "\(cell) no ring layer")
+            guard let ring else { continue }
+            #expect(!ring.masksToBounds && ring.contents == nil && ring.backgroundColor == nil, "\(cell) ring fill")
+            #expect(i315Close(ring.frame, image.frame.insetBy(dx: -spread, dy: -spread), 0.001),
+                    "\(cell) ring frame \(ring.frame) vs image \(image.frame)")
+            #expect(ring.borderWidth == spread, "\(cell) ring width \(ring.borderWidth)")
+            #expect(ring.cornerRadius == radius + spread, "\(cell) ring radius \(ring.cornerRadius)")
+        }
+        #expect(!anyTileContainerMasks(home), "a tile container clips its ring")
     }
 }
 
