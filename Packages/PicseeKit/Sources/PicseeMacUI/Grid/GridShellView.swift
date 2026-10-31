@@ -68,11 +68,11 @@ import PicseeCore
     private var footerActionsRequested = true
     private var searchEmptyRequested = false
     private let preferencesStore: any DisplayPreferencesStore
+    var reduceTransparencyOverride: Bool?
     private let divider = GridSidebarDivider()
     private let folderName = NSTextField(labelWithString: "")
     public let folderTree = GridSidebarTreeView(frame: .zero)
     private let sidebarRule = NSView()
-    private let footerRule = NSView()
     private let footerLeadingDivider = NSView()
     private let currentFileStatus = NSTextField(labelWithString: "")
     private var currentFileName = ""
@@ -109,7 +109,6 @@ import PicseeCore
         footer.addSubview(sortButton)
         footer.addSubview(infoButton)
         footer.addSubview(displayButton)
-        footer.addSubview(footerRule)
         footer.addSubview(footerLeadingDivider)
         footer.addSubview(currentFileStatus)
         footer.addSubview(keyboardHint)
@@ -243,23 +242,30 @@ import PicseeCore
         wantsLayer = true
         sidebar.wantsLayer = true
         footer.wantsLayer = true
-        footerRule.wantsLayer = true
         refreshAppearance()
         refreshToggleLabel()
+        NSWorkspace.shared.notificationCenter.addObserver(self,
+            selector: #selector(accessibilityOptionsChanged(_:)),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
         needsLayout = true
     }
     public required init?(coder: NSCoder) { nil }
+    deinit { NSWorkspace.shared.notificationCenter.removeObserver(self) }
 
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         refreshAppearance()
     }
+    @objc private func accessibilityOptionsChanged(_ notification: Notification) { refreshAppearance() }
+    private var reduceTransparency: Bool {
+        reduceTransparencyOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+    }
     private func refreshAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             sidebar.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
             sidebarRule.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
-            footer.layer?.backgroundColor = DesignColor.sidebarBackground.nsColor.cgColor
-            footerRule.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
+            footer.layer?.backgroundColor = DesignColor.canvasBackground.nsColor
+                .withAlphaComponent(reduceTransparency ? 1 : 0.8).cgColor
             footerLeadingDivider.layer?.backgroundColor = DesignColor.divider.nsColor.cgColor
             toggleButton.layer?.backgroundColor = preferencesStore.value.gridSidebarVisible
                 ? DesignColor.hoverBackground.nsColor.cgColor : NSColor.clear.cgColor
@@ -351,7 +357,6 @@ import PicseeCore
         let toggleWidth: CGFloat = compactFooter ? 16 : 30
         toggleButton.frame = NSRect(x: compactFooter ? 8 : 12, y: compactFooter ? 4 : 5,
                                     width: toggleWidth, height: compactFooter ? 32 : 30)
-        footerRule.frame = NSRect(x: 0, y: 39, width: bounds.width, height: 1)
         footerLeadingDivider.frame = NSRect(x: 52, y: 10, width: 1, height: 20)
         // grid-light.html: 12pt trailing inset, 7pt only through 480pt;
         // toolbar gap 6pt, reduced to 2pt through 800pt.
