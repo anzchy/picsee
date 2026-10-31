@@ -915,3 +915,25 @@ private let i315AXChildren = ["first-launch.heading", "state.open", "first-launc
     }
     #expect(reads.count == 3 && reads[0] == reads[2] && reads[0] != reads[1], "light → dark → light \(reads)")
 }
+
+// MARK: - Review M1: the fade runs from the alpha on screen to the drag target
+
+@Test @MainActor func i315WallFadeRunsFromPreviousAlphaToTarget() throws {
+    let dragAlpha = try i315DragWallAlpha()
+    let (scene, home) = try i315Scene()
+    defer { scene.window.close() }
+    let wall = try #require(wallView(home))
+    home.pinAccessibility(reduceMotion: false)
+    var previous = wall.alphaValue
+    for drag in [true, false, true, false] {
+        wall.layer?.removeAllAnimations()
+        scene.state.setFirstLaunchDragActive(drag)
+        let target: CGFloat = drag ? dragAlpha : 1
+        let fade = try #require(wallOpacityAnimations(home).first, "drag \(drag) did not fade")
+        let from = try #require(fade.fromValue as? Float), to = try #require(fade.toValue as? Float)
+        #expect(abs(CGFloat(from) - previous) < 0.001, "drag \(drag) fade starts at \(from), not \(previous)")
+        #expect(abs(CGFloat(to) - target) < 0.001, "drag \(drag) fade ends at \(to), not \(target)")
+        #expect(from != to, "drag \(drag) fade does not move")
+        previous = target
+    }
+}

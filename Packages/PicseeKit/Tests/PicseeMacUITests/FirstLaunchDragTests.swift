@@ -78,8 +78,12 @@ import PicseeApplication
     launch.reduceMotionOverride = true
     launch.setDragActive(false); launch.setDragActive(true)
     launch.layoutSubtreeIfNeeded()
+    let wall = try #require(b4View("first-launch.wall", in: scene.state))
+    #expect(heading.stringValue == "Release to open" && !outline.isHidden)
+    #expect(abs(wall.alphaValue - 0.4) < 0.001)
     launch.reduceTransparencyOverride = true
     launch.setDragActive(false); launch.setDragActive(true)
+    #expect(wall.alphaValue == 0)
     let children = try #require(scene.state.accessibilityChildren() as? [NSView])
     #expect(children.map { $0.accessibilityIdentifier() }.contains("first-launch.heading"))
     #expect(children.map { $0.accessibilityIdentifier() }.contains("state.open"))

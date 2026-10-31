@@ -186,12 +186,14 @@ import os
         guard let layer = wall.layer else { return }
         let target: CGFloat = dragActive ? (reduceTransparency ? 0 : 0.4) : 1
         let current = wall.alphaValue
+        // Read the on-screen value before the model changes, so a reversal mid-fade starts where it is.
+        let from = layer.presentation()?.opacity ?? Float(current)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         wall.alphaValue = target
         CATransaction.commit()
         if animated && !reduceMotion && current != target {
             let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = layer.presentation()?.opacity ?? Float(current)
+            fade.fromValue = from
             fade.toValue = Float(target)
             fade.duration = 0.15
             fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -274,7 +276,8 @@ import os
         let paths = names.compactMap { name -> (String, URL)? in
             (sampleURLs == nil ? Self.sampleURL(name: name) : sampleURLs?[name]).map { (name, $0) }
         }
-        Task.detached(priority: .utility) { [weak self] in
+        // GCD rather than the cooperative pool: a busy pool must not hold back the Home's first paint.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var decoded: [String: CGImage] = [:]
             var failures = Set(names).subtracting(paths.map(\.0))
             for (name, url) in paths {
@@ -293,16 +296,18 @@ import os
                 Logger(subsystem: "com.picsee.app", category: "B4Samples").error("Sample decode failed: \(name, privacy: .public)")
             }
             let images = decoded
-            await MainActor.run { [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                CATransaction.begin(); CATransaction.setDisableActions(true)
-                for container in self.tiles {
-                    let image = container.name.flatMap { images[$0] }
-                    container.sublayers?.first?.contents = image
-                    container.isHidden = image == nil
+                MainActor.assumeIsolated {
+                    CATransaction.begin(); CATransaction.setDisableActions(true)
+                    for container in self.tiles {
+                        let image = container.name.flatMap { images[$0] }
+                        container.sublayers?.first?.contents = image
+                        container.isHidden = image == nil
+                    }
+                    CATransaction.commit()
+                    self.sampleLoadCompleted = true
                 }
-                CATransaction.commit()
-                self.sampleLoadCompleted = true
             }
         }
     }
