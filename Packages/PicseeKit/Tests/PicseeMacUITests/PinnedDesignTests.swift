@@ -170,12 +170,19 @@ private func fixturePage(_ css: String) throws -> PinnedDesign {
     let heading = try empty.font(".empty-state h2", viewport: 1280)
     #expect(heading.size == 16)
     #expect(heading.weight == 500)
-    let light = try PinnedDesign.page("grid-light").color(".grid-bottom-bar", "border-top", viewport: 1280)
-    let dark = try PinnedDesign.page("grid-dark").color(".grid-bottom-bar", "border-top", viewport: 1280)
-    #expect(light.alpha == 0.10)
-    #expect(dark.alpha == 0.12)
-    #expect(light.red == 26.0 / 255)
-    #expect(dark.red == 229.0 / 255)
+    // #317: the Bottom Bar has no top rule and is --color-bg at 80% in each appearance.
+    for name in ["grid-light", "grid-dark"] {
+        let page = try PinnedDesign.page(name)
+        #expect(try page.raw(".grid-bottom-bar", "border-top", viewport: 1280) == "0", "\(name)")
+        let fill = try page.color(".grid-bottom-bar", "background", viewport: 1280)
+        let background = try page.color(":root", "--color-bg", viewport: 1280)
+        #expect(abs(fill.alpha - background.alpha * 0.8) < 1e-9, "\(name)")
+        #expect(abs(fill.red - background.red) < 1e-9 && abs(fill.green - background.green) < 1e-9
+            && abs(fill.blue - background.blue) < 1e-9, "\(name)")
+    }
+    let light = try PinnedDesign.page("grid-light").color(":root", "--color-bg", viewport: 1280)
+    let dark = try PinnedDesign.page("grid-dark").color(":root", "--color-bg", viewport: 1280)
+    #expect(light != dark)
 }
 
 @Test func pinnedDesignReportsMissingRules() throws {
